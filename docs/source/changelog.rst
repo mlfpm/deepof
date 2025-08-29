@@ -2,7 +2,7 @@ Changelog
 =========
 
 
-[0.8.2] - 2025-08-29
+[0.8.2] - 2025-08-30
 ====================
 
 Added
@@ -28,6 +28,9 @@ Changed
 - The arena detection GUI now has a maximum size
 - Made bodypart key error that arises during angle calculation more informative
 
+Deprecated
+----------
+- During the rework of the unsupervised pipeline we plan to replace some of the old models and options with new ones
 
 Removed
 -------
@@ -54,7 +57,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2025-08-29
+- Release Date: 2025-08-30
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.7.1/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
