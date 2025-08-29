@@ -3261,7 +3261,7 @@ def export_annotated_video(
         if isinstance(soft_counts[first_key], dict):
             soft_counts[first_key] = get_dt(soft_counts,first_key)
 
-        if cluster_names is None or len(cluster_names) != len(behaviors):
+        if cluster_names is None or behaviors is None or len(cluster_names) != len(behaviors):
             cluster_names = behaviors
         #unify tab_dict name
         tab_dict=soft_counts
@@ -3286,7 +3286,7 @@ def export_annotated_video(
         if behaviors is None and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = [cur_tab.columns[0]]
-        elif behaviors[0] == "all" and supervised_annotations is not None:
+        elif behaviors is not None and behaviors[0] == "all" and supervised_annotations is not None:
             cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = cur_tab.columns     
         if roi_number is not None:
