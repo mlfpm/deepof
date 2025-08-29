@@ -545,12 +545,14 @@ def _draw_behavior_info(
     """Draws the behavior names, background boxes, and counters."""
     text_width, text_height = widest_text_size
     y_start = 10 + text_height
-    y_step = 0
-    
+    line_step = int(text_height * 2)
+
     for i, behavior in enumerate(behaviors):
         behavior_text = behavior_df.iloc[frame_idx][i]
         if behavior_text:
-            box_y = y_start + y_step
+            # Fixed vertical position per behavior when shifting is enabled
+            box_y = y_start + (i * line_step if shift_name_box else 0)
+
             # Draw background rectangle
             top_left = (v_width - text_width - params.padding * 2, box_y - text_height - params.padding)
             bottom_right = (v_width - params.padding, box_y + params.padding)
@@ -559,15 +561,14 @@ def _draw_behavior_info(
             # Update and format text with counter if enabled
             if config.display_counter:
                 behavior_counters[i] += 1
-                time_str = deepof.visuals_utils.seconds_to_time(behavior_counters[i] / frame_rate, cut_milliseconds=False)[3:11]
+                time_str = deepof.visuals_utils.seconds_to_time(
+                    behavior_counters[i] / frame_rate, cut_milliseconds=False
+                )[3:11]
                 behavior_text += f' {time_str}'
-            
+
             # Draw behavior text
             text_pos = (v_width - text_width - params.padding, box_y)
             cv2.putText(frame, behavior_text, text_pos, params.font, params.font_scale, params.text_color, params.thickness)
-            
-            if shift_name_box:
-                y_step += int(text_height * 2)
 
 
 def output_annotated_video(
