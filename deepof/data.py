@@ -557,21 +557,27 @@ class Project:
 
     def _update_connectivity_graph(self):
         """Updates body part connectivity graph based on current animal_ids and bodyparts."""
-        # Reinstate "vanilla" bodyparts without animal ids
-        reinstated_bps = list(set(
+        # Reinstate "vanilla" bodyparts with animal ids
+        
+        # Save list of excluded bodyparts without animal ids
+        raw_excluded_bodyparts = copy.copy(self.exclude_bodyparts)
+
+        # Add ids to excluded bodyparts
+        exclude_bodyparts_with_ids = list(set(
             bp[len(aid) + 1:] if bp.startswith(f"{aid}_") else bp
             for aid in self.animal_ids for bp in self.exclude_bodyparts
         ))
 
+        # Create graph ignoring excluded bodyparts
         model_dict = {
             f"{aid}mouse_topview": deepof.utils.connect_mouse(
-                aid, exclude_bodyparts=reinstated_bps, graph_preset=self.bodypart_graph
+                aid, exclude_bodyparts=exclude_bodyparts_with_ids, graph_preset=self.bodypart_graph
             ) for aid in self.animal_ids
         }
         self.connectivity = {aid: model_dict[f"{aid}{self.model}"] for aid in self.animal_ids}
 
-        if len(self.animal_ids) > 1 and reinstated_bps != [""]:
-            self.exclude_bodyparts = [f"{aid}_{bp}" for aid in self.animal_ids for bp in reinstated_bps]
+        # Reset excluded bodyparts to base list without ids
+        self.exclude_bodyparts =  raw_excluded_bodyparts
 
     def _filter_irrelevant_bodyparts(self, table: pd.DataFrame) -> pd.DataFrame:
         """Removes bodyparts not present in the connectivity graph or explicitly excluded."""
@@ -643,6 +649,7 @@ class Project:
         table_dict = deepof.utils.set_missing_animals(self, table_dict, lik_dict)
 
         return table_dict, warn_nans_count
+
 
     def preprocess_tables(self) -> Tuple[table_dict, table_dict]:
         """

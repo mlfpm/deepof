@@ -85,18 +85,25 @@ def _filter_videos_by_condition(
     ]
 
 def _determine_behaviors_to_process(
-    behaviors: Union[str, List[str]],
     behavior_dict: dict,
-    behavior_names: List[str]
+    behaviors: Union[str, List[str]],
+    behaviors_renamed: Union[str, List[str]],
 ) -> List[str]:
-    """Determine the final list of behaviors to generate videos for."""
+    """Determine the final lists of available, selected and renamed behaviors to generate videos for."""
     if isinstance(behaviors, str):
         return [behaviors]
     meta_info = get_dt(behavior_dict, list(behavior_dict.keys())[0], only_metainfo=True)
-    available_behaviors = meta_info.get('columns', behavior_names)
+    if meta_info.get('columns') is None:
+        available_behaviors = ["Cluster_"+ str(k) for k in range(meta_info.get('num_cols'))]
+    else:
+        available_behaviors = meta_info.get('columns')
     if behaviors is None:
-        return available_behaviors
-    return [b for b in behaviors if b in available_behaviors]
+        return available_behaviors, available_behaviors, available_behaviors
+    return (
+        available_behaviors, 
+        [b for b in behaviors if b in available_behaviors], # all behaviors that occur in available_behaviors
+        [b for i, b in enumerate(behaviors_renamed) if behaviors[i] in available_behaviors] # all renamed_behaviors that correspond to behaviors occuring in available_behaviors
+    )
 
 def _get_behavior_mask_and_confidence(
     tab: Union[pd.DataFrame, np.ndarray],
@@ -122,7 +129,7 @@ def output_videos_per_cluster(
     exp_conditions: dict,
     behavior_dict: dict,
     behaviors: Union[str, list],
-    behavior_names: list,
+    behaviors_renamed: list,
     frame_limit_per_video: int = float('inf'),
     bin_info: dict = None,
     roi_number: int = None,
@@ -158,16 +165,18 @@ def output_videos_per_cluster(
     exp_ids_to_process = _filter_videos_by_condition(
         coordinates, list(behavior_dict.keys()), exp_conditions
     )
-    behaviors_to_process = _determine_behaviors_to_process(behaviors, behavior_dict, behavior_names)
+    available_behaviors, behaviors_to_process, behaviors_renamed_to_process  = _determine_behaviors_to_process(behavior_dict, behaviors, behaviors_renamed)
     
     cluster_export_config = dataclasses.replace(
         config, display_behavior_names=False, display_counter=False,
         display_video_name=True, display_loading_bar=False,
     )
 
-    for behavior in tqdm(behaviors_to_process, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="video"):
-        
-        video_out_path = output_path / f"Behavior={behavior}_threshold={min_confidence}_{int(time.time())}.mp4"
+    for behavior in tqdm(behaviors_to_process, desc=f"{'Exporting behavior videos':<{PROGRESS_BAR_FIXED_WIDTH}}", unit=" video"):
+
+        behavior_renamed = behaviors_renamed_to_process[behaviors_to_process.index(behavior)]        
+
+        video_out_path = output_path / f"Behavior={behavior_renamed}_threshold={min_confidence}_{int(time.time())}.mp4"
         out = cv2.VideoWriter(
             str(video_out_path), cv2.VideoWriter_fourcc(*"mp4v"),
             frame_rate, single_output_resolution,
@@ -182,10 +191,10 @@ def output_videos_per_cluster(
                 
                 cur_tab = get_dt(behavior_dict, exp_id)
                 if type(cur_tab)==np.ndarray:
-                    cur_tab=pd.DataFrame(cur_tab,columns=behavior_names)  
+                    cur_tab=pd.DataFrame(cur_tab,columns=available_behaviors)  
 
                 behavior_mask, confidence = _get_behavior_mask_and_confidence(
-                    cur_tab, behavior, behavior_names
+                    cur_tab, behavior, available_behaviors
                 )
 
                 confidence_indices = np.ones(len(behavior_mask), dtype=bool)
@@ -216,6 +225,7 @@ def output_videos_per_cluster(
                         frames=selected_frames, cap=cap, out=out,
                         v_width=single_output_resolution[0], v_height=single_output_resolution[1],
                         frame_limit=frame_limit_per_video, out_path=output_path,
+                        behaviors_renamed=[behavior_renamed],
                     )
         finally:
             out.release()
@@ -425,7 +435,7 @@ def output_videos_per_cluster_old(
 
 
 def _prepare_behavior_dataframe(
-    tab: pd.DataFrame, behaviors: List[str]
+    tab: pd.DataFrame, behaviors: List[str], behavior_renamed: List[str],
 ) -> pd.DataFrame:
     """
     Creates a DataFrame where cells contain the behavior name if the condition
@@ -433,9 +443,9 @@ def _prepare_behavior_dataframe(
     way to look up the active behavior string for a given frame.
     """
     behavior_df = pd.DataFrame(index=tab.index, columns=behaviors, data="")
-    for behavior in behaviors:
+    for behavior, behavior_renamed in zip(behaviors, behavior_renamed):
         mask = tab[behavior] > 0.1
-        behavior_df.loc[mask, behavior] = behavior
+        behavior_df.loc[mask, behavior] = behavior_renamed
     return behavior_df
 
 
@@ -535,12 +545,14 @@ def _draw_behavior_info(
     """Draws the behavior names, background boxes, and counters."""
     text_width, text_height = widest_text_size
     y_start = 10 + text_height
-    y_step = 0
-    
+    line_step = int(text_height * 2)
+
     for i, behavior in enumerate(behaviors):
-        behavior_text = behavior_df.iloc[frame_idx][0]
+        behavior_text = behavior_df.iloc[frame_idx][i]
         if behavior_text:
-            box_y = y_start + y_step
+            # Fixed vertical position per behavior when shifting is enabled
+            box_y = y_start + (i * line_step if shift_name_box else 0)
+
             # Draw background rectangle
             top_left = (v_width - text_width - params.padding * 2, box_y - text_height - params.padding)
             bottom_right = (v_width - params.padding, box_y + params.padding)
@@ -549,15 +561,14 @@ def _draw_behavior_info(
             # Update and format text with counter if enabled
             if config.display_counter:
                 behavior_counters[i] += 1
-                time_str = deepof.visuals_utils.seconds_to_time(behavior_counters[i] / frame_rate, cut_milliseconds=False)[3:11]
+                time_str = deepof.visuals_utils.seconds_to_time(
+                    behavior_counters[i] / frame_rate, cut_milliseconds=False
+                )[3:11]
                 behavior_text += f' {time_str}'
-            
+
             # Draw behavior text
             text_pos = (v_width - text_width - params.padding, box_y)
             cv2.putText(frame, behavior_text, text_pos, params.font, params.font_scale, params.text_color, params.thickness)
-            
-            if shift_name_box:
-                y_step += int(text_height * 2)
 
 
 def output_annotated_video(
@@ -573,6 +584,7 @@ def output_annotated_video(
     v_height: int = None,
     frame_limit: int = float('inf'),
     out_path: Path = Path("."),
+    behaviors_renamed: List = None,
 ):
     """
     Generates a video with frames annotated with specified behaviors and other metadata.
@@ -590,21 +602,27 @@ def output_annotated_video(
         v_height: Desired output video height. Defaults to source video height.
         frame_limit: Maximum number of frames to process.
         out_path: The directory where the output video will be saved.
+        behaviors_renamed: List of updated behavior names for display
     """
     video_path = Path(coordinates.get_videos(full_paths=True)[experiment_id])
     video_name_stem = video_path.stem
 
     # --- Behavior & Frame Preparation ---
     shift_name_box = True
-    if not behaviors:
+    if behaviors is None:
         # If no behaviors are specified, check if it's a single-behavior-per-frame scenario
         if not (tab.sum(axis=1) > 1.9).any():
             behaviors = list(tab.columns)
             shift_name_box = False  # Display all behaviors simultaneously
         else:
-            raise ValueError("A list of 'behaviors' must be provided for multi-label annotations.")
+            behaviors = list(tab.columns)
+            #raise ValueError("A list of 'behaviors' must be provided for multi-label annotations.")
 
-    behavior_df = _prepare_behavior_dataframe(tab, behaviors)
+    if behaviors_renamed is None or len(behaviors_renamed) != len(behaviors):
+        behaviors_renamed=behaviors
+
+    behavior_df = _prepare_behavior_dataframe(tab, behaviors, behaviors_renamed)
+
     
     cur_coords = get_dt(coordinates._tables, experiment_id)
 
@@ -644,7 +662,7 @@ def output_annotated_video(
     behavior_counters = np.zeros(len(behaviors))
 
     # Pre-calculate text size for layout purposes
-    widest_text = max(behaviors, key=len)
+    widest_text = max(behaviors_renamed, key=len)
     if config.display_counter:
         widest_text += ' 00:00.00'  # Add placeholder for counter time
     (text_w, text_h), _ = cv2.getTextSize(widest_text, params.font, params.font_scale, params.thickness)
@@ -699,7 +717,7 @@ def output_annotated_video(
             # Annotations drawn AFTER resizing
             if config.display_behavior_names:
                 _draw_behavior_info(
-                    frame, frame_idx, v_width, behavior_df, behaviors, bg_colors,
+                    frame, frame_idx, v_width, behavior_df, behaviors_renamed, bg_colors,
                     behavior_counters, widest_text_size, shift_name_box, config, params, frame_rate
                 )
             

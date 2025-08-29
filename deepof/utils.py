@@ -618,7 +618,7 @@ def iterative_imputation(
             try:
 
                 # get table for current animal
-                sub_table = tab.iloc[np.where(presence_masks[k][animal_id].values)[0]]
+                sub_table = copy.copy(tab.iloc[np.where(presence_masks[k][animal_id].values)[0]])
                 # add row number info (twice as it makes things easier later when splitting in x and y)
                 sub_table.insert(
                     0, ("Row", "x"), np.where(presence_masks[k][animal_id].values)[0]
