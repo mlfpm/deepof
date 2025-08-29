@@ -1043,11 +1043,6 @@ class Project:
         return all_areas_dict
 
 
-    @deepof.data_loading._suppress_warning(
-        warn_messages=[
-            "A value is trying to be set on a copy of a slice from a DataFrame"
-        ]
-    )
     def create(
         self,
         verbose: bool = True,
