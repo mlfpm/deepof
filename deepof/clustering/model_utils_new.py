@@ -7,6 +7,7 @@
 import os
 from datetime import date, datetime
 from typing import Any, List, NewType, Tuple, Union, Dict
+from contextlib import nullcontext
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -855,30 +856,36 @@ class AffineTransformedDistribution(TransformedDistribution):
 class ProbabilisticDecoderPT(nn.Module):
     """
     PyTorch translation of the ProbabilisticDecoder, including scaling transform.
+    AMP-safe version: do distribution math in float32, sanitize NaNs/Infs.
     """
     def __init__(self, hidden_dim: int, data_dim: int):
         super().__init__()
         self.loc_projection = nn.Linear(in_features=hidden_dim, out_features=data_dim)
 
     def forward(self, hidden: torch.Tensor, validity_mask: torch.Tensor) -> AffineTransformedDistribution:
-        B, T, D = hidden.shape
-        # Reconstruct mean locations
-        hidden_2d = hidden.reshape(B * T, -1)
+        B, T, _ = hidden.shape
+
+        # Linear projection in float32 for numerical stability under AMP
+        hidden_2d = hidden.reshape(B * T, -1).float()
         loc_params = self.loc_projection(hidden_2d).reshape(B, T, -1)
 
-        # Define Gaussian distributions with means (init: var=1)
-        scale_params = torch.ones_like(loc_params)
-        base_dist = torch.distributions.Normal(loc=loc_params, scale=scale_params)
+        # Sanitize to avoid NaN/Inf in distribution parameters
+        loc_params = torch.nan_to_num(loc_params, nan=0.0, posinf=1e6, neginf=-1e6)
 
-        # Multivariate Gaussian distributions for feature vector
-        independent_dist = torch.distributions.Independent(base_dist, 1)
-        
-        # Define transform to map masked values to 0 (y = 0 + 0 * x) and unmasked-values to themselves (y = 0 + 1.0 * x)
-        scale_transform = validity_mask.unsqueeze(-1).to(hidden.dtype)
-        transform = AffineTransform(loc=0, scale=scale_transform)
-        
-        # Returns a custom class instead of the generic one as "mean" functionality otherwise would be missing.
-        final_dist = AffineTransformedDistribution(independent_dist, transform)
+        # Build the distribution in float32 (disable autocast to avoid fp16 validator issues)
+        with torch.amp.autocast(device_type=loc_params.device.type, enabled=False):
+            loc32 = loc_params  # already float32
+            scale32 = torch.ones_like(loc32)  # unit variance
+
+            base_dist = torch.distributions.Normal(loc=loc32, scale=scale32, validate_args=False)
+            independent_dist = torch.distributions.Independent(base_dist, 1)
+
+            # Keep transform dtype consistent with distribution dtype
+            scale_transform = validity_mask.unsqueeze(-1).to(dtype=loc32.dtype, device=loc32.device)
+            transform = AffineTransform(loc=0.0, scale=scale_transform)
+
+            final_dist = AffineTransformedDistribution(independent_dist, transform)
+
         return final_dist
     
 
@@ -1787,17 +1794,54 @@ def embedding_per_video(
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
         tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
         
-        device = next(model.parameters()).device 
-        model.eval()  
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = model.to(device).eval()
 
-        x_tensor = torch.from_numpy(tab_tuple[0]).float().to(device)
-        a_tensor = torch.from_numpy(tab_tuple[1]).float().to(device)
+        x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
+        a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
 
-        with torch.no_grad():
-            outputs = model(x_tensor, a_tensor, False)
+        batch_size = 256  # adjust to fit your GPU
+        recon_list, zfinal_list, zcat_list = [], [], []
 
-        _, z_final, z_cat, _ = outputs
+        # Optional AMP for speed/memory on GPU
+        if False: #device.type == "cuda":
+            try:
+                bf16_ok = torch.cuda.is_bf16_supported()
+            except Exception:
+                major, _ = torch.cuda.get_device_capability()
+                bf16_ok = major >= 8  # Ampere+ typically supports bf16
+            amp_dtype = torch.bfloat16 if bf16_ok else torch.float16
+            amp_ctx = torch.amp.autocast(device_type="cuda", dtype=amp_dtype)
+        else:
+            amp_ctx = nullcontext()
 
+        with torch.inference_mode(), amp_ctx:
+            for s in range(0, x_all.size(0), batch_size):
+                xb = x_all[s:s + batch_size].to(device, non_blocking=True)
+                ab = a_all[s:s + batch_size].to(device, non_blocking=True)
+
+                # Disable attention collection if supported
+                try:
+                    out = model(xb, ab, return_gmm_params=False, return_attention=False)
+                except TypeError:
+                    out = model(xb, ab, False)
+
+                # Expected: (reconstruction_dist, z_final, z_cat, kmeans_loss, z_mean, z_log_var, gmm_params)
+                if not isinstance(out, tuple) or len(out) < 3:
+                    raise RuntimeError("Unexpected model output; expected a tuple with at least three items.")
+
+                recon_dist, z_final_b, z_cat_b = out[0], out[1], out[2]
+                recon_b = recon_dist.mean if hasattr(recon_dist, "mean") else recon_dist
+
+                recon_list.append(recon_b.detach().cpu())
+                zfinal_list.append(z_final_b.detach().cpu())
+                zcat_list.append(z_cat_b.detach().cpu())
+
+        # Stitch full outputs
+        recon_mean = torch.cat(recon_list, dim=0) if recon_list else None
+        z_final    = torch.cat(zfinal_list, dim=0) if zfinal_list else None
+        z_cat      = torch.cat(zcat_list, dim=0) if zcat_list else None
+        print('completed')
         emb = z_final.cpu().numpy()
 
         if not contrastive:

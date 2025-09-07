@@ -25,4 +25,8 @@
 /PolarPlots/
 /SI/
 /Very_Large/
+/repo_info_data/
+/repo_info_plots/
+info_scraper.py
+info_plotter.py
 

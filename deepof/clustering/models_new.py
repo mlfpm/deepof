@@ -1131,13 +1131,19 @@ class MultiHeadAttentionPT(nn.Module):
         k = proj(self.k_proj)
         v = proj(self.v_proj)
 
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B,H,T,T)
+
         if attn_mask is not None:
-            scores = scores.masked_fill(attn_mask.unsqueeze(1).unsqueeze(2), float("-inf"))
+            # attn_mask: (B, T) True = mask-out keys (padded timesteps)
+            mask_k = attn_mask.unsqueeze(1).unsqueeze(2)  # (B,1,1,T), broadcast to keys dim
+            scores = scores.masked_fill(mask_k, float("-inf"))
 
         attn = torch.softmax(scores, dim=-1)
+        # If a row is fully masked, softmax returns NaN. Turn NaNs into zeros.
+        attn = torch.nan_to_num(attn, nan=0.0)
         attn = self.dropout(attn)
-        ctx = torch.matmul(attn, v)
+
+        ctx = torch.matmul(attn, v)  # (B,H,T,K)
         ctx = ctx.permute(0, 2, 1, 3).contiguous().reshape(B, T, self.inner_dim)
         out = self.out_proj(ctx)
 
@@ -1252,8 +1258,8 @@ class TFMEncoderPT(nn.Module):
             )
 
             # Spatial GNN
-            self.spatial_gnn = CensNetConvPT(node_channels=self.latent_dim, edge_channels=self.latent_dim, activation="relu")
-            lap, edge_lap, inc = self.spatial_gnn.preprocess(torch.tensor(adjacency_matrix))
+            self.spatial_gnn_block = CensNetConvPT(node_channels=self.latent_dim, edge_channels=self.latent_dim, activation="relu")
+            lap, edge_lap, inc = self.spatial_gnn_block.preprocess(torch.tensor(adjacency_matrix))
             self.register_buffer("laplacian", lap.float())
             self.register_buffer("edge_laplacian", edge_lap.float())
             self.register_buffer("incidence", inc.float())
@@ -1312,7 +1318,7 @@ class TFMEncoderPT(nn.Module):
             edges_flat = edge_out.reshape(B, self.N, W * (self.N * self.NF))
                     
             # Apply spatial GNN
-            x_nodes_g, x_edges_g = self.spatial_gnn([
+            x_nodes_g, x_edges_g = self.spatial_gnn_block([
                 nodes_flat, (self.laplacian, self.edge_laplacian, self.incidence), edges_flat
             ])
 
@@ -1561,7 +1567,7 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         query: torch.Tensor,   # (B, Tq, q_in)
         key: torch.Tensor,     # (B, Tk, kv_in)
         value: torch.Tensor,   # (B, Tk, kv_in)
-        attn_mask: torch.Tensor = None,   # keep mask
+        attn_mask: torch.Tensor = None,   # keep mask preferred; see below
         return_attention_scores: bool = True,
     ):
         B, Tq, _ = query.shape
@@ -1579,28 +1585,33 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B, H, Tq, Tk)
 
         if attn_mask is not None:
-            # Normalize keep mask to (B, H, Tq, Tk)
+            # We support keep masks: True = keep, False = mask-out
             if attn_mask.ndim == 2:        # (B, Tk)
                 keep = attn_mask[:, None, None, :]                     # (B,1,1,Tk)
-                keep = keep.expand(B, self.num_heads, Tq, Tk)          # (B,H,Tq,Tk)
+                keep = keep.expand(B, self.num_heads, Tq, Tk)
             elif attn_mask.ndim == 3:      # (B, Tq, Tk)
                 keep = attn_mask[:, None, :, :]                        # (B,1,Tq,Tk)
-                keep = keep.expand(B, self.num_heads, Tq, Tk)          # (B,H,Tq,Tk)
+                keep = keep.expand(B, self.num_heads, Tq, Tk)
             elif attn_mask.ndim == 4:      # (B, 1 or H, Tq, Tk)
                 keep = attn_mask
                 if keep.size(1) == 1:
                     keep = keep.expand(B, self.num_heads, Tq, Tk)
             else:
                 raise ValueError(f"Unsupported attn_mask shape: {attn_mask.shape}")
-
             if keep.dtype != torch.bool:
                 keep = keep > 0
             keep = keep.to(scores.device)
 
-            # Mask logits where keep=False
-            scores = scores.masked_fill(~keep, -1e9)
+            scores = scores.masked_fill(~keep, float("-inf"))
+        else:
+            # No mask -> everything is kept
+            keep = torch.ones_like(scores, dtype=torch.bool, device=scores.device)
 
         attn = torch.softmax(scores, dim=-1)
+        # Safe against fully-masked rows
+        attn = torch.nan_to_num(attn, nan=0.0)
+        # Zero-out masked positions explicitly (in case of numerical residue)
+        attn = attn * keep.to(attn.dtype)
         attn = self.dropout(attn)
 
         ctx = torch.matmul(attn, v)  # (B,H,Tq,K)
@@ -1706,28 +1717,29 @@ class DecoderCorePT(nn.Module):
 
 
 class TFMDecoderPT(nn.Module):
-    """
-    Full PyTorch translation of the TF Transformer decoder:
-      - Generator MLP from z (latent) -> memory (RepeatVector)
-      - Transformer decoder core over input x using memory
-      - ProbabilisticDecoderPT to produce mean-output masked by validity
-    """
     def __init__(
         self,
-        input_shape: Tuple[int, int],  # (W, D_in) where D_in = N*NF (flattened like TF)
+        output_shape: Tuple[int, int],  # (W, D_in)
         latent_dim: int,
         num_layers: int = 2,
         num_heads: int = 8,
         dff: int = 128,
         dropout_rate: float = 0.1,
+        teacher_forcing_mode: str = "shifted",   # "shifted" | "zeros" | "dropout"
+        input_dropout_p: float = 0.0,
+        self_attn_diag_only: bool = False,
     ):
         super().__init__()
-        self.W, self.D_in = input_shape
+        self.W, self.D_in = output_shape
         self.latent_dim = int(latent_dim)
         self.model_dim = self.D_in
-        self.memory_dim = 4 * self.latent_dim  # final Dense in TF generator
+        self.memory_dim = 4 * self.latent_dim
 
-        # Generator MLP: Dense(latent) -> BN -> Dense(2*latent, relu) -> BN -> Dense(4*latent, relu) -> BN
+        assert teacher_forcing_mode in {"shifted", "zeros", "dropout"}
+        self.teacher_forcing_mode = teacher_forcing_mode
+        self.input_dropout_p = float(input_dropout_p)
+        self.self_attn_diag_only = bool(self_attn_diag_only)
+
         self.generator_mlp = nn.Sequential(
             nn.Linear(self.latent_dim, self.latent_dim),
             BatchNorm1dKerasFP32(self.latent_dim, eps=1e-3),
@@ -1743,7 +1755,6 @@ class TFMDecoderPT(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
 
-        # Decoder core (embedding + layers)
         self.decoder = DecoderCorePT(
             model_dim=self.model_dim,
             memory_dim=self.memory_dim,
@@ -1753,32 +1764,41 @@ class TFMDecoderPT(nn.Module):
             max_pos=self.W,
             rate=dropout_rate,
         )
-
-        # Probabilistic decoder to map to data space (D_in)
         self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=self.model_dim, data_dim=self.D_in)
 
-    def forward(self, g: torch.Tensor, x: torch.Tensor, training: bool = False):
-        B, W, D = x.shape
+    def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool | None = None):
+        B, W, D = x_target.shape
         assert (W, D) == (self.W, self.D_in)
+        is_training = self.training if training is None else bool(training)
 
-        # validity mask: True for valid steps (NOT all-zero features)
         with torch.no_grad():
-            validity_mask = torch.logical_not(torch.all(x == 0.0, dim=-1))  # (B, W), bool
+            validity_mask = torch.logical_not(torch.all(x_target == 0.0, dim=-1))  # (B, W)
 
-        # Generator MLP + repeat across time
-        gen = self.generator_mlp(g.float()).to(x.dtype)                    # (B, 4*latent)
-        memory = gen.unsqueeze(1).expand(-1, self.W, -1).contiguous()      # (B, W, memory_dim)
+        # Teacher-forced input
+        if self.teacher_forcing_mode == "shifted":
+            x_in = torch.zeros_like(x_target); x_in[:, 1:, :] = x_target[:, :-1, :]
+        elif self.teacher_forcing_mode == "zeros":
+            x_in = torch.zeros_like(x_target)
+        else:  # "dropout"
+            x_in = torch.zeros_like(x_target); x_in[:, 1:, :] = x_target[:, :-1, :]
+            if is_training and self.input_dropout_p > 0.0:
+                mask = (torch.rand(B, W, 1, device=x_in.device) > self.input_dropout_p).to(x_in.dtype)
+                mask[:, 0, :] = 0.0
+                x_in = x_in * mask
 
-        # TF-style mask-out masks (3D/2D)
-        combined_mask_3d, pad_mask_2d = create_masks_pt(memory)            # (B,T,T), (B,T), True=masked-out
+        gen = self.generator_mlp(g.float()).to(x_target.dtype)
+        memory = gen.unsqueeze(1).expand(-1, self.W, -1).contiguous()
 
-        # Decoder pass
-        hidden, attention_weights = self.decoder(x, memory, combined_mask_3d, pad_mask_2d, training=training)
+        if self.self_attn_diag_only:
+            la_keep = torch.eye(W, dtype=torch.bool, device=x_target.device)
+        else:
+            la_keep = create_look_ahead_mask_pt(W, device=x_target.device)
+        combined_mask_3d = la_keep.unsqueeze(0).unsqueeze(0).expand(B, 1, W, W)
+        padding_mask_2d = torch.ones(B, 1, 1, W, dtype=torch.bool, device=x_target.device)
 
-        # Probabilistic output (mean)
+        hidden, _ = self.decoder(x_in, memory, combined_mask_3d, padding_mask_2d, training=is_training)
         dist = self.prob_decoder(hidden, validity_mask)
-        x_decoded = dist.mean
-        return x_decoded, attention_weights
+        return dist
     
 
 def get_transformer_decoder(
@@ -2767,6 +2787,28 @@ class VaDEPT(nn.Module):
             self.decoder = TCNDecoderPT(
                 output_shape=(time_steps, decoder_output_features),
                 latent_dim=latent_dim,
+            ) 
+        elif encoder_type == "transformer":
+            self.encoder = TFMEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                #interaction_regularization=interaction_regularization,
+            )
+
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = TFMDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+                num_layers=2,
+                num_heads=8,
+                dff=128,
+                dropout_rate=0.2,               # a bit more dropout helps
+                teacher_forcing_mode="dropout", # try "zeros" if collapse persists
+                input_dropout_p=0.5,            # drop 50% of time steps during training
+                self_attn_diag_only=False,      # set True to further reduce copying
             ) 
         else:
             raise NotImplementedError("invalid encoder type, try \"recurrent\", \"TCN\" or \"transformer\" ")          
