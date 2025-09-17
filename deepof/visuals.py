@@ -3806,7 +3806,8 @@ def plot_behavior_trends(
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
     # Normalize frames to reflect seconds
-    df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
+    if not normalize and behavior_to_plot != "speed":
+        df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
     
     assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
@@ -4087,7 +4088,13 @@ def plot_behavior_trends(
 
         # Add axis labels
         ax.set_xlabel("Time Bins", fontsize=12)
-        ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
+
+        if behavior_to_plot == "speed":
+            ax.set_ylabel(f"{behavior_to_plot} [avg. speed]", fontsize=12)
+        elif normalize:
+            ax.set_ylabel(f"{behavior_to_plot} [%]", fontsize=12)
+        else:
+            ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
 
         # Add legend
         legend_1 = ax.legend(
