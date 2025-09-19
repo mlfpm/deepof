@@ -1155,7 +1155,7 @@ def plot_enrichment(
 
             # valid where finite and positive (log scale)
             valid = np.isfinite(mu) & np.isfinite(upper) & np.isfinite(lower)
-            valid &= (mu > eps) & (upper > eps) #& (lower > eps)
+            valid &= (mu > eps) & (upper > eps) 
 
             color = cond_to_color[k]
             first = True
