@@ -1122,58 +1122,65 @@ def plot_enrichment(
                 + [err_values[all_exp_conditions[k]][x_bin_labels[0]]]
             )
 
-        # Plot means as lines and extract color of these lines
-        colors = {}
-        for k in plot_means:
-            plot_handle = ax.plot(
-                mid_angles, plot_means[k], linewidth=3, label=f"{k}", alpha=0.8
-            )
-            colors[k] = plot_handle[0].get_color()
+        # Use midpoints but drop the duplicated closing point
+        theta = np.unwrap(mid_angles[:-1])  # unwrap to make angles strictly increasing
+        eps = 1e-8  # small positive floor for log scale
 
-        # Plot markers for each group
-        marker_handles = []
-        for k in plot_means:
-            marker_handles.append(
-                ax.plot(
-                    mid_angles,
-                    plot_means[k],
-                    marker="o",
-                    linestyle="",
-                    color=colors[k],
-                    linewidth=2,
-                )
-            )
+        # Fixed colors per condition (don't rely on the property cycle being in sync)
+        palette = plt.rcParams['axes.prop_cycle'].by_key().get('color', None)
+        if not palette:
+            palette = ['C0','C1','C2','C3','C4','C5','C6','C7','C8','C9']
+        cond_to_color = {cond: palette[i % len(palette)] for i, cond in enumerate(all_exp_conditions)}
 
-        # Plot the error as lines above and below the mean values
-        for k in plot_means:
-            ax.plot(
-                mid_angles,
-                plot_means[k] + plot_errs[k],
-                linestyle="",
-                color=colors[k],
-                alpha=0.8,
-            )
-            ax.plot(
-                mid_angles,
-                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
-                linestyle="",
-                color=colors[k],
-                alpha=0.8,
-            )
+        def contiguous_segments(mask: np.ndarray):
+            # yields slices for contiguous True blocks
+            if mask.ndim != 1:
+                mask = np.asarray(mask).ravel()
+            if not mask.any():
+                return []
+            edges = np.where(np.diff(np.r_[False, mask, False]))[0].reshape(-1, 2)
+            return [slice(s, e) for s, e in edges]
 
-        # Shade Error
-        for k in plot_means:
-            ax.fill_between(
-                mid_angles,
-                plot_means[k] + plot_errs[k],
-                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
-                color=colors[k],
-                alpha=0.15,
-            )
+        # get smallest non-zero average
+        mu_min=np.min([np.min(plot_means[k][np.where(plot_means[k]>0)]) for k in plot_means.keys()])
+        lower_bound = np.min([mu_min/10,0.01]) # calculate lower bound for plot
+        
+        # Plot means, markers, error lines and shaded bands, split at NaNs/gaps
+        for k in all_exp_conditions:
+            mu = np.asarray(plot_means[k][:-1], dtype=float)
+            sd = np.asarray(plot_errs[k][:-1], dtype=float)
+
+            upper = mu + sd
+            lower = mu - sd
+
+            # valid where finite and positive (log scale)
+            valid = np.isfinite(mu) & np.isfinite(upper) & np.isfinite(lower)
+            valid &= (mu > eps) & (upper > eps) #& (lower > eps)
+
+            color = cond_to_color[k]
+            first = True
+            for sl in contiguous_segments(valid):
+                th = theta[sl]
+                mu_seg = mu[sl]
+                up = upper[sl]
+                lo = np.clip(lower[sl], lower_bound, None)
+
+                # mean line + markers (label only once per condition)
+                ax.plot(th, mu_seg, linewidth=3, color=color, alpha=0.8, label=k if first else None)
+                ax.plot(th, mu_seg, marker="o", linestyle="", color=color, linewidth=2)
+
+                # error lines
+                ax.plot(th, up, linestyle="--", color=color, alpha=0.6, linewidth=1)
+                ax.plot(th, lo, linestyle="--", color=color, alpha=0.6, linewidth=1)
+
+                # shaded std band
+                ax.fill_between(th, lo, up, color=color, alpha=0.15)
+
+                first = False
 
     else:
         # Plot a barchart grouped per experimental conditions
-        np.random.seed(42) #to ensure the outlier points are always jittered te same (relevant for automatic testing)
+        np.random.seed(42) #to ensure the outlier points are always jittered the same (relevant for automatic testing)
         sns.barplot(
             data=enrichment,
             x="cluster",
