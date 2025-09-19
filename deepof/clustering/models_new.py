@@ -1069,6 +1069,67 @@ def get_TCN_decoder(
 
     return Model([g, x], x_decoded, name="TCN_decoder")
 
+# --------- NaN debug helpers (shared) ---------
+def _dbg_report_nan(name: str, t: torch.Tensor, sample_elems: int = 8):
+    if t is None or not torch.is_floating_point(t):
+        return
+    with torch.no_grad():
+        nan_mask = torch.isnan(t)
+        if not nan_mask.any():
+            return
+        device = str(t.device)
+        dtype = str(t.dtype)
+        shape = tuple(t.shape)
+        num_nan = int(nan_mask.sum().item())
+        numel = t.numel()
+        inf_mask = torch.isinf(t)
+        num_inf = int(inf_mask.sum().item())
+        finite_mask = torch.isfinite(t)
+        finite_count = int(finite_mask.sum().item())
+        stats = ""
+        if finite_count > 0:
+            finite_vals = t[finite_mask]
+            try:
+                stats = f"min={finite_vals.min().item():.4e}, max={finite_vals.max().item():.4e}, mean={finite_vals.float().mean().item():.4e}"
+            except Exception:
+                stats = "min/max/mean unavailable"
+        idx = torch.nonzero(nan_mask, as_tuple=False)
+        idx_sample = idx[:sample_elems].cpu().numpy() if idx.numel() > 0 else []
+        print(f"[NaN DETECTED] {name}: shape={shape}, dtype={dtype}, device={device}, NaNs={num_nan}/{numel}, Infs={num_inf}, {stats}, nan_idx_sample={idx_sample}")
+
+def _has_nonfinite(t: torch.Tensor) -> bool:
+    if t is None or not torch.is_floating_point(t):
+        return False
+    with torch.no_grad():
+        return not torch.isfinite(t).all()
+
+def _safe_pointwise_conv1d(conv1x1: nn.Conv1d, x_bct: torch.Tensor, out_dtype: torch.dtype, name_prefix: str) -> torch.Tensor:
+    """
+    FIX: run pointwise Conv1d in float32 with autocast disabled.
+    Also sanitize inputs if non-finite values are detected (no-op otherwise).
+    x_bct: (B, C_in, T)
+    """
+    _dbg_report_nan(f"{name_prefix}.input_bct", x_bct)
+    # Sanitize only if needed
+    if _has_nonfinite(x_bct):
+        with torch.no_grad():
+            print(f"[SANITIZE] Non-finite detected at {name_prefix}.input_bct -> applying nan_to_num")
+        x_bct = torch.nan_to_num(x_bct, nan=0.0, posinf=1e4, neginf=-1e4)
+
+    # Check weights/bias before use
+    _dbg_report_nan(f"{name_prefix}.weight", conv1x1.weight)
+    if conv1x1.bias is not None:
+        _dbg_report_nan(f"{name_prefix}.bias", conv1x1.bias)
+
+    # Compute in float32 (AMP off) to avoid fp16 overflows
+    with torch.amp.autocast(device_type=x_bct.device.type, enabled=False):
+        y = conv1x1(x_bct.float())
+    _dbg_report_nan(f"{name_prefix}.out_fp32", y)
+
+    y = y.to(out_dtype)
+    _dbg_report_nan(f"{name_prefix}.out_cast", y)
+    return y
+# ----------------------------------------------
 
 def _act(name: str) -> nn.Module:
     name = (name or "relu").lower()
@@ -1086,7 +1147,9 @@ class BatchNorm1dKerasFP32(nn.BatchNorm1d):
         super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        _dbg_report_nan("Encoder.BatchNorm1dKerasFP32.input", x)
         y = super().forward(x.float())
+        _dbg_report_nan("Encoder.BatchNorm1dKerasFP32.output", y)
         return y.to(dtype=x.dtype)
 
 
@@ -1098,7 +1161,9 @@ def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtyp
     pe[:, 0::2] = torch.sin(position * div_term)
     n_odd = pe[:, 1::2].shape[1]
     pe[:, 1::2] = torch.cos(position * div_term)[:, :n_odd]
-    return pe.unsqueeze(0)  # (1, max_len, d_model)
+    pe = pe.unsqueeze(0)  # (1, max_len, d_model)
+    _dbg_report_nan("Encoder.PositionalEncoding.pe", pe)
+    return pe
 
 
 class MultiHeadAttentionPT(nn.Module):
@@ -1122,6 +1187,7 @@ class MultiHeadAttentionPT(nn.Module):
 
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
         B, T, _ = x.shape
+        _dbg_report_nan("Encoder.MHA.input_x", x)
 
         def proj(linear: nn.Linear):
             y = linear(x)
@@ -1130,25 +1196,33 @@ class MultiHeadAttentionPT(nn.Module):
         q = proj(self.q_proj)
         k = proj(self.k_proj)
         v = proj(self.v_proj)
+        _dbg_report_nan("Encoder.MHA.q", q)
+        _dbg_report_nan("Encoder.MHA.k", k)
+        _dbg_report_nan("Encoder.MHA.v", v)
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B,H,T,T)
+        _dbg_report_nan("Encoder.MHA.scores_before_mask", scores)
 
         if attn_mask is not None:
-            # attn_mask: (B, T) True = mask-out keys (padded timesteps)
-            mask_k = attn_mask.unsqueeze(1).unsqueeze(2)  # (B,1,1,T), broadcast to keys dim
+            mask_k = attn_mask.unsqueeze(1).unsqueeze(2)  # (B,1,1,T)
             scores = scores.masked_fill(mask_k, float("-inf"))
 
+        _dbg_report_nan("Encoder.MHA.scores_after_mask", scores)
+
         attn = torch.softmax(scores, dim=-1)
-        # If a row is fully masked, softmax returns NaN. Turn NaNs into zeros.
         attn = torch.nan_to_num(attn, nan=0.0)
+        _dbg_report_nan("Encoder.MHA.attn_softmax", attn)
         attn = self.dropout(attn)
 
         ctx = torch.matmul(attn, v)  # (B,H,T,K)
+        _dbg_report_nan("Encoder.MHA.ctx", ctx)
         ctx = ctx.permute(0, 2, 1, 3).contiguous().reshape(B, T, self.inner_dim)
         out = self.out_proj(ctx)
+        _dbg_report_nan("Encoder.MHA.out", out)
 
         if attn_mask is not None:
             out = out.masked_fill(attn_mask.unsqueeze(-1), 0.0)
+        _dbg_report_nan("Encoder.MHA.out_after_mask", out)
         return out
 
 
@@ -1171,10 +1245,15 @@ class TransformerEncoderLayerPT(nn.Module):
             nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
+        _dbg_report_nan("Encoder.EncLayer.input", x)
         attn_out = self.mha(x, attn_mask=attn_mask)
+        _dbg_report_nan("Encoder.EncLayer.attn_out", attn_out)
         x = self.norm1(x + self.dropout1(attn_out))
+        _dbg_report_nan("Encoder.EncLayer.residual1", x)
         ff = self.ffn2(self.act(self.ffn1(x)))
+        _dbg_report_nan("Encoder.EncLayer.ff_out", ff)
         x = self.norm2(x + self.dropout2(ff))
+        _dbg_report_nan("Encoder.EncLayer.residual2", x)
         return x
 
 
@@ -1200,25 +1279,34 @@ class TransformerCorePT(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, _ = x.shape
+        _dbg_report_nan("Encoder.Core.input_x", x)
         
         # Compute mask for all-zero timesteps
         with torch.no_grad():
             mask = torch.all(x == 0.0, dim=-1)
 
-        # Embedding with Conv1D
-        y = self.embed(x.transpose(1, 2)).transpose(1, 2)
+        # FIX: safe 1x1 conv in fp32 with optional sanitization
+        x_bct = x.transpose(1, 2)                 # (B, C_in, T)
+        y_bct = _safe_pointwise_conv1d(self.embed, x_bct, out_dtype=x.dtype, name_prefix="Encoder.Core.embed")
+        y = y_bct.transpose(1, 2)                  # (B, T, key_dim)
+        _dbg_report_nan("Encoder.Core.after_embed", y)
+
         y = F.relu(y)
+        _dbg_report_nan("Encoder.Core.after_relu", y)
         y = y * (self.key_dim ** 0.5)
+        _dbg_report_nan("Encoder.Core.after_scale", y)
 
         # Add positional encoding
         if T > self.pos_encoding.size(1):
             self.pos_encoding = sinusoidal_positional_encoding(T, self.key_dim, device=x.device).to(self.pos_encoding.dtype)
         y = y + self.pos_encoding[:, :T, :].to(y.dtype)
+        _dbg_report_nan("Encoder.Core.after_posenc", y)
         y = self.dropout(y)
 
         # Apply transformer layers
-        for layer in self.layers:
+        for li, layer in enumerate(self.layers):
             y = layer(y, attn_mask=mask)
+            _dbg_report_nan(f"Encoder.Core.layer[{li}].out", y)
         return y
 
 
@@ -1292,7 +1380,10 @@ class TFMEncoderPT(nn.Module):
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         B, W, N, NF = x.shape
-        B, W, E, EF = a.shape
+        B2, W2, E, EF = a.shape
+        _dbg_report_nan("Encoder.TFMEncoder.input_x", x)
+        _dbg_report_nan("Encoder.TFMEncoder.input_a", a)
+        assert B == B2 and W == W2
         assert (W, N, NF) == (self.W, self.N, self.NF)
 
         if self.use_gnn:
@@ -1301,10 +1392,14 @@ class TFMEncoderPT(nn.Module):
             x_transposed = x_flat.permute(2, 1, 0)  # (N*NF, W, B)
             x_reshaped = x_transposed.reshape(NF, W, N, B)  # (NF, W, N, B)
             x_nodes = x_reshaped.permute(3, 2, 1, 0)  # (B, N, W, NF)
+            _dbg_report_nan("Encoder.TFMEncoder.x_nodes", x_nodes)
             
             node_in = x_nodes.reshape(B * N, W, NF)
+            _dbg_report_nan("Encoder.TFMEncoder.node_in", node_in)
             node_out = self.node_tf(node_in).view(B, N, W, -1)
+            _dbg_report_nan("Encoder.TFMEncoder.node_out", node_out)
             nodes_flat = node_out.reshape(B, N, W * (self.N * self.NF))
+            _dbg_report_nan("Encoder.TFMEncoder.nodes_flat", nodes_flat)
 
             # Process edges using TF's transpose-reshape-transpose pattern
             EEF = E * EF
@@ -1312,27 +1407,37 @@ class TFMEncoderPT(nn.Module):
             a_transposed = a_flat.permute(2, 1, 0)  # (EEF, W, B)
             a_reshaped = a_transposed.reshape(1, W, EEF, B)  # (1, W, EEF, B)
             a_edges = a_reshaped.permute(3, 2, 1, 0)  # (B, EEF, W, 1)
+            _dbg_report_nan("Encoder.TFMEncoder.a_edges", a_edges)
             
             edge_in = a_edges.reshape(B * EEF, W, 1)
+            _dbg_report_nan("Encoder.TFMEncoder.edge_in", edge_in)
             edge_out = self.edge_tf(edge_in).view(B, EEF, W, -1)
+            _dbg_report_nan("Encoder.TFMEncoder.edge_out", edge_out)
             edges_flat = edge_out.reshape(B, self.N, W * (self.N * self.NF))
+            _dbg_report_nan("Encoder.TFMEncoder.edges_flat", edges_flat)
                     
             # Apply spatial GNN
             x_nodes_g, x_edges_g = self.spatial_gnn_block([
                 nodes_flat, (self.laplacian, self.edge_laplacian, self.incidence), edges_flat
             ])
+            _dbg_report_nan("Encoder.TFMEncoder.x_nodes_g", x_nodes_g)
+            _dbg_report_nan("Encoder.TFMEncoder.x_edges_g", x_edges_g)
 
             # Concatenate node and edge features
             enc = torch.cat([x_nodes_g, x_edges_g], dim=1).reshape(B, -1)
+            _dbg_report_nan("Encoder.TFMEncoder.enc_concat", enc)
             
         else:
             # Non-GNN path: simple transformer on flattened input
             x_flat = x.view(B, W, N * NF)
+            _dbg_report_nan("Encoder.TFMEncoder.x_flat", x_flat)
             seq_out = self.flat_tf(x_flat)
+            _dbg_report_nan("Encoder.TFMEncoder.seq_out", seq_out)
             enc = seq_out.reshape(B, -1)
 
         # Apply MLP head
         out = self.head(enc.float()).to(enc.dtype)
+        _dbg_report_nan("Encoder.TFMEncoder.head_out", out)
         return out
     
 
@@ -1493,43 +1598,20 @@ def create_look_ahead_mask_pt(size: int, device=None, dtype=torch.bool) -> torch
     Returns lower-triangular True (keep), False above diagonal.
     Shape: (T, T) boolean.
     """
-    # TF: mask = tf.linalg.band_part(tf.ones((size, size)), -1, 0)
-    #     return tf.cast(mask, tf.float32)
-    # We return boolean keep mask
     return torch.tril(torch.ones(size, size, dtype=torch.bool, device=device))
 
 
 def create_masks_pt(inp_3d: torch.Tensor):
     """
     PyTorch replica of TF create_masks for the decoder (KEEP semantics).
-
-    Given inp_3d (B, T, D):
-      - tar = inp[:, :, 0]
-      - dec_padding_keep = create_padding_mask(tar)  -> (B, 1, 1, T), True = keep (not padded)
-      - look_ahead_keep = create_look_ahead_mask(T)  -> (T, T), True = keep (causal lower-tri)
-      - combined_keep = maximum(dec_padding_keep, look_ahead_keep) -> (B, 1, T, T), True = keep
-
-    Returns:
-      combined_keep: (B, 1, T, T) boolean
-      dec_padding_keep: (B, 1, 1, T) boolean
     """
     device = inp_3d.device
     B, T, _ = inp_3d.shape
 
-    # TF: tar = inp[:, :, 0]
     tar = inp_3d[:, :, 0]  # (B, T)
-
-    # TF create_padding_mask: 1 - (seq == 0) -> keep (1) for non-zero, 0 for zero
-    # We return boolean keep mask
-    dec_padding_keep = (tar != 0).unsqueeze(1).unsqueeze(1)  # (B, 1, 1, T), True = keep
-
-    # TF create_look_ahead_mask: lower-tri ones (keep)
+    dec_padding_keep = (tar != 0).unsqueeze(1).unsqueeze(1)  # (B, 1, 1, T)
     la_keep = create_look_ahead_mask_pt(T, device=device, dtype=torch.bool)  # (T, T)
-
-    # TF combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-    # Both are keep masks -> maximum is logical OR of keeps
     combined_keep = (dec_padding_keep | la_keep.unsqueeze(0).unsqueeze(0))  # (B, 1, T, T)
-
     return combined_keep, dec_padding_keep
 
 
@@ -1537,12 +1619,6 @@ class MultiHeadAttentionGeneralPT(nn.Module):
     """
     Multi-head attention with separate in_dims for query and key/value,
     using boolean keep masks (True=keep, False=mask-out).
-
-    Accepted attn_mask shapes:
-      - (B, Tk)
-      - (B, Tq, Tk)
-      - (B, 1, Tq, Tk)
-      - (B, H, Tq, Tk)
     """
     def __init__(self, q_in_dim: int, kv_in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
         super().__init__()
@@ -1567,10 +1643,13 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         query: torch.Tensor,   # (B, Tq, q_in)
         key: torch.Tensor,     # (B, Tk, kv_in)
         value: torch.Tensor,   # (B, Tk, kv_in)
-        attn_mask: torch.Tensor = None,   # keep mask preferred; see below
+        attn_mask: torch.Tensor = None,   # keep mask
         return_attention_scores: bool = True,
     ):
         B, Tq, _ = query.shape
+        _dbg_report_nan("Decoder.MHAGeneral.query", query)
+        _dbg_report_nan("Decoder.MHAGeneral.key", key)
+        _dbg_report_nan("Decoder.MHAGeneral.value", value)
         Bk, Tk, _ = key.shape
         assert B == Bk, "Batch mismatch between query and key/value"
 
@@ -1581,17 +1660,18 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         q = proj(query, self.q_proj)   # (B, H, Tq, K)
         k = proj(key, self.k_proj)     # (B, H, Tk, K)
         v = proj(value, self.v_proj)   # (B, H, Tk, K)
+        _dbg_report_nan("Decoder.MHAGeneral.q", q)
+        _dbg_report_nan("Decoder.MHAGeneral.k", k)
+        _dbg_report_nan("Decoder.MHAGeneral.v", v)
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B, H, Tq, Tk)
+        _dbg_report_nan("Decoder.MHAGeneral.scores_before_mask", scores)
 
         if attn_mask is not None:
-            # We support keep masks: True = keep, False = mask-out
             if attn_mask.ndim == 2:        # (B, Tk)
-                keep = attn_mask[:, None, None, :]                     # (B,1,1,Tk)
-                keep = keep.expand(B, self.num_heads, Tq, Tk)
+                keep = attn_mask[:, None, None, :].expand(B, self.num_heads, Tq, Tk)
             elif attn_mask.ndim == 3:      # (B, Tq, Tk)
-                keep = attn_mask[:, None, :, :]                        # (B,1,Tq,Tk)
-                keep = keep.expand(B, self.num_heads, Tq, Tk)
+                keep = attn_mask[:, None, :, :].expand(B, self.num_heads, Tq, Tk)
             elif attn_mask.ndim == 4:      # (B, 1 or H, Tq, Tk)
                 keep = attn_mask
                 if keep.size(1) == 1:
@@ -1604,19 +1684,21 @@ class MultiHeadAttentionGeneralPT(nn.Module):
 
             scores = scores.masked_fill(~keep, float("-inf"))
         else:
-            # No mask -> everything is kept
             keep = torch.ones_like(scores, dtype=torch.bool, device=scores.device)
 
+        _dbg_report_nan("Decoder.MHAGeneral.scores_after_mask", scores)
+
         attn = torch.softmax(scores, dim=-1)
-        # Safe against fully-masked rows
         attn = torch.nan_to_num(attn, nan=0.0)
-        # Zero-out masked positions explicitly (in case of numerical residue)
-        attn = attn * keep.to(attn.dtype)
+        attn = attn * keep.to(attn.dtype)  # explicit zero for masked keys
+        _dbg_report_nan("Decoder.MHAGeneral.attn_softmax", attn)
         attn = self.dropout(attn)
 
         ctx = torch.matmul(attn, v)  # (B,H,Tq,K)
+        _dbg_report_nan("Decoder.MHAGeneral.ctx", ctx)
         ctx = ctx.permute(0, 2, 1, 3).contiguous().view(B, Tq, self.inner_dim)
         out = self.out_proj(ctx)  # (B,Tq,q_in)
+        _dbg_report_nan("Decoder.MHAGeneral.out", out)
 
         if return_attention_scores:
             return out, attn
@@ -1653,17 +1735,25 @@ class TransformerDecoderLayerPT(nn.Module):
         padding_mask_2d: torch.Tensor,     # (B, Tk) True=masked-out
         training: bool = False,
     ):
+        _dbg_report_nan("Decoder.DecLayer.input_x", x)
+        _dbg_report_nan("Decoder.DecLayer.input_memory", memory)
         # Self-attention
         attn1, w1 = self.mha1(query=x, key=x, value=x, attn_mask=look_ahead_mask_3d, return_attention_scores=True)
+        _dbg_report_nan("Decoder.DecLayer.attn1_out", attn1)
         x = self.norm1(x + self.dropout1(attn1))
+        _dbg_report_nan("Decoder.DecLayer.after_norm1", x)
 
         # Cross-attention
         attn2, w2 = self.mha2(query=x, key=memory, value=memory, attn_mask=padding_mask_2d, return_attention_scores=True)
+        _dbg_report_nan("Decoder.DecLayer.attn2_out", attn2)
         x = self.norm2(x + self.dropout2(attn2))
+        _dbg_report_nan("Decoder.DecLayer.after_norm2", x)
 
         # FFN
         ffn_out = self.ffn2(self.act(self.ffn1(x)))
+        _dbg_report_nan("Decoder.DecLayer.ffn_out", ffn_out)
         x = self.norm3(x + self.dropout3(ffn_out))
+        _dbg_report_nan("Decoder.DecLayer.after_norm3", x)
         return x, w1, w2
 
 
@@ -1696,20 +1786,31 @@ class DecoderCorePT(nn.Module):
         training: bool = False,
     ):
         B, T, _ = x.shape
+        _dbg_report_nan("Decoder.Core.input_x", x)
+        _dbg_report_nan("Decoder.Core.input_memory", memory)
 
-        y = self.embed(x.transpose(1, 2)).transpose(1, 2)
+        # FIX: safe 1x1 conv in fp32 with optional sanitization
+        x_bct = x.transpose(1, 2)  # (B, C_in, T)
+        y_bct = _safe_pointwise_conv1d(self.embed, x_bct, out_dtype=x.dtype, name_prefix="Decoder.Core.embed")
+        y = y_bct.transpose(1, 2)
+        _dbg_report_nan("Decoder.Core.after_embed", y)
+
         y = torch.relu(y)
+        _dbg_report_nan("Decoder.Core.after_relu", y)
         y = y * (self.model_dim ** 0.5)
+        _dbg_report_nan("Decoder.Core.after_scale", y)
 
         if T > self.pos_encoding.size(1):
             self.pos_encoding = sinusoidal_positional_encoding(T, self.model_dim, device=x.device).to(self.pos_encoding.dtype)
         y = y + self.pos_encoding[:, :T, :].to(y.dtype)
+        _dbg_report_nan("Decoder.Core.after_posenc", y)
         y = self.dropout(y)
 
         attention_weights = {}
         out = y
         for i, layer in enumerate(self.layers, start=1):
             out, w1, w2 = layer(out, memory, look_ahead_mask_3d, padding_mask_2d, training=training)
+            _dbg_report_nan(f"Decoder.Core.layer[{i}].out", out)
             attention_weights[f"decoder_layer{i}_block1"] = w1
             attention_weights[f"decoder_layer{i}_block2"] = w2
 
@@ -1769,12 +1870,14 @@ class TFMDecoderPT(nn.Module):
     def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool | None = None):
         B, W, D = x_target.shape
         assert (W, D) == (self.W, self.D_in)
+        _dbg_report_nan("Decoder.TFMDecoder.input_g", g)
+        _dbg_report_nan("Decoder.TFMDecoder.input_x_target", x_target)
         is_training = self.training if training is None else bool(training)
 
         with torch.no_grad():
             validity_mask = torch.logical_not(torch.all(x_target == 0.0, dim=-1))  # (B, W)
 
-        # Teacher-forced input
+        # Teacher-forced input (unchanged)
         if self.teacher_forcing_mode == "shifted":
             x_in = torch.zeros_like(x_target); x_in[:, 1:, :] = x_target[:, :-1, :]
         elif self.teacher_forcing_mode == "zeros":
@@ -1785,9 +1888,12 @@ class TFMDecoderPT(nn.Module):
                 mask = (torch.rand(B, W, 1, device=x_in.device) > self.input_dropout_p).to(x_in.dtype)
                 mask[:, 0, :] = 0.0
                 x_in = x_in * mask
+        _dbg_report_nan("Decoder.TFMDecoder.x_in", x_in)
 
         gen = self.generator_mlp(g.float()).to(x_target.dtype)
+        _dbg_report_nan("Decoder.TFMDecoder.gen", gen)
         memory = gen.unsqueeze(1).expand(-1, self.W, -1).contiguous()
+        _dbg_report_nan("Decoder.TFMDecoder.memory", memory)
 
         if self.self_attn_diag_only:
             la_keep = torch.eye(W, dtype=torch.bool, device=x_target.device)
@@ -1797,6 +1903,7 @@ class TFMDecoderPT(nn.Module):
         padding_mask_2d = torch.ones(B, 1, 1, W, dtype=torch.bool, device=x_target.device)
 
         hidden, _ = self.decoder(x_in, memory, combined_mask_3d, padding_mask_2d, training=is_training)
+        _dbg_report_nan("Decoder.TFMDecoder.hidden", hidden)
         dist = self.prob_decoder(hidden, validity_mask)
         return dist
     
@@ -2806,7 +2913,7 @@ class VaDEPT(nn.Module):
                 num_heads=8,
                 dff=128,
                 dropout_rate=0.2,               # a bit more dropout helps
-                teacher_forcing_mode="dropout", # try "zeros" if collapse persists
+                teacher_forcing_mode="zeros", # try "zeros" if collapse persists
                 input_dropout_p=0.5,            # drop 50% of time steps during training
                 self_attn_diag_only=False,      # set True to further reduce copying
             ) 
