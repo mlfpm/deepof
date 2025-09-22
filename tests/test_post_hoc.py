@@ -391,7 +391,7 @@ def test_chunk_summary_statistics():
 )
 def test_shap_pipeline(mode, sampler):
 
-    np.random.seed(42)
+    # np.random.seed(42)
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)
