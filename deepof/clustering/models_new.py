@@ -1867,7 +1867,7 @@ class TFMDecoderPT(nn.Module):
         )
         self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=self.model_dim, data_dim=self.D_in)
 
-    def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool | None = None):
+    def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool = None):
         B, W, D = x_target.shape
         assert (W, D) == (self.W, self.D_in)
         _dbg_report_nan("Decoder.TFMDecoder.input_g", g)
