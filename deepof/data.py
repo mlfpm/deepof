@@ -2871,7 +2871,7 @@ class Coordinates:
             )
 
         try:
-            trained_models = deepof.clustering.model_utils_new.embedding_model_fitting(
+            trained_models = deepof.model_utils.embedding_model_fitting(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
                 embedding_model=embedding_model,
