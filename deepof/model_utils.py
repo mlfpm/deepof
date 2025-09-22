@@ -152,7 +152,7 @@ def nce_loss(history, future, similarity, temperature=0.1):  # pragma: no cover
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     all_sim = K.exp(sim / temperature)
@@ -178,7 +178,7 @@ def dcl_loss(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
@@ -222,7 +222,7 @@ def fc_loss(
 
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim))
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg_sim = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
 
@@ -231,7 +231,7 @@ def fc_loss(
     # Top-K cancellation only
     if elimination_topk == 0:
         elimination_topk = 1
-    tri_mask = np.ones(N * (N - 1), dtype=np.bool).reshape(N, N - 1)
+    tri_mask = np.ones(N * (N - 1), dtype=bool).reshape(N, N - 1)
     tri_mask[:, -elimination_topk:] = False
     neg = tf.reshape(
         tf.boolean_mask(sorted_sim, tri_mask), [N, N - elimination_topk - 1]
@@ -256,7 +256,7 @@ def hard_loss(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
