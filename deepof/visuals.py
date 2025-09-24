@@ -2929,7 +2929,7 @@ def animate_skeleton(
         frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
         get_behavior_frames_in_roi._warning_issued = False
 
-    if len(frames) > len(cluster_embedding[0]):
+    if cluster_embedding is not None and len(frames) > len(cluster_embedding[0]):
         frames=frames[0:len(cluster_embedding[0])]
         warnings.warn(
             "\033[38;5;208m\n"
