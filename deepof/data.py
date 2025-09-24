@@ -3267,7 +3267,7 @@ class TableDict(dict):
         )
 
 
-    def preprocess_new(
+    def preprocess(
         self,
         coordinates: coordinates,
         handle_ids: str = "concat",
@@ -3312,15 +3312,8 @@ class TableDict(dict):
 
         if save_as_paths is None:
             save_as_paths = False
-            first_key = keys_list[0]
-            _ = get_dt(self, first_key, only_metainfo=True)["num_rows"]
             if coordinates._very_large_project:
                 save_as_paths = True
-
-        assert handle_ids in ["concat", "split"], (
-            "handle IDs should be one of 'concat', and 'split'. "
-            "See documentation for more details."
-        )
 
         if scale and scale not in {"robust", "standard", "minmax"}:
             raise ValueError("Invalid scaler. Select one of standard, minmax or robust")  # pragma: no cover
@@ -3355,8 +3348,6 @@ class TableDict(dict):
                     )
 
                 if scale:
-                    if verbose:
-                        print("Scaling data...")
 
                     current_tab_local = deepof.utils.scale_table(
                         feature_array=tab,
@@ -3462,9 +3453,6 @@ class TableDict(dict):
 
         X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
 
-        if verbose:
-            print("Breaking time series...")
-
         X_train, train_shape = deepof.utils.extract_windows(
             to_window=X_train,
             window_size=window_size,
@@ -3486,13 +3474,10 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
-        if verbose:
-            print("Done!")
-
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
     # noinspection PyTypeChecker,PyGlobalUndefined
-    def preprocess(
+    def preprocess_old(
         self,
         coordinates: coordinates,
         handle_ids: str = "concat",
