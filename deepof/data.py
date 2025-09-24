@@ -96,7 +96,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.8.2"
+current_deepof_version="0.8.3"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -2207,11 +2207,11 @@ class Coordinates:
             else:
                 pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    @deepof.data_loading._suppress_warning(
-        warn_messages=[
-            "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
-        ]
-    )
+    #@deepof.data_loading._suppress_warning(
+    #    warn_messages=[
+    #        "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
+    #    ]
+    #)
     def get_graph_dataset(
         self,
         animal_id: str = None,
@@ -3236,8 +3236,9 @@ class TableDict(dict):
 
         keys=np.array(list(current_table_dict.keys()))
 
+        rng = np.random.seed(42)
         test_indices = np.random.choice(
-            range(len(current_table_dict)), test_videos, replace=False
+            range(len(current_table_dict)), test_videos, replace=False, 
         )
 
         test_keys = keys[test_indices]
@@ -3264,6 +3265,231 @@ class TableDict(dict):
             X_test,
             test_keys,
         )
+
+
+    def preprocess_new(
+        self,
+        coordinates: coordinates,
+        handle_ids: str = "concat",
+        window_size: int = 25,
+        window_step: int = 1,
+        # binning info
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max: int = 227272,
+        # other parameters
+        scale: str = "standard",
+        pretrained_scaler: Any = None,
+        test_videos: int = 0,
+        verbose: int = 0,
+        filter_low_variance: bool = False,
+        interpolate_normalized: int = 10,
+        file_name: str = "preprocessed",
+        save_as_paths: Optional[bool] = None,
+        shuffle: bool = False,
+    ) -> np.ndarray:
+
+        available_mem = psutil.virtual_memory().available * 0.9
+        N_rows_max = int(available_mem / ((33 + 11) * window_size * 8))
+        if samples_max is None:
+            samples_max = N_rows_max
+        elif samples_max > N_rows_max:  # pragma: no cover
+            warnings.warn(
+                "\033[38;5;208m\nWarning! The selected number of samples may exceed your available memory.\033[0m"
+            )
+
+        keys_list = list(self.keys())
+
+        bin_info = _preprocess_time_bins(
+            coordinates=coordinates,
+            bin_size=bin_size,
+            bin_index=bin_index,
+            precomputed_bins=precomputed_bins,
+            tab_dict_for_binning=self,
+            samples_max=samples_max,
+        )
+
+        if save_as_paths is None:
+            save_as_paths = False
+            first_key = keys_list[0]
+            _ = get_dt(self, first_key, only_metainfo=True)["num_rows"]
+            if coordinates._very_large_project:
+                save_as_paths = True
+
+        assert handle_ids in ["concat", "split"], (
+            "handle IDs should be one of 'concat', and 'split'. "
+            "See documentation for more details."
+        )
+
+        if scale and scale not in {"robust", "standard", "minmax"}:
+            raise ValueError("Invalid scaler. Select one of standard, minmax or robust")  # pragma: no cover
+
+        resave_after_global = bool(scale) and (scale == "standard" and bool(interpolate_normalized))
+
+        # IMPORTANT: create a proper TableDict-like container (not a plain dict)
+        try:
+            table_temp = type(self)({}, self._type, self._table_path)
+        except Exception:
+            # Fallback: deepcopy and clear contents, preserving metadata
+            table_temp = copy.deepcopy(self)
+            for k in list(table_temp.keys()):
+                del table_temp[k]
+
+        rng = np.random.RandomState(42)
+        samples_for_fit = []
+        global_scaler = None
+
+        with tqdm(total=len(keys_list), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+            for key in keys_list:
+                tab = get_dt(self, key)
+                tab = tab.iloc[bin_info[key]]
+
+                if filter_low_variance:
+                    keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                    tab = tab.iloc[:, keep_cols]
+                    assert len(tab.columns) > 0, (
+                        "Error! During preprocessing the entire table was filtered out due to low variance!\n"
+                        "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
+                    )
+
+                if scale:
+                    if verbose:
+                        print("Scaling data...")
+
+                    current_tab_local = deepof.utils.scale_table(
+                        feature_array=tab,
+                        scale=scale,
+                        global_scaler=None,
+                    )
+
+                    float_mask = (tab.dtypes == float).values
+                    n_take = min(samples_max, len(tab))
+                    if n_take > 0:
+                        idx = rng.choice(len(tab), size=n_take, replace=False)
+                        samples_for_fit.append(current_tab_local[idx][:, float_mask])
+
+                    if not resave_after_global:
+                        tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
+                        tab_local_df = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
+                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                        table_temp[key] = save_dt(tab_local_df, table_path, save_as_paths)
+                else:
+                    table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                    table_temp[key] = save_dt(tab, table_path, save_as_paths)
+
+                pbar.update()
+
+        if scale:
+            if scale == "standard":
+                global_scaler = StandardScaler()
+            elif scale == "minmax":
+                global_scaler = MinMaxScaler()
+            else:
+                global_scaler = RobustScaler()
+
+            if pretrained_scaler is None:
+                if samples_for_fit:
+                    concat_array = np.vstack(samples_for_fit)
+                    global_scaler.fit(concat_array)
+                else:
+                    # Will error similarly to original if there are zero features, maintaining behavior
+                    global_scaler.fit(np.empty((0, 0)))
+            else:
+                global_scaler = pretrained_scaler
+
+        if resave_after_global:
+            with tqdm(total=len(keys_list), desc=f"{'Rescaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+                for key in keys_list:
+                    tab = get_dt(self, key)
+                    tab = tab.iloc[bin_info[key]]
+
+                    if filter_low_variance:
+                        keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                    list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                        tab = tab.iloc[:, keep_cols]
+
+                    # local -> global scaling (same as original)
+                    current_tab_local = deepof.utils.scale_table(
+                        feature_array=tab,
+                        scale=scale,
+                        global_scaler=None,
+                    )
+                    tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
+
+                    current_tab_global = deepof.utils.scale_table(
+                        feature_array=tab_local_df,
+                        scale=scale,
+                        global_scaler=global_scaler,
+                    )
+                    tab_scaled = pd.DataFrame(current_tab_global, columns=tab.columns, index=tab.index)
+
+                    if scale == "standard" and interpolate_normalized:
+                        cur_tab = tab_scaled.to_numpy(copy=True)
+                        try:
+                            cur_tab[cur_tab > interpolate_normalized] = np.nan
+                            cur_tab[cur_tab < -interpolate_normalized] = np.nan
+                        except TypeError:  # pragma: no cover
+                            cur_tab[
+                                np.append(
+                                    (cur_tab[:, :-1].astype(float) > interpolate_normalized),
+                                    np.array([[False] * len(cur_tab)]).T,
+                                    axis=1,
+                                )
+                            ] = np.nan
+                            cur_tab[
+                                np.append(
+                                    (cur_tab[:, :-1].astype(float) < -interpolate_normalized),
+                                    np.array([[False] * len(cur_tab)]).T,
+                                    axis=1,
+                                )
+                            ] = np.nan
+
+                        tab_interpol = (
+                            pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
+                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                            .interpolate(limit_direction="both")
+                        )
+
+                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                        table_temp[key] = save_dt(tab_interpol, table_path, save_as_paths)
+                    else:
+                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                        table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
+
+                    pbar.update()
+
+        X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
+
+        if verbose:
+            print("Breaking time series...")
+
+        X_train, train_shape = deepof.utils.extract_windows(
+            to_window=X_train,
+            window_size=window_size,
+            window_step=window_step,
+            save_as_paths=save_as_paths,
+            shuffle=shuffle,
+            windows_desc="Get training windows",
+        )
+
+        if test_videos and len(test_index) > 0:
+            X_test, test_shape = deepof.utils.extract_windows(
+                to_window=X_test,
+                window_size=window_size,
+                window_step=window_step,
+                save_as_paths=save_as_paths,
+                shuffle=shuffle,
+                windows_desc="Get testing windows",
+            )
+        else:
+            test_shape = (0,)
+
+        if verbose:
+            print("Done!")
+
+        return (X_train, X_test), (train_shape, test_shape), global_scaler
 
     # noinspection PyTypeChecker,PyGlobalUndefined
     def preprocess(
@@ -3318,6 +3544,28 @@ class TableDict(dict):
             global_scaler: global scaler that was used for scaling
         
         """
+        #double call of old and new version for comparison purposes
+        X_tuple, shape_tuple, global_scaler_new = self.preprocess_new(
+            coordinates,
+            handle_ids,
+            window_size,
+            window_step,
+            #binning info
+            bin_size,
+            bin_index,
+            precomputed_bins,
+            samples_max,  #corresponds to 1GB of memory when using default settings
+            #other parameters
+            scale,
+            pretrained_scaler,
+            test_videos,
+            verbose,
+            filter_low_variance,
+            interpolate_normalized,
+            file_name,
+            save_as_paths,
+            shuffle
+        ,)
         
         #get available memory -10% as buffer
         available_mem=psutil.virtual_memory().available*0.9
@@ -3338,12 +3586,6 @@ class TableDict(dict):
         table_temp = copy.deepcopy(self)
 
         bin_info=_preprocess_time_bins(coordinates=coordinates, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=self, samples_max=samples_max)
-
-
-        #determine the number of rows to use
-        #N_elements_max=int(1000000000/8) #up to 1GB in save space
-        #num_cols=get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
-        #samples_max=int(N_elements_max/(window_size*num_cols)*window_step)
 
         #save outputs as paths if first table is larger than a threshold
         if save_as_paths is None:
@@ -3526,10 +3768,69 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
+        assert np.sum([np.sum(np.sum(np.abs(get_dt(X_tuple[0],key)-get_dt(X_train,key)))) for key in X_train.keys()]) < 0.0000001
+        if X_test is not None and len(X_test.keys()) > 0:
+            assert np.sum([np.sum(np.sum(np.abs(get_dt(X_tuple[1],key)-get_dt(X_test,key)))) for key in X_test.keys()]) < 0.0000001
+        assert shape_tuple[0]==train_shape
+        assert shape_tuple[1]==test_shape
+
+        def scalers_equivalent(a, b, rtol=1e-7, atol=1e-9) -> bool:
+            import numpy as np
+            from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
+            # Same type required
+            if type(a) is not type(b):
+                return False
+
+            # Pick the key hyperparameters and learned attributes to compare
+            if isinstance(a, StandardScaler):
+                params = ["with_mean", "with_std"]
+                attrs  = ["mean_", "scale_"]
+            elif isinstance(a, MinMaxScaler):
+                params = ["feature_range"]
+                attrs  = ["min_", "scale_"]
+            elif isinstance(a, RobustScaler):
+                params = ["quantile_range", "with_centering", "with_scaling"]
+                attrs  = ["center_", "scale_"]
+            else:
+                # Fallback: compare all params and common learned attrs
+                params = sorted(a.get_params().keys())
+                attrs  = [n for n in ("mean_", "scale_", "min_", "center_", "data_min_", "data_max_", "data_range_") if hasattr(a, n)]
+
+            # Compare hyperparameters (must be identical)
+            pa, pb = a.get_params(deep=True), b.get_params(deep=True)
+            for p in params:
+                if pa.get(p, None) != pb.get(p, None):
+                    return False
+
+            # Helper to compare numbers/arrays with tolerance
+            def _close(x, y):
+                if isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+                    return x.shape == y.shape and np.allclose(x, y, rtol=rtol, atol=atol, equal_nan=True)
+                if isinstance(x, (list, tuple)) and isinstance(y, (list, tuple)):
+                    xa, ya = np.asarray(x), np.asarray(y)
+                    return xa.shape == ya.shape and np.allclose(xa, ya, rtol=rtol, atol=atol, equal_nan=True)
+                # scalars or other simple types
+                try:
+                    return (x == y) or (np.isfinite([x, y]).all() and np.isclose(x, y, rtol=rtol, atol=atol))
+                except Exception:
+                    return x == y
+
+            # Compare learned attributes
+            for attr in attrs:
+                if not hasattr(a, attr) or not hasattr(b, attr):
+                    return False
+                if not _close(getattr(a, attr), getattr(b, attr)):
+                    return False
+
+            return True
+        
+        assert scalers_equivalent(global_scaler,global_scaler_new)
 
         if verbose:
             print("Done!")
 
+    
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
     def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:

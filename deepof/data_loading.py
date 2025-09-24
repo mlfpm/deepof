@@ -142,11 +142,11 @@ def get_dt(
     return (raw_data, path) if return_path else raw_data
 
 
-@_suppress_warning(
-    warn_messages=[
-        "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
-    ]
-)
+#@_suppress_warning(
+#    warn_messages=[
+#        "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
+#    ]
+#)
 def save_dt(
     dt: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray]],
     folder_path: str,
