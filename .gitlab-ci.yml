@@ -79,8 +79,8 @@ tutorials:
     - pip install papermill
     - pip install -q -e . --progress-bar off
     - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
-    - curl --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/AWQPeadjdLG5Xir/download
-    - unzip tutorial_files.zip
+    - curl --output tutorial_files https://datashare.mpcdf.mpg.de/s/Hu1XjZkY9zml0mm/download
+    - unzip tutorial_files
 
   script:
     - pip install pyarrow
