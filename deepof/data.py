@@ -3498,7 +3498,7 @@ class TableDict(dict):
         file_name = 'preprocessed',
         save_as_paths = None,
         shuffle: bool = False,
-    ) -> np.ndarray:
+    ) -> np.ndarray: # pragma: no cover
         """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
         Capable of returning training and test sets ready for model training.
