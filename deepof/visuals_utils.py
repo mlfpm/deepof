@@ -999,15 +999,18 @@ def _get_behaviorwise_behaviors_in_roi(
         return cur_supervised # No relevant columns to process further.
 
     # 3. Apply ROI masks animal by animal, but only to their relevant columns.
-    # We must iterate through all animals in bin_info, not just target_ids.
     for animal_id, roi_mask in local_bin_info.items():
         if animal_id == "time":
             continue
+        # if there is more than one mosue, add underscores
+        animal_id_suffix = animal_id
+        if len(local_bin_info)>2:
+            animal_id_suffix = animal_id + "_"
             
         # Find which of the valid_cols are associated with the current animal_id
         cols_for_this_animal = [
             col for col in valid_cols 
-            if _get_col_base_name(col).startswith(animal_id)
+            if (animal_id_suffix) in _get_col_base_name(col)
         ]
         
         if cols_for_this_animal:
@@ -1047,6 +1050,8 @@ def get_supervised_behaviors_in_roi(
         cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
     elif roi_mode == "behaviorwise":
         cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    else:
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")
             
     return cur_supervised
 
