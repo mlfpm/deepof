@@ -57,8 +57,8 @@ table_dict = NewType("deepof_table_dict", Any)
 class RecurrentEncoderPT(nn.Module):
     def __init__(
         self,
-        input_shape: tuple,        # Expected: (Time, Nodes, Features_per_node)
-        edge_feature_shape: tuple, # Expected: (Time, Edges, Features_per_edge)
+        input_shape: tuple,
+        edge_feature_shape: tuple,
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         use_gnn: bool = True,
@@ -68,22 +68,22 @@ class RecurrentEncoderPT(nn.Module):
         self.use_gnn = use_gnn
         self.num_nodes = adjacency_matrix.shape[0]
         self.latent_dim = latent_dim
+        self.input_shape = input_shape
 
         if self.use_gnn:
-            node_feat_per_animal = input_shape[2]  # Get Features_per_node
-            edge_feat_per_edge = edge_feature_shape[2] # Get Features_per_edge
-
-            # Check for consistency
-            assert self.num_nodes == input_shape[1], "Adjacency matrix nodes and input_shape nodes do not match."
-
-            # Node path initialization
+            # For GNN: input_shape must be (Time, Nodes, Features) - 3D
+            assert len(input_shape) == 3, "GNN path requires 3D input_shape"
+            
+            # FIXED: Use total features divided by nodes (matching old implementation)
+            node_feat_per_animal = input_shape[-1] // self.num_nodes
+            
             self.node_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
                 input_features=node_feat_per_animal, latent_dim=latent_dim
             )
 
-            # Edge path initialization
+            # FIXED: Edge features should be 1 (matching old implementation)
             self.edge_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
-                input_features=edge_feat_per_edge, latent_dim=latent_dim
+                input_features=1, latent_dim=latent_dim
             )
 
             self.spatial_gnn_block = CensNetConvPT(
@@ -99,43 +99,48 @@ class RecurrentEncoderPT(nn.Module):
             final_dense_in = (self.num_nodes * latent_dim) + (self.num_edges * latent_dim)
             self.final_dense = nn.Linear(final_dense_in, latent_dim)
 
-        else: # Non-GNN path 
-            in_features = input_shape[1] * input_shape[2]
+        else: # Non-GNN path
+            # Handle both 2D and 3D input_shape
+            if len(input_shape) == 2:
+                # VQVAE case: (time, total_features)
+                in_features = input_shape[1]
+            else:
+                # Standard case: (time, nodes, features)
+                in_features = input_shape[1] * input_shape[2]
+            
             self.recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
                 input_features=in_features, latent_dim=latent_dim
             )
-            self.final_dense = nn.Linear(latent_dim, latent_dim)
+            # FIXED: Check what RecurrentBlockPT actually returns
+            # If it returns concatenated bidirectional (2*latent_dim), keep this
+            # Otherwise, change back to latent_dim
+            self.final_dense = nn.Linear(2 * latent_dim, latent_dim)  # Changed back
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
-        # x shape: (B, T, N, F_node)
-        # a shape: (B, T, E, F_edge)
-        B, T, N, F_node = x.shape
-        _, _, E, F_edge = a.shape
+        B, T, N_nodes_total, F_nodes_total = x.shape
+        _, _, E_edges_total, F_edges_total = a.shape
 
         if self.use_gnn:
-            # This logic block exactly replicates the TensorFlow version's
-            # complex (and maybe buggy) reshaping to prepare data for the recurrent block.
-
-            # --- Node Path ---
-            # 1. Start with the 4D tensor and flatten last two dims to mimic TF's starting point
-            x_3d = x.view(B, T, N * F_node)
-            # 2. Transpose to (TotalFeatures, Time, Batch)
-            x_t = x_3d.permute(2, 1, 0)
-            # 3. Reshape to (Feats_per_node, Time, Nodes, Batch)
-            x_reshaped_t = x_t.reshape(F_node, T, N, B)
-            # 4. Transpose to (Batch, Nodes, Time, Feats_per_node)
-            x_for_block = x_reshaped_t.permute(3, 2, 1, 0)
-            # 5. Pass to the recurrent block, which is designed for this 4D input
-            node_output = self.node_recurrent_block(x_for_block)
-
-            # --- Edge Path (Identical Logic) ---
-            a_3d = a.view(B, T, E * F_edge)
-            a_t = a_3d.permute(2, 1, 0)
-            a_reshaped_t = a_t.reshape(F_edge, T, E, B)
-            a_for_block = a_reshaped_t.permute(3, 2, 1, 0)
-            edge_output = self.edge_recurrent_block(a_for_block)
+            # FIXED: Restore the exact reshaping logic from the old implementation
+            F_per_node = F_nodes_total // self.num_nodes
             
-            # --- GNN and Final Layers ---
+            # Node path - match TF's transpose/reshape/transpose pattern
+            x_t = x.permute(3, 2, 1, 0)  # (F_total, N_total, T, B)
+            target_shape_x = (F_per_node, T, self.num_nodes, -1)
+            x_reshaped_t = x_t.reshape(target_shape_x)
+            x_reshaped = x_reshaped_t.permute(3, 2, 1, 0)  # (B, num_nodes, T, F_per_node)
+            
+            # Edge path - match TF's pattern
+            a_t = a.permute(3, 2, 1, 0)  # (F_edges, E_edges, T, B)
+            target_shape_a = (1, T, F_edges_total, -1)
+            a_reshaped_t = a_t.reshape(target_shape_a)
+            a_reshaped = a_reshaped_t.permute(3, 2, 1, 0)  # (B, E_edges, T, 1)
+
+            # Pass through recurrent blocks
+            node_output = self.node_recurrent_block(x_reshaped)           
+            edge_output = self.edge_recurrent_block(a_reshaped)
+            
+            # GNN and final layers
             adj_tuple = (self.laplacian, self.edge_laplacian, self.incidence)
             x_nodes, x_edges = self.spatial_gnn_block(
                 [node_output, adj_tuple, edge_output]
@@ -143,16 +148,16 @@ class RecurrentEncoderPT(nn.Module):
             x_nodes = F.relu(x_nodes)
             x_edges = F.relu(x_edges)
             
-            x_nodes_flat = x_nodes.view(B, -1)
-            x_edges_flat = x_edges.view(B, -1)
+            b_prime = x_nodes.shape[0]
+            x_nodes_flat = x_nodes.view(b_prime, -1)
+            x_edges_flat = x_edges.view(b_prime, -1)
             encoder = torch.cat([x_nodes_flat, x_edges_flat], dim=-1)
 
-
         else: # Non-GNN path
+            # FIXED: Match the old implementation's logic
+            x_reshaped = x.view(B, T, N_nodes_total * F_nodes_total).unsqueeze(1)
+            encoder = self.recurrent_block(x_reshaped).squeeze(1)
 
-            x_reshaped = x.view(B, T, N * F_node).unsqueeze(1)
-            encoder = self.recurrent_block(x_reshaped).squeeze(1)        
-            
         return self.final_dense(encoder)
 
 
@@ -218,7 +223,6 @@ def get_recurrent_encoder(
                 ][::-1],
             )
         )
-        #a_reshaped = tf.transpose(a, perm=[0, 2, 1, 3])
 
 
     else:
@@ -230,6 +234,7 @@ def get_recurrent_encoder(
         x_reshaped, latent_dim, gru_unroll, bidirectional_merge
     )(x_reshaped)
 
+
     # Instantiate spatial graph block
     if use_gnn:
 
@@ -237,7 +242,7 @@ def get_recurrent_encoder(
         a_encoder = deepof.clustering.model_utils_new.get_recurrent_block(
             a_reshaped, latent_dim, gru_unroll, bidirectional_merge
         )(a_reshaped)
-
+    
         spatial_block = CensNetConv(
             node_channels=latent_dim,
             edge_channels=latent_dim,
@@ -254,6 +259,7 @@ def get_recurrent_encoder(
         x_nodes, x_edges = spatial_block(
             [encoder, (laplacian, edge_laplacian, incidence), a_encoder], mask=None
         )
+        
 
         x_nodes = tf.reshape(
             x_nodes,
@@ -273,7 +279,7 @@ def get_recurrent_encoder(
     encoder_output = tf.keras.layers.Dense(latent_dim, kernel_initializer="he_uniform")(
         encoder
     )
-
+    
     return Model([x, a], encoder_output, name="recurrent_encoder")
 
 

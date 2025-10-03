@@ -1533,7 +1533,7 @@ def embedding_model_fitting(
     with strategy.scope():
 
         if embedding_model == "VQVAE":
-            ae_full_model = deepof.clustering.models_new.VQVAE(
+            ae_full_model = deepof.models.VQVAE(
                 input_shape=train_shape,
                 edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,
