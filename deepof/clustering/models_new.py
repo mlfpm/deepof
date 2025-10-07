@@ -55,111 +55,151 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 class RecurrentEncoderPT(nn.Module):
+    """
+    PyTorch translation of the TF recurrent encoder.
+
+    Expected shapes:
+      - use_gnn=True:
+          x: (B, T, N_nodes, F_per_node)
+          a: (B, T, E_edges, F_per_edge)
+
+          Internally:
+            - TF-style grouping reshape -> (B, N_nodes, T, F_per_node) / (B, E_edges, T, F_per_edge)
+            - Recurrent blocks -> (B, N_nodes/E_edges, 2*latent_dim)
+            - CensNetConvPT -> (B, N_nodes/E_edges, latent_dim)
+            - ReLU (to match TF activation='relu')
+            - Flatten+concat -> Linear(latent_dim)
+
+      - use_gnn=False:
+          x: (B, T, N_nodes, F_per_node) -> flatten to (B, 1, T, N_nodes*F_per_node)
+          recurrent block -> (B, 1, 2*latent_dim) -> squeeze -> Linear(latent_dim)
+    """
+
     def __init__(
         self,
-        input_shape: tuple,
-        edge_feature_shape: tuple,
-        adjacency_matrix: np.ndarray,
+        input_shape: tuple,            # (T, N_nodes, F_per_node)
+        edge_feature_shape: tuple,     # (T, E_edges, F_per_edge)
+        adjacency_matrix: np.ndarray,  # (N_nodes, N_nodes)
         latent_dim: int,
         use_gnn: bool = True,
-        interaction_regularization: float = 0.0,
+        interaction_regularization: float = 0.0,  # not used in PT, kept for API parity
     ):
         super().__init__()
         self.use_gnn = use_gnn
-        self.num_nodes = adjacency_matrix.shape[0]
         self.latent_dim = latent_dim
-        self.input_shape = input_shape
+
+        self.num_nodes = int(adjacency_matrix.shape[0])
+        self.num_edges = int(edge_feature_shape[1]) if use_gnn else 0
 
         if self.use_gnn:
-            # For GNN: input_shape must be (Time, Nodes, Features) - 3D
-            assert len(input_shape) == 3, "GNN path requires 3D input_shape"
-            
-            # FIXED: Use total features divided by nodes (matching old implementation)
-            node_feat_per_animal = input_shape[-1] // self.num_nodes
-            
+            # Node stream
+            node_feat_per_node = int(input_shape[-1])
             self.node_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
-                input_features=node_feat_per_animal, latent_dim=latent_dim
+                input_features=node_feat_per_node,
+                latent_dim=latent_dim,
             )
 
-            # FIXED: Edge features should be 1 (matching old implementation)
+            # Edge stream
+            edge_feat_per_edge = int(edge_feature_shape[-1])
             self.edge_recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
-                input_features=1, latent_dim=latent_dim
+                input_features=edge_feat_per_edge,
+                latent_dim=latent_dim,
             )
 
+            # GNN block
             self.spatial_gnn_block = CensNetConvPT(
                 node_channels=latent_dim,
                 edge_channels=latent_dim,
+                activation='relu',
             )
+            # Build with expected feature dims (2*latent on each stream)
+            self.spatial_gnn_block._build(
+                node_features_shape=[None, None, 2 * latent_dim],
+                edge_features_shape=[None, None, 2 * latent_dim],
+            )
+
+            # Preprocess graph operators once and buffer them
             lap, edge_lap, inc = self.spatial_gnn_block.preprocess(torch.tensor(adjacency_matrix))
             self.register_buffer("laplacian", lap.float())
             self.register_buffer("edge_laplacian", edge_lap.float())
             self.register_buffer("incidence", inc.float())
-            
-            self.num_edges = edge_feature_shape[1]
-            final_dense_in = (self.num_nodes * latent_dim) + (self.num_edges * latent_dim)
-            self.final_dense = nn.Linear(final_dense_in, latent_dim)
 
-        else: # Non-GNN path
-            # Handle both 2D and 3D input_shape
-            if len(input_shape) == 2:
-                # VQVAE case: (time, total_features)
-                in_features = input_shape[1]
-            else:
-                # Standard case: (time, nodes, features)
-                in_features = input_shape[1] * input_shape[2]
-            
+            # Final projection after concatenating node+edge embeddings
+            final_in = (self.num_nodes * latent_dim) + (self.num_edges * latent_dim)
+            self.final_dense = nn.Linear(final_in, latent_dim)
+
+        else:
+            # Non-GNN: single recurrent block over a single "group" dimension
+            in_features = int(input_shape[1]) * int(input_shape[2])  # N_nodes * F_per_node
             self.recurrent_block = deepof.clustering.model_utils_new.RecurrentBlockPT(
-                input_features=in_features, latent_dim=latent_dim
+                input_features=in_features,
+                latent_dim=latent_dim,
             )
-            # FIXED: Check what RecurrentBlockPT actually returns
-            # If it returns concatenated bidirectional (2*latent_dim), keep this
-            # Otherwise, change back to latent_dim
-            self.final_dense = nn.Linear(2 * latent_dim, latent_dim)  # Changed back
+            self.final_dense = nn.Linear(2 * latent_dim, latent_dim)
+
+    @staticmethod
+    def tf_style_group_reshape(x: torch.Tensor, groups: int, feat_per_group: int) -> torch.Tensor:
+        """
+        Exact TF mapping used in the encoder for the GNN path:
+          x: (B, T, groups, feat_per_group)
+          -> (B, groups, T, feat_per_group)
+        Derived from the TF sequence: transpose -> reshape -> transpose.
+        """
+        B, T, G, F = x.shape
+        assert G == groups and F == feat_per_group
+        # (B, T, G*F)
+        flat = x.reshape(B, T, G * F)
+        # (G*F, T, B)
+        tmp = flat.permute(2, 1, 0)
+        # (F, T, G, B)
+        tmp = tmp.reshape(F, T, G, B)
+        # (B, G, T, F)
+        out = tmp.permute(3, 2, 1, 0).contiguous()
+        return out
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
-        B, T, N_nodes_total, F_nodes_total = x.shape
-        _, _, E_edges_total, F_edges_total = a.shape
+        """
+        x: (B, T, N_nodes, F_per_node)
+        a: (B, T, E_edges, F_per_edge)
+        """
+        B, T, N_nodes, F_per_node = x.shape
+        _, _, E_edges, F_per_edge = a.shape
 
         if self.use_gnn:
-            # FIXED: Restore the exact reshaping logic from the old implementation
-            F_per_node = F_nodes_total // self.num_nodes
-            
-            # Node path - match TF's transpose/reshape/transpose pattern
-            x_t = x.permute(3, 2, 1, 0)  # (F_total, N_total, T, B)
-            target_shape_x = (F_per_node, T, self.num_nodes, -1)
-            x_reshaped_t = x_t.reshape(target_shape_x)
-            x_reshaped = x_reshaped_t.permute(3, 2, 1, 0)  # (B, num_nodes, T, F_per_node)
-            
-            # Edge path - match TF's pattern
-            a_t = a.permute(3, 2, 1, 0)  # (F_edges, E_edges, T, B)
-            target_shape_a = (1, T, F_edges_total, -1)
-            a_reshaped_t = a_t.reshape(target_shape_a)
-            a_reshaped = a_reshaped_t.permute(3, 2, 1, 0)  # (B, E_edges, T, 1)
+            # TF-style reshape into (B, groups, T, features)
+            x_reshaped = self.tf_style_group_reshape(x, self.num_nodes, F_per_node)  # (B, N, T, F)
+            a_reshaped = self.tf_style_group_reshape(a, self.num_edges, F_per_edge)  # (B, E, T, F)
 
-            # Pass through recurrent blocks
-            node_output = self.node_recurrent_block(x_reshaped)           
+            # Recurrent blocks -> (B, N/E, 2*latent)
+            node_output = self.node_recurrent_block(x_reshaped)
             edge_output = self.edge_recurrent_block(a_reshaped)
-            
-            # GNN and final layers
+
+            # GNN
             adj_tuple = (self.laplacian, self.edge_laplacian, self.incidence)
             x_nodes, x_edges = self.spatial_gnn_block(
                 [node_output, adj_tuple, edge_output]
-            )
-            x_nodes = F.relu(x_nodes)
-            x_edges = F.relu(x_edges)
-            
-            b_prime = x_nodes.shape[0]
-            x_nodes_flat = x_nodes.view(b_prime, -1)
-            x_edges_flat = x_edges.view(b_prime, -1)
+            )  # (B, N/E, latent)
+
+            # Activation to match Spektral's activation='relu'
+            # Apply here only if not already applied inside CensNetConvPT.
+            if getattr(self.spatial_gnn_block, "activation", None) == "relu":
+                x_nodes = F.relu(x_nodes)
+                x_edges = F.relu(x_edges)
+
+            # Flatten and concat
+            x_nodes_flat = x_nodes.view(B, -1)
+            x_edges_flat = x_edges.view(B, -1)
             encoder = torch.cat([x_nodes_flat, x_edges_flat], dim=-1)
 
-        else: # Non-GNN path
-            # FIXED: Match the old implementation's logic
-            x_reshaped = x.view(B, T, N_nodes_total * F_nodes_total).unsqueeze(1)
-            encoder = self.recurrent_block(x_reshaped).squeeze(1)
+        else:
+            # Flatten nodes/features into a single feature dim and keep a single group
+            x_flat = x.view(B, T, N_nodes * F_per_node)  # (B, T, N*F)
+            x_grouped = x_flat.unsqueeze(1)              # (B, 1, T, N*F)
+            encoder = self.recurrent_block(x_grouped).squeeze(1)  # (B, 2*latent)
 
+        # Final projection
         return self.final_dense(encoder)
-
+        
 
 # noinspection PyCallingNonCallable
 @deepof.data_loading._suppress_warning(
@@ -1972,6 +2012,100 @@ def get_transformer_decoder(
     )
   
 
+class VectorQuantizerPT(nn.Module):
+    """PyTorch Vector quantizer layer."""
+
+    def __init__(
+        self,
+        n_components: int,
+        embedding_dim: int,
+        beta: float,
+        kmeans_loss: float = 0.0,
+    ):
+        super(VectorQuantizerPT, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.n_components = n_components
+        self.beta = beta
+        self.kmeans = kmeans_loss
+
+        self.codebook = nn.Parameter(
+            torch.empty(self.embedding_dim, self.n_components).uniform_(0, 1)
+        )
+        
+        # Store individual loss components for inspection (but not for summing)
+        self.last_commitment_loss = None
+        self.last_codebook_loss = None
+        self.last_kmeans_loss = None
+        self.last_vq_loss = None
+
+    def forward(self, x: torch.Tensor, return_losses: bool = True):
+        """
+        Args:
+            x: Input tensor of shape (..., embedding_dim)
+               Typically (batch_size, embedding_dim) from encoder
+        """
+        input_shape = x.shape
+        
+        losses = {}
+
+        # Flatten to 2D
+        flattened = x.reshape(-1, self.embedding_dim)
+
+        # Kmeans loss on flattened 2D tensor
+        if self.kmeans and return_losses:
+            kmeans_loss_val = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(flattened, self.kmeans)
+            losses['kmeans_loss'] = kmeans_loss_val
+            self.last_kmeans_loss = kmeans_loss_val.item()
+
+        # Get encodings
+        encoding_indices = self.get_code_indices(
+            flattened, return_soft_counts=False
+        ).long()
+        soft_counts = self.get_code_indices(flattened, return_soft_counts=True)
+
+        encodings = F.one_hot(encoding_indices, self.n_components).float()
+        quantized = torch.matmul(encodings, self.codebook.T)
+        quantized = quantized.reshape(input_shape)
+
+        if return_losses:
+            commitment_loss = self.beta * torch.mean(
+                (quantized.detach() - x) ** 2
+            )
+            codebook_loss = torch.mean((quantized - x.detach()) ** 2)
+            vq_loss = commitment_loss + codebook_loss
+            
+            # Store the COMBINED vq_loss in the losses dict (matching TF behavior)
+            losses['vq_loss'] = vq_loss
+            
+            # Store individual components for inspection/logging only
+            self.last_commitment_loss = commitment_loss.item()
+            self.last_codebook_loss = codebook_loss.item()
+            self.last_vq_loss = vq_loss.item()
+
+        if return_losses:
+            return quantized, soft_counts, losses
+        else:
+            return quantized, soft_counts
+
+    def get_code_indices(
+        self, flattened_inputs: torch.Tensor, return_soft_counts: bool = False
+    ) -> torch.Tensor:
+        similarity = torch.matmul(flattened_inputs, self.codebook)
+        distances = (
+            torch.sum(flattened_inputs**2, dim=1, keepdim=True)
+            + torch.sum(self.codebook**2, dim=0)
+            - 2 * similarity
+        )
+
+        if return_soft_counts:
+            similarity = (1 / distances) ** 2
+            soft_counts = similarity / torch.sum(similarity, dim=1, keepdim=True)
+            return soft_counts
+
+        encoding_indices = torch.argmin(distances, dim=1)
+        return encoding_indices
+    
+
 class VectorQuantizer(nn.Module):
     """
     Vector Quantizer Layer for VQ-VAE.
@@ -2166,7 +2300,239 @@ class VectorQuantizer(nn.Module):
         return quantized, soft_counts
 
 
+class VQVAEPT(nn.Module):
+    """
+    PyTorch implementation of the VQ-VAE model adapted to the DeepOF setting.
+    
+    Note: This version handles the actual DeepOF input format where:
+    - x: (B, T, node_features) - flattened node features
+    - a: (B, T, edge_features) - flattened edge features
+    """
+    
+    def __init__(
+        self,
+        input_shape: tuple,
+        edge_feature_shape: tuple,
+        adjacency_matrix: np.ndarray,
+        latent_dim: int,
+        n_components: int,
+        beta: float = 1.0,
+        kmeans_loss: float = 0.0,
+        use_gnn: bool = True,
+        encoder_type: str = "recurrent",
+        interaction_regularization: float = 0.0,
+    ):
+        """Initialize a VQ-VAE model.
 
+        Args:
+            input_shape (tuple): Shape of the input (time_steps, node_features).
+            edge_feature_shape (tuple): Shape of edge features (time_steps, edge_features).
+            adjacency_matrix (np.ndarray): Adjacency matrix for GNN.
+            latent_dim (int): Dimensionality of the latent space.
+            n_components (int): Number of embeddings (clusters) in the codebook.
+            beta (float): Beta parameter of the VQ loss.
+            kmeans_loss (float): Regularization parameter for the Gram matrix.
+            use_gnn (bool): Whether to use GNN in encoder.
+            encoder_type (str): Type of encoder ("recurrent", "TCN", or "transformer").
+            interaction_regularization (float): Regularization parameter for interactions.
+        """
+        super().__init__()
+        
+        time_steps, n_nodes, n_features_per_node = input_shape
+        self.input_n_nodes = n_nodes
+        self.input_n_features_per_node = n_features_per_node
+        self.window_size = time_steps
+        self.latent_dim = latent_dim
+        self.n_components = n_components
+        self.encoder_type = encoder_type
+        
+        # Initialize encoder based on type
+        if encoder_type == "recurrent":
+            self.encoder = deepof.clustering.models_new.RecurrentEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = deepof.clustering.models_new.RecurrentDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+            )
+        elif encoder_type == "TCN":
+            self.encoder = deepof.clustering.models_new.TCNEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = deepof.clustering.models_new.TCNDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+            ) 
+        elif encoder_type == "transformer":
+            self.encoder = deepof.clustering.models_new.TFMEncoderPT(
+                input_shape=input_shape,
+                edge_feature_shape=edge_feature_shape,
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+            )
+            decoder_output_features = n_nodes * n_features_per_node
+            self.decoder = deepof.clustering.models_new.TFMDecoderPT(
+                output_shape=(time_steps, decoder_output_features),
+                latent_dim=latent_dim,
+                num_layers=2,
+                num_heads=8,
+                dff=128,
+                dropout_rate=0.2,
+                teacher_forcing_mode="zeros",
+                input_dropout_p=0.5,
+                self_attn_diag_only=False,
+            )
+        else:
+            raise ValueError(f"Unknown encoder_type: {encoder_type}")
+        
+        # Initialize Vector Quantizer
+        self.vq_layer = VectorQuantizerPT(
+            n_components=n_components,
+            embedding_dim=latent_dim,
+            beta=beta,
+            kmeans_loss=kmeans_loss,
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        a: torch.Tensor,
+        return_losses: bool = True,
+        return_all_outputs: bool = False,
+    ):
+        """
+        Forward pass through the VQ-VAE model.
+        
+        Args:
+            x: Input node features (B, T, N, F)
+            a: Input edge features (B, T, E, F_edge)
+            return_losses: Whether to compute and return VQ losses
+            return_all_outputs: Whether to return all intermediate outputs
+        """
+        # Encode
+        encoder_output = self.encoder(x, a)  # Shape: (B, latent_dim)
+        
+        # Vector Quantization
+        if return_losses:
+            quantized_latents, soft_counts, vq_losses = self.vq_layer(
+                encoder_output, return_losses=True
+            )
+        else:
+            quantized_latents, soft_counts = self.vq_layer(
+                encoder_output, return_losses=False
+            )
+            vq_losses = {}
+        
+        # Prepare input for decoder (flatten spatial dimensions for teacher forcing)
+        B, T, N, F = x.shape
+        x_for_decoder = x.view(B, T, N * F)  # Flatten to (B, T, node_features)
+        
+        # Decode from QUANTIZED latents (main path)
+        encoding_reconstruction_dist = self.decoder(quantized_latents, x_for_decoder)
+        
+        # Decode from ORIGINAL encoder output (bypass path for gradient flow)
+        reconstruction_dist = self.decoder(encoder_output, x_for_decoder)
+        
+        # Handle transformer decoder outputs (which return attention weights)
+        if self.encoder_type == "transformer":
+            if isinstance(encoding_reconstruction_dist, tuple):
+                encoding_reconstruction_dist = encoding_reconstruction_dist[0]
+            if isinstance(reconstruction_dist, tuple):
+                reconstruction_dist = reconstruction_dist[0]
+        
+        if return_all_outputs:
+            return (
+                encoding_reconstruction_dist,
+                reconstruction_dist,
+                quantized_latents,
+                soft_counts,
+                encoder_output,
+                vq_losses if return_losses else None,
+            )
+        else:
+            if return_losses:
+                return encoding_reconstruction_dist, reconstruction_dist, vq_losses
+            else:
+                return encoding_reconstruction_dist, reconstruction_dist
+
+    @torch.no_grad()
+    def encode(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """Inference-only: Get encoder output. Equivalent to TF 'encoder' model."""
+        return self.encoder(x, a)
+
+    @torch.no_grad()
+    def group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """Inference-only: Get quantized latents. Equivalent to TF 'grouper' model."""
+        encoder_output = self.encoder(x, a)
+        quantized, _ = self.vq_layer(encoder_output, return_losses=False)
+        return quantized
+
+    @torch.no_grad()
+    def soft_group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """Inference-only: Get soft cluster assignments. Equivalent to TF 'soft_grouper' model."""
+        encoder_output = self.encoder(x, a)
+        _, soft_counts = self.vq_layer(encoder_output, return_losses=False)
+        return soft_counts
+
+    @torch.no_grad()
+    def reconstruct(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """Full reconstruction from input through VQ-VAE."""
+        encoding_recon_dist, _ = self.forward(x, a, return_losses=False)
+        return encoding_recon_dist.mean
+    
+    def get_codebook_usage(self, data_loader, max_samples: int = 10000):
+        """Compute codebook usage statistics over a dataset."""
+        self.eval()
+        all_indices = []
+        all_soft_counts = []
+        samples_seen = 0
+        
+        with torch.no_grad():
+            for x, a, *_ in data_loader:
+                x = x.to(next(self.parameters()).device)
+                a = a.to(next(self.parameters()).device)
+                
+                encoder_output = self.encoder(x, a)
+                flattened = encoder_output.reshape(-1, self.latent_dim)
+                
+                indices = self.vq_layer.get_code_indices(
+                    flattened, return_soft_counts=False
+                )
+                soft_counts = self.vq_layer.get_code_indices(
+                    flattened, return_soft_counts=True
+                )
+                
+                all_indices.append(indices.cpu())
+                all_soft_counts.append(soft_counts.cpu())
+                
+                samples_seen += x.size(0)
+                if samples_seen >= max_samples:
+                    break
+        
+        all_indices = torch.cat(all_indices)
+        all_soft_counts = torch.cat(all_soft_counts)
+        
+        usage_counts = torch.bincount(all_indices, minlength=self.n_components)
+        
+        # Compute perplexity
+        avg_probs = all_soft_counts.mean(dim=0)
+        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
+        
+        return usage_counts, perplexity.item()
+    
 
 # noinspection PyCallingNonCallable
 def get_vqvae(

@@ -1549,7 +1549,7 @@ def embedding_model_fitting(
             )
 
         elif embedding_model == "VaDE":
-            ae_full_model = deepof.clustering.models_new.VaDE(
+            ae_full_model = deepof.models.VaDE(
                 input_shape=train_shape,
                 edge_feature_shape=a_train_shape,
                 adjacency_matrix=adjacency_matrix,

@@ -107,16 +107,13 @@ def get_recurrent_encoder(
             )
         )
 
-
     else:
-        x_flat = tf.reshape(x, [-1, input_shape[0], input_shape[1] * input_shape[2]])
-        x_reshaped = tf.expand_dims(x_flat, axis=1)
+        x_reshaped = tf.expand_dims(x, axis=1)
 
     # Instantiate temporal RNN block
     encoder = deepof.model_utils.get_recurrent_block(
         x_reshaped, latent_dim, gru_unroll, bidirectional_merge
     )(x_reshaped)
-
 
     # Instantiate spatial graph block
     if use_gnn:
@@ -125,7 +122,7 @@ def get_recurrent_encoder(
         a_encoder = deepof.model_utils.get_recurrent_block(
             a_reshaped, latent_dim, gru_unroll, bidirectional_merge
         )(a_reshaped)
-    
+
         spatial_block = CensNetConv(
             node_channels=latent_dim,
             edge_channels=latent_dim,
@@ -142,7 +139,6 @@ def get_recurrent_encoder(
         x_nodes, x_edges = spatial_block(
             [encoder, (laplacian, edge_laplacian, incidence), a_encoder], mask=None
         )
-        
 
         x_nodes = tf.reshape(
             x_nodes,
@@ -159,12 +155,12 @@ def get_recurrent_encoder(
     else:
         encoder = tf.squeeze(encoder, axis=1)
 
-
     encoder_output = tf.keras.layers.Dense(latent_dim, kernel_initializer="he_uniform")(
         encoder
     )
-    
+
     return Model([x, a], encoder_output, name="recurrent_encoder")
+
 
 
 # noinspection PyCallingNonCallable

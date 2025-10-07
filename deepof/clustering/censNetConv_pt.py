@@ -95,6 +95,11 @@ class CensNetConvPT(nn.Module):
     def _propagate_nodes(self, inputs):
         """Performs the node feature propagation step."""
         node_features, (laplacian, _, incidence), edge_features = inputs
+        
+        print(f"DEBUG _propagate_nodes: node_features shape: {node_features.shape}")
+        print(f"DEBUG _propagate_nodes: edge_features shape: {edge_features.shape}")
+        print(f"DEBUG _propagate_nodes: self.node_kernel shape: {self.node_kernel.shape}")
+        print(f"DEBUG _propagate_nodes: self.edge_weights shape: {self.edge_weights.shape}")
 
         # weighted_edge_features = diag(I^T * P_e)
         weighted_edge_features = modal_dot_pt(edge_features, self.edge_weights)
@@ -463,6 +468,7 @@ def modal_dot_pt(a: torch.Tensor, b: torch.Tensor, transpose_a=False, transpose_
         return mixed_mode_dot_pt(a, b)
     elif a_ndim == 3 and b_ndim == 2:
         # We can use einsum here as well for a clean implementation.
+        print(f"DEBUG modal_dot_pt: About to einsum with a.shape={a.shape}, b.shape={b.shape}")
         return torch.einsum('bij,jk->bik', a, b)
     else:
         raise ValueError(f"Unsupported combination of ranks: {a_ndim} and {b_ndim}")
