@@ -1602,7 +1602,9 @@ class Coordinates:
         all_columns = []
 
         for aid in animal_ids:
-            align_bp_name = f"{aid}{'_' if aid else ''}{align}"
+            if aid:
+                aid=aid+'_'
+            align_bp_name = f"{aid}{align}"
             
             # Define alignment columns and remaining columns for the animal
             align_cols = [(align_bp_name, "phi" if polar else "x"),
