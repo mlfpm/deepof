@@ -2371,6 +2371,47 @@ def rolling_speed(
     return speeds#.fillna(0.0)
 
 
+def get_behavior_mask_and_confidence(
+    tab: Union[pd.DataFrame, np.ndarray],
+    behaviors: List[str],  
+    supervised_export: bool,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:  # Changed return type to DataFrame
+    """Generates a boolean mask and a confidence dataframe for given behaviors.
+
+    Args:
+        tab (Union[pd.DataFrame, np.ndarray]): Table with supervised or unsupervised behaviors.
+        behaviors (List(str)): List of behavior names.
+        supervised_export (bool): Does the given table contain supervised or unsupervised behaviors? 
+
+    Returns:
+        np.ndarray: Mask of confidence indices to keep.
+
+    """
+    
+    # Guards
+    if type(behaviors)==str:
+        behaviors=[behaviors]
+    if type(tab)==pd.DataFrame:
+        assert all([behavior in list(tab.columns) for behavior in behaviors]), "Error! Some of the given behavior names do not exist within the behavior data table!"
+
+    # In supervised case, allow multiple behaviors at once
+    if supervised_export:
+        df = tab.copy()
+        mask = df[behaviors] > 0.1
+        confidence = df[behaviors]
+    # In unsupervised case, only identify most likely behavior
+    else:
+        most_likely_behavior = tab.idxmax(axis=1)
+        df = pd.DataFrame(tab, columns=behaviors)
+        # Build a mask DataFrame where each column is True only if that
+        # behavior was the most likely one for that row.
+        mask = pd.DataFrame(
+            {b: (most_likely_behavior == b) for b in behaviors}
+        )
+        confidence = df[behaviors]
+    return mask, confidence
+
+
 def filter_short_bouts(
     cluster_assignments: np.ndarray,
     cluster_confidence: np.ndarray,

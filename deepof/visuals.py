@@ -31,6 +31,7 @@ from scipy.signal import savgol_filter
 from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
+import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
@@ -3251,6 +3252,7 @@ def export_annotated_video(
         display_arena=display_arena,
         display_markers=display_markers,
         display_mouse_labels=display_mouse_labels,
+        supervised_export=supervised_annotations is not None,
     )   
 
     if animals_in_roi is None or roi_mode=="behaviorwise":
@@ -3298,10 +3300,27 @@ def export_annotated_video(
     # special case: an experiment id was given
     if experiment_id is not None:
 
-        # get frames for this experiment id
+        # get current tab and video path
+        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+
+        # Reformat current tab into data table with cluster names as column names
+        if soft_counts is not None:
+            all_cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
+            cur_tab=pd.DataFrame(cur_tab,columns=all_cluster_names)
+
+        # Set default behavior if no behaviors were given
         if behaviors is None and supervised_annotations is not None:
-            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = [cur_tab.columns[0]]
+        elif behaviors is None:
+            behaviors = list(cur_tab.columns)
+
+        # Filter out low certainty behaviors (only relevant in unsupervised case)
+        behavior_mask, _ = deepof.utils.get_behavior_mask_and_confidence(
+            cur_tab, behaviors, video_export_config.supervised_export
+        )
+        cur_tab=behavior_mask.astype(float)
+        
+        # Get frames for this experiment id
         if roi_number is not None:
             if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
@@ -3311,16 +3330,9 @@ def export_annotated_video(
                 behavior_in=None
             frames=get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
         else:
-            frames=bin_info[experiment_id]["time"]
-        # get current tab and video path
-        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-        
-        # reformat current tab into data table with cluster names as column names
-        if soft_counts is not None:
-            all_cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
-            cur_tab=pd.DataFrame(cur_tab,columns=all_cluster_names)
+            frames=bin_info[experiment_id]["time"]     
 
-        # handle defaults
+        # Handle frame defaults
         if frame_limit_per_video is None:
             frame_limit_per_video = np.inf
 
@@ -3332,7 +3344,7 @@ def export_annotated_video(
             experiment_id=experiment_id,                
             tab=cur_tab,
             behaviors=behaviors,
-            config=video_export_config,
+            video_export_config=video_export_config,
             frames=frames,
             out_path=out_path,
             behaviors_renamed=cluster_names
@@ -3361,7 +3373,7 @@ def export_annotated_video(
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
-            config=video_export_config,
+            video_export_config=video_export_config,
             roi_mode=roi_mode,
         )
 

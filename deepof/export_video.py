@@ -51,6 +51,7 @@ class VideoExportConfig:
     display_markers: bool = False
     display_mouse_labels: bool = False
     display_loading_bar: bool = True
+    supervised_export: bool = True
 
 
 @dataclass
@@ -105,24 +106,6 @@ def _determine_behaviors_to_process(
         [b for i, b in enumerate(behaviors_renamed) if behaviors[i] in available_behaviors] # all renamed_behaviors that correspond to behaviors occuring in available_behaviors
     )
 
-def _get_behavior_mask_and_confidence(
-    tab: Union[pd.DataFrame, np.ndarray],
-    behavior: str,
-    behavior_names: List[str]
-) -> Tuple[pd.Series, pd.Series]:
-    """Generates a boolean mask and a confidence series for a given behavior."""
-    if isinstance(tab, np.ndarray):
-        df = pd.DataFrame(tab, columns=behavior_names)
-        mask = (df.idxmax(axis=1) == behavior)
-        confidence = df[behavior]
-    else:
-        df = tab.copy()
-        if df.columns.tolist() != list(behavior_names):
-            df.columns = behavior_names
-        mask = df[behavior] > 0.1
-        confidence = df[behavior]
-    return mask, confidence
-
 
 def output_videos_per_cluster(
     coordinates: coordinates,
@@ -137,7 +120,7 @@ def output_videos_per_cluster(
     single_output_resolution: tuple = None,
     min_confidence: float = 0.0,
     min_bout_duration: int = None,
-    config: VideoExportConfig = VideoExportConfig(),
+    video_export_config: VideoExportConfig = VideoExportConfig(),
     out_path: str = ".",
     roi_mode: str = "mousewise",
 ):
@@ -167,8 +150,8 @@ def output_videos_per_cluster(
     )
     available_behaviors, behaviors_to_process, behaviors_renamed_to_process  = _determine_behaviors_to_process(behavior_dict, behaviors, behaviors_renamed)
     
-    cluster_export_config = dataclasses.replace(
-        config, display_behavior_names=False, display_counter=False,
+    video_export_config = dataclasses.replace(
+        video_export_config, display_behavior_names=False, display_counter=False,
         display_video_name=True, display_loading_bar=False,
     )
 
@@ -190,20 +173,27 @@ def output_videos_per_cluster(
                 _loading_basic(i, total_exps)
                 
                 cur_tab = get_dt(behavior_dict, exp_id)
+                # Data frame conversion as soft counts get safed as numpy arrays
                 if type(cur_tab)==np.ndarray:
                     cur_tab=pd.DataFrame(cur_tab,columns=available_behaviors)  
 
-                behavior_mask, confidence = _get_behavior_mask_and_confidence(
-                    cur_tab, behavior, available_behaviors
+                # Behavior mask will function as behavior dataframe after float conversion
+                behavior_mask, confidence = deepof.utils.get_behavior_mask_and_confidence(
+                    cur_tab, behavior, video_export_config.supervised_export
                 )
+                behavior_mask_np=np.array(behavior_mask).squeeze()
+                confidence=np.array(confidence).squeeze()
 
                 confidence_indices = np.ones(len(behavior_mask), dtype=bool)
                 confidence_indices = deepof.utils.filter_short_bouts(
-                    behavior_mask.astype(float), confidence, confidence_indices,
-                    min_confidence, min_bout_duration
+                   behavior_mask_np, 
+                    confidence, 
+                    confidence_indices,
+                    min_confidence, 
+                    min_bout_duration
                 )
                 
-                frames_passing_confidence = np.where(behavior_mask & confidence_indices)[0]
+                frames_passing_confidence = np.where(behavior_mask_np & confidence_indices)[0]
 
                 if bin_info is not None and roi_number is not None:
                     behavior_for_roi = behavior if roi_mode == "behaviorwise" else None
@@ -220,8 +210,8 @@ def output_videos_per_cluster(
                 if len(selected_frames) > 0:
                     cap = cv2.VideoCapture(video_paths[exp_id])
                     output_annotated_video(
-                        coordinates=coordinates, experiment_id=exp_id, tab=cur_tab,
-                        behaviors=[behavior], config=cluster_export_config,
+                        coordinates=coordinates, experiment_id=exp_id, tab=behavior_mask.astype(float),
+                        behaviors=[behavior], video_export_config=video_export_config,
                         frames=selected_frames, cap=cap, out=out,
                         v_width=single_output_resolution[0], v_height=single_output_resolution[1],
                         frame_limit=frame_limit_per_video, out_path=output_path,
@@ -417,7 +407,7 @@ def output_videos_per_cluster_old(
                     experiment_id=key,                
                     tab=cur_tab,
                     behaviors=[cur_behavior],
-                    config=config,
+                    video_export_config=config,
                     frames=selected_frames,
                     cap=cap,
                     out=out,
@@ -573,9 +563,9 @@ def _draw_behavior_info(
 def output_annotated_video(
     coordinates: coordinates,
     experiment_id: str,
-    tab: np.ndarray,
+    tab: pd.DataFrame,
     behaviors: List[str],
-    config: VideoExportConfig = VideoExportConfig(),
+    video_export_config: VideoExportConfig = VideoExportConfig(),
     frames: np.array = None,
     cap: Any = None,
     out: Any = None,
@@ -593,7 +583,7 @@ def output_annotated_video(
         experiment_id: ID of the experiment to export.
         tab: DataFrame with behavior probabilities/scores per frame.
         behaviors: A list of behavior names (columns in `tab`) to annotate.
-        config: A dataclass object specifying which annotations to display.
+        video_export_config: A dataclass object specifying video export information (what to display, export mode).
         frames: An array of specific frame indices to include in the output video.
         cap: An existing cv2.VideoCapture object. If None, one will be created.
         out: An existing cv2.VideoWriter object. If None, one will be created.
@@ -620,7 +610,8 @@ def output_annotated_video(
     if behaviors_renamed is None:
         behaviors_renamed=behaviors
 
-    behavior_df = _prepare_behavior_dataframe(tab, behaviors, behaviors_renamed)
+    # Rename behaviors to user given names 
+    behavior_df = _prepare_behavior_dataframe(tab=tab, behaviors=behaviors,behavior_renamed=behaviors_renamed)
     
     cur_coords = get_dt(coordinates._tables, experiment_id)
 
@@ -656,19 +647,19 @@ def output_annotated_video(
 
     # --- Drawing & Annotation Parameter Setup ---
     params = VideoExportProps()
-    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, tab)
+    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, behavior_df)
     behavior_counters = np.zeros(len(behaviors))
 
     # Pre-calculate text size for layout purposes
     widest_text = max(behaviors_renamed, key=len)
-    if config.display_counter:
+    if video_export_config.display_counter:
         widest_text += ' 00:00.00'  # Add placeholder for counter time
     (text_w, text_h), _ = cv2.getTextSize(widest_text, params.font, params.font_scale, params.thickness)
     widest_text_size = (text_w, text_h)
 
     # Pre-calculate scaled coordinates and arena parameters if needed
     scaling_ratio = coordinates._scales[experiment_id][2] / coordinates._scales[experiment_id][3]
-    if config.display_arena:
+    if video_export_config.display_arena:
         arena_params = coordinates._arena_params[experiment_id]
         if "polygonal" in coordinates._arena:
             scaled_arena_params = np.array(arena_params) * scaling_ratio
@@ -678,17 +669,17 @@ def output_annotated_video(
                 tuple(np.array(arena_params[1]) * scaling_ratio),
                 arena_params[2],
             )
-    if config.display_markers or config.display_mouse_labels:
+    if video_export_config.display_markers or video_export_config.display_mouse_labels:
         scaled_coords = cur_coords * scaling_ratio
-    
+
     # --- Main Processing Loop ---
     try:
         frame_indices = tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame") \
-                        if config.display_loading_bar else range(len(frames))
+                        if video_export_config.display_loading_bar else range(len(frames))
 
         for i in frame_indices:
             frame_idx = frames[i]
-            
+           
             # Efficiently seek frames only when necessary (not consecutive)
             if i == 0 or frames[i] - frames[i-1] != 1:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -699,13 +690,13 @@ def output_annotated_video(
                 break
 
             # Annotations drawn BEFORE resizing
-            if config.display_arena:
+            if video_export_config.display_arena:
                 _draw_arena(frame, coordinates._arena, scaled_arena_params, params)
             
-            if config.display_markers:
+            if video_export_config.display_markers:
                 _draw_markers(frame, scaled_coords.iloc[frame_idx], coordinates._animal_ids, params)
             
-            if config.display_mouse_labels:
+            if video_export_config.display_mouse_labels:
                 _draw_mouse_labels(frame, scaled_coords.iloc[frame_idx], coordinates._animal_ids, params)
 
             # Resize frame if custom dimensions are provided
@@ -713,17 +704,17 @@ def output_annotated_video(
                 frame = cv2.resize(frame, (v_width, v_height))
             
             # Annotations drawn AFTER resizing
-            if config.display_behavior_names:
+            if video_export_config.display_behavior_names:
                 _draw_behavior_info(
                     frame, frame_idx, v_width, behavior_df, behaviors_renamed, bg_colors,
-                    behavior_counters, widest_text_size, shift_name_box, config, params, frame_rate
+                    behavior_counters, widest_text_size, shift_name_box, video_export_config, params, frame_rate
                 )
             
-            if config.display_video_name:
+            if video_export_config.display_video_name:
                 cv2.putText(frame, video_name_stem, (15, v_height - 15),
                             params.font, 0.75, params.text_color, 2)
             
-            if config.display_time:
+            if video_export_config.display_time:
                 time_text = f"time: {deepof.visuals_utils.seconds_to_time(frame_idx / frame_rate)}"
                 pos = (params.padding, 10 + text_h)
                 cv2.putText(frame, time_text, pos, params.font, params.font_scale * 1.5, params.outline_color, params.thickness + 2)

@@ -3387,7 +3387,7 @@ class TableDict(dict):
                     concat_array = np.vstack(samples_for_fit)
                     global_scaler.fit(concat_array)
                 else:
-                    # Will error similarly to original if there are zero features, maintaining behavior
+                    # Will error if there are zero features
                     global_scaler.fit(np.empty((0, 0)))
             else:
                 global_scaler = pretrained_scaler
@@ -3403,7 +3403,7 @@ class TableDict(dict):
                                     list(np.where(["pheno" in str(col) for col in tab.columns])[0])
                         tab = tab.iloc[:, keep_cols]
 
-                    # local -> global scaling (same as original)
+                    # local -> global scaling 
                     current_tab_local = deepof.utils.scale_table(
                         feature_array=tab,
                         scale=scale,
