@@ -60,6 +60,209 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 ### CONTRASTIVE LEARNING UTILITIES
+def select_contrastive_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: str,
+    loss_fn: str = "nce",
+    temperature: float = 0.1,
+    tau: float = 0.1,
+    beta: float = 0.1,
+    elimination_topk: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    sim_fn = _SIMILARITIES[similarity]
+
+    if loss_fn == "nce":
+        return nce_loss_pt(history, future, sim_fn, temperature)
+    elif loss_fn == "dcl":
+        return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
+    elif loss_fn == "fc":
+        return fc_loss_pt(history, future, sim_fn, temperature, elimination_topk=elimination_topk)
+    elif loss_fn == "hard_dcl":
+        return hard_loss_pt(history, future, sim_fn, temperature, beta=beta, debiased=True, tau_plus=tau)
+    else:
+        raise ValueError(f"Unknown loss_fn: {loss_fn}")
+    
+def _l2_normalize(x: torch.Tensor, dim: int = 1, eps: float = 1e-12) -> torch.Tensor:
+    return F.normalize(x, p=2, dim=dim, eps=eps)
+
+
+def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    # x: (N, D), y: (N, D) -> (N, N)
+    x1 = x.unsqueeze(1)  # (N, 1, D)
+    y1 = y.unsqueeze(0)  # (1, N, D)
+    return F.cosine_similarity(x1, y1, dim=2)
+
+
+def _dot_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    return x @ y.t()
+
+
+def _euclidean_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    x1 = x.unsqueeze(1)  # (N, 1, D)
+    y1 = y.unsqueeze(0)  # (1, N, D)
+    d = torch.sqrt(torch.clamp(((x1 - y1) ** 2).sum(dim=2), min=0.0))
+    s = 1.0 / (1.0 + d)
+    return s
+
+
+def _edit_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    # Matches provided TF code (same as euclidean similarity transform)
+    return _euclidean_similarity_pt(x, y)
+
+
+_SIMILARITIES: Dict[str, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
+    "cosine": _cosine_similarity_pt,
+    "dot": _dot_similarity_pt,
+    "euclidean": _euclidean_similarity_pt,
+    "edit": _edit_similarity_pt,
+}
+
+
+def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
+    """
+    Extract off-diagonal elements row-wise and reshape to (N, N-1),
+    mirroring TF's boolean_mask+reshape.
+    """
+    N = sim.shape[0]
+    mask = torch.ones((N, N), dtype=torch.bool, device=sim.device)
+    mask.fill_diagonal_(False)
+    flat = sim.reshape(-1)
+    masked = flat[mask.reshape(-1)]
+    return masked.reshape(N, N - 1)
+
+
+def nce_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    temperature: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
+    """
+    N = history.shape[0]
+    sim = similarity(history, future)  # (N, N)
+    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
+
+    neg = _off_diagonal_rows(sim)  # (N, N-1)
+    all_sim = torch.exp(sim / temperature)  # (N, N)
+
+    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
+    labels = torch.ones_like(logits)
+
+    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
+    loss = bce(logits, labels)
+
+    mean_sim = torch.diag(sim).mean()
+    mean_neg = neg.mean()
+    return loss, mean_sim, mean_neg
+
+
+def dcl_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    temperature: float = 0.1,
+    debiased: bool = True,
+    tau_plus: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    N = history.shape[0]
+    sim = similarity(history, future)  # (N, N)
+    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
+
+    neg = _off_diagonal_rows(sim)  # (N, N-1)
+    neg_sim = torch.exp(neg / temperature)  # (N, N-1)
+
+    if debiased:
+        N_eff = N - 1
+        Ng = (-tau_plus * N_eff * pos_sim + neg_sim.sum(dim=-1)) / (1.0 - tau_plus)
+        min_clip = N_eff * math.e ** (-1.0 / temperature)
+        Ng = torch.clamp(Ng, min=min_clip, max=torch.finfo(history.dtype).max)
+    else:
+        Ng = neg_sim.sum(dim=-1)
+
+    loss = (-torch.log(pos_sim / (pos_sim + Ng))).mean()
+
+    mean_sim = torch.diag(sim).mean()
+    mean_neg = neg.mean()
+    return loss, mean_sim, mean_neg
+
+
+def fc_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    temperature: float = 0.1,
+    elimination_topk: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    N = history.shape[0]
+    elim = min(elimination_topk, 0.5)
+    k = int(math.ceil(elim * N))
+
+    sim = similarity(history, future) / temperature  # (N, N)
+    pos_sim = torch.exp(torch.diag(sim))  # (N,)
+
+    neg_sim_raw = _off_diagonal_rows(sim)  # (N, N-1)
+    sorted_sim, _ = torch.sort(neg_sim_raw, dim=1)  # ascending
+
+    if k == 0:
+        k = 1
+    keep = (N - 1) - k
+    trimmed = sorted_sim[:, : max(keep, 0)]  # may be empty
+
+    neg_sim = torch.exp(trimmed).sum(dim=1) if trimmed.numel() > 0 else torch.zeros(
+        N, device=sim.device, dtype=sim.dtype
+    )
+
+    loss = (-torch.log(pos_sim / (pos_sim + neg_sim))).mean()
+
+    mean_sim = torch.diag(sim).mean() * temperature
+    mean_neg = trimmed.mean() * temperature if trimmed.numel() > 0 else torch.tensor(
+        0.0, device=sim.device, dtype=sim.dtype
+    )
+    return loss, mean_sim, mean_neg
+
+
+def hard_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    temperature: float,
+    beta: float = 0.0,
+    debiased: bool = True,
+    tau_plus: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    N = history.shape[0]
+    sim = similarity(history, future)  # (N, N)
+
+    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
+    neg = _off_diagonal_rows(sim)  # (N, N-1)
+    neg_sim = torch.exp(neg / temperature)  # (N, N-1)
+
+    if beta == 0.0:
+        reweight = torch.ones_like(neg_sim)
+    else:
+        denom = neg_sim.mean(dim=1, keepdim=True)
+        reweight = (beta * neg_sim) / denom
+
+    if debiased:
+        N_eff = N - 1
+        Ng = (-tau_plus * N_eff * pos_sim + (reweight * neg_sim).sum(dim=-1)) / (
+            1.0 - tau_plus
+        )
+        min_clip = math.e ** (-1.0 / temperature)
+        Ng = torch.clamp(Ng, min=min_clip, max=torch.finfo(history.dtype).max)
+    else:
+        Ng = neg_sim.sum(dim=-1)
+
+    loss = (-torch.log(pos_sim / (pos_sim + Ng))).mean()
+
+    mean_sim = torch.diag(sim).mean()
+    mean_neg = neg.mean()
+    return loss, mean_sim, mean_neg
+
+
 def select_contrastive_loss(
     history,
     future,

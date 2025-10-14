@@ -9,7 +9,7 @@
 # encoding: utf-8
 # module deepof
 
-from typing import Any, NewType, Iterable, Tuple
+from typing import Any, NewType, Iterable, Tuple, Dict
 
 import numpy as np
 import tcn
@@ -3951,6 +3951,187 @@ class VaDE(tf.keras.models.Model):
             log_dict["cat_cluster_loss"] = self.val_cat_cluster_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.vade.metrics}}
+
+
+class ContrastivePT(nn.Module):
+    """
+    PyTorch port of the TF Contrastive model.
+
+    Inputs:
+      x: (B, T, N, F)
+      a: (B, T, E, F_edge)
+
+    Behavior:
+      - Builds an encoder for sequences of length T//2.
+      - forward(x_half, a_half) returns embeddings (B, D) for a given half-window.
+      - compute_loss(x_full, a_full) slices pos/neg windows and returns (loss, pos_mean, neg_mean, debug).
+    """
+
+    def __init__(
+        self,
+        input_shape: Tuple[int, int, int],         # (T, N, F)
+        edge_feature_shape: Tuple[int, int, int],  # (T, E, F_edge)
+        adjacency_matrix,
+        encoder_type: str = "TCN",
+        latent_dim: int = 8,
+        use_gnn: bool = True,
+        temperature: float = 0.1,
+        similarity_function: str = "cosine",
+        loss_function: str = "nce",
+        beta: float = 0.1,
+        tau: float = 0.1,
+        interaction_regularization: float = 0.0,
+    ):
+        super().__init__()
+
+        T, N, F_in = input_shape
+        Te, E, Fe = edge_feature_shape
+        if T != Te:
+            raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
+        if T < 2 or (T % 2) != 0:
+            raise ValueError(
+                f"ContrastivePT requires an even sequence length T>=2. Got T={T}. "
+                "Please pre-trim or pad your sequences (e.g., use T=24 if original T=25)."
+            )
+
+        self.full_time_steps = T
+        self.window_length = T // 2
+        self.input_shape = input_shape
+        self.edge_feature_shape = edge_feature_shape
+        self.adjacency_matrix = adjacency_matrix
+
+        self.latent_dim = latent_dim
+        self.use_gnn = use_gnn
+        self.encoder_type = encoder_type
+
+        self.temperature = temperature
+        self.similarity_function = similarity_function
+        self.loss_function = loss_function
+        self.beta = beta
+        self.tau = tau
+        self.interaction_regularization = interaction_regularization
+
+        if encoder_type == "recurrent":
+            self.encoder = deepof.clustering.models_new.RecurrentEncoderPT(
+                input_shape=(self.window_length, N, F_in),
+                edge_feature_shape=(self.window_length, E, Fe),
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+        elif encoder_type == "TCN":
+            self.encoder = deepof.clustering.models_new.TCNEncoderPT(
+                input_shape=(self.window_length, N, F_in),
+                edge_feature_shape=(self.window_length, E, Fe),
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+                interaction_regularization=interaction_regularization,
+            )
+        elif encoder_type == "transformer":
+            self.encoder = deepof.clustering.models_new.TFMEncoderPT(
+                input_shape=(self.window_length, N, F_in),
+                edge_feature_shape=(self.window_length, E, Fe),
+                adjacency_matrix=adjacency_matrix,
+                latent_dim=latent_dim,
+                use_gnn=use_gnn,
+            )
+        else:
+            raise ValueError(f"Unknown encoder_type: {encoder_type}")
+
+        # Debug cache
+        self._last_debug: Dict[str, Any] = {}
+
+    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        Encode a half-window:
+          x: (B, T_half, N, F), a: (B, T_half, E, Fe) -> (B, D)
+        """
+        return self.encoder(x, a)
+
+    @staticmethod
+    def _ts_samples(x: torch.Tensor, win: int):
+        # TF parity: pos = x[:, 1:win+1], neg = x[:, -win:]
+        pos = x[:, 1 : win + 1]
+        neg = x[:, -win:]
+        return pos, neg
+
+    def compute_loss(
+        self,
+        x: torch.Tensor,  # (B, T, N, F)
+        a: torch.Tensor,  # (B, T, E, Fe)
+        return_debug: bool = False,
+    ):
+        B, T, N, F_in = x.shape
+        if T != self.full_time_steps:
+            raise ValueError(f"Input time dim T={T} does not match model T={self.full_time_steps}")
+
+        # Slice windows exactly like TF
+        pos_x, neg_x = self._ts_samples(x, self.window_length)
+        pos_a, neg_a = self._ts_samples(a, self.window_length)
+
+        # Encode and normalize
+        z_pos = self.encoder(pos_x, pos_a)  # (B, D)
+        z_neg = self.encoder(neg_x, neg_a)  # (B, D)
+        z_pos = deepof.clustering.model_utils_new._l2_normalize(z_pos, dim=1, eps=1e-12)
+        z_neg = deepof.clustering.model_utils_new._l2_normalize(z_neg, dim=1, eps=1e-12)
+
+        # Compute loss
+        loss, pos_mean, neg_mean = deepof.clustering.model_utils_new.select_contrastive_loss_pt(
+            z_pos,
+            z_neg,
+            similarity=self.similarity_function,
+            loss_fn=self.loss_function,
+            temperature=self.temperature,
+            tau=self.tau,
+            beta=self.beta,
+            elimination_topk=0.1,  # same default as TF snippet
+        )
+
+        debug = None
+        if return_debug:
+            # Build a minimal debug pack for parity troubleshooting
+            sim_fn = deepof.clustering.model_utils_new._SIMILARITIES[self.similarity_function]
+            with torch.no_grad():
+                sim = sim_fn(z_pos, z_neg)  # (B, B)
+                diag = torch.diag(sim)
+                offdiag = sim[~torch.eye(B, dtype=torch.bool, device=sim.device)]
+                offdiag = offdiag.view(B, B - 1) if B > 1 else offdiag.view(B, 0)
+
+                debug = {
+                    "z_pos_shape": torch.tensor(z_pos.shape),
+                    "z_neg_shape": torch.tensor(z_neg.shape),
+                    "z_pos_norm_mean": torch.norm(z_pos, dim=1).mean().cpu(),
+                    "z_neg_norm_mean": torch.norm(z_neg, dim=1).mean().cpu(),
+                    "sim_diag_mean": diag.mean().cpu(),
+                    "sim_offdiag_mean": offdiag.mean().cpu() if offdiag.numel() > 0 else torch.tensor(0.0),
+                    "loss": loss.detach().cpu(),
+                    "pos_mean": pos_mean.detach().cpu(),
+                    "neg_mean": neg_mean.detach().cpu(),
+                }
+            self._last_debug = {k: (v.clone() if torch.is_tensor(v) else v) for k, v in debug.items()}
+
+        return loss, pos_mean, neg_mean, debug
+
+    def get_last_debug(self) -> Dict[str, Any]:
+        return self._last_debug
+
+
+def training_step_contrastive_pt(
+    model: ContrastivePT,
+    x: torch.Tensor,
+    a: torch.Tensor,
+    optimizer: torch.optim.Optimizer,
+    clip_value: float = 0.75,
+):
+    model.train()
+    optimizer.zero_grad(set_to_none=True)
+    loss, pos_mean, neg_mean, _ = model.compute_loss(x, a, return_debug=False)
+    loss.backward()
+    torch.nn.utils.clip_grad_value_(model.parameters(), clip_value)
+    optimizer.step()
+    return loss.item(), float(pos_mean.item()), float(neg_mean.item())
 
 
 # noinspection PyDefaultArgument,PyCallingNonCallable
