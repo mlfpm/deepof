@@ -8,20 +8,9 @@ from typing import Dict, Tuple, Optional
 from deepof.data_loading import get_dt
 
 def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
-    xy_order = [
-        'B_Spine_1', 'B_Center', 'B_Left_bhip', 'B_Left_ear', 'B_Left_fhip',
-        'B_Nose', 'B_Right_bhip', 'B_Right_ear', 'B_Right_fhip', 'B_Spine_2',
-        'B_Tail_base'
-    ]
-    likelihood_order = [
-        'B_Center', 'B_Left_bhip', 'B_Left_ear', 'B_Left_fhip', 'B_Nose',
-        'B_Right_bhip', 'B_Right_ear', 'B_Right_fhip', 'B_Spine_1',
-        'B_Spine_2', 'B_Tail_base'
-    ]
-    p_map = {name: i + 22 for i, name in enumerate(likelihood_order)}
-    new_indices = [val for i, name in enumerate(xy_order) for val in (i * 2, i * 2 + 1, p_map[name])]
-    final_shape = (*data.shape[:-1], 11, 3)
-    return data[:, :, new_indices].reshape(final_shape)
+    assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, likelihood)!"
+    final_shape = (*data.shape[:-1], int(data.shape[2]/3), 3)
+    return data.reshape(final_shape)
 
 class BatchDictDataset:
     def __init__(
