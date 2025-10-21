@@ -50,7 +50,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-def _fit_hmm_range(
+def _fit_hmm_range_old(
     concat_embeddings, states, min_states, max_states, covariance_type="full"
 ):
 
@@ -104,6 +104,77 @@ def _fit_hmm_range(
     return hmm_model, model_selection
 
 
+def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="diag"):
+
+    # Collect sequences, validate dims, crop to common length
+    seq_list = [np.asarray(v) for v in embeddings.values()]
+    if not seq_list:
+        raise ValueError("No sequences provided.")
+    d = seq_list[0].shape[1]
+    for s in seq_list:
+        if s.ndim != 2 or s.shape[1] != d:
+            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")
+    min_T = min(s.shape[0] for s in seq_list)
+    X = np.stack([s[:min_T].astype(np.float32, copy=False) for s in seq_list], axis=0)  # (N, T, D)
+    n_obs = X.shape[0] * X.shape[1]
+
+    def n_params(n_states, n_features, cov):
+        cov = (cov or "diag").lower()
+        if cov == "full":
+            cov_params = n_features * (n_features + 1) // 2
+        elif cov == "sphere":
+            cov_params = 1
+        else:  # diag
+            cov_params = n_features
+        per_state = n_features + cov_params
+        return n_states * per_state + n_states * (n_states - 1)  # transitions only
+
+    model_selection = []
+    best_model, best_score = None, np.inf
+
+    for i in tqdm.tqdm(range(min_states, max_states + 1)):
+        try:
+            used_cov = covariance_type
+            try:
+                m = DenseHMM([Normal(covariance_type=used_cov) for _ in range(i)]).fit(X)
+            except Exception:
+                if covariance_type != "diag":
+                    used_cov = "diag"
+                    m = DenseHMM([Normal(covariance_type="diag") for _ in range(i)]).fit(X)
+                else:
+                    raise
+
+            ll = m.log_probability(X).numpy()
+            total_ll = float(np.sum(ll)) if hasattr(ll, "__len__") else float(ll)
+
+            k = n_params(i, d, used_cov)
+            if states == "aic":
+                score = 2.0 * k - 2.0 * total_ll
+            elif states == "bic":
+                score = k * np.log(max(1, n_obs)) - 2.0 * total_ll
+            else:
+                score = np.nan
+
+            model_selection.append(float(score))
+
+            if states in ("aic", "bic"):
+                if score < best_score:
+                    best_model, best_score = m, score
+                else:
+                    del m  # free non-best fit
+            else:
+                if best_model is None:
+                    best_model = m
+
+        except Exception:
+            model_selection.append(np.inf)
+            continue
+
+    if best_model is None:
+        raise RuntimeError("All HMM fits failed across the requested range.")
+    return best_model, model_selection
+    
+
 def recluster(
     coordinates: coordinates,
     embeddings: table_dict,
@@ -111,7 +182,7 @@ def recluster(
     min_confidence: float = 0.75,
     states: Union[str, int] = "aic",
     pretrained: Union[bool, str] = False,
-    covariance_type: str = "full",
+    covariance_type: str = "diag",
     min_states: int = 2,
     max_states: int = 25,
     save: bool = True,
@@ -203,11 +274,11 @@ def recluster(
 
         # Fit a range of HMMs with different number of states
         hmm_model, model_selection = _fit_hmm_range(
-            concat_embeddings,
+            embeddings,
             states,
             min_states,
             max_states,
-            covariance_type=covariance_type,
+            covariance_type="diag",
         )
 
     # Save the best model

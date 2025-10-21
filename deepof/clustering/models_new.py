@@ -2316,11 +2316,11 @@ class VQVAEPT(nn.Module):
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         n_components: int,
-        beta: float = 1.0,
+        encoder_type: str = "recurrent", 
+        use_gnn: bool = True, 
         kmeans_loss: float = 0.0,
-        use_gnn: bool = True,
-        encoder_type: str = "recurrent",
-        interaction_regularization: float = 0.0,
+        interaction_regularization: float = 0.0,      
+        beta: float = 1.0,
     ):
         """Initialize a VQ-VAE model.
 
@@ -3225,8 +3225,8 @@ class VaDEPT(nn.Module):
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         n_components: int,
-        use_gnn: bool = True,
         encoder_type: str = "recurrent",
+        use_gnn: bool = True,
         kmeans_loss: float = 1.0,
         interaction_regularization: float = 0.0,
     ):
@@ -3972,8 +3972,8 @@ class ContrastivePT(nn.Module):
         input_shape: Tuple[int, int, int],         # (T, N, F)
         edge_feature_shape: Tuple[int, int, int],  # (T, E, F_edge)
         adjacency_matrix,
-        encoder_type: str = "TCN",
         latent_dim: int = 8,
+        encoder_type: str = "TCN",
         use_gnn: bool = True,
         temperature: float = 0.1,
         similarity_function: str = "cosine",
@@ -3986,6 +3986,7 @@ class ContrastivePT(nn.Module):
 
         T, N, F_in = input_shape
         Te, E, Fe = edge_feature_shape
+        
         if T != Te:
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
         if T < 2 or (T % 2) != 0:
@@ -3995,7 +3996,7 @@ class ContrastivePT(nn.Module):
             )
 
         self.full_time_steps = T
-        self.window_length = T // 2
+        self.window_size = T // 2
         self.input_shape = input_shape
         self.edge_feature_shape = edge_feature_shape
         self.adjacency_matrix = adjacency_matrix
@@ -4013,8 +4014,8 @@ class ContrastivePT(nn.Module):
 
         if encoder_type == "recurrent":
             self.encoder = deepof.clustering.models_new.RecurrentEncoderPT(
-                input_shape=(self.window_length, N, F_in),
-                edge_feature_shape=(self.window_length, E, Fe),
+                input_shape=(self.window_size, N, F_in),
+                edge_feature_shape=(self.window_size, E, Fe),
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
@@ -4022,8 +4023,8 @@ class ContrastivePT(nn.Module):
             )
         elif encoder_type == "TCN":
             self.encoder = deepof.clustering.models_new.TCNEncoderPT(
-                input_shape=(self.window_length, N, F_in),
-                edge_feature_shape=(self.window_length, E, Fe),
+                input_shape=(self.window_size, N, F_in),
+                edge_feature_shape=(self.window_size, E, Fe),
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
@@ -4031,8 +4032,8 @@ class ContrastivePT(nn.Module):
             )
         elif encoder_type == "transformer":
             self.encoder = deepof.clustering.models_new.TFMEncoderPT(
-                input_shape=(self.window_length, N, F_in),
-                edge_feature_shape=(self.window_length, E, Fe),
+                input_shape=(self.window_size, N, F_in),
+                edge_feature_shape=(self.window_size, E, Fe),
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
@@ -4068,8 +4069,8 @@ class ContrastivePT(nn.Module):
             raise ValueError(f"Input time dim T={T} does not match model T={self.full_time_steps}")
 
         # Slice windows exactly like TF
-        pos_x, neg_x = self._ts_samples(x, self.window_length)
-        pos_a, neg_a = self._ts_samples(a, self.window_length)
+        pos_x, neg_x = self._ts_samples(x, self.window_size)
+        pos_a, neg_a = self._ts_samples(a, self.window_size)
 
         # Encode and normalize
         z_pos = self.encoder(pos_x, pos_a)  # (B, D)

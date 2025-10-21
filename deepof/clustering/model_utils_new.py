@@ -6,7 +6,7 @@
 
 import os
 from datetime import date, datetime
-from typing import Any, List, NewType, Tuple, Union, Dict
+from typing import Any, List, NewType, Tuple, Union, Dict, Callable
 from contextlib import nullcontext
 
 from IPython.display import clear_output
@@ -1961,7 +1961,7 @@ def embedding_per_video(
 
 
     graph = False
-    contrastive = isinstance(model, deepof.models.Contrastive)
+    contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
 
@@ -2004,7 +2004,7 @@ def embedding_per_video(
         a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
 
         batch_size = 256  # adjust to fit your GPU
-        recon_list, zfinal_list, zcat_list = [], [], []
+        recon_list, emb_list, sc_list = [], [], []
 
         # Optional AMP for speed/memory on GPU
         if False: #device.type == "cuda":
@@ -2024,31 +2024,27 @@ def embedding_per_video(
                 ab = a_all[s:s + batch_size].to(device, non_blocking=True)
 
                 # Disable attention collection if supported
-                try:
-                    out = model(xb, ab, return_gmm_params=False, return_attention=False)
-                except TypeError:
-                    out = model(xb, ab, False)
+                if isinstance(model, deepof.clustering.models_new.VaDEPT):
+                    _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
+                    sc_list.append(sc_out.detach().cpu())
+                elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
+                    _, _, _, sc, emb, _ = model(xb, ab, return_all_outputs=True)
+                    sc_list.append(sc_out.detach().cpu())
+                elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
+                    emb_out = model(xb, ab)
+                else:
+                    raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
 
-                # Expected: (reconstruction_dist, z_final, z_cat, kmeans_loss, z_mean, z_log_var, gmm_params)
-                if not isinstance(out, tuple) or len(out) < 3:
-                    raise RuntimeError("Unexpected model output; expected a tuple with at least three items.")
-
-                recon_dist, z_final_b, z_cat_b = out[0], out[1], out[2]
-                recon_b = recon_dist.mean if hasattr(recon_dist, "mean") else recon_dist
-
-                recon_list.append(recon_b.detach().cpu())
-                zfinal_list.append(z_final_b.detach().cpu())
-                zcat_list.append(z_cat_b.detach().cpu())
+                emb_list.append(emb_out.detach().cpu())
 
         # Stitch full outputs
-        recon_mean = torch.cat(recon_list, dim=0) if recon_list else None
-        z_final    = torch.cat(zfinal_list, dim=0) if zfinal_list else None
-        z_cat      = torch.cat(zcat_list, dim=0) if zcat_list else None
+        emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
         print('completed')
-        emb = z_final.cpu().numpy()
+        emb = emb_raw.cpu().numpy()
 
         if not contrastive:
-            sc = z_cat.cpu().numpy()
+            sc_raw = torch.cat(sc_list, dim=0) if sc_list else None
+            sc = sc_raw.cpu().numpy()
             # save paths for modified tables
             table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
             soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)

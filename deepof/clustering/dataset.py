@@ -64,7 +64,7 @@ class BatchDictDataset:
     def _init_hdf5(self, preprocessed_dict: Dict, force_rebuild: bool, h5_chunk_len: Optional[int]):
         os.makedirs(self.dataset_folder, exist_ok=True)
         need_build = force_rebuild or (not os.path.exists(self.X_path) or not os.path.exists(self.a_path) or not os.path.exists(self.idx_path))
-        if need_build:
+        if True: #currently always true to not accidentally train on old datasets. May be changed or removed entirely in the future
             print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
             self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
         else:
