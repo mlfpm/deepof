@@ -2309,7 +2309,7 @@ def plot_embeddings(
     aggregate_experiments: str = None,
     samples: int = 500,
     show_aggregated_density: bool = True,
-    colour_by: str = "exp_condition",
+    colour_by: str = "cluster",
     ax: Any = None,
     save: bool = False,
 ):
@@ -2335,7 +2335,7 @@ def plot_embeddings(
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
-        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
+        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', 'exp_id' or, if supervised behaviors are given, also any supervised behavior.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -2343,6 +2343,7 @@ def plot_embeddings(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
         normative_model=normative_model,
         exp_condition=exp_condition,
         aggregate_experiments=aggregate_experiments,
@@ -2379,20 +2380,22 @@ def plot_embeddings(
     if supervised_annotations is not None and any(
         [embeddings is not None, soft_counts is not None]
     ):
-        raise ValueError(
-            "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
-        )      
+        pass
+        #raise ValueError(
+        #    "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        #)      
 
-    # preprocess information given for time binning
-    if supervised_annotations is not None:
+    # preprocess information given for time binning, 
+    # default to embeddings as embeddings are always the length of supervised_annotations or shorter
+    if embeddings is not None:
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
+            tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
     else:
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=embeddings, samples_max=samples_max,
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
 
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
@@ -2455,12 +2458,20 @@ def plot_embeddings(
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
 
+
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
             )
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
+
+            # If given, prepare supervised annotations analogously to embeddings (same sample positions)
+            if sup_annots_to_plot is not None:
+                current_sup = get_dt(sup_annots_to_plot,key)
+                current_sup = current_sup.iloc[valid_samples[key]]
+                sup_annots_to_plot[key] = current_sup.iloc[sample_ids]
+
         get_behavior_frames_in_roi._warning_issued = False
                
 
@@ -2489,6 +2500,18 @@ def plot_embeddings(
             ]
         )
 
+        behavior_labels=np.zeros(cluster_assignments.shape)
+        behavior_name="None"
+        if sup_annots_to_plot is not None and colour_by not in ["cluster","exp_cond","exp_id"]:
+            # Concatenate experiments and align experimental conditions
+            behavior_name = colour_by
+            behavior_labels = np.concatenate(
+                [get_dt(sup_annots_to_plot,key)[behavior_name] 
+                    for key in sup_annots_to_plot],
+                axis=0
+            )
+            behavior_labels[np.isnan(behavior_labels)]=0 #set possible nans to zero
+
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
         reducers = deepof.post_hoc.compute_UMAP(concat_embeddings, cluster_assignments)
@@ -2512,6 +2535,7 @@ def plot_embeddings(
                 "confidence": confidence,
                 "cluster": cluster_assignments,
                 "experimental condition": np.repeat(concat_hue, lens),
+                behavior_name: behavior_labels
             }
         )
 
@@ -2631,7 +2655,7 @@ def plot_embeddings(
             )
             warnings.warn(warning_message)
 
-    if not aggregate_experiments:
+    if not aggregate_experiments and colour_by in ["cluster"]:
         if ax is None:
             plt.legend("", frameon=False)
         else:

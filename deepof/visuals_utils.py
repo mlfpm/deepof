@@ -347,7 +347,7 @@ def _filter_embeddings(
             for key, val in soft_counts.items()
             if key in coordinates.get_exp_conditions.keys()
         }
-    elif supervised_annotations is not None:
+    if supervised_annotations is not None:
         supervised_annotations = {
             key: val
             for key, val in supervised_annotations.items()
@@ -1373,7 +1373,7 @@ def _check_enum_inputs(
     center_opts = ["arena"]
     vis_opts = ["networks", "heatmaps"] if origin == "plot_transitions" else ["confusion_matrix", "balanced_accuracy"]
     agg_exp_opts = ["time on cluster", "mean", "median"]
-    color_by_opts = ["cluster", "exp_condition", "exp_id"]
+    color_by_opts = ["cluster", "exp_condition", "exp_id"]+behavior_opts
     roi_mode_opts = ["mousewise", "behaviorwise"]
 
     # =========================================================================
