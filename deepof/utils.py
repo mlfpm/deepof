@@ -819,6 +819,31 @@ def angle(bpart_array: np.array) -> np.array:
     return ang
 
 
+def signed_angle(bpart_array: np.array) -> np.array:
+    """Return a numpy.ndarray with the signed angles between the provided instances.
+
+    Args:
+        bpart_array (numpy.array): 2D positions over time for a bodypart.
+
+    Returns:
+        ang (np.array): 1D angles between the three-point-instances.
+
+    """
+    a, b, c = bpart_array
+
+    ab = a - b
+    bc = c - b 
+    
+    dot = (ab * bc).sum(-1)
+
+    det = ab[..., 0] * bc[..., 1] - ab[..., 1] * bc[..., 0]
+    theta = np.arctan2(det, dot)          # (-π, π]
+    ang_sin = np.sin(theta)             # [-1, 1]
+    ang_cos = np.cos(theta)             # [-1, 1]
+
+    return np.stack([ang_sin,ang_cos],axis=1)
+
+
 def compute_areas(polygon_xy_stack: np.array) -> np.array:
     """Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 

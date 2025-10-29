@@ -559,21 +559,27 @@ class Project:
 
     def _update_connectivity_graph(self):
         """Updates body part connectivity graph based on current animal_ids and bodyparts."""
-        # Reinstate "vanilla" bodyparts without animal ids
-        reinstated_bps = list(set(
+        # Reinstate "vanilla" bodyparts with animal ids
+        
+        # Save list of excluded bodyparts without animal ids
+        raw_excluded_bodyparts = copy.copy(self.exclude_bodyparts)
+
+        # Add ids to excluded bodyparts
+        exclude_bodyparts_with_ids = list(set(
             bp[len(aid) + 1:] if bp.startswith(f"{aid}_") else bp
             for aid in self.animal_ids for bp in self.exclude_bodyparts
         ))
 
+        # Create graph ignoring excluded bodyparts
         model_dict = {
             f"{aid}mouse_topview": deepof.utils.connect_mouse(
-                aid, exclude_bodyparts=reinstated_bps, graph_preset=self.bodypart_graph
+                aid, exclude_bodyparts=exclude_bodyparts_with_ids, graph_preset=self.bodypart_graph
             ) for aid in self.animal_ids
         }
         self.connectivity = {aid: model_dict[f"{aid}{self.model}"] for aid in self.animal_ids}
 
-        if len(self.animal_ids) > 1 and reinstated_bps != [""]:
-            self.exclude_bodyparts = [f"{aid}_{bp}" for aid in self.animal_ids for bp in reinstated_bps]
+        # Reset excluded bodyparts to base list without ids
+        self.exclude_bodyparts =  raw_excluded_bodyparts
 
     def _filter_irrelevant_bodyparts(self, table: pd.DataFrame) -> pd.DataFrame:
         """Removes bodyparts not present in the connectivity graph or explicitly excluded."""
@@ -878,14 +884,14 @@ class Project:
                     dats = []
                     for clique in bridges:
                         dat = pd.DataFrame(
-                            deepof.utils.angle(
+                            deepof.utils.signed_angle(
                                 np.transpose(
                                     np.array(tab[clique]).reshape([tab.shape[0], 3, 2])
                                 ,(1, 0, 2))
-                            ).T
+                            )
                         )
 
-                        dat.columns = [tuple(clique)]
+                        dat.columns = [str(clique)+'_sin',str(clique)+'_cos']
                         dats.append(dat)
 
                     dats = pd.concat(dats, axis=1)
@@ -2204,10 +2210,8 @@ class Coordinates:
         )
 
         with open(pkl_out, "wb") as handle:
-            if file is None:
-                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            else:
-                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
     #@deepof.data_loading._suppress_warning(
     #    warn_messages=[
@@ -2266,6 +2270,9 @@ class Coordinates:
                 # get first distance only for column names
                 dists = self.get_distances_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
                 edge_feature_names = list(dists.keys())
+                # Same for angles
+                angles = self.get_angles_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
+                angle_feature_names = list(angles.keys())
 
                 pbar.update()
             else:  
@@ -2286,19 +2293,20 @@ class Coordinates:
                 pbar.set_postfix(step="Loading distances")
 
                 dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
-
-                #read table metadata
+                #get edge names from table
                 edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
 
                 pbar.update()
                 pbar.set_postfix(step="Loading angles")
 
-                #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+                angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+                #get angle names from table
+                angle_feature_names = get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns']
 
                 # Merge and extract names
                 tab_dict = coords.merge(
                     speeds,
-                    #angles,
+                    angles,
                     dists,
                     save_as_paths=return_as_paths
                     )
@@ -2353,11 +2361,19 @@ class Coordinates:
 
             # Sort indices to have always the same node order
             node_sorting_indices = []
+            angle_sorting_indices = []
             edge_sorting_indices = []
             for n in node_feature_names:
                 for j, f in enumerate(feature_names):
                     if n == f:
                         node_sorting_indices.append(j)
+
+            for n in angle_feature_names:
+                for j, f in enumerate(feature_names):
+                    if n == f:
+                        angle_sorting_indices.append(j)
+
+            
 
             inner_link_bool_mask = []
             for e in [tuple(sorted(e)) for e in list(graph.edges)]:
@@ -2387,6 +2403,7 @@ class Coordinates:
    
             shapes=[]
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+                edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
                 for k in range(0,len(to_preprocess)):
                 
                     num_rows=0
@@ -2397,14 +2414,11 @@ class Coordinates:
                         if result and len(result)==2 :
                             tab = result[0]
                             table_path = result[1]
-                        dataset = (
-                            tab[:, :, ~feature_names.isin(edge_feature_names)][
-                                :, :, node_sorting_indices
-                            ],
-                            tab[:, :, feature_names.isin(edge_feature_names)][
-                                :, :, edge_sorting_indices
-                            ],
-                        )
+                        tab_nodes = tab[:, :, node_sorting_indices]
+                        tab_edges = tab[:, :, edge_sorting_indices] 
+                        tab_angles = tab[:, :, angle_sorting_indices]                    
+                        dataset = ( tab_nodes, tab_edges, tab_angles)
+
                         num_rows=num_rows+tab.shape[0]
                     
 
@@ -2414,7 +2428,7 @@ class Coordinates:
                         to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:
-                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
                     else:
                         shapes=(0,)
                     pbar.update()
