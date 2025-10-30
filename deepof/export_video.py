@@ -195,15 +195,22 @@ def output_videos_per_cluster(
                 
                 frames_passing_confidence = np.where(behavior_mask_np & confidence_indices)[0]
 
-                if bin_info is not None and roi_number is not None:
-                    behavior_for_roi = behavior if roi_mode == "behaviorwise" else None
-                    frames_in_roi = deepof.visuals_utils.get_behavior_frames_in_roi(
-                        behavior=behavior_for_roi, local_bin_info=bin_info[exp_id],
-                        animal_ids=animals_in_roi,
-                    )
-                    selected_frames = np.intersect1d(
-                        frames_passing_confidence, frames_in_roi, assume_unique=True
-                    )
+                if bin_info is not None:
+                    
+                    if roi_number is not None:
+                        behavior_for_roi = behavior if roi_mode == "behaviorwise" else None
+                        frames_in_roi = deepof.visuals_utils.get_behavior_frames_in_roi(
+                            behavior=behavior_for_roi, local_bin_info=bin_info[exp_id],
+                            animal_ids=animals_in_roi,
+                        )
+                        selected_frames = np.intersect1d(
+                            frames_passing_confidence, frames_in_roi, assume_unique=True
+                        )
+                    else:
+                        selected_frames = np.intersect1d(
+                            frames_passing_confidence, bin_info[exp_id]["time"], assume_unique=True
+                        )
+
                 else:
                     selected_frames = frames_passing_confidence
                 
