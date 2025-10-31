@@ -891,7 +891,7 @@ class Project:
                             )
                         )
 
-                        dat.columns = [str(clique)+'_sin',str(clique)+'_cos']
+                        dat.columns = [tuple([cl+'_sin' for cl in clique]),tuple([cl+'_cos' for cl in clique])] #for compatibility with tuple column name assessment
                         dats.append(dat)
 
                     dats = pd.concat(dats, axis=1)
@@ -2310,7 +2310,7 @@ class Coordinates:
                     dists,
                     save_as_paths=return_as_paths
                     )
-                
+                                
                 pbar.update()
             pbar.set_postfix(step="Get graph info")
 
@@ -3304,6 +3304,7 @@ class TableDict(dict):
         file_name: str = "preprocessed",
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
+        skip_angles: bool = True,
     ) -> np.ndarray:
 
         available_mem = psutil.virtual_memory().available * 0.9
@@ -3362,6 +3363,12 @@ class TableDict(dict):
                         "Error! During preprocessing the entire table was filtered out due to low variance!\n"
                         "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
                     )
+                
+                # Remove angle columns and put them back at the end of the loop
+                if skip_angles:
+                    angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
+                    angle_cols = tab.loc[:,angle_col_mask].copy()
+                    tab = tab.drop(columns=angle_cols)
 
                 if scale:
 
@@ -3379,12 +3386,15 @@ class TableDict(dict):
 
                     if not resave_after_global:
                         tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
-                        tab_local_df = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
-                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                        table_temp[key] = save_dt(tab_local_df, table_path, save_as_paths)
-                else:
-                    table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                    table_temp[key] = save_dt(tab, table_path, save_as_paths)
+                        tab = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
+
+                #re-add unprocessed angle columns
+                if skip_angles:
+                    for i, col in enumerate(angle_cols):
+                        tab.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
+
+                table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                table_temp[key] = save_dt(tab, table_path, save_as_paths)
 
                 pbar.update()
 
@@ -3416,6 +3426,12 @@ class TableDict(dict):
                         keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
                                     list(np.where(["pheno" in str(col) for col in tab.columns])[0])
                         tab = tab.iloc[:, keep_cols]
+
+                    # Remove angle columns and put them back at the end of the loop
+                    if skip_angles:
+                        angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
+                        angle_cols = tab.loc[:,angle_col_mask].copy()
+                        tab = tab.drop(columns=angle_cols)
 
                     # local -> global scaling 
                     current_tab_local = deepof.utils.scale_table(
@@ -3453,17 +3469,19 @@ class TableDict(dict):
                                 )
                             ] = np.nan
 
-                        tab_interpol = (
+                        tab_scaled = (
                             pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
                             .apply(lambda x: pd.to_numeric(x, errors="ignore"))
                             .interpolate(limit_direction="both")
                         )
+                    
+                    #re-add unprocessed angle columns
+                    if skip_angles:
+                        for i, col in enumerate(angle_cols):
+                            tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
 
-                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                        table_temp[key] = save_dt(tab_interpol, table_path, save_as_paths)
-                    else:
-                        table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                        table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
+                    table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                    table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
 
                     pbar.update()
 
