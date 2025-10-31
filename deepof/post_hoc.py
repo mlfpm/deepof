@@ -908,7 +908,8 @@ def compute_steady_state(
 def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
     """Compute UMAP embeddings for visualization purposes."""
     
-    assert np.unique(np.argmax(cluster_assignments, axis=1)).size > 1, "LDA could not be computed, as these soft_counts correspond to a collapsed model that only contains a single cluster!"
+    # Check if clusters have collapsed
+    assert np.unique(cluster_assignments).size > 1, "LDA could not be computed, as these soft_counts correspond to a collapsed model that only contains a single cluster!"
     
     lda = LinearDiscriminantAnalysis(
         n_components=np.min([embeddings.shape[1], len(set(cluster_assignments)) - 1]),
