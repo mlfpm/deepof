@@ -1012,8 +1012,9 @@ def supervised_tagging(
                 backbone.remove(bp)
 
         #calculate overall length of bodypart chain i.e. mouse length
-        indices=np.random.choice(np.arange(0, len(raw_coords)), size=np.min([5000, len(raw_coords)]), replace=False)
-        if len(backbone)>1:
+        subset_cols = [col for col in raw_coords.columns if col[0] in backbone]
+        if len(backbone)>1 and len(raw_coords.dropna(subset=subset_cols))>=1000:
+            indices=np.random.choice(raw_coords.dropna(subset=subset_cols).index, size=np.min([5000, len(raw_coords.dropna(subset=subset_cols))]), replace=False)
             mouse_lens_raw=0
             for bp_pos in range(0, len(backbone)-1):
                 mouse_lens_raw+=np.apply_along_axis(
