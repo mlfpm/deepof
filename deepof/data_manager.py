@@ -53,10 +53,6 @@ class DataManager:
         table_name = sanitize_table_name(key)
         filetype, is_blob = ("npz", True) if isinstance(data, tuple) else ("npy", True) if isinstance(data, np.ndarray) else (None, False)
 
-        
-               
-       
-
         if is_blob:
             table_name = f"{table_name}__{filetype}"
             buffer = io.BytesIO()
@@ -81,14 +77,24 @@ class DataManager:
                 )
                 
         elif isinstance(data, pd.DataFrame):
-            df = self._prepare_dataframe(data)
+            # Extract minimal time metadata (n_rows, end_ns) from index if possible
+            time_meta = self._extract_time_meta_from_index(data.index)
+
+            df = self._prepare_dataframe(data)  # numeric-only table
             self.conn.register("df_temp", df)
             try:
                 self.conn.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM df_temp')
             except Exception:
                 self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
                 self.conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM df_temp')
-            
+
+            if time_meta is not None:
+                n_rows, end_ns = time_meta
+                self._ensure_time_meta_table()
+                self.conn.execute(
+                    'INSERT OR REPLACE INTO "_dm_time_meta" (table_name, n_rows, end_ns) VALUES (?, ?, ?)',
+                    [table_name, int(n_rows), int(end_ns)]
+                )
         else:
             raise TypeError("Unsupported data type")
         self._get_table_columns.cache_clear()
@@ -103,7 +109,6 @@ class DataManager:
              load_range: np.ndarray = None):
         table_name = sanitize_table_name(key)
         
-
         if not os.path.exists(self.db_path):
             raise FileNotFoundError(f"{self.db_path} does not exist")
         
@@ -111,7 +116,6 @@ class DataManager:
             cols = {col[1] for col in self._get_table_columns(table_name)}
             return "data" in cols and "metadata" in cols and len(cols) == 2
         
-       
         if _is_blob():
             if only_metainfo:
                 return self._get_metadata_blob(table_name, load_index)
@@ -136,10 +140,11 @@ class DataManager:
                         for key in loaded.files
                     )
 
-           
             return (deserialized, {"duckdb_file": self.db_path, "table": table_name}) if return_path else deserialized
+
         if only_metainfo:
             return self._get_metadata(table_name, load_index)
+
         query = self._build_query(table_name, load_range)
         arrow_table = self.conn.execute(query).fetch_arrow_table()
         df = arrow_table.to_pandas(
@@ -147,15 +152,59 @@ class DataManager:
             self_destruct=True,      
         )
 
-        #index_part = df.iloc[:, :1]
-        data_part = df.iloc[:, 1:]
-        df = self._parse_columns_to_tuples(data_part)
+        # Parse MultiIndex-like string columns back to tuples if applicable
+        df = self._parse_columns_to_tuples(df)
+
+        # Reconstruct index if requested (no fallbacks — raise on any mismatch)
+        if load_index:
+            meta = self._get_time_meta(table_name)
+            assert meta is not None, f"Time index metadata missing for table '{table_name}'."
+            end_ns = int(meta["end_ns"])
+            total_rows = int(meta["n_rows"])
+
+            n_loaded = len(df)
+            if n_loaded == 0:
+                df.index = pd.Index([], dtype=object)
+            else:
+                if load_range is None:
+                    load_range = [0, total_rows - 1]
+
+                if isinstance(load_range, (list, np.ndarray)):
+                    arr = np.asarray(load_range)
+
+                    if arr.ndim == 1 and arr.size == 2:
+                        # Contiguous [a, b] using 0-based positions (like iloc but closed intervals)
+                        a = int(arr[0])
+                        b = int(arr[1])
+                        expected = b - a + 1
+                        assert (b > a) and (n_loaded == expected), "Given load range is invalid!"
+
+                        index_strings = self._make_legacy_index_strings_from_end(
+                            end_ns=end_ns,
+                            total_rows=total_rows,
+                            start_offset=a,
+                            length=expected
+                        )
+                        df.index = pd.Index(index_strings)
+
+                    else:
+                        # Arbitrary positions (e.g., [0, 4, 6])
+                        pos = arr.astype(int).ravel()
+                        assert pos.size == n_loaded and pos.min() >= 0 and pos.max() < total_rows, "Given load range is invalid!"
+
+                        full = pd.timedelta_range(
+                            "00:00:00",
+                            pd.to_timedelta(int(end_ns), unit="ns"),
+                            periods=total_rows + 1,
+                            closed="left",
+                        )
+                        s = pd.Series(full.astype(str), copy=False).str.replace(r"^0 days ", "", regex=True)
+                        df.index = pd.Index(s.iloc[pos].to_numpy(dtype=object))
+
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 
 
     def _get_metadata(self, table_name: str, load_index: bool) -> dict:
-        
-
         def parse_col(c):
             tuple_pattern = re.compile(r'^\(([^()]+,[^()]+)\)$')
             if isinstance(c, str) and tuple_pattern.match(c):
@@ -165,43 +214,50 @@ class DataManager:
                 except Exception:
                     return c
             return c
-        
 
-
+        # Columns and basic shape
         raw_cols = self._get_table_columns(table_name)
-        column_names = [row[1] for row in raw_cols]    
-        
+        column_names = [row[1] for row in raw_cols]
         parsed_columns = [parse_col(name) for name in column_names]
-        parsed_columns_no_index = parsed_columns[1:]
         num_rows = self.conn.execute(f"SELECT COUNT(*) FROM '{table_name}'").fetchone()[0]
 
         meta = {
-            "columns": parsed_columns_no_index,
-            "num_cols": len(parsed_columns_no_index),
+            "columns": parsed_columns,
+            "num_cols": len(parsed_columns),
             "num_rows": num_rows,
-            "shape": (num_rows, len(parsed_columns_no_index)),
+            "shape": (num_rows, len(parsed_columns)),
         }
-        
+
         if load_index:
-            try:
-                idx_df = self.conn.execute(f'SELECT "{column_names[0]}" FROM "{table_name}"').fetchdf()
-                meta["index_column"] = idx_df.iloc[:, 0]
-                meta["start_time"] = str(idx_df.iloc[0, 0])
-                meta["end_time"] = str(idx_df.iloc[-1, 0])
-            except Exception:
-                meta["index_column"] = None
+            time_meta = self._get_time_meta(table_name)
+            assert time_meta is not None, f"Time index metadata missing for table '{table_name}'."
+            n_rows_meta = int(time_meta["n_rows"])
+            end_ns = int(time_meta["end_ns"])
+            assert n_rows_meta == num_rows, (
+                f"n_rows mismatch between table and time metadata for '{table_name}' "
+                f"(table {num_rows}, meta {n_rows_meta})."
+            )
+
+            # Reconstruct full legacy index (HH:MM:SS.SSSSSSSSS)
+            idx_strings = self._make_legacy_index_strings_from_end(
+                end_ns=end_ns,
+                total_rows=n_rows_meta,
+                start_offset=0,
+                length=n_rows_meta
+            )
+            meta["index_column"] = pd.Index(idx_strings)
+            meta["start_time"] = idx_strings[0] if n_rows_meta > 0 else None
+            meta["end_time"] = idx_strings[-1] if n_rows_meta > 0 else None
         else:
             meta["index_column"] = None
 
         return meta
 
     def _get_metadata_blob(self, table_name: str, load_index: bool) -> dict:
-       
         try:
             meta_json = self.conn.execute(f'SELECT metadata FROM "{table_name}"').fetchone()[0]
             meta_dict = json.loads(meta_json)
 
-            # Taking the first shape to make it similar like original behavior
             first_shape = meta_dict["shapes"][0] if meta_dict["shapes"] else (0,)
 
             return {
@@ -213,14 +269,14 @@ class DataManager:
             }           
 
         except Exception as e:
-                return {
-                    "columns": [],
-                    "num_cols": 0,
-                    "num_rows": 0,
-                    "shape": (),
-                    "index_column": None,
-                    "error": f"Failed to load blob: {str(e)}"
-                }
+            return {
+                "columns": [],
+                "num_cols": 0,
+                "num_rows": 0,
+                "shape": (),
+                "index_column": None,
+                "error": f"Failed to load blob: {str(e)}"
+            }
 
     def _prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         df_copy = df.copy()
@@ -233,10 +289,8 @@ class DataManager:
                 cols[i] = f"{dup}_duplicate{i}"
             df_copy.columns = cols
 
-        if isinstance(df_copy.index, (pd.TimedeltaIndex, pd.DatetimeIndex)):
-            df_copy.index = df_copy.index.astype(str)
-
-        return df_copy.reset_index(names="index")
+        # Keep tables numeric-only: drop the index into a RangeIndex
+        return df_copy.reset_index(drop=True)
 
     def _build_query(self, table_name: str, load_range: np.ndarray) -> str:
         quoted_cols = ", ".join(
@@ -279,7 +333,7 @@ class DataManager:
                 if match:
                     parts = [x.strip().strip("'") for x in match.group(1).split(",")]
                     if len(parts) == 2:
-                        parsed_cols.append((parts[0], parts[1]))  # <--- treat both as str
+                        parsed_cols.append((parts[0], parts[1]))
                         continue
                 parsed_cols.append(col)
             else:
@@ -298,5 +352,60 @@ class DataManager:
 
         return df
 
+    # ---------- Minimal helpers ----------
 
-    
+    def _ensure_time_meta_table(self):
+        self.conn.execute(
+            'CREATE TABLE IF NOT EXISTS "_dm_time_meta" ('
+            'table_name TEXT PRIMARY KEY, '
+            'n_rows BIGINT, '
+            'end_ns BIGINT)'
+        )
+
+    def _get_time_meta(self, table_name: str) -> Union[dict, None]:
+        row = self.conn.execute(
+            'SELECT n_rows, end_ns FROM "_dm_time_meta" WHERE table_name = ?',
+            [table_name]
+        ).fetchone()
+        if row is None:
+            return None
+        return {"n_rows": int(row[0]), "end_ns": int(row[1])}
+
+    def _extract_time_meta_from_index(self, index: pd.Index) -> Union[Tuple[int, int], None]:
+        try:
+            if isinstance(index, pd.TimedeltaIndex):
+                td = index
+            else:
+                td = pd.to_timedelta(index, errors="coerce")
+                if getattr(td, "isna", None) is not None and np.any(td.isna()):
+                    return None
+                if not isinstance(td, pd.TimedeltaIndex):
+                    td = pd.to_timedelta(td)
+
+            n = len(td)
+            if n == 0:
+                return None
+            ns = td.to_numpy(dtype="timedelta64[ns]").astype("int64")
+            if n == 1:
+                end_ns = 0
+            else:
+                # Invert end boundary E from last value L: L ≈ floor((n-1)/n * E)
+                # => E ≈ round(L * n / (n - 1))
+                last_ns = int(ns[-1])
+                end_ns = int(round(last_ns * n / (n - 1)))
+            return (n, end_ns)
+        except Exception:
+            return None
+
+    def _make_legacy_index_strings_from_end(self, end_ns: int, total_rows: int, start_offset: int, length: int) -> np.ndarray:
+        if length <= 0:
+            return np.array([], dtype=object)
+        full = pd.timedelta_range(
+            "00:00:00",
+            pd.to_timedelta(int(end_ns), unit="ns"),
+            periods=int(total_rows) + 1,
+            closed="left",
+        )
+        s = pd.Series(full.astype(str), copy=False)
+        s = s.str.replace(r"^0 days ", "", regex=True)
+        return s.iloc[start_offset:start_offset + length].to_numpy(dtype=object)
