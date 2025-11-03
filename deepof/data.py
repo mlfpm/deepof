@@ -3349,11 +3349,17 @@ class TableDict(dict):
         rng = np.random.RandomState(42)
         samples_for_fit = []
         global_scaler = None
-
+        keys_to_drop=[]
+    
         with tqdm(total=len(keys_list), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in keys_list:
                 tab = get_dt(self, key)
                 tab = tab.iloc[bin_info[key]]
+                #skip if selected table range has only NaNs and reduce keys_list
+                if tab.isna().all().all():
+                    keys_to_drop.append(key)
+                    pbar.update()
+                    continue
 
                 if filter_low_variance:
                     keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
@@ -3397,6 +3403,13 @@ class TableDict(dict):
                 table_temp[key] = save_dt(tab, table_path, save_as_paths)
 
                 pbar.update()
+        
+        # Remove all keys to invalid tables
+        keys_list = [key for key in keys_list if key not in keys_to_drop]
+        if len(keys_to_drop) > 0:
+            print(
+                f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
+            )
 
         if scale:
             if scale == "standard":
