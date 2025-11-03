@@ -690,10 +690,10 @@ def set_missing_animals(
     for animal_id in animal_ids:
         for k, tab in tab_dict.filter_id(animal_id).items():
             try:
-                missing_times = tab[presence_masks[k][animal_id] == 0]
+                missing_times = tab[np.array(presence_masks[k][animal_id] == 0)]
             except KeyError:
                 missing_times = tab[
-                    presence_masks[k].sum(axis=1) < (len(animal_ids) - 1)
+                    np.array(presence_masks[k].sum(axis=1) < (len(animal_ids) - 1))
                 ]
 
             tab_dict[k].loc[missing_times.index, missing_times.columns] = np.nan
