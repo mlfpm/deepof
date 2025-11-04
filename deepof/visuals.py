@@ -1687,7 +1687,7 @@ def count_all_events(
         column_counts={}
         for col in tab.columns:
             series = tab[col]
-            series.fillna(0,inplace=True)
+            series=series.fillna(0)
             # skip non-binary columns (e.g. speed column)
             if (series > 1.0001).any():
                 continue
@@ -2352,6 +2352,8 @@ def plot_embeddings(
         roi_number=roi_number,
         roi_mode=roi_mode,
     )
+    if type(colour_by)==str:
+        colour_by=[colour_by]
     if supervised_annotations is not None and roi_number is not None and animals_in_roi is not None:
         raise ValueError(
             '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
@@ -2501,16 +2503,23 @@ def plot_embeddings(
         )
 
         behavior_labels=np.zeros(cluster_assignments.shape)
-        behavior_name="None"
-        if sup_annots_to_plot is not None and colour_by not in ["cluster","exp_cond","exp_id"]:
+        behavior_names="None"
+        behavior_labels_fin=pd.Series(range(0,len(cluster_assignments)))
+        behavior_labels_fin[:]=''
+        if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_cond","exp_id"]:
             # Concatenate experiments and align experimental conditions
-            behavior_name = colour_by
-            behavior_labels = np.concatenate(
-                [get_dt(sup_annots_to_plot,key)[behavior_name] 
-                    for key in sup_annots_to_plot],
-                axis=0
-            )
-            behavior_labels[np.isnan(behavior_labels)]=0 #set possible nans to zero
+            behavior_names = colour_by
+            for k in range(len(behavior_names)):
+                behavior_labels = np.concatenate(
+                    [get_dt(sup_annots_to_plot,key)[behavior_names[k]] 
+                        for key in sup_annots_to_plot],
+                    axis=0
+                )
+                behavior_labels[np.isnan(behavior_labels)]=0 #set possible nans to zero
+                behavior_labels_fin[behavior_labels.astype(bool)==True]=behavior_names[k]
+            colour_by="behaviors"
+        else:
+            colour_by=colour_by[0]
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
@@ -2535,7 +2544,7 @@ def plot_embeddings(
                 "confidence": confidence,
                 "cluster": cluster_assignments,
                 "experimental condition": np.repeat(concat_hue, lens),
-                behavior_name: behavior_labels
+                "behaviors": behavior_labels_fin
             }
         )
 
@@ -2762,11 +2771,22 @@ def animate_skeleton(
     if type(animals_in_roi)==str:
         animals_in_roi=[animals_in_roi]
 
+    tab_dict_for_binning=None
+    if embeddings is not None:
+        tab_dict_for_binning=embeddings
 
     bin_info_time = _preprocess_time_bins(
-    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
+    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max, tab_dict_for_binning=tab_dict_for_binning,
     )
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+
+    #get available frames to display based on binning
+    if roi_number is None:
+        frames = bin_info[experiment_id]["time"]
+    else:
+        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
+        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
+        get_behavior_frames_in_roi._warning_issued = False
 
     if sampling_rate is None:
         sampling_rate=coordinates._frame_rate
@@ -2790,6 +2810,12 @@ def animate_skeleton(
 
     # Sort column index to allow for multiindex slicing
     coords = coords.sort_index(ascending=True, inplace=False, axis=1)
+
+    # Slice objects according to selected frame range
+    coords=coords.iloc[frames,:]
+    if cur_embeddings is not None:
+        cur_embeddings=cur_embeddings[frames,:]
+        cur_soft_counts=cur_soft_counts[frames,:]
 
     # Get output scale
     x_dv = np.maximum(
@@ -2945,14 +2971,6 @@ def animate_skeleton(
             return umap_scatter, skeleton_scatter
 
         return skeleton_scatter
-
-    #get frames to display based on binning
-    if roi_number is None:
-        frames = bin_info[experiment_id]["time"]
-    else:
-        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
-        get_behavior_frames_in_roi._warning_issued = False
 
     if embeddings is not None and len(frames) > len(cluster_embedding[0]):
         frames=frames[0:len(cluster_embedding[0])]

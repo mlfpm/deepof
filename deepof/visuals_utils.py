@@ -463,11 +463,11 @@ def _process_animation_data(
 
 
     # Center sliding window instances
-    try:
-        win_size = coords.shape[0] - twoDim_embeddings.shape[0]
-    except AttributeError:
-        win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
-    coords = coords[win_size // 2 : -win_size // 2]
+    #try:
+    #    win_size = coords.shape[0] - twoDim_embeddings.shape[0]
+    #except AttributeError:
+    #    win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
+    #coords = coords[win_size // 2 : -win_size // 2]
 
     # Ensure that shapes are matching
     assert (
@@ -484,18 +484,23 @@ def _process_animation_data(
 
         assert selected_cluster in set(
             hard_counts
-        ), "selected cluster should be in the clusters provided"
+        ), "The cluster you selected did not occur in the data range given!"
 
-        cluster_embedding = [twoDim_embeddings[hard_counts == selected_cluster]]
+        cluster_embedding = twoDim_embeddings[hard_counts == selected_cluster]
         confidence_indices = confidence_indices[
             hard_counts == selected_cluster
         ]
 
         coords = coords.loc[hard_counts == selected_cluster, :]
         coords = coords.loc[confidence_indices, :]
-        cluster_embedding = cluster_embedding[0][confidence_indices]
+        cluster_embedding = cluster_embedding[confidence_indices]
         concat_embedding = concat_embedding[full_confidence_indices]
         hard_counts = hard_counts[full_confidence_indices]
+
+        assert coords.shape[0]>0, (
+            "In the given range the selected cluster did occur, but was only predicted with low confidence or in very short sections!\n"
+            "Either increase bin_size, increase min_confidence or lower min_bout_duration!"
+        )
 
     else:
         cluster_embedding = twoDim_embeddings
@@ -1330,6 +1335,7 @@ def _check_enum_inputs(
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
     animals_in_roi = _to_list_if_str(animals_in_roi)
+    colour_by = _to_list_if_str(colour_by)
 
     # =========================================================================
     # 2. GENERATE LISTS OF VALID OPTIONS
@@ -1373,8 +1379,12 @@ def _check_enum_inputs(
     center_opts = ["arena"]
     vis_opts = ["networks", "heatmaps"] if origin == "plot_transitions" else ["confusion_matrix", "balanced_accuracy"]
     agg_exp_opts = ["time on cluster", "mean", "median"]
-    color_by_opts = ["cluster", "exp_condition", "exp_id"]+behavior_opts
     roi_mode_opts = ["mousewise", "behaviorwise"]
+    color_by_opts = ["cluster", "exp_condition", "exp_id"]
+    colour_by_is_behaviors=False
+    if len(colour_by)>1:
+        color_by_opts=behavior_opts
+        colour_by_is_behaviors=True
 
     # =========================================================================
     # 3. CONFIGURE AND RUN VALIDATION CHECKS
@@ -1393,7 +1403,7 @@ def _check_enum_inputs(
         ("center", center, center_opts, False, None),
         ("visualization", visualization, vis_opts, False, None),
         ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None),
-        ("colour_by", colour_by, color_by_opts, False, None),
+        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!"),
         ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project."),
         ("roi_mode", roi_mode, roi_mode_opts, False, None),
     ]
