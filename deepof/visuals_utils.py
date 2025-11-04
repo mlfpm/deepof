@@ -1335,7 +1335,7 @@ def _check_enum_inputs(
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
     animals_in_roi = _to_list_if_str(animals_in_roi)
-    colour_by = _to_list_if_str(colour_by)
+    
 
     # =========================================================================
     # 2. GENERATE LISTS OF VALID OPTIONS
@@ -1382,7 +1382,8 @@ def _check_enum_inputs(
     roi_mode_opts = ["mousewise", "behaviorwise"]
     color_by_opts = ["cluster", "exp_condition", "exp_id"]
     colour_by_is_behaviors=False
-    if len(colour_by)>1:
+    if colour_by is not None and isinstance(colour_by,list):
+        colour_by = _to_list_if_str(colour_by)
         color_by_opts=behavior_opts
         colour_by_is_behaviors=True
 
