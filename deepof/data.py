@@ -332,7 +332,8 @@ class Project:
             table_list
         ), "Unequal number of videos and tables. Please check your file structure"
 
-        #turn tables and videos into dictionaries with same keys
+
+        # Turn tables and videos into dictionaries with same keys
         self.tables={}
         self.videos={}
         for i, tab in enumerate(table_list):
@@ -343,6 +344,27 @@ class Project:
                 tab_name = tab.split(".")[0]
             self.tables[tab_name]=table_list[i]
             self.videos[tab_name]=video_list[i]
+
+        # Verify that all videos have the same frame rate
+        fpses={}
+        for key, vid in self.videos.items(): 
+            current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, vid))
+            fps = float(current_video_cap.get(cv2.CAP_PROP_FPS))
+            current_video_cap.release()
+            fpses[key]=fps
+
+        min_key, min_val = min(fpses.items(), key=lambda item: item[1])
+        max_key, max_val = max(fpses.items(), key=lambda item: item[1])
+        max_diff = max_val - min_val
+
+        assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (e.g. {min_key}: {min_val} fps and {max_key}: {max_val} fps)"
+
+        if max_diff>0:
+            warnings.warn(
+                f"\033[38;5;208m"
+                f"The sampling rate of some of your videos differ. The maximum difference is {min_key}: {min_val} fps and {max_key}: {max_val} fps! Proceed with cauthion"
+                f"\033[0m"
+            )
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
