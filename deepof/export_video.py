@@ -76,14 +76,16 @@ def _filter_videos_by_condition(
     """Return a list of experiment IDs that match provided conditions."""
     if not conditions:
         return experiment_ids
-    all_exp_conditions = coordinates.get_exp_conditions()
-    return [
-        exp_id for exp_id in experiment_ids
-        if all(
-            all_exp_conditions.get(exp_id, {}).get(cond) == state
-            for cond, state in conditions.items()
-        )
+    all_exp_conditions = coordinates.get_exp_conditions
+    assert isinstance(conditions,dict), "Error! To select one experiment condition for export you must enter a dictionary {condition name: experiment condition [optional:, second condition name: second experiment condition, ...]}"
+    list(conditions.values())
+    filtered_conditions = [
+        exp_id for exp_id in experiment_ids if
+        all([all_exp_conditions.get(exp_id, {})[cond][0] == state
+        for cond, state in conditions.items()])
     ]
+    assert len(filtered_conditions)>0, f"no conditions are left after filtering. Make sure that your dictionary keys are among: {list(all_exp_conditions[list(all_exp_conditions.keys())[0]].columns)} and condition values are spelled correctly!" 
+    return filtered_conditions
 
 def _determine_behaviors_to_process(
     behavior_dict: dict,
