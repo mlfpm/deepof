@@ -463,11 +463,11 @@ def _process_animation_data(
 
 
     # Center sliding window instances
-    #try:
-    #    win_size = coords.shape[0] - twoDim_embeddings.shape[0]
-    #except AttributeError:
-    #    win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
-    #coords = coords[win_size // 2 : -win_size // 2]
+    try:
+        win_size = coords.shape[0] - twoDim_embeddings.shape[0]
+    except AttributeError:
+        win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
+    coords = coords[win_size // 2 : -win_size // 2]
 
     # Ensure that shapes are matching
     assert (
