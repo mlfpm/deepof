@@ -289,6 +289,10 @@ class DataManager:
                 cols[i] = f"{dup}_duplicate{i}"
             df_copy.columns = cols
 
+        # insert dummy NaN column to make saving possible
+        if df_copy.shape[1]==0:
+            df_copy['empty']=np.NaN
+
         # Keep tables numeric-only: drop the index into a RangeIndex
         return df_copy.reset_index(drop=True)
 
