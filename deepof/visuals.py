@@ -751,7 +751,18 @@ def gantt_plotter(
     
     colors = [color for color in colors if color is not None]
 
-    N_colors=int(np.nanmax(gantt_matrix))
+    N_colors=0
+    if np.isnan(gantt_matrix).all():
+        warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                f"Warning! Your selected section for Gantt plotting contains only NaNs!\n"
+                f"This can happen if you select a ROI that no mouse entered in the given time interval.\n"
+                f"\"Missing\" behavior is not defined for ROIs since it only denotes if a mouse was tracked."
+                "\033[0m"  # Reset text color
+            )
+        warnings.warn(warning_message)
+    else:
+        N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
     #N_colors=len(col_indices)
     sns.heatmap(
@@ -2254,7 +2265,7 @@ def plot_normative_log_likelihood(
             for key, val in embeddings._exp_conditions.items()
         }
 
-    embedding_dataset.index = embeddings._exp_conditions.keys()
+    #embedding_dataset.index = embeddings._exp_conditions.keys()
     embedding_dataset.sort_values(
         "experimental condition",
         key=lambda x: x == normative_model,
@@ -3591,6 +3602,7 @@ def plot_behavior_trends(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
@@ -3705,6 +3717,24 @@ def plot_behavior_trends(
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
+    
+    #####
+    # Get ROI bin info
+    ##### 
+
+    #create full time bins covering entire signal
+    if supervised_annotations is not None:
+        bin_info_time = _preprocess_time_bins(
+        coordinates, None, None, None, samples_max=samples_max,
+        tab_dict_for_binning=supervised_annotations,
+        )
+    else:            
+        bin_info_time = _preprocess_time_bins(
+            coordinates, None, None, None, samples_max=samples_max, 
+            tab_dict_for_binning=soft_counts,
+        )
+    # Create ROI bins
+    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -3714,11 +3744,13 @@ def plot_behavior_trends(
 
     # Init hidden bins if not given
     if not hide_time_bins:
-        hide_time_bins = [False] * len(custom_time_bins)
+        hide_time_bins = np.array([False] * len(custom_time_bins))
     elif not len(hide_time_bins) == len(custom_time_bins):
         raise ValueError(
             f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
         )
+    else:
+       hide_time_bins= np.array(hide_time_bins)
 
     # Set behavior ids
     if plot_type == "unsupervised":
@@ -3729,7 +3761,6 @@ def plot_behavior_trends(
     elif plot_type == "supervised":
         keys=list(supervised_annotations.keys())
         behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
-
 
     #####
     # Some validity checks and more formatting
@@ -3790,26 +3821,6 @@ def plot_behavior_trends(
             f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
         )
     
-    #####
-    # Get ROI bin info
-    ##### 
-
-    if roi_number is not None:
-        #create full time bins covering entire signal
-        if supervised_annotations is not None:
-            bin_info_time = _preprocess_time_bins(
-            coordinates, None, None, None, 
-            tab_dict_for_binning=supervised_annotations,
-            )
-        else:            
-            bin_info_time = _preprocess_time_bins(
-                coordinates, None, None, None,  
-                tab_dict_for_binning=soft_counts,
-            )
-        # Create ROI bins
-        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
-
-
 
     #####
     # Collect data for plotting
@@ -3828,32 +3839,62 @@ def plot_behavior_trends(
             continue
 
         if plot_type == "unsupervised":
-            data_set=get_dt(soft_counts,key)
+            data_set=get_dt(soft_counts,key,load_range=roi_bin_info[key]['time'])
             if roi_number is not None:
                 data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
-            data_set=get_dt(supervised_annotations,key)
+            data_set=get_dt(supervised_annotations,key,load_range=roi_bin_info[key]['time'])
             if roi_number is not None:
                 data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
 
+        # time vector aligned with loaded data_set
+        t = np.asarray(roi_bin_info[key]["time"])
+
         # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
         for i, (bin_start, bin_end) in enumerate(custom_time_bins):
 
-            #get current snippet
-            data_snippet=data_set[bin_start:bin_end]
+            # Inclusive end to mimic the original semantics
+            in_bin = (t >= bin_start) & (t <= bin_end)
 
-            behavior_timebin = np.nansum(index_dict_fn(data_snippet))
-            if normalize or behavior_to_plot == "speed":
-                behavior_timebin = behavior_timebin / len(
-                    index_dict_fn(data_snippet)
-                )
-            
+            if not np.any(in_bin):
+                behavior_timebin = np.nan
+            else:
+                data_snippet = data_set[in_bin]
+                vals = index_dict_fn(data_snippet)
+                vals = np.asarray(vals)
+
+                if behavior_to_plot == "speed":
+                    # time-weighted average speed
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.average(vals[val_mask])
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+
+                elif normalize:
+                    # fraction of time (or prob.) within bin
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+                else: #don't normalize
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.nansum(vals[val_mask])/coordinates._frame_rate
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+
+
             new_row = pd.DataFrame(
                 [
                     {
@@ -3866,9 +3907,19 @@ def plot_behavior_trends(
             df = pd.concat([df, new_row], ignore_index=True)
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
-    # Normalize frames to reflect seconds
-    if not normalize and behavior_to_plot != "speed":
-        df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
+    #Remove missing values (less than 20% of values remainign per group) 
+    min_frac = 0.20
+    num_bins = len(custom_time_bins)
+
+    # Create table denoting teh nan percentage for each group and bin
+    coverage = df.pivot_table(
+        index="time_bin", columns="exp_condition", values=behavior_to_plot,
+        aggfunc=lambda s: s.notna().mean()
+    ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
+
+    enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
+    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in tehse bisn only have little data
+    df=df.dropna(subset =[behavior_to_plot]) # exclude time bins with NaNs (which will also exclude them from statistics)
     
     assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
