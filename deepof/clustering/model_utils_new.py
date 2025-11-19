@@ -512,6 +512,11 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
     Returns:
         The calculated scalar loss tensor.
     """
+    #Guard for bad inputs
+    #z = torch.nan_to_num(latent_means, nan=0.0, posinf=1e4, neginf=-1e4)
+    #zc = z - z.mean(dim=0, keepdim=True)
+    #std = zc.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-6)
+    #z_norm = zc / std
     batch_size = float(latent_means.shape[0])
     gram_matrix = (latent_means.T @ latent_means) / batch_size
     
@@ -520,8 +525,13 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
     
     # Clamp to avoid NaN gradients from sqrt(0)
     penalization = torch.sqrt(torch.clamp(singular_values, min=1e-9))
-    
-    return weight * torch.mean(penalization)
+
+    kmeans_loss = weight * torch.nanmean(penalization[~torch.isinf(penalization)])
+    if torch.isnan(kmeans_loss):
+        return 0.0
+    if kmeans_loss >  1000:
+        print("HALT!")
+    return kmeans_loss
 
 
 def compute_kmeans_loss(
@@ -619,33 +629,35 @@ def get_angles(pos: int, i: int, d_model: int):
 class RecurrentBlockPT(nn.Module):
     def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
         super().__init__()
+        self.internal_dim = torch.min(64,latent_dim) # Cap maximum internal dimension to avoid tensor size explosion
         self.latent_dim = latent_dim
         if bidirectional_merge != "concat":
             warnings.warn("Bidirectional merge mode defaulting to 'concat'.")
 
         self.conv1d = nn.Conv1d(
             in_channels=input_features,
-            out_channels=2 * latent_dim,
+            out_channels=2 * self.internal_dim,
             kernel_size=5,
             padding="same",
             bias=False,
         )
         self.gru1 = nn.GRU(
-            input_size=2 * latent_dim,
-            hidden_size=2 * latent_dim,
+            input_size=2 * self.internal_dim,
+            hidden_size=2 * self.internal_dim,
             num_layers=1,
             batch_first=True,
             bidirectional=True,
         )
-        self.norm1 = nn.LayerNorm(4 * latent_dim, eps=1e-3)
+        self.norm1 = nn.LayerNorm(4 * self.internal_dim, eps=1e-3)
         self.gru2 = nn.GRU(
-            input_size=4 * latent_dim,
-            hidden_size=latent_dim,
+            input_size=4 * self.internal_dim,
+            hidden_size=self.internal_dim,
             num_layers=1,
             batch_first=True,
             bidirectional=True,
         )
-        self.norm2 = nn.LayerNorm(2 * latent_dim, eps=1e-3)
+        self.norm2 = nn.LayerNorm(2 * self.internal_dim, eps=1e-3)
+        self.projection = nn.Linear(in_features=self.internal_dim*2, out_features=latent_dim*2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Expect x: (B, T, N, F)
@@ -656,53 +668,59 @@ class RecurrentBlockPT(nn.Module):
         x = x.to(dev, non_blocking=True)
 
         # Stage 1: Conv (TimeDistributed over T)
-        conv_in = x.reshape(B * T, N, -1).permute(0, 2, 1)  # (B*T, F, N)
-        conv_out = F.relu(self.conv1d(conv_in))             # (B*T, 2*latent, N)
-        gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*latent)
+        with torch.amp.autocast(device_type=dev.type, enabled=False):
+            x32 = x.float()    
+            conv_in = x32.reshape(B * T, N, -1).permute(0, 2, 1)  # (B*T, F, N)
+            conv_out = F.relu(self.conv1d(conv_in))             # (B*T, 2*latent, N)
+            gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*latent)
 
-        # Mask/lengths for packing
-        mask = (gru1_in.abs().sum(dim=-1) > 0)              # (B*T, N)
-        lengths_cpu = mask.sum(dim=1).to(torch.int64).cpu() # lengths must be CPU for pack_padded_sequence
-        valid_idx_cpu = torch.where(lengths_cpu > 0)[0]     # CPU index for CPU lengths
-        valid_idx = valid_idx_cpu.to(dev)                   # GPU index for GPU tensors
+            # Mask/lengths for packing
+            mask = (gru1_in.abs().sum(dim=-1) > 0)              # (B*T, N)
+            lengths_cpu = mask.sum(dim=1).to(torch.int64).cpu() # lengths must be CPU for pack_padded_sequence
+            valid_idx_cpu = torch.where(lengths_cpu > 0)[0]     # CPU index for CPU lengths
+            valid_idx = valid_idx_cpu.to(dev)                   # GPU index for GPU tensors
 
-        # Stage 2: First GRU with packing
-        gru1_out_full = torch.zeros(
-            B * T, N, 4 * self.latent_dim, device=gru1_in.device, dtype=gru1_in.dtype
-        )
-        if valid_idx.numel() > 0:
-            packed_input = pack_padded_sequence(
-                gru1_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
+            # Stage 2: First GRU with packing
+            gru1_out_full = torch.zeros(
+                B * T, N, 4 * self.internal_dim, device=gru1_in.device, dtype=gru1_in.dtype
             )
-            packed_output, _ = self.gru1(packed_input)
-            unpacked_output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=N)
-            # Cast source to buffer dtype to avoid AMP mismatch
-            gru1_out_full[valid_idx] = unpacked_output.to(gru1_out_full.dtype)
+            if valid_idx.numel() > 0:
+                packed_input = pack_padded_sequence(
+                    gru1_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
+                )
+                packed_output, _ = self.gru1(packed_input)
+                unpacked_output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=N)
+                # Cast source to buffer dtype to avoid AMP mismatch
+                gru1_out_full[valid_idx] = unpacked_output.to(gru1_out_full.dtype)
 
-        # Stage 3: First LayerNorm
-        norm1_in = gru1_out_full.reshape(B, T, N, -1)
-        norm1_out = self.norm1(norm1_in)
+            # Stage 3: First LayerNorm
+            norm1_in = gru1_out_full.reshape(B, T, N, -1)
+            norm1_out = self.norm1(norm1_in)
 
-        # Stage 4: Second GRU with packing
-        gru2_in = norm1_out.reshape(B * T, N, -1)
-        gru2_h_n_full = torch.zeros(
-            2, B * T, self.latent_dim, device=gru2_in.device, dtype=gru2_in.dtype
-        )
-        if valid_idx.numel() > 0:
-            packed_input_2 = pack_padded_sequence(
-                gru2_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
+            # Stage 4: Second GRU with packing
+            gru2_in = norm1_out.reshape(B * T, N, -1)
+            gru2_h_n_full = torch.zeros(
+                2, B * T, self.internal_dim, device=gru2_in.device, dtype=gru2_in.dtype
             )
-            _, h_n_2 = self.gru2(packed_input_2)  # (2, B_valid, latent)
-            # Cast source to buffer dtype to avoid AMP mismatch
-            gru2_h_n_full[:, valid_idx, :] = h_n_2.to(gru2_h_n_full.dtype)
+            if valid_idx.numel() > 0:
+                packed_input_2 = pack_padded_sequence(
+                    gru2_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
+                )
+                _, h_n_2 = self.gru2(packed_input_2)  # (2, B_valid, latent)
+                # Cast source to buffer dtype to avoid AMP mismatch
+                gru2_h_n_full[:, valid_idx, :] = h_n_2.to(gru2_h_n_full.dtype)
 
-        gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
+            gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
 
-        # Stage 5: Second LayerNorm
-        norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*latent)
+            # Stage 5: Second LayerNorm
+            norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*latent)
 
-        final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*latent)
-        return final_output
+            final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*latent)
+            if self.internal_dim != self.latent_dim:
+                final_output=self.projection(final_output) # restore latent space dependent output shape 
+            if torch.isnan(final_output).any():
+                print("z issues!")
+        return final_output.to(x.dtype)
 
 
 def get_recurrent_block(
@@ -2028,7 +2046,7 @@ def embedding_per_video(
                     _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
-                    _, _, _, sc, emb, _ = model(xb, ab, return_all_outputs=True)
+                    _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
                     emb_out = model(xb, ab)
@@ -2056,28 +2074,33 @@ def embedding_per_video(
         #to not flood the output with loading bars
         clear_output()
 
-    if contrastive:
-        soft_counts = deepof.post_hoc.recluster(
-            coordinates, embeddings, pretrained=pretrained, **kwargs
-        )
+    
+    table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
     if isinstance(soft_counts, tuple):
         soft_counts = soft_counts[0]
+    embeddings= deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=table_path, 
+        exp_conditions=coordinates.get_exp_conditions,
+    )
 
+    if contrastive:
 
-    table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
-    return (
-        deepof.data.TableDict(
-            embeddings,
-            typ="unsupervised_embedding",
-            table_path=table_path, 
-            exp_conditions=coordinates.get_exp_conditions,
-        ),
-        deepof.data.TableDict(
+        soft_counts, model_selection = deepof.post_hoc.get_contrastive_soft_counts(
+            coordinates, embeddings, 
+        )
+    else:
+        soft_counts=deepof.data.TableDict(
             soft_counts,
             typ="unsupervised_counts",
             table_path=table_path, 
             exp_conditions=coordinates.get_exp_conditions,
-        ),
+        )
+
+    return (
+        embeddings,
+        soft_counts,
     )
 
 

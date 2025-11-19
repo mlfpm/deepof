@@ -21,13 +21,16 @@ class BatchDictDataset:
         in_memory: bool = False,
         force_rebuild: bool = False,
         h5_chunk_len: Optional[int] = None,
+        return_angles: Optional[bool] = False,
     ):
         self.in_memory = in_memory
         self.dataset_folder = dataset_folder
         self.dataset_name = dataset_name
+        self.return_angles=return_angles
 
         self.X_path = os.path.join(dataset_folder, dataset_name + 'X_data.h5')
         self.a_path = os.path.join(dataset_folder, dataset_name + 'a_data.h5')
+        self.ang_path = os.path.join(dataset_folder, dataset_name + 'ang_data.h5')
         self.idx_path = os.path.join(dataset_folder, dataset_name + 'video_idx.npy')
 
         if in_memory:
@@ -37,34 +40,39 @@ class BatchDictDataset:
 
     def _load_all_to_memory(self, preprocessed_dict: Dict):
         print("BatchDictDataset: loading to memory...")
-        all_x, all_a, all_video_idx = [], [], []
+        all_x, all_a, all_ang, all_video_idx = [], [], [], []
         keys = list(preprocessed_dict.keys())
         for i, key in enumerate(keys):
-            X_batch, a_batch = get_dt(preprocessed_dict, key)
+            X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
             all_x.append(reorder_and_reshape(X_batch))
             all_a.append(np.expand_dims(a_batch, -1))
+            all_ang.append(np.expand_dims(ang_batch, -1))
             all_video_idx.append(np.full(X_batch.shape[0], i, dtype=np.int32))
 
         X = np.concatenate(all_x, axis=0)
         A = np.concatenate(all_a, axis=0)
+        Ang = np.concatenate(all_ang, axis=0)
         video_idx = np.concatenate(all_video_idx, axis=0)
 
         X = np.ascontiguousarray(X, dtype=np.float32)
         A = np.ascontiguousarray(A, dtype=np.float32)
+        Ang = np.ascontiguousarray(Ang, dtype=np.float32)
 
         self.X_tensor = torch.from_numpy(X)
         self.A_tensor = torch.from_numpy(A)
+        self.Ang_tensor = torch.from_numpy(Ang)
         self.video_idx = torch.from_numpy(video_idx.astype(np.int32))
 
         self.x_shape = tuple(self.X_tensor.shape[1:])
         self.a_shape = tuple(self.A_tensor.shape[1:])
+        self.ang_shape = tuple(self.Ang_tensor.shape[1:])
         self.length = int(self.X_tensor.shape[0])
         print(f"In-memory dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, a_shape: {self.a_shape}")
 
-    def _init_hdf5(self, preprocessed_dict: Dict, force_rebuild: bool, h5_chunk_len: Optional[int]):
+    def _init_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int], force_rebuild: bool = True):
         os.makedirs(self.dataset_folder, exist_ok=True)
-        need_build = force_rebuild or (not os.path.exists(self.X_path) or not os.path.exists(self.a_path) or not os.path.exists(self.idx_path))
-        if True: #currently always true to not accidentally train on old datasets. May be changed or removed entirely in the future
+        need_build = force_rebuild or (not os.path.exists(self.X_path) or not os.path.exists(self.a_path) or not os.path.exists(self.ang_path) or not os.path.exists(self.idx_path))
+        if need_build: #currently always true to not accidentally train on old datasets. May be changed or removed entirely in the future
             print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
             self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
         else:
@@ -77,8 +85,12 @@ class BatchDictDataset:
         with h5py.File(self.a_path, 'r') as f:
             A_ds = f['a']
             self.a_shape = tuple(A_ds.shape[1:])
+        with h5py.File(self.ang_path, 'r') as f:
+            Ang_ds = f['ang']
+            self.ang_shape = tuple(Ang_ds.shape[1:])
         self._h5_X = None
         self._h5_A = None
+        self._h5_Ang = None
         print(f"HDF5 dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, a_shape: {self.a_shape}")
 
     def _build_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int]):
@@ -86,15 +98,18 @@ class BatchDictDataset:
         total_samples = 0
         shapes_X = None
         shapes_A = None
+        shapes_Ang = None
         video_indices = []
 
         for i, key in enumerate(keys):
-            X_batch, a_batch = get_dt(preprocessed_dict, key)
+            X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
             if shapes_X is None:
                 sample_X = reorder_and_reshape(X_batch[:1])
                 sample_A = np.expand_dims(a_batch[:1], -1)
+                sample_Ang = np.expand_dims(ang_batch[:1], -1)
                 shapes_X = tuple(sample_X.shape[1:])
                 shapes_A = tuple(sample_A.shape[1:])
+                shapes_Ang = tuple(sample_Ang.shape[1:])
             n = int(X_batch.shape[0])
             total_samples += n
             video_indices.append(np.full(n, i, dtype=np.int32))
@@ -102,7 +117,7 @@ class BatchDictDataset:
         if h5_chunk_len is None:
             h5_chunk_len = min(512, total_samples)
 
-        with h5py.File(self.X_path, 'w') as X_h5, h5py.File(self.a_path, 'w') as A_h5:
+        with h5py.File(self.X_path, 'w') as X_h5, h5py.File(self.a_path, 'w') as A_h5, h5py.File(self.ang_path, 'w') as Ang_h5:
             X_dset = X_h5.create_dataset(
                 'X',
                 shape=(total_samples, *shapes_X),
@@ -119,15 +134,25 @@ class BatchDictDataset:
                 compression=None, shuffle=False, fletcher32=False,
                 maxshape=(total_samples, *shapes_A),
             )
+            Ang_dset = Ang_h5.create_dataset(
+                'ang',
+                shape=(total_samples, *shapes_Ang),
+                dtype='float32',
+                chunks=(h5_chunk_len, *shapes_Ang),
+                compression=None, shuffle=False, fletcher32=False,
+                maxshape=(total_samples, *shapes_Ang),
+            )
 
             idx = 0
             for key in keys:
-                X_batch, a_batch = get_dt(preprocessed_dict, key)
+                X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
                 n = int(X_batch.shape[0])
                 X_re = reorder_and_reshape(X_batch).astype(np.float32, copy=False)
                 A_re = np.expand_dims(a_batch, -1).astype(np.float32, copy=False)
+                Ang_re = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
                 X_dset[idx:idx+n] = X_re
                 A_dset[idx:idx+n] = A_re
+                Ang_dset[idx:idx+n] = Ang_re
                 idx += n
 
         video_indices = np.concatenate(video_indices, axis=0)
@@ -142,7 +167,11 @@ class BatchDictDataset:
             x = self.X_tensor[idx]
             a = self.A_tensor[idx]
             vid = int(self.video_idx[idx].item() if torch.is_tensor(self.video_idx) else self.video_idx[idx])
-            return x, a, vid
+            if self.return_angles==False:
+                return x, a, vid
+            else:
+                ang = self.Ang_tensor[idx]           
+                return x, a, ang, vid
         else:
             if self._h5_X is None:
                 self._h5_X = h5py.File(self.X_path, 'r')
@@ -150,12 +179,20 @@ class BatchDictDataset:
                 self._X = self._h5_X['X']
                 self._A = self._h5_A['a']
                 self._vid = np.load(self.idx_path, mmap_mode='r')
+                if self.return_angles:
+                    self._h5_Ang =  h5py.File(self.ang_path, 'r')
+                    self._Ang = self._h5_Ang['ang']
             x_np = self._X[idx]
             a_np = self._A[idx]
             x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
             a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
             vid = int(self._vid[idx])
-            return x, a, vid
+            if self.return_angles==False:
+                return x, a, vid
+            else:
+                ang_np = self._Ang[idx]
+                ang = torch.from_numpy(np.ascontiguousarray(ang_np)).float()
+                return x, a, ang, vid
 
     def make_loader(
         self,
@@ -191,6 +228,7 @@ class BatchDictDataset:
             iterable = _H5BatchIterableDataset(
                 x_path=self.X_path,
                 a_path=self.a_path,
+                ang_path=self.ang_path,
                 idx_path=self.idx_path,
                 batch_size=batch_size,
                 n_samples=self.length,
@@ -200,6 +238,7 @@ class BatchDictDataset:
                 rdcc_nslots=rdcc_nslots,
                 block_shuffle=block_shuffle,
                 permute_within_block=permute_within_block,
+                return_angles=self.return_angles,
             )
             return DataLoader(
                 iterable,
@@ -229,6 +268,7 @@ class _H5BatchIterableDataset(IterableDataset):
         self,
         x_path: str,
         a_path: str,
+        ang_path: str,
         idx_path: str,
         batch_size: int,
         n_samples: Optional[int] = None,
@@ -238,10 +278,12 @@ class _H5BatchIterableDataset(IterableDataset):
         rdcc_nslots: int = 1_000_000,
         block_shuffle: bool = True,
         permute_within_block: bool = False,
+        return_angles: int = False,
     ):
         super().__init__()
         self.x_path = x_path
         self.a_path = a_path
+        self.ang_path = ang_path
         self.idx_path = idx_path
         self.batch_size = int(batch_size)
         self.n_samples = int(n_samples) if n_samples is not None else None
@@ -251,6 +293,7 @@ class _H5BatchIterableDataset(IterableDataset):
         self.rdcc_nslots = rdcc_nslots
         self.block_shuffle = block_shuffle
         self.permute_within_block = permute_within_block
+        self.return_angles = return_angles
 
     def __len__(self) -> int:
         if self.n_samples is None:
@@ -293,24 +336,52 @@ class _H5BatchIterableDataset(IterableDataset):
         if w is not None:
             starts = starts[w.id::w.num_workers]  # disjoint strided split
 
-        for s in starts:
-            e = min(s + bs, n)
-            x_np = X[s:e]
-            a_np = A[s:e]
-            vid = video_idx[s:e]
+        if self.return_angles:
+            Ang_h5 = h5py.File(self.ang_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
+            Ang = Ang_h5['ang']
 
-            if self.shuffle and self.permute_within_block:
-                # optional extra randomness inside the batch
-                perm = np.random.default_rng().permutation(e - s)
-                x_np = x_np[perm]
-                a_np = a_np[perm]
-                vid = vid[perm]
+            for s in starts:
+                e = min(s + bs, n)
+                x_np = X[s:e]
+                a_np = A[s:e]
+                ang_np = Ang[s:e]
+                vid = video_idx[s:e]
 
-            x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
-            a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
-            vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
+                if self.shuffle and self.permute_within_block:
+                    # optional extra randomness inside the batch
+                    perm = np.random.default_rng().permutation(e - s)
+                    x_np = x_np[perm]
+                    a_np = a_np[perm]
+                    ang_np = ang_np[perm]
+                    vid = vid[perm]
 
-            yield x, a, vid_t
+                x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
+                a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
+                ang = torch.from_numpy(np.ascontiguousarray(ang_np)).float()
+                vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
+
+                yield x, a, ang, vid_t
+            Ang_h5.close()
+
+        else:
+            for s in starts:
+                e = min(s + bs, n)
+                x_np = X[s:e]
+                a_np = A[s:e]
+                vid = video_idx[s:e]
+
+                if self.shuffle and self.permute_within_block:
+                    # optional extra randomness inside the batch
+                    perm = np.random.default_rng().permutation(e - s)
+                    x_np = x_np[perm]
+                    a_np = a_np[perm]
+                    vid = vid[perm]
+
+                x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
+                a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
+                vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
+
+                yield x, a, vid_t
 
         X_h5.close()
         A_h5.close()

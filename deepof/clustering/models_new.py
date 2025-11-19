@@ -191,6 +191,9 @@ class RecurrentEncoderPT(nn.Module):
             x_edges_flat = x_edges.view(B, -1)
             encoder = torch.cat([x_nodes_flat, x_edges_flat], dim=-1)
 
+            if torch.isnan(encoder).any():
+                print("z issues!")
+
         else:
             # Flatten nodes/features into a single feature dim and keep a single group
             x_flat = x.view(B, T, N_nodes * F_per_node)  # (B, T, N*F)
@@ -2873,12 +2876,107 @@ class VQVAE(tf.keras.models.Model):
 
 
 class GaussianMixtureLatentPT(nn.Module):
-    def __init__(self, input_dim: int, n_components: int, latent_dim: int, kmeans: float, **kwargs):
+    """
+    PyTorch implementation of the Gaussian Mixture probabilistic latent space model.
+    It embeds data into a latent space and models that space as a mixture of Gaussians.
+    """
+    def __init__(
+        self,
+        input_dim: int,
+        n_components: int,
+        latent_dim: int,
+        kmeans: float,
+        **kwargs,
+    ):
         super().__init__()
         self.input_dim = input_dim
         self.n_components = n_components
         self.latent_dim = latent_dim
         self.kmeans_weight = kmeans
+
+        # --- Trainable Parameters for the GMM components ---
+        self.gmm_means = nn.Parameter(torch.empty(n_components, latent_dim))
+        self.gmm_log_vars = nn.Parameter(torch.empty(n_components, latent_dim))
+        nn.init.xavier_normal_(self.gmm_means)
+        nn.init.xavier_normal_(self.gmm_log_vars)
+
+        # --- Encoder Layers to produce the latent distribution ---
+        self.encoder_mean = nn.Linear(self.input_dim, self.latent_dim)
+        self.encoder_log_var = nn.Linear(self.input_dim, self.latent_dim)
+
+        # --- Non-trainable Buffers ---
+        self.register_buffer('prior', torch.ones(n_components) / n_components)
+        self.register_buffer('pretrain', torch.tensor(0.0))
+        
+        # --- Helper Layers ---
+        self.cluster_control = deepof.clustering.model_utils_new.ClusterControlPT()
+
+    def _encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Encodes the input into mean and log-variance of the latent distribution."""
+        z_mean = self.encoder_mean(x)
+        z_log_var = self.encoder_log_var(x) # Note: softplus is applied in the forward pass
+        return z_mean, z_log_var
+
+    def _reparameterize(
+        self, mean: torch.Tensor, var: torch.Tensor, epsilon: torch.Tensor = None
+    ) -> torch.Tensor:
+        """
+        Performs reparameterization.
+        MODIFIED to exactly replicate the original TF model's non-standard scale calculation.
+        """
+        # Original TF logic: scale = sqrt(exp(variance))
+        # The 'var' input here is the direct output of the softplus activation.
+        scale = torch.sqrt(torch.exp(var))
+        
+        if epsilon is None:
+            epsilon = torch.randn_like(scale)
+        return mean + scale * epsilon
+
+    def _calculate_posterior(self, z: torch.Tensor) -> torch.Tensor:
+        """Calculates the posterior probability p(c|z) for each sample."""
+        # MODIFIED: The GMM parameters from TF are log-std-dev, not log-variance.
+        # So we just exponentiate them to get the scale.
+        gmm_scale = torch.exp(self.gmm_log_vars)
+
+        gmm_dist = Normal(
+            loc=self.gmm_means.unsqueeze(0),
+            scale=gmm_scale.unsqueeze(0)
+        )
+        log_p_z_given_c = gmm_dist.log_prob(z.unsqueeze(1)).sum(dim=-1)
+        
+        log_p_c_given_z = torch.log(self.prior + 1e-9) + log_p_z_given_c
+        
+        return F.softmax(log_p_c_given_z, dim=-1)
+
+    def forward(
+        self, x: torch.Tensor, epsilon: torch.Tensor = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        
+        z_mean, z_log_var = self._encode(x)
+        z_var = F.softplus(z_log_var) # Apply activation
+
+        # Pass z_var directly, not z_log_var
+        z_sample = self._reparameterize(z_mean, z_var, epsilon)
+        # ... rest of the method is the same ...
+        z_for_downstream = z_sample if self.training else z_mean
+        if torch.isnan(z_for_downstream).any():
+            print("z issues!")
+        z_cat = self._calculate_posterior(z_for_downstream)
+        z_final, metrics = self.cluster_control(z_for_downstream, z_cat)
+        kmeans_loss = torch.tensor(0.0, device=x.device)
+        if self.kmeans_weight > 0:
+            kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
+        return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss, z_mean, z_log_var)
+
+
+class GaussianMixtureLatentPT_new(nn.Module):
+    def __init__(self, input_dim: int, n_components: int, latent_dim: int, kmeans: float, responsibility_temp: float = 1, **kwargs):
+        super().__init__()
+        self.input_dim = input_dim
+        self.n_components = n_components
+        self.latent_dim = latent_dim
+        self.kmeans_weight = kmeans
+        self.responsibility_temp = responsibility_temp
 
         # GMM params (trainable)
         self.gmm_means = nn.Parameter(torch.empty(n_components, latent_dim))
@@ -2915,21 +3013,25 @@ class GaussianMixtureLatentPT(nn.Module):
         dtype = self.gmm_means.dtype
 
         z = z.to(dev, dtype=dtype, non_blocking=True)
+        # Defensive guard to avoid hard crashes (remove once stable)
+        z = torch.nan_to_num(z, nan=0.0, posinf=1e6, neginf=-1e6)
 
         gmm_means = self.gmm_means                               # (C, D) on dev
         # Clamp to keep scales reasonable
         gmm_log_vars = torch.clamp(self.gmm_log_vars, min=-10.0, max=10.0)
         gmm_scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-6)
 
-        # Optional defensive guard to avoid hard crashes (remove once stable)
-        z = torch.nan_to_num(z, nan=0.0, posinf=1e6, neginf=-1e6)
+
 
         gmm_dist = Normal(gmm_means.unsqueeze(0), gmm_scale.unsqueeze(0))  # (1, C, D)
         log_p_z_given_c = gmm_dist.log_prob(z.unsqueeze(1)).sum(dim=-1)    # (B, C)
 
         prior = self.prior.to(dev, dtype=dtype)
         log_p_c_given_z = torch.log(prior + 1e-9).unsqueeze(0) + log_p_z_given_c
-        return F.softmax(log_p_c_given_z, dim=-1)  # (B, C)
+        #return F.softmax(log_p_c_given_z, dim=-1)  # (B, C)
+
+        T_resp = float(getattr(self, "responsibility_temp", 1.0))
+        return torch.softmax(log_p_c_given_z / max(1e-6, T_resp), dim=-1)  # (B, C)
 
     def forward(self, x: torch.Tensor, epsilon: torch.Tensor = None):
         z_mean, z_log_var = self._encode(x)
@@ -2959,6 +3061,13 @@ class GaussianMixtureLatentPT(nn.Module):
             z_mean,
             z_log_var,
         )
+    
+    @torch.no_grad()
+    def log_emissions(self, z: torch.Tensor) -> torch.Tensor:
+        gmm_log_vars = torch.clamp(self.gmm_log_vars, min=-10.0, max=10.0)
+        scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-6)
+        dist = Normal(self.gmm_means.unsqueeze(0), scale.unsqueeze(0))
+        return dist.log_prob(z.unsqueeze(1)).sum(dim=-1) # [T, C]
 
 
 
@@ -3315,15 +3424,20 @@ class VaDEPT(nn.Module):
             - gmm_params (dict) [if return_gmm_params=True]
         """
         encoder_output = self.encoder(x, a)
+        z_mean_head = self.latent_space.encoder_mean(encoder_output)               
+        z_var_param = torch.nn.functional.softplus(self.latent_space.encoder_log_var(encoder_output))  
         (
             latent,
             categorical,
             _n_populated,
             _confidence,
             kmeans_loss,
-            z_mean,
-            z_log_var,
+            z_mean_head_comp,
+            z_var_param_comp,
         ) = self.latent_space(encoder_output)
+
+        if torch.isnan(z_mean_head).any() or torch.isnan(z_var_param).any():
+            print("z issues!")
 
         B, T, _, _ = x.shape
         x_for_decoder = x.view(B, T, self.input_n_nodes * self.input_n_features_per_node)
@@ -3340,8 +3454,8 @@ class VaDEPT(nn.Module):
                 latent,
                 categorical,
                 kmeans_loss,
-                z_mean,
-                z_log_var,
+                z_mean_head,
+                z_var_param,
                 gmm_params,
             )
         else:
@@ -3412,7 +3526,7 @@ class VaDEPT(nn.Module):
             torch.Tensor: The latent representation `z`.
         """
         encoder_output = self.encoder(x, a)
-        latent, _, _, _, _ = self.latent_space(encoder_output)
+        latent, _, _, _, _, _, _ = self.latent_space(encoder_output)
         return latent
 
     @torch.no_grad()
@@ -3428,7 +3542,7 @@ class VaDEPT(nn.Module):
             torch.Tensor: The soft cluster assignments (categorical probabilities).
         """
         encoder_output = self.encoder(x, a)
-        _, categorical, _, _, _ = self.latent_space(encoder_output)
+        _, categorical, _, _, _, _, _ = self.latent_space(encoder_output)
         return categorical
 
 
