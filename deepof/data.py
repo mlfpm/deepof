@@ -3509,11 +3509,17 @@ class TableDict(dict):
                             .apply(lambda x: pd.to_numeric(x, errors="ignore"))
                             .interpolate(limit_direction="both")
                         )
+
+                        angle_cols_nans_interpolated = (
+                            angle_cols
+                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                            .interpolate(limit_direction="both")
+                        )
                     
                     #re-add unprocessed angle columns
                     if skip_angles:
-                        for i, col in enumerate(angle_cols):
-                            tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
+                        for i, col in enumerate(angle_cols_nans_interpolated):
+                            tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols_nans_interpolated[col])
 
                     table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
                     table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
