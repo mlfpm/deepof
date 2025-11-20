@@ -629,7 +629,7 @@ def get_angles(pos: int, i: int, d_model: int):
 class RecurrentBlockPT(nn.Module):
     def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
         super().__init__()
-        self.internal_dim = torch.min(64,latent_dim) # Cap maximum internal dimension to avoid tensor size explosion
+        self.internal_dim = int(torch.min(torch.tensor([64,latent_dim]))) # Cap maximum internal dimension to avoid tensor size explosion
         self.latent_dim = latent_dim
         if bidirectional_merge != "concat":
             warnings.warn("Bidirectional merge mode defaulting to 'concat'.")

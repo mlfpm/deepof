@@ -2886,6 +2886,7 @@ class GaussianMixtureLatentPT(nn.Module):
         n_components: int,
         latent_dim: int,
         kmeans: float,
+        lens_enabled: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -2893,10 +2894,12 @@ class GaussianMixtureLatentPT(nn.Module):
         self.n_components = n_components
         self.latent_dim = latent_dim
         self.kmeans_weight = kmeans
+        self.lens_enabled = lens_enabled
+        self.mixture_dim = (12 if lens_enabled else self.latent_dim)
 
         # --- Trainable Parameters for the GMM components ---
-        self.gmm_means = nn.Parameter(torch.empty(n_components, latent_dim))
-        self.gmm_log_vars = nn.Parameter(torch.empty(n_components, latent_dim))
+        self.gmm_means = nn.Parameter(torch.empty(n_components, self.mixture_dim))
+        self.gmm_log_vars = nn.Parameter(torch.empty(n_components, self.mixture_dim))
         nn.init.xavier_normal_(self.gmm_means)
         nn.init.xavier_normal_(self.gmm_log_vars)
 
@@ -2910,6 +2913,10 @@ class GaussianMixtureLatentPT(nn.Module):
         
         # --- Helper Layers ---
         self.cluster_control = deepof.clustering.model_utils_new.ClusterControlPT()
+
+        # --- Focus layer ---
+        self.lens = nn.Linear(self.latent_dim,self.mixture_dim)
+
 
     def _encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Encodes the input into mean and log-variance of the latent distribution."""
@@ -2957,16 +2964,58 @@ class GaussianMixtureLatentPT(nn.Module):
 
         # Pass z_var directly, not z_log_var
         z_sample = self._reparameterize(z_mean, z_var, epsilon)
-        # ... rest of the method is the same ...
         z_for_downstream = z_sample if self.training else z_mean
+
+        # Focus to lower dimension, if lens is enabled
+        if self.lens_enabled:
+            z_for_gaussian = self.lens(z_for_downstream)
+        else:
+            z_for_gaussian = z_for_downstream
+
         if torch.isnan(z_for_downstream).any():
             print("z issues!")
-        z_cat = self._calculate_posterior(z_for_downstream)
+        
+        # get probabilities from Gaussians
+        z_cat = self._calculate_posterior(z_for_gaussian)
         z_final, metrics = self.cluster_control(z_for_downstream, z_cat)
         kmeans_loss = torch.tensor(0.0, device=x.device)
         if self.kmeans_weight > 0:
             kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
-        return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss, z_mean, z_log_var)
+
+        # Compute lens-space posterior parameters (μ_h, log_var_h) for proper MC-KL  ###HERE!
+        if self.lens_enabled: 
+            W = self.lens.weight  # (d_lens, d_latent) 
+            h_mean = F.linear(z_mean, W, bias=None)  # z_mean @ W.T 
+            var_z = torch.exp(z_log_var)  # (B, d_latent) 
+            var_h = torch.clamp(var_z @ (W.pow(2)).t(), min=1e-8)  # (B, d_lens) 
+            h_log_var = torch.log(var_h)  # (B, d_lens)  
+        else:  
+            h_mean = z_mean  # (B, latent_dim) 
+            h_log_var = z_log_var  # (B, latent_dim) 
+
+        return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss, h_mean, h_log_var, z_for_gaussian)
+
+    @torch.no_grad()
+    def set_lens_weights(self, W: torch.Tensor) -> None: 
+        """Set the projection (lens) weights from an external initializer (e.g., PCA/LDA).""" 
+        if W.shape != self.lens.weight.shape:  
+            raise ValueError(f"Lens weight shape {W.shape} does not match {self.lens.weight.shape}")  
+        self.lens.weight.data.copy_(W.to(self.lens.weight.device, dtype=self.lens.weight.dtype)) 
+
+    def freeze_lens(self, freeze: bool = True) -> None:  
+        """Freeze/unfreeze the lens parameters."""  
+        for p in self.lens.parameters(): 
+            p.requires_grad = not freeze 
+
+
+
+
+
+
+
+
+
+
 
 
 class GaussianMixtureLatentPT_new(nn.Module):
@@ -3338,6 +3387,7 @@ class VaDEPT(nn.Module):
         use_gnn: bool = True,
         kmeans_loss: float = 1.0,
         interaction_regularization: float = 0.0,
+        lens_enabled = False,
     ):
         super().__init__()
         
@@ -3345,6 +3395,7 @@ class VaDEPT(nn.Module):
         self.input_n_nodes = n_nodes
         self.input_n_features_per_node = n_features_per_node
         self.window_size = time_steps #important for modal usage later
+        self.lens_enabled=lens_enabled
 
         if encoder_type == "recurrent":
             self.encoder = RecurrentEncoderPT(
@@ -3406,6 +3457,7 @@ class VaDEPT(nn.Module):
             n_components=n_components,
             latent_dim=latent_dim,
             kmeans=kmeans_loss,
+            lens_enabled=self.lens_enabled,
         )
 
 
@@ -3432,8 +3484,9 @@ class VaDEPT(nn.Module):
             _n_populated,
             _confidence,
             kmeans_loss,
-            z_mean_head_comp,
-            z_var_param_comp,
+            h_mean,
+            h_log_var,
+            z_for_gaussian,
         ) = self.latent_space(encoder_output)
 
         if torch.isnan(z_mean_head).any() or torch.isnan(z_var_param).any():
@@ -3451,15 +3504,15 @@ class VaDEPT(nn.Module):
             }
             return (
                 reconstruction_dist,
-                latent,
+                z_for_gaussian,
                 categorical,
                 kmeans_loss,
-                z_mean_head,
-                z_var_param,
+                h_mean,
+                h_log_var,
                 gmm_params,
             )
         else:
-            return reconstruction_dist, latent, categorical, kmeans_loss
+            return reconstruction_dist, z_for_gaussian, categorical, kmeans_loss
 
     @property
     def get_gmm_params(self) -> dict:
@@ -3491,6 +3544,8 @@ class VaDEPT(nn.Module):
                 x, a = x.to(dev), a.to(dev)
                 enc = self.encoder(x, a)
                 z_mean, _ = self.latent_space._encode(enc)
+                if getattr(self.latent_space, "lens_enabled", False):          
+                    z_mean = self.latent_space.lens(z_mean)  
                 all_embeddings.append(z_mean.cpu())
                 samples_gathered += z_mean.size(0)
                 if samples_gathered >= n_samples:
