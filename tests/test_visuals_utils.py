@@ -253,8 +253,8 @@ def test_process_animation_data(min_confidence,min_bout_duration,selected_cluste
     )
 
     #create random embeddings and soft counts
-    cur_embeddings = np.random.normal(size=(len(features)*len(coordinates)-5, 10))
-    counts = np.abs(np.random.normal(size=(len(features)*len(coordinates)-5, 2)))
+    cur_embeddings = np.random.normal(size=(len(features)*len(coordinates), 10))
+    counts = np.abs(np.random.normal(size=(len(features)*len(coordinates), 2)))
     cur_soft_counts = counts / counts.sum(axis=1)[:, None]
     cur_soft_counts[0:6,:]=[1,0] # add strongly confident bouts to not trigger assert
     cur_soft_counts[-1:-6:-1,:]=[0,1]
