@@ -2822,11 +2822,16 @@ def animate_skeleton(
     # Sort column index to allow for multiindex slicing
     coords = coords.sort_index(ascending=True, inplace=False, axis=1)
 
-    # Slice objects according to selected frame range
-    coords=coords.iloc[frames,:]
+     
+    # Slice objects according to selected frame range 
     if cur_embeddings is not None:
+        win_size = coords.shape[0] - cur_embeddings.shape[0]
+        coords = coords[win_size // 2 : -win_size // 2]
+        # Determine window size difference between coords and soft_counts
         cur_embeddings=cur_embeddings[frames,:]
         cur_soft_counts=cur_soft_counts[frames,:]
+
+    coords=coords.iloc[frames,:]
 
     # Get output scale
     x_dv = np.maximum(

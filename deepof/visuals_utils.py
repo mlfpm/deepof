@@ -462,14 +462,6 @@ def _process_animation_data(
     twoDim_embeddings = reducers[1].transform(reducers[0].transform(cur_embeddings))
 
 
-    # Center sliding window instances
-    if coords.shape[0] - twoDim_embeddings.shape[0] > 0:
-        try:
-            win_size = coords.shape[0] - twoDim_embeddings.shape[0]
-        except AttributeError:
-            win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
-        coords = coords[win_size // 2 : -win_size // 2]
-
     # Ensure that shapes are matching
     assert (
         twoDim_embeddings.shape[0] == coords.shape[0]
