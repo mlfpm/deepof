@@ -2895,7 +2895,7 @@ class GaussianMixtureLatentPT(nn.Module):
         self.latent_dim = latent_dim
         self.kmeans_weight = kmeans
         self.lens_enabled = lens_enabled
-        self.mixture_dim = (12 if lens_enabled else self.latent_dim)
+        self.mixture_dim = (24 if lens_enabled else self.latent_dim)
 
         # --- Trainable Parameters for the GMM components ---
         self.gmm_means = nn.Parameter(torch.empty(n_components, self.mixture_dim))
@@ -3001,6 +3001,7 @@ class GaussianMixtureLatentPT(nn.Module):
         if W.shape != self.lens.weight.shape:  
             raise ValueError(f"Lens weight shape {W.shape} does not match {self.lens.weight.shape}")  
         self.lens.weight.data.copy_(W.to(self.lens.weight.device, dtype=self.lens.weight.dtype)) 
+        #self.freeze_lens(True)
 
     def freeze_lens(self, freeze: bool = True) -> None:  
         """Freeze/unfreeze the lens parameters."""  
