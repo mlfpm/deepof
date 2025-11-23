@@ -2999,7 +2999,7 @@ def animate_skeleton(
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=frames,
+        frames=range(coords.shape[0]),
         interval=int(np.round(1000 // sampling_rate)),
     )
 
