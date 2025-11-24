@@ -1347,7 +1347,7 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
     # Single animal case
     else:
         # If "all", take all bodyparts i.e. full table
-        if in_roi_criterion == "all":
+        if "all" in in_roi_criterion:
             all_points=tab
         else:
             all_points=tab[in_roi_criterion]

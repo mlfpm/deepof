@@ -425,7 +425,7 @@ def test_preprocess_time_bins(
 @given(
     mode=st.one_of(st.just("single"), st.just("multi")),
     bin_size=st.one_of(st.just(100), st.just(50)),
-    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose")),
+    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose"), st.just("all"), st.just(["Spine_1","Center","Spine_2"])),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
 def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
