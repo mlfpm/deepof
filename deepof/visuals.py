@@ -12,7 +12,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import chain, combinations, product
-from typing import Any, List, NewType, Union
+from typing import Any, List, NewType, Union, Optional
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -2737,25 +2737,25 @@ def animate_skeleton(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     # Time selection parameters
-    bin_size: Union[int, str] = None,
-    bin_index: Union[int, str] = None,
-    precomputed_bins: np.ndarray = None,
-    samples_max: int =20000,  
+    bin_size: Union[int, str, None] = None,
+    bin_index: Union[int, str, None] = None,
+    precomputed_bins: Optional[np.ndarray] = None,
+    samples_max: int = 20000,
     # ROI functionality
-    roi_number: int = None,  
-    animals_in_roi: list = None,
-    in_roi_criterion: str = "Center", 
+    roi_number: Optional[int] = None,
+    animals_in_roi: Optional[Union[str, Sequence[str]]] = None,
+    in_roi_criterion: Union[str, Sequence[str]] = "Center",
     # other parameters
-    animal_id: list = None,
-    center: str = "arena",
-    align: str = None,
-    sampling_rate: float = None, 
+    animal_id: Optional[Union[str, Sequence[str]]] = None,
+    center: Union[str, bool] = "arena",
+    align: Optional[str] = None,
+    sampling_rate: Optional[float] = None,
     min_confidence: float = 0.0,
-    min_bout_duration: int = None,
-    selected_cluster: np.ndarray = None,
+    min_bout_duration: Optional[int] = None,
+    selected_cluster: Optional[np.ndarray] = None,
     display_arena: bool = True,
     legend: bool = True,
-    save: bool = None,
+    save: Optional[Union[bool, str]] = None,
     dpi: int = 100,
 ):
     """Render a FuncAnimation object with embeddings and/or motion trajectories over time.
@@ -2763,29 +2763,31 @@ def animate_skeleton(
     Args:
         coordinates (coordinates): deepof Coordinates object.
         experiment_id (str): Name of the experiment to display.
-        embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
-        soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        embeddings (table_dict): UMAP or latent embedding for each experiment. If not None, a second animation shows the embedding, colored by cluster if available.
+        soft_counts (table_dict): soft cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified
+        component are rendered. Defaults to None. bin_size (Union[int, str, None]): bin size for time filtering.
+        bin_index (Union[int, str, None]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray, optional): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
-        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).       
-        sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
+        roi_number (int, optional): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded).
+        animals_in_roi (str or list of str, optional): IDs of animals that need to be inside the active ROI. All frames in which any of the given animals are not inside the ROI get excluded.
+        in_roi_criterion (str or list of str): Criterion for in-roi check: a single bodypart, a list of bodyparts or "all" bodyparts of a mouse.
+        animal_id (str or list of str, optional): ID list of animals to display. If None (default) it shows all animals.
+        center (str or bool): Name of the body part to which the positions will be centered. If False, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str, optional): Body part to which later processes will align the frames.
+        sampling_rate (float, optional): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
-        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
-        save (str): name of the file where to save the produced animation.
-        dpi (int): dots per inch of the figure to create.
+        min_bout_duration (int, optional): Minimum number of frames to render a cluster assignment bout.
+        selected_cluster (np.ndarray, optional): Cluster to filter.
+        display_arena (bool): Whether to plot a dashed line with an overlying arena perimeter.
+        legend (bool): Whether to add a color-coded legend to multi-animal plots.
+        save (bool or str, optional): If not None, save the animation. If a string is provided, it is added as a suffix in the auto-generated file name.
+        dpi (int): Dots per inch of the figure to create.
 
     """
-    # initial check if enum-like inputs were given correctly
+    # ----------------------------------------------------------------------
+    # Initial check if enum-like inputs were given correctly
+    # ----------------------------------------------------------------------
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
@@ -2794,78 +2796,108 @@ def animate_skeleton(
         roi_number=roi_number,
         in_roi_bodyparts=in_roi_criterion,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
-    if type(animal_id)==str:
-        animal_id=[animal_id]
-    if animals_in_roi is None:
-        animals_in_roi = coordinates._animal_ids
-    if type(animals_in_roi)==str:
-        animals_in_roi=[animals_in_roi]
 
-    tab_dict_for_binning=None
-    if embeddings is not None:
-        tab_dict_for_binning=embeddings
+    # Small helper to normalize animal id arguments to a list of strings
+    def _normalize_id_list(ids, default):
+        if ids is None:
+            return list(default)
+        if isinstance(ids, str):
+            return [ids]
+        return list(ids)
+
+    # Normalize animal ids
+    if hasattr(coordinates, "_animal_ids"):
+        all_animals = list(coordinates._animal_ids)
+    else:
+        all_animals = []
+
+    animal_id = _normalize_id_list(animal_id, all_animals)
+    animals_in_roi = _normalize_id_list(animals_in_roi, all_animals)
+
+    # ----------------------------------------------------------------------
+    # Time binning and ROI filtering
+    # ----------------------------------------------------------------------
+    tab_dict_for_binning = embeddings if embeddings is not None else None
 
     bin_info_time = _preprocess_time_bins(
-    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max, tab_dict_for_binning=tab_dict_for_binning,
+        coordinates,
+        bin_size,
+        bin_index,
+        precomputed_bins,
+        samples_max=samples_max,
+        tab_dict_for_binning=tab_dict_for_binning,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(
+        coordinates, roi_number, bin_info_time, in_roi_criterion
+    )
 
-    #get available frames to display based on binning
+    # Get available frames to display based on binning
     if roi_number is None:
         frames = bin_info[experiment_id]["time"]
     else:
-        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
+        # A pseudo behavior is constructed from the animal ids that contains all
+        # ids intended to be inside the ROI.
+        frames = get_behavior_frames_in_roi(
+            "_".join(animals_in_roi) + "_",
+            bin_info[experiment_id],
+            animal_ids=animals_in_roi,
+        )
         get_behavior_frames_in_roi._warning_issued = False
 
+    # Convert frames to an integer numpy array for consistent indexing
+    frames = np.asarray(frames, dtype=int)
+
+    # ----------------------------------------------------------------------
+    # Sampling rate & embedding data for the requested experiment
+    # ----------------------------------------------------------------------
     if sampling_rate is None:
-        sampling_rate=coordinates._frame_rate
+        sampling_rate = coordinates._frame_rate
 
     if embeddings is not None:
-        #Get data for requested experiment
-        cur_embeddings=get_dt(embeddings, experiment_id)
-        cur_soft_counts=get_dt(soft_counts, experiment_id)
+        cur_embeddings = get_dt(embeddings, experiment_id)
+        cur_soft_counts = get_dt(soft_counts, experiment_id)
     else:
-        cur_embeddings=None
-        cur_soft_counts=None
+        cur_embeddings = None
+        cur_soft_counts = None
 
-    #scales is now a dictionary which simplifies things
-    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
+    # ----------------------------------------------------------------------
+    # Coordinates preprocessing (centering, alignment, selection of animals)
+    # ----------------------------------------------------------------------
+    coords = coordinates.get_coords_at_key(
+        center=center,
+        align=align,
+        scale=coordinates._scales[experiment_id],
+        key=experiment_id,
+        animals_in_roi=animal_id,
+    )
 
-    # Filter requested animals
-    coords_list=[]
-    for aid in animal_id:
-        coords_list.append(deepof.utils.filter_animal_id_in_table(table=coords, selected_id=aid))
-    coords=pd.concat(coords_list,axis=1)
-
-    # Sort column index to allow for multiindex slicing
-    coords = coords.sort_index(ascending=True, inplace=False, axis=1)
-
-     
-    # Slice objects according to selected frame range 
+    # If we also have embeddings, align coords length to embeddings length
     if cur_embeddings is not None:
         win_size = coords.shape[0] - cur_embeddings.shape[0]
-        coords = coords[win_size // 2 : -win_size // 2]
-        # Determine window size difference between coords and soft_counts
-        cur_embeddings=cur_embeddings[frames,:]
-        cur_soft_counts=cur_soft_counts[frames,:]
+        # Keep the center section
+        coords = coords.iloc[win_size // 2 : -win_size // 2]
 
-    coords=coords.iloc[frames,:]
+        # Apply frame selection to embeddings/soft_counts
+        cur_embeddings = cur_embeddings[frames, :]
+        cur_soft_counts = cur_soft_counts[frames, :]
 
-    # Get output scale
-    x_dv = np.maximum(
-        np.abs(coords.loc[:, (slice("x"), ["x"])].min().mean()),
-        np.abs(coords.loc[:, (slice("x"), ["x"])].max().mean()),
-    )
-    y_dv = np.maximum(
-        np.abs(coords.loc[:, (slice("x"), ["y"])].min().mean()),
-        np.abs(coords.loc[:, (slice("x"), ["y"])].max().mean()),
-    )
+    # Slice coords according to selected frame range
+    coords = coords.iloc[frames, :]
 
+    # ----------------------------------------------------------------------
+    # Get output scale (use coords before possible cluster filtering)
+    # ----------------------------------------------------------------------
+    # Select x and y coordinates by MultiIndex level (level 1: 'x'/'y')
+    coords_x_for_scale = coords.xs("x", level=1, axis=1).to_numpy()
+    coords_y_for_scale = coords.xs("y", level=1, axis=1).to_numpy()
+
+    x_dv = float(np.max(np.abs(coords_x_for_scale))) if coords_x_for_scale.size else 1.0
+    y_dv = float(np.max(np.abs(coords_y_for_scale))) if coords_y_for_scale.size else 1.0
+
+    # ----------------------------------------------------------------------
+    # Embedding post-processing (UMAP etc.)
+    # ----------------------------------------------------------------------
     if embeddings is not None:
-        # Get and process data to plot from coordinates object
         (
             coords,
             cur_embeddings,
@@ -2881,18 +2913,35 @@ def animate_skeleton(
             selected_cluster,
         )
 
-    # Define canvas
-    fig = plt.figure(figsize=((16 if cur_embeddings is not None else 8), 8), dpi=dpi)
+    # After _process_animation_data, recompute the x/y arrays used for animation
+    coords_x_df = coords.xs("x", level=1, axis=1)
+    coords_y_df = coords.xs("y", level=1, axis=1)
+    coords_x = coords_x_df.to_numpy()
+    coords_y = coords_y_df.to_numpy()
 
-    # If embeddings are provided, add projection plot to the left
-    if cur_embeddings is not None:
+    n_frames = coords.shape[0]
+
+    # ----------------------------------------------------------------------
+    # Define canvas
+    # ----------------------------------------------------------------------
+    fig = plt.figure(
+        figsize=((16 if embeddings is not None else 8), 8),
+        dpi=dpi,
+    )
+
+    # ----------------------------------------------------------------------
+    # Embedding subplot (if provided)
+    # ----------------------------------------------------------------------
+    if embeddings is not None:
         ax1 = fig.add_subplot(121)
 
+        # Background scatter of all valid embeddings
         _scatter_embeddings(concat_embedding, hard_counts, ax1, show=False)
 
-        # Plot current position
+        # Plot current position(s) as large markers
         umap_scatter = {}
         for i, emb in enumerate(cur_embeddings):
+            # cur_embeddings is a list of arrays, each (n_frames, 2)
             umap_scatter[i] = ax1.scatter(
                 emb[0, 0],
                 emb[0, 1],
@@ -2910,118 +2959,132 @@ def animate_skeleton(
         ax1.set_xlabel("UMAP-1")
         ax1.set_ylabel("UMAP-2")
 
-    # Add skeleton animation
-    ax2 = fig.add_subplot((122 if cur_embeddings is not None else 111))
+    # ----------------------------------------------------------------------
+    # Skeleton subplot
+    # ----------------------------------------------------------------------
+    ax2 = fig.add_subplot((122 if embeddings is not None else 111))
 
-    # Plot!
-    init_x = coords.loc[:, (slice("x"), ["x"])].iloc[0, :]
-    init_y = coords.loc[:, (slice("x"), ["y"])].iloc[0, :]
+    # Plot initialization: first frame
+    init_x = coords_x[0]
+    init_y = coords_y[0]
 
     # If there are more than one animal in the representation, display each in a different color
-    hue = None
-    cmap_all = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
-    positions = [coordinates._animal_ids.index(item) for item in animal_id]
-    cmap = ListedColormap([cmap_all(pos)for pos in positions])
-    #cmap = cmap[]
+    cmap_all = ListedColormap(
+        sns.color_palette("tab10", len(coordinates._animal_ids))
+    )
+    positions = [coordinates._animal_ids.index(a) for a in animal_id]
+    # Select colors for the requested animals in a stable way
+    colors_all = list(cmap_all.colors)
+    selected_colors = [colors_all[pos] for pos in positions]
+    cmap = ListedColormap(selected_colors)
 
+    # Compute hue: one value per point (bodypart) based on the animal id prefix
+    x_columns = coords_x_df.columns.to_list()  # level-0 labels, e.g. 'B_Nose', 'W_Nose'
+    hue = np.zeros(len(x_columns), dtype=int)
+    for idx, aid in enumerate(animal_id):
+        prefix = aid if aid.endswith("_") else f"{aid}_"
+        mask = np.array([col.startswith(prefix) for col in x_columns], dtype=bool)
+        hue[mask] = idx
+
+    # Polygons per animal
     polygons = [_get_polygon_coords(coords, aid) for aid in animal_id]
 
-    hue = np.zeros(len(np.array(init_x)))
-    for i, id in enumerate(animal_id):
+    # Create legend only once, using the selected colors
+    if legend:
+        custom_labels = [
+            ax2.scatter([], [], color=selected_colors[i], lw=3)
+            for i in range(len(animal_id))
+        ]
+        ax2.legend(custom_labels, animal_id, loc="upper right")
 
-        hue[coords.columns.levels[0].str.startswith(id)] = i
-
-        # Set a custom legend outside the plot, with the color of each animal
-
-        if legend:
-            custom_labels = [
-                plt.scatter(
-                    [np.inf],
-                    [np.inf],
-                    color=cmap(i / len(animal_id)),
-                    lw=3,
-                )
-                for i in range(len(animal_id))
-            ]
-            ax2.legend(custom_labels, animal_id, loc="upper right")
-
+    # Main scatter for bodyparts
     skeleton_scatter = ax2.scatter(
-        x=np.array(init_x),
-        y=np.array(init_y),
+        x=init_x,
+        y=init_y,
         cmap=cmap,
-        label="Original",
         c=hue,
+        label="Original",
     )
 
+    # Create polygon patches and tail lines, and keep explicit handles
+    head_patches = []
+    body_patches = []
     tail_lines = []
-    for p, aid in enumerate(polygons):
-        ax2.add_patch(
-            patches.Polygon(
-                aid[0][0, :].reshape(-1, 2),
-                closed=True,
-                fc=cmap.colors[p],
-                ec=cmap.colors[p],
-                alpha=0.5,
-            )
+
+    for p, poly in enumerate(polygons):
+        head = poly[0][0, :].reshape(-1, 2)
+        body = poly[1][0, :].reshape(-1, 2)
+        tail = poly[2][0, :].reshape(-1, 2)
+
+        head_patch = patches.Polygon(
+            head,
+            closed=True,
+            fc=selected_colors[p],
+            ec=selected_colors[p],
+            alpha=0.5,
         )
-        ax2.add_patch(
-            patches.Polygon(
-                aid[1][0, :].reshape(-1, 2),
-                closed=True,
-                fc=cmap.colors[p],
-                ec=cmap.colors[p],
-                alpha=0.5,
-            )
+        body_patch = patches.Polygon(
+            body,
+            closed=True,
+            fc=selected_colors[p],
+            ec=selected_colors[p],
+            alpha=0.5,
         )
-        tail_lines.append(ax2.plot(*aid[2][0, :].reshape(-1, 2).T))
+        ax2.add_patch(head_patch)
+        ax2.add_patch(body_patch)
+
+        (tail_line,) = ax2.plot(
+            tail[:, 0],
+            tail[:, 1],
+            color=selected_colors[p],
+        )
+
+        head_patches.append(head_patch)
+        body_patches.append(body_patch)
+        tail_lines.append(tail_line)
 
     if display_arena and center in [False, "arena"] and align is None:
         plot_arena(coordinates, center, "black", ax2, key=experiment_id)
 
-    # Update data in main plot
+    # ----------------------------------------------------------------------
+    # Animation update function
+    # ----------------------------------------------------------------------
     def animation_frame(i):
-
-        if cur_embeddings is not None:
-            # Update umap scatter
-            for j, xy in umap_scatter.items():
+        # Update UMAP scatter(s) if present
+        if embeddings is not None:
+            for j, scatter in umap_scatter.items():
                 umap_x = cluster_embedding[j][i, 0]
                 umap_y = cluster_embedding[j][i, 1]
-
-                umap_scatter[j].set_offsets(np.c_[umap_x, umap_y])
+                scatter.set_offsets(np.c_[umap_x, umap_y])
 
         # Update skeleton scatter plot
-        x = coords.loc[:, (slice("x"), ["x"])].iloc[i, :]
-        y = coords.loc[:, (slice("x"), ["y"])].iloc[i, :]
-
+        x = coords_x[i]
+        y = coords_y[i]
         skeleton_scatter.set_offsets(np.c_[x, y])
 
-        for p, aid in enumerate(polygons):
-            # Update polygons
-            ax2.patches[2 * p].set_xy(aid[0][i, :].reshape(-1, 2))
-            ax2.patches[2 * p + 1].set_xy(aid[1][i, :].reshape(-1, 2))
+        # Update polygons and tails
+        for p, poly in enumerate(polygons):
+            head = poly[0][i, :].reshape(-1, 2)
+            body = poly[1][i, :].reshape(-1, 2)
+            tail = poly[2][i, :].reshape(-1, 2)
 
-            # Update tails
-            tail_lines[p][0].set_xdata(aid[2][i, :].reshape(-1, 2)[:, 0])
-            tail_lines[p][0].set_ydata(aid[2][i, :].reshape(-1, 2)[:, 1])
+            head_patches[p].set_xy(head)
+            body_patches[p].set_xy(body)
+            tail_lines[p].set_data(tail[:, 0], tail[:, 1])
 
-        if cur_embeddings is not None:
-            return umap_scatter, skeleton_scatter
+        if embeddings is not None:
+            # Return artists for completeness; FuncAnimation does not use them
+            return tuple(umap_scatter.values()) + (skeleton_scatter,)
+        return (skeleton_scatter,)
 
-        return skeleton_scatter
-
-    if embeddings is not None and len(frames) > len(cluster_embedding[0]):
-        frames=frames[0:len(cluster_embedding[0])]
-        warnings.warn(
-            "\033[38;5;208m\n"
-            f"Not enough valid frames found in given interval! Set limit to {len(frames)} frames"
-            "\033[0m"
-        )
-
+    # ----------------------------------------------------------------------
+    # Build animation
+    # ----------------------------------------------------------------------
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=range(coords.shape[0]),
-        interval=int(np.round(1000 // sampling_rate)),
+        frames=n_frames,
+        interval=int(round(1000.0 / sampling_rate)),
     )
 
     ax2.set_title(
@@ -3032,23 +3095,24 @@ def animate_skeleton(
     ax2.set_ylabel("y")
 
     if center not in [False, "arena"]:
-
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
     ax2.invert_yaxis()
-
     plt.tight_layout()
 
+    # ----------------------------------------------------------------------
+    # Optional saving
+    # ----------------------------------------------------------------------
     if save is not None:
-        save = os.path.join(
+        save_path = os.path.join(
             coordinates._project_path,
             coordinates._project_name,
             "Out_videos",
             "deepof_embedding_animation{}_{}_start{}-duration{}_{}.mp4".format(
                 (f"_{save}" if isinstance(save, str) else ""),
                 (
-                    "cluster={}".format(selected_cluster)
+                    f"cluster={selected_cluster}"
                     if selected_cluster is not None
                     else experiment_id
                 ),
@@ -3058,8 +3122,8 @@ def animate_skeleton(
             ),
         )
 
-        writevideo = FFMpegWriter(fps=sampling_rate)
-        animation.save(save, writer=writevideo)
+        writer = FFMpegWriter(fps=int(round(sampling_rate)))
+        animation.save(save_path, writer=writer)
 
     return animation.to_html5_video()
 
