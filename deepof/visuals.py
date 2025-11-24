@@ -335,6 +335,7 @@ def _plot_experiment_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -356,6 +357,7 @@ def _plot_experiment_gantt(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse           
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -375,6 +377,7 @@ def _plot_experiment_gantt(
         animals_in_roi = animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -426,7 +429,7 @@ def _plot_experiment_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # get indices to be plotted
     bin_indices=bin_info[experiment_id]["time"]
@@ -534,6 +537,7 @@ def _plot_behavior_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -555,6 +559,7 @@ def _plot_behavior_gantt(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)        
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -575,6 +580,7 @@ def _plot_behavior_gantt(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -621,7 +627,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -911,6 +917,7 @@ def plot_enrichment(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise", 
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -936,6 +943,7 @@ def plot_enrichment(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded        
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
@@ -955,6 +963,7 @@ def plot_enrichment(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -1008,7 +1017,7 @@ def plot_enrichment(
             tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
@@ -1622,6 +1631,7 @@ def count_all_events(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
     # Others
     counting_mode = "Events",
 ):
@@ -1637,6 +1647,7 @@ def count_all_events(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse         
         counting_mode (str): How to count behaviors. Options: 
             - "Frames": Total frames where behavior is active (after extension)
             - "Time": Total time where behavior is active
@@ -1650,6 +1661,7 @@ def count_all_events(
         soft_counts=soft_counts,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
     Counting_mode_options=["Frames","Time","Events","Transitions"]  
     if counting_mode not in Counting_mode_options:
@@ -1671,7 +1683,7 @@ def count_all_events(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # create tabdict dictionary to iterate over options
     load_range = None
@@ -2018,6 +2030,7 @@ def plot_stationary_entropy(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
@@ -2037,6 +2050,7 @@ def plot_stationary_entropy(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                           
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
@@ -2050,6 +2064,7 @@ def plot_stationary_entropy(
         exp_condition=exp_condition,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None:
         animals_in_roi = coordinates._animal_ids
@@ -2077,7 +2092,7 @@ def plot_stationary_entropy(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     if (any([np.sum(bin_info[key]["time"]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
@@ -2309,6 +2324,7 @@ def plot_embeddings(
     roi_number: int = None,
     animals_in_roi: Union[str,list] = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -2338,6 +2354,7 @@ def plot_embeddings(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                          
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -2362,6 +2379,7 @@ def plot_embeddings(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if type(colour_by)==str:
         colour_by=[colour_by]
@@ -2411,7 +2429,7 @@ def plot_embeddings(
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
     
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
@@ -2726,6 +2744,7 @@ def animate_skeleton(
     # ROI functionality
     roi_number: int = None,  
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
     # other parameters
     animal_id: list = None,
     center: str = "arena",
@@ -2752,6 +2771,7 @@ def animate_skeleton(
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
         animal_id (list): ID list of animals to display. If None (default) it shows all animals.
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).       
@@ -2772,6 +2792,7 @@ def animate_skeleton(
         animal_id=animal_id,
         center=center,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animal_id is None:
         animal_id = coordinates._animal_ids
@@ -2789,7 +2810,7 @@ def animate_skeleton(
     bin_info_time = _preprocess_time_bins(
     coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max, tab_dict_for_binning=tab_dict_for_binning,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     #get available frames to display based on binning
     if roi_number is None:
@@ -3253,6 +3274,7 @@ def export_annotated_video(
     roi_number: int =None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     #others
     behaviors: list = None,
     experiment_id: str = None,
@@ -3279,6 +3301,7 @@ def export_annotated_video(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse           
         behaviors (list): Behaviors or Clusters to that get exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations. If multiple behaviors are given as a list, one video can get annotated with multiple different behaviors
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
@@ -3301,6 +3324,7 @@ def export_annotated_video(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
         #behaviors=behaviors,
     )
     # Create video config
@@ -3353,7 +3377,7 @@ def export_annotated_video(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=np.inf
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
     
     # special case: an experiment id was given
     if experiment_id is not None:
@@ -3612,6 +3636,7 @@ def plot_behavior_trends(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization
     hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
@@ -3638,6 +3663,7 @@ def plot_behavior_trends(
     roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
     animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
     roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+    in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse    
     hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.    
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
@@ -3663,6 +3689,7 @@ def plot_behavior_trends(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -3739,7 +3766,7 @@ def plot_behavior_trends(
             tab_dict_for_binning=soft_counts,
         )
     # Create ROI bins
-    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -4362,6 +4389,7 @@ def get_roi_data(
     roi_number: int,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -4378,6 +4406,7 @@ def get_roi_data(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
@@ -4392,6 +4421,7 @@ def get_roi_data(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if coordinates._very_large_project and experiment_id is None:
         raise NotImplementedError(
@@ -4416,7 +4446,7 @@ def get_roi_data(
         tab_dict_for_binning=table_dict, samples_max=samples_max,
     )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)    
 
     object_out={}
     for key in exp_ids:

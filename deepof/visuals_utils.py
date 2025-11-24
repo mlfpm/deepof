@@ -914,7 +914,7 @@ def _apply_rois_to_bin_info(
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         roi_number (int): number of the roi 
         bin_info_time (dict): A dictionary containing start and end positions or indices for plotting 
-        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
     """
 
     animal_ids=coordinates._animal_ids
@@ -1217,6 +1217,7 @@ def _validate_parameter(
     valid_options: List[Any],
     is_list: bool = False,
     custom_error_if_empty: Optional[str] = None,
+    only_one_of_many: Optional[bool] = True
 ): # pragma: no cover
     """
     A generic helper to validate a single parameter against a list of valid options.
@@ -1257,10 +1258,15 @@ def _validate_parameter(
         options_preview = str(valid_options[:5])[1:-1]
         if len(valid_options) > 5:
             options_preview += ", ..."
-            
-        raise ValueError(
-            f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
-        )
+
+        if only_one_of_many:    
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+            )
+        else:
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
+            )
 
 
 #not covered by testing as the only purpose of this function is to throw specific exceptions
@@ -1275,6 +1281,7 @@ def _check_enum_inputs(
     condition_values: Optional[List[str]] = None,
     behaviors: Optional[List[str]] = None,
     bodyparts: Optional[List[str]] = None,
+    in_roi_bodyparts: Optional[List[str]] = None,
     animal_id: Optional[str] = None,
     center: Optional[str] = None,
     visualization: Optional[str] = None,
@@ -1302,6 +1309,7 @@ def _check_enum_inputs(
         condition_values (Optional[List[str]]): Specific condition values to plot.
         behaviors (Optional[List[str]]): List of animal behaviors to analyze.
         bodyparts (Optional[List[str]]): List of body parts to plot.
+        in_roi_bodyparts (Optional[List[str]]): List of body parts to plot, excluding animal ids, including "all".
         animal_id (Optional[str]): ID of a specific animal.
         center (Optional[str]): Center point for position normalization (e.g., 'arena').
         visualization (Optional[str]): Visualization mode (e.g., 'networks', 'heatmaps').
@@ -1327,6 +1335,7 @@ def _check_enum_inputs(
     condition_values = _to_list_if_str(condition_values)
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
+    in_roi_bodyparts = _to_list_if_str(in_roi_bodyparts)
     animals_in_roi = _to_list_if_str(animals_in_roi)
     
 
@@ -1360,6 +1369,10 @@ def _check_enum_inputs(
         cols = get_dt(coordinates._tables, key, only_metainfo=True)['columns']
         all_bps.extend([c[0] for c in cols])
     bodypart_opts = [bp for bp in np.unique(all_bps) if bp not in coordinates._excluded]
+    # remove ids for in roi version
+    if(len(coordinates._animal_ids)>1):
+        in_roi_bodypart_opts=[bp.partition("_")[2] for bp in bodypart_opts]
+    in_roi_bodypart_opts = in_roi_bodypart_opts + ["all"]
 
     animal_id_opts = coordinates._animal_ids
     
@@ -1385,25 +1398,26 @@ def _check_enum_inputs(
     # Format: (param_name, param_value, valid_options, is_list, custom_error)
     # =========================================================================
     validation_checks = [
-        ("experiment_ids", experiment_ids, exp_id_opts, True, None),
-        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!"),
-        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'."),
-        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'."),
-        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model."),
-        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!"),
-        ("bodyparts", bodyparts, bodypart_opts, True, None),
-        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None),
-        ("animal_id", animal_id, animal_id_opts, False, None),
-        ("center", center, center_opts, False, None),
-        ("visualization", visualization, vis_opts, False, None),
-        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None),
-        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!"),
-        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project."),
-        ("roi_mode", roi_mode, roi_mode_opts, False, None),
+        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True),
+        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True),
+        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False),
+        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True),
+        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", True),
+        ("bodyparts", bodyparts, bodypart_opts, True, None, False),
+        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False),
+        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True),
+        ("animal_id", animal_id, animal_id_opts, False, None, True),
+        ("center", center, center_opts, False, None, True),
+        ("visualization", visualization, vis_opts, False, None, True),
+        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True),
+        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False),
+        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True),
+        ("roi_mode", roi_mode, roi_mode_opts, False, None, True),
     ]
 
-    for name, value, options, is_list, error_msg in validation_checks:
-        _validate_parameter(name, value, options, is_list, error_msg)
+    for name, value, options, is_list, error_msg, only_one_of_many in validation_checks:
+        _validate_parameter(name, value, options, is_list, error_msg, only_one_of_many)
 
     # =========================================================================
     # 4. HANDLE SPECIAL CASES AND WARNINGS

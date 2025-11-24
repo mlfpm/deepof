@@ -40,6 +40,7 @@ from tqdm import tqdm
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
+import deepof.utils
 
 
 
@@ -1324,24 +1325,42 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
     Args:
         tab (dataTable): Datatable containing mouse tracking data.
         aid (str): ainimal id of the mouse to check
-        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
         roi_polygon (np.ndarray): 2D numpy array containing the coordinats of the ROI
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
     Returns:
         mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
     """
 
+    # Make to list
+    if isinstance(in_roi_criterion,str):
+        in_roi_criterion=[in_roi_criterion]
+    # Multi animal case
     if aid != "":
-        points=np.array(tab[aid+"_"+in_roi_criterion])
+        # If "all", take all bodyparts in table of animal aid
+        if "all" in in_roi_criterion:
+            in_roi_criterion=np.unique([col[0] for col in tab.columns if col[0].startswith(aid)])
+        # Otherwise add aid to bodypart names to only get bodyparts of animal aid
+        else:
+            in_roi_criterion = [aid+"_"+bodypart for bodypart in in_roi_criterion]
+        all_points=tab[in_roi_criterion]
+    # Single animal case
     else:
-        points=np.array(tab[in_roi_criterion])
+        # If "all", take all bodyparts i.e. full table
+        if in_roi_criterion == "all":
+            all_points=tab
+        else:
+            all_points=tab[in_roi_criterion]
     if type(roi_polygon)==tuple:
         roi_polygon=np.array(roi_polygon)
 
-    if run_numba:
-        mouse_in_polygon=deepof.utils.point_in_polygon_numba(points,roi_polygon)
-    else:
-        mouse_in_polygon=deepof.utils.point_in_polygon(points,roi_polygon)
+    # Iterate over chosen bodyparts and only keep the ones in which all bodyparts exist
+    mouse_in_polygon = np.ones([all_points.shape[0]]).astype(bool)
+    for bodypart in all_points.columns.get_level_values(0).unique():
+        if run_numba:            
+            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon_numba(np.array(all_points[bodypart]),roi_polygon)
+        else:
+            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon(np.array(all_points[bodypart]),roi_polygon)
 
     return mouse_in_polygon
 
