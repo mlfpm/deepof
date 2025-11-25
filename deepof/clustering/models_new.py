@@ -2895,7 +2895,7 @@ class GaussianMixtureLatentPT(nn.Module):
         self.latent_dim = latent_dim
         self.kmeans_weight = kmeans
         self.lens_enabled = lens_enabled
-        self.mixture_dim = (24 if lens_enabled else self.latent_dim)
+        self.mixture_dim = (24 if self.lens_enabled else self.latent_dim)
 
         # --- Trainable Parameters for the GMM components ---
         self.gmm_means = nn.Parameter(torch.empty(n_components, self.mixture_dim))
@@ -2943,11 +2943,11 @@ class GaussianMixtureLatentPT(nn.Module):
         """Calculates the posterior probability p(c|z) for each sample."""
         # MODIFIED: The GMM parameters from TF are log-std-dev, not log-variance.
         # So we just exponentiate them to get the scale.
-        gmm_scale = torch.exp(self.gmm_log_vars)
+        gmm_std = torch.exp(0.5 * self.gmm_log_vars).clamp(min=1e-3)
 
         gmm_dist = Normal(
             loc=self.gmm_means.unsqueeze(0),
-            scale=gmm_scale.unsqueeze(0)
+            scale=gmm_std.unsqueeze(0)
         )
         log_p_z_given_c = gmm_dist.log_prob(z.unsqueeze(1)).sum(dim=-1)
         
@@ -3005,7 +3005,11 @@ class GaussianMixtureLatentPT(nn.Module):
 
     def freeze_lens(self, freeze: bool = True) -> None:  
         """Freeze/unfreeze the lens parameters."""  
-        for p in self.lens.parameters(): 
+        if freeze:
+            print("Freezing lense")
+        else:
+            print("Unfreezing lense")
+        for p in self.lens.parameters():       
             p.requires_grad = not freeze 
 
 
