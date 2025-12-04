@@ -3252,7 +3252,7 @@ class TableDict(dict):
         return merged_tables
 
     def get_training_set(
-        self, current_table_dict: table_dict, test_videos: int = 0
+        self, current_table_dict: table_dict, test_videos: Union[int, list] = 0
     ) -> tuple:
         """Generate training and test sets as table_dicts for model training.
 
@@ -3260,7 +3260,7 @@ class TableDict(dict):
 
         Args:
             current_table_dict (table_dict): table_dict object containing the data to be used for training.
-            test_videos (int): Number of videos to be used for testing. Defaults to 0.
+            test_videos (Union[int, list]): Number of videos to be used for testing or keys of test videos. Defaults to 0.
 
         Returns:
             IF there are no test videos:
@@ -3274,13 +3274,19 @@ class TableDict(dict):
 
         keys=np.array(list(current_table_dict.keys()))
 
-        rng = np.random.seed(42)
-        test_indices = np.random.choice(
-            range(len(current_table_dict)), test_videos, replace=False, 
-        )
-
-        test_keys = keys[test_indices]
-        train_keys = np.delete(keys, test_indices)
+        if isinstance(test_videos,int):
+            rng = np.random.seed(42)
+            test_indices = np.random.choice(
+                range(len(current_table_dict)), test_videos, replace=False, 
+            )
+            test_keys = keys[test_indices]
+        elif isinstance(test_videos,list) and all([key in list(current_table_dict.keys()) for key in test_videos]):
+            
+            test_keys = test_videos
+        else:
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")
+        
+        train_keys = list(set(keys)-set(test_keys))
 
         X_test = TableDict({},current_table_dict._type, current_table_dict._table_path)
         if test_videos > 0:
@@ -3510,6 +3516,7 @@ class TableDict(dict):
                             .interpolate(limit_direction="both")
                         )
 
+                        # Interpolate angle columns to avoid nans as only actual preprocesing step
                         angle_cols_nans_interpolated = (
                             angle_cols
                             .apply(lambda x: pd.to_numeric(x, errors="ignore"))
