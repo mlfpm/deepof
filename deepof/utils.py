@@ -1976,6 +1976,7 @@ def extract_windows(
     window_step: int,
     save_as_paths: bool = False,
     shuffle: bool = False,
+    average: bool = False,
     windows_desc : str = "Get windows"
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
@@ -1989,6 +1990,7 @@ def extract_windows(
         window_step (int): specifies the stride of the sliding window.
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
         shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
+        average (bool): Isntead of extracting full windows, only extract averages
         windows_desc (str): Progress bar label
 
     Returns:
@@ -2016,6 +2018,9 @@ def extract_windows(
                 window_size,
                 window_step,
             )
+            if average:
+                tab=tab.mean(axis=1)
+                tab = tab[:, None, :]
             if shuffle:
                 shuffle_idcs = np.random.choice(
                     tab.shape[0], tab.shape[0], replace=False
