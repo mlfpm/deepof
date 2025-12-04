@@ -1372,6 +1372,8 @@ def _check_enum_inputs(
     # remove ids for in roi version
     if(len(coordinates._animal_ids)>1):
         in_roi_bodypart_opts=[bp.partition("_")[2] for bp in bodypart_opts]
+    else:
+        in_roi_bodypart_opts=copy.copy(bodypart_opts)
     in_roi_bodypart_opts = in_roi_bodypart_opts + ["all"]
 
     animal_id_opts = coordinates._animal_ids

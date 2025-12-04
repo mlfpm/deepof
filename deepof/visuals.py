@@ -3768,6 +3768,7 @@ def plot_behavior_trends(
 
     # Init exp_condition if not given
     if not exp_condition:
+        assert coordinates.get_exp_conditions is not None, "Please load your experiment conditions first!"
         exp_condition = coordinates.get_exp_conditions[
             next(iter(coordinates.get_exp_conditions))
         ].columns[0]
