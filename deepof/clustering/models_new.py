@@ -2921,11 +2921,11 @@ class GaussianMixtureLatentPT(nn.Module):
     def _encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Encodes the input into mean and log-variance of the latent distribution."""
         z_mean = self.encoder_mean(x)
-        z_log_var = self.encoder_log_var(x) # Note: softplus is applied in the forward pass
-        return z_mean, z_log_var
+        z_log_var_pre = self.encoder_log_var(x) # Note: softplus is applied in the forward pass
+        return z_mean, z_log_var_pre
 
     def _reparameterize(
-        self, mean: torch.Tensor, var: torch.Tensor, epsilon: torch.Tensor = None
+        self, mean: torch.Tensor, log_var: torch.Tensor, epsilon: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Performs reparameterization.
@@ -2933,11 +2933,11 @@ class GaussianMixtureLatentPT(nn.Module):
         """
         # Original TF logic: scale = sqrt(exp(variance))
         # The 'var' input here is the direct output of the softplus activation.
-        scale = torch.sqrt(torch.exp(var))
-        
+        scale = torch.exp(0.5 * log_var)  # sqrt(exp(log_var))
         if epsilon is None:
             epsilon = torch.randn_like(scale)
-        return mean + scale * epsilon
+        return mean + scale * epsilon        
+        
 
     def _calculate_posterior(self, z: torch.Tensor) -> torch.Tensor:
         """Calculates the posterior probability p(c|z) for each sample."""
@@ -2959,12 +2959,23 @@ class GaussianMixtureLatentPT(nn.Module):
         self, x: torch.Tensor, epsilon: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         
-        z_mean, z_log_var = self._encode(x)
-        z_var = F.softplus(z_log_var) # Apply activation
+        z_mean, z_log_var_pre = self._encode(x)
+        z_log_var = F.softplus(z_log_var_pre) # Apply activation
 
         # Pass z_var directly, not z_log_var
-        z_sample = self._reparameterize(z_mean, z_var, epsilon)
+        z_sample = self._reparameterize(z_mean, z_log_var, epsilon)
         z_for_downstream = z_sample if self.training else z_mean
+
+        # Compute lens-space posterior parameters (μ_h, log_var_h) for proper MC-KL  ###HERE!
+        if self.lens_enabled: 
+            W = self.lens.weight  # (d_lens, d_latent) 
+            h_mean = F.linear(z_mean, W, bias=None)  # z_mean @ W.T 
+            var_z = torch.exp(z_log_var)  # (B, d_latent) 
+            var_h = torch.clamp(var_z @ (W.pow(2)).t(), min=1e-8)  # (B, d_lens) 
+            h_log_var = torch.log(var_h)  # (B, d_lens)  
+        else:  
+            h_mean = z_mean  # (B, latent_dim) 
+            h_log_var = z_log_var  # (B, latent_dim) 
 
         # Focus to lower dimension, if lens is enabled
         if self.lens_enabled:
@@ -2981,17 +2992,6 @@ class GaussianMixtureLatentPT(nn.Module):
         kmeans_loss = torch.tensor(0.0, device=x.device)
         if self.kmeans_weight > 0:
             kmeans_loss = deepof.clustering.model_utils_new.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
-
-        # Compute lens-space posterior parameters (μ_h, log_var_h) for proper MC-KL  ###HERE!
-        if self.lens_enabled: 
-            W = self.lens.weight  # (d_lens, d_latent) 
-            h_mean = F.linear(z_mean, W, bias=None)  # z_mean @ W.T 
-            var_z = torch.exp(z_log_var)  # (B, d_latent) 
-            var_h = torch.clamp(var_z @ (W.pow(2)).t(), min=1e-8)  # (B, d_lens) 
-            h_log_var = torch.log(var_h)  # (B, d_lens)  
-        else:  
-            h_mean = z_mean  # (B, latent_dim) 
-            h_log_var = z_log_var  # (B, latent_dim) 
 
         return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss, h_mean, h_log_var, z_for_gaussian)
 
