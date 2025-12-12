@@ -1418,7 +1418,7 @@ def load_table(
     tab: str,
     table_path: str,
     table_format: str,
-    rename_bodyparts: list = None,
+    rename_bodyparts_dict: dict = None,
     animal_ids: list = None,
 ):
     """Loads a table into a structured pandas data frame.
@@ -1429,7 +1429,7 @@ def load_table(
         tab (str): Name of the file containing the tracks.
         table_path (string): Full path to the file containing the tracks.
         table_format (str): type of the files to load, coming from either DeepLabCut (CSV and H5) and (S)LEAP (NPY).
-        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+        rename_bodyparts_dict (dict): dictionary of bodypart names given in the table corresponding to deepOFs bodypart names.
         animal_ids (list): List with the animal ids in case of multiple tracked animals. Is expected to be None if there is only a single animal getting tracked.
         
     Returns:
@@ -1475,14 +1475,16 @@ def load_table(
             loaded_tab = np.load(os.path.join(table_path, tab), "r")
 
             # Check that body part names are provided
-            slp_bodyparts = rename_bodyparts
+            slp_bodyparts = rename_bodyparts_dict.keys()
             if not animal_ids[0]:
                 slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
             else:
                 slp_animal_ids = animal_ids
         assert len(slp_bodyparts) == loaded_tab.shape[2], (
             "Some body part names appear to be in excess or missing.\n"
-            " If you used the rename_bodyparts argument, check if you set it correctly.\n"
+            f" The table you loaded has {loaded_tab.shape[2]} columns but no headers.\n"
+            " Respectively you should choose appropriate bodypart names from deepof8, 11 or 14\n" 
+            " and use privide these with rename_bodyparts as a list input" 
             " Otherwise, there might be an issue with the tables in your Tables-folder"
         )
 
@@ -1512,10 +1514,10 @@ def load_table(
         loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
         loaded_tab.columns = multi_index.loc["scorer"]
 
-    if rename_bodyparts is not None:
+    if rename_bodyparts_dict is not None:
         loaded_tab = rename_track_bps(
             loaded_tab,
-            rename_bodyparts,
+            rename_bodyparts_dict,
             (animal_ids if table_format in ["h5", "csv"] else [""]),
         )
 
@@ -1523,35 +1525,47 @@ def load_table(
 
 
 def rename_track_bps(
-    loaded_tab: pd.DataFrame, rename_bodyparts: list, animal_ids: list
+    loaded_tab: pd.DataFrame, rename_bodyparts_dict: list, animal_ids: list
 ):
     """Renames all body parts in the provided dataframe.
 
     Args:
         loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
-        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP files.
+        rename_bodyparts_dict (dict): dictionary of bodypart names given in the table corresponding to deepOFs bodypart names.
         animal_ids (list): list of IDs to use for the animals present in the provided tracking files.
+        bodypart_graph (str): DeepOF bodypart graph that is going to be used
 
     Returns:
         renamed_tab (pd.DataFrame): Data frame with renamed body parts
 
     """
-    renamed_tab = copy.deepcopy(loaded_tab)
+    # Does not operate on a copy but the loaded project table directly! 
+    if rename_bodyparts_dict is None:
+        return loaded_tab
 
+    bp_row = loaded_tab.loc["bodyparts", :]
+    
+    # Block to make sure that all bodyparts that should be replaced also occur with that name in the given table
     if not animal_ids[0]:
-        current_bparts = loaded_tab.loc["bodyparts", :].unique()
+        current_bparts = bp_row.unique()
     else:
         current_bparts = list(
             map(
                 lambda x: "_".join(x.split("_")[1:]),
-                loaded_tab.loc["bodyparts", :].unique(),
+                bp_row.unique(),
             )
         )
+    for bp in rename_bodyparts_dict.keys():
+        if not bp in current_bparts:
+            raise ValueError(f"\"{bp}\" does not correspond to any bodypart in the given table!\n Table bodyparts are {np.unique(current_bparts)}!")
+    
+    # Actual replacement of old table bp names with new ones
+    bp_row.replace(rename_bodyparts_dict, inplace=True, regex=True)
+    
+    # Should have been changed in place, this is just to be sure 
+    loaded_tab.loc["bodyparts", :] = bp_row
 
-    for old, new in zip(current_bparts, rename_bodyparts):
-        renamed_tab.replace(old, new, inplace=True, regex=True)
-
-    return renamed_tab
+    return loaded_tab
 
 
 def scale_table(

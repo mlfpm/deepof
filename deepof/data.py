@@ -385,6 +385,33 @@ class Project:
         if frames_max > 360000 or frames_sum > 900000: #roughly one 4 hour video at 25 fps or 10 hours of recording material in total
             self.very_large_project = True
 
+        # If the bodypart names in his table deviate from the ones deepOF expects, the user can rename them 
+        rename_bodyparts_dict = None
+        if rename_bodyparts is not None and isinstance(rename_bodyparts, list) and "npy" not in table_format:
+            if len(rename_bodyparts) == 8:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_8").nodes                            
+            elif len(rename_bodyparts) == 11:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
+            elif len(rename_bodyparts) == 14:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
+            else:
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!")
+            
+            # Creates a dictionary assigning table bp names to corresponding deepOF bp names
+            rename_bodyparts_dict = {}
+            node_assignment_string = f"Your custom bodypart names will be assigned to deepOF bodyparts as follows:\n"
+            for deepof_node, custom_node in zip(pattern, rename_bodyparts):
+                node_assignment_string += f"{deepof_node} : {custom_node},\n"
+                rename_bodyparts_dict[custom_node] = deepof_node
+            node_assignment_string+=f"If this assignment is incorrect, please update your \"bodypart_names\" list with the correct order and rerun the project creation" 
+            print(node_assignment_string)
+        # Special case table format npy with no headers. Here rename_bodyparts functions as a list of bodypart names with only the keys being used
+        elif "npy" in table_format:
+            rename_bodyparts_dict={}
+            for bp in rename_bodyparts:
+                rename_bodyparts_dict[bp]=bp
+
+
         # Init the rest of the parameters
         self.angles = True
         self.animal_ids = animal_ids if animal_ids is not None else [""]
@@ -408,7 +435,7 @@ class Project:
         self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
         self.segmentation_path = sam_checkpoint_path
-        self.rename_bodyparts = rename_bodyparts
+        self.rename_bodyparts_dict = rename_bodyparts_dict
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -551,7 +578,7 @@ class Project:
         """Loads a table and handles multi-animal formatting."""
         table = deepof.utils.load_table(
             self.tables[key], self.source_table_path, self.table_format,
-            self.rename_bodyparts, self.animal_ids
+            self.rename_bodyparts_dict, self.animal_ids
         )
 
         is_multi_animal = "individuals" in table.index
@@ -2328,7 +2355,7 @@ class Coordinates:
                 # Merge and extract names
                 tab_dict = coords.merge(
                     speeds,
-                    angles,
+                    #angles,
                     dists,
                     save_as_paths=return_as_paths
                     )
@@ -3289,7 +3316,7 @@ class TableDict(dict):
         train_keys = list(set(keys)-set(test_keys))
 
         X_test = TableDict({},current_table_dict._type, current_table_dict._table_path)
-        if test_videos > 0:
+        if len(test_keys) > 0:
             try:
                 X_test = current_table_dict.filter_videos(test_keys)   
                 X_train = current_table_dict.filter_videos(train_keys)  

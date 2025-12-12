@@ -36,15 +36,12 @@ import deepof.utils
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
     ),
-    custom_bodyparts=st.booleans(),
+    table_bodyparts=st.booleans(),
 )
-def test_project_init(table_type, arena_detection, custom_bodyparts):
+def test_project_init(table_type, arena_detection, table_bodyparts):
 
-    if custom_bodyparts or table_type == "npy":
-        custom_bodyparts = [
-            "".join(random.choice(string.ascii_lowercase) for _ in range(10))
-            for _ in range(14)
-        ]
+    if table_bodyparts or table_type == "npy":
+        table_bodyparts = ["Nose", "Left_ear", "Right_ear", "Spine_1", "Center", "Spine_2", "Left_fhip", "Right_fhip", "Left_bhip", "Right_bhip", "Tail_base", "Tail_1", "Tail_2", "Tail_tip"]
 
     # Add path to SLEAP tables if necessary
     tables_path = "Tables"
@@ -60,11 +57,11 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
             ".", "tests", "test_examples", "test_single_topview", tables_path
         ),
         project_name=f"test_{table_type[1:]}",
-        rename_bodyparts=(None if not custom_bodyparts else custom_bodyparts),
+        rename_bodyparts=(None if not table_bodyparts else table_bodyparts),
         bodypart_graph=(
             "deepof_14"
-            if not custom_bodyparts
-            else {custom_bodyparts[0]: custom_bodyparts[1:]}
+            if not table_bodyparts
+            else {table_bodyparts[0]: table_bodyparts[1:]}
         ),
         arena=arena_detection,
         video_scale=380,
