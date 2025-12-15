@@ -25,8 +25,18 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS, BODYPART_COLORS
-
+from deepof.config import (
+    PROGRESS_BAR_FIXED_WIDTH,
+    ONE_ANIMAL_COLOR_MAP,
+    TWO_ANIMALS_COLOR_MAP,
+    DEEPOF_8_BODYPARTS,
+    DEEPOF_11_BODYPARTS,
+    DEEPOF_14_BODYPARTS,
+    BODYPART_COLORS,
+    SINGLE_BEHAVIORS,
+    SYMMETRIC_BEHAVIORS,
+    ASYMMETRIC_BEHAVIORS,
+)
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -111,14 +121,14 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         pass
     elif type(animal_ids) == str:
         animal_ids=[animal_ids]
+    # extract aids from data frame columns    
     elif type(animal_ids)==pd.DataFrame:
         animal_ids_raw=animal_ids.columns
-        animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
-        # in case of only one animal what is found is only behavior names
-        if "speed" in animal_ids_raw:
-            animal_ids=None
-        else:
-            animal_ids=list(np.sort(np.unique(animal_ids_raw)))
+        # Get list of all aids in each behavior
+        animal_ids_raw=[s.split('_')[:-1] for s in animal_ids_raw]
+        # Flatten list
+        flat_aid_list = [aid for aid_list in animal_ids_raw for aid in aid_list]
+        animal_ids=list(np.sort(np.unique(flat_aid_list)))
     else:
         animal_ids=list(np.sort(animal_ids))
         
@@ -147,13 +157,15 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing", "speed"]
-    symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
-    asymmetric_behaviors=["nose2tail","nose2body","following"]
+    single_behaviors=SINGLE_BEHAVIORS
+    symmetric_behaviors=SYMMETRIC_BEHAVIORS
+    asymmetric_behaviors=ASYMMETRIC_BEHAVIORS
 
     # create names of supervised behaviors from animal ids and raw behavior names in correct order
     if animal_ids is None or len(animal_ids)==1:
         supervised = single_behaviors
+        if len(animal_ids)==1:
+           supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)

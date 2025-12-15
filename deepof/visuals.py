@@ -3457,6 +3457,13 @@ def export_annotated_video(
         # Set default behavior if no behaviors were given
         if behaviors is None and supervised_annotations is not None:
             behaviors = [cur_tab.columns[0]]
+            print(
+            f'\033[33mInfo! No supervised behaviors selected, default to {cur_tab.columns[0]}! (enter "all" if you want all behaviors exported)\033[0m'
+            )
+        elif "all" in behaviors and supervised_annotations is not None:
+            behaviors = list(cur_tab.columns) 
+            behaviors = [behavior for behavior in behaviors if not "speed" in behavior]
+            cluster_names = behaviors
         elif behaviors is None:
             behaviors = list(cur_tab.columns)
 
