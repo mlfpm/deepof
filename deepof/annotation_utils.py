@@ -1244,12 +1244,13 @@ def supervised_tagging(
         animal_id=_id,
         )
 
+        # Experimental and too unspecific
         #tag_dict[_id + undercond + "digging"] = digging(
         #speeds,
         #dists,
+        #likelihoods,
         #_id + undercond,
         #close_range,
-        #likelihoods,
         #params["stationary_threshold"],
         #params["nose_likelihood"],
         #params["min_follow_frames"],
