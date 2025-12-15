@@ -463,13 +463,16 @@ def _plot_experiment_gantt(
         behaviors_to_plot = behavior_ids
 
     # set gantt matrix
-    n_available_features = len(behavior_ids)
+    n_base_features = len(behavior_ids)
     n_features = len(behaviors_to_plot)
     gantt = np.zeros([len(behaviors_to_plot), len(bin_indices)])
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if roi_number is not None:
+            # ROI filter wit hgeneral approach
+            additional_checkpoints = get_unsupervised_behaviors_in_roi(additional_checkpoints.transpose(), bin_info[experiment_id], animals_in_roi).transpose()
         if behaviors_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -493,7 +496,7 @@ def _plot_experiment_gantt(
 
     # Iterate over features and plot
     rows = 0
-    for feature in range(n_available_features):
+    for feature in range(n_base_features):
 
         # skip if feature is not selected for plotting
         if behavior_ids[feature] not in behaviors_to_plot:
@@ -514,7 +517,7 @@ def _plot_experiment_gantt(
         gantt_matrix=gantt,
         plot_type=plot_type,
         instance_id=experiment_id,
-        n_available_instances=n_available_features,
+        n_available_instances=n_base_features,
         instances_to_plot=behaviors_to_plot,
         colors=colors,
         bin_indices=bin_indices,
@@ -659,6 +662,9 @@ def _plot_behavior_gantt(
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if roi_number is not None:
+            # ROI filter wit hgeneral approach
+            additional_checkpoints = get_unsupervised_behaviors_in_roi(additional_checkpoints.transpose(), bin_info[all_experiments[0]], animals_in_roi).transpose()
         if experiments_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
