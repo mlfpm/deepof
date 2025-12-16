@@ -794,6 +794,8 @@ def gantt_plotter(
             standard_signal = (signal_overlay - signal_overlay.min()) / (
                 signal_overlay.max() - signal_overlay.min()
             )
+            # mirror on x axis as it get's mirrored again during plotting
+            standard_signal=-(standard_signal-1)
             sns.lineplot(
                 x=signal_overlay.index[0 : len(bin_indices)],
                 y=standard_signal[bin_indices] + rows,
