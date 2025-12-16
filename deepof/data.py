@@ -933,14 +933,14 @@ class Project:
                     dats = []
                     for clique in bridges:
                         dat = pd.DataFrame(
-                            deepof.utils.signed_angle(
+                            deepof.utils.angle(   #signed_angle
                                 np.transpose(
                                     np.array(tab[clique]).reshape([tab.shape[0], 3, 2])
                                 ,(1, 0, 2))
                             )
                         )
 
-                        dat.columns = [tuple([cl+'_sin' for cl in clique]),tuple([cl+'_cos' for cl in clique])] #for compatibility with tuple column name assessment
+                        dat.columns = [tuple([cl for cl in clique])] #[tuple([cl+'_sin' for cl in clique]),tuple([cl+'_cos' for cl in clique])] #for compatibility with tuple column name assessment
                         dats.append(dat)
 
                     dats = pd.concat(dats, axis=1)
@@ -2262,11 +2262,11 @@ class Coordinates:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-    #@deepof.data_loading._suppress_warning(
-    #    warn_messages=[
-    #        "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
-    #    ]
-    #)
+    @deepof.data_loading._suppress_warning(
+        warn_messages=[
+            "adjacency_matrix will return a scipy.sparse array instead of a matrix in Networkx 3.0."
+        ]
+    )
     def get_graph_dataset(
         self,
         animal_id: str = None,
