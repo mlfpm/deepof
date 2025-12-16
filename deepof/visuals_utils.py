@@ -1590,7 +1590,7 @@ def heatmap(
         )
 
     for i, bpart in enumerate(bodyparts):
-        heatmap = dframe[bpart].loc[mask]
+        heatmap = dframe[bpart].loc[mask].dropna()
 
         if len(bodyparts) > 1:
             sns.kdeplot(
@@ -1598,6 +1598,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
+                cut=0,
+                bw_adjust=0.3,
                 alpha=1,
                 ax=ax[i],
                 **kwargs,
@@ -1608,6 +1610,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
+                cut=0,
+                bw_adjust=0.3,
                 alpha=1,
                 ax=ax,
                 **kwargs,

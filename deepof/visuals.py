@@ -144,6 +144,8 @@ def plot_heatmaps(
         condition_values=[condition_value],
         roi_number=roi_number,
     )
+    if isinstance(bodyparts,str):
+        bodyparts=[bodyparts]
 
     coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animals_in_roi=animals_in_roi)
 
@@ -2864,6 +2866,8 @@ def animate_skeleton(
 
     # Convert frames to an integer numpy array for consistent indexing
     frames = np.asarray(frames, dtype=int)
+
+    assert len(frames)>0, "The chosen combination of bins and ROIS did not yield any relevant frames to plot!"
 
     # ----------------------------------------------------------------------
     # Sampling rate & embedding data for the requested experiment
