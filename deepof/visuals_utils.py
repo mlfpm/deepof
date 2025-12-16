@@ -129,6 +129,8 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         # Flatten list
         flat_aid_list = [aid for aid_list in animal_ids_raw for aid in aid_list]
         animal_ids=list(np.sort(np.unique(flat_aid_list)))
+        if len(animal_ids) == 0:
+            animal_ids = ['']
     else:
         animal_ids=list(np.sort(animal_ids))
         
@@ -162,10 +164,12 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     asymmetric_behaviors=ASYMMETRIC_BEHAVIORS
 
     # create names of supervised behaviors from animal ids and raw behavior names in correct order
-    if animal_ids is None or len(animal_ids)==1:
+    if animal_ids is None or animal_ids[0]=='':
         supervised = single_behaviors
-        if len(animal_ids)==1:
-           supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
+        color_map = ONE_ANIMAL_COLOR_MAP
+    elif len(animal_ids)==1:
+        supervised = single_behaviors
+        supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
