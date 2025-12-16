@@ -529,8 +529,6 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
     kmeans_loss = weight * torch.nanmean(penalization[~torch.isinf(penalization)])
     if torch.isnan(kmeans_loss):
         return 0.0
-    if kmeans_loss >  1000:
-        print("HALT!")
     return kmeans_loss
 
 
@@ -1982,9 +1980,17 @@ def embedding_per_video(
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
-
+    
+    keys_to_drop=[]
     window_size = model.window_size
     for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+
+        dict_to_preprocess = to_preprocess.filter_videos([key])
+        #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
+        dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
+        if dict_to_preprocess[key].isna().all().all():
+            keys_to_drop.append(key)
+            continue
 
         #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
         print("")
@@ -1992,7 +1998,7 @@ def embedding_per_video(
         if graph:
             processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
-                precomputed_tab_dict=to_preprocess.filter_videos([key]),
+                precomputed_tab_dict=dict_to_preprocess,
                 preprocess=True,
                 scale=scale,
                 window_size=window_size,
@@ -2003,7 +2009,7 @@ def embedding_per_video(
 
         else:
 
-            processed_exp, _, _ = to_preprocess.filter_videos([key]).preprocess(
+            processed_exp, _, _ = dict_to_preprocess.preprocess(
                 coordinates=coordinates,
                 scale=scale,
                 window_size=window_size,
@@ -2074,6 +2080,15 @@ def embedding_per_video(
         #to not flood the output with loading bars
         clear_output()
 
+    # Notify user about key removal, if applicable 
+    exp_conds=copy.copy(coordinates.get_exp_conditions)
+    if len(keys_to_drop) > 0:
+        for key in keys_to_drop:
+            del exp_conds[key]
+        print(
+            f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
+        )
+
     
     table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
     if isinstance(soft_counts, tuple):
@@ -2082,7 +2097,7 @@ def embedding_per_video(
         embeddings,
         typ="unsupervised_embedding",
         table_path=table_path, 
-        exp_conditions=coordinates.get_exp_conditions,
+        exp_conditions=exp_conds,
     )
 
     if contrastive:
@@ -2095,7 +2110,7 @@ def embedding_per_video(
             soft_counts,
             typ="unsupervised_counts",
             table_path=table_path, 
-            exp_conditions=coordinates.get_exp_conditions,
+            exp_conditions=exp_conds,
         )
 
     return (
