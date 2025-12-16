@@ -488,7 +488,7 @@ def automatically_recognize_arena(
     possible_indices = np.where(possible_frames)[0]
     possible_distances_to_center = distances_to_center[possible_indices]
 
-    if arena_reference is not None:
+    if arena_reference is not None and len(possible_indices)>0:
         # If a reference is provided manually, avoid frames where the mouse is too close to the edges, which can
         # hinder segmentation
         min_distance_to_arena = cdist(
@@ -496,15 +496,20 @@ def automatically_recognize_arena(
         ).reshape([distances_to_center.shape[0], -1, len(arena_reference)])
 
         min_distance_to_arena = min_distance_to_arena[possible_indices]
+
         frame_index = np.argmax(
             np.nanmin(np.nanmin(min_distance_to_arena, axis=1), axis=1)
         )
+        current_frame = possible_indices[frame_index]
 
-    else:
+    elif len(possible_indices)>0:
         # If not, use the maximum distance to the center as a proxy
         frame_index = np.argmin(np.nanmax(possible_distances_to_center, axis=1))
-
-    current_frame = possible_indices[frame_index]
+        current_frame = possible_indices[frame_index]
+    else:
+        # set frame_index to 0 if no mouse does appear in this arena.
+        current_frame = 0
+        
     current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
     reading_successful, numpy_im = current_video_cap.read()
     current_video_cap.release()
