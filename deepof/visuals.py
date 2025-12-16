@@ -811,21 +811,31 @@ def gantt_plotter(
 
     # Iterate over additional checkpoints and plot
     if additional_checkpoints is not None:
+        gantt_cp = gantt_matrix.copy()
+        gantt_cp[
+            [i for i in range(gantt_matrix.shape[0]) if i < n_instances]
+        ] = np.nan
+        if (gantt_cp>1).any():
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! \"additional_checkpoints\" assumes binary data, your input data exceeds values of 1 and was capped at it (<=0.001 = 0, >0.001=1)!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+
+        gantt_cp[gantt_cp>0.001]=1
+        gantt_cp[gantt_cp<=0.001]=0
         for checkpoint in range(additional_checkpoints.shape[0]):
-            gantt_cp = gantt_matrix.copy()
-            gantt_cp[
-                [i for i in range(gantt_matrix.shape[0]) if i != n_instances + checkpoint]
-            ] = np.nan
             plt.axhline(y=n_instances + checkpoint, color="k", linewidth=0.5)
 
-            sns.heatmap(
-                data=gantt_cp,
-                cbar=False,
-                cmap=LinearSegmentedColormap.from_list(
-                    "deepof", ["white", "black"], N=2
-                ),
-                ax=ax,
-            )
+        sns.heatmap(
+            data=gantt_cp,
+            cbar=False,
+            cmap=LinearSegmentedColormap.from_list(
+                "deepof", ["white", "black"], N=2
+            ),
+            ax=ax,
+        )
 
     # set x-ticks
     plt.xticks([])
