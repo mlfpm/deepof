@@ -4026,7 +4026,7 @@ def plot_behavior_trends(
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
     #Remove missing values (less than 20% of values remainign per group) 
-    min_frac = 0.20
+    min_frac = 0.05 #20
     num_bins = len(custom_time_bins)
 
     # Create table denoting teh nan percentage for each group and bin
@@ -4317,16 +4317,18 @@ def plot_behavior_trends(
         ax.plot(
             x_err,
             upper,
-            linestyle="-",
+            linestyle="--",
             color=color,
             alpha=0.8,
+            linewidth=1,
         )
         ax.plot(
             x_err,
             lower,
-            linestyle="-",
+            linestyle="--",
             color=color,
             alpha=0.8,
+            linewidth=1,
         )
 
         # Shaded error band
