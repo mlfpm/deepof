@@ -8,6 +8,7 @@ import os
 from datetime import date, datetime
 from typing import Any, List, NewType, Tuple, Union, Dict, Callable
 from contextlib import nullcontext
+import copy
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
