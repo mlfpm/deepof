@@ -62,6 +62,7 @@ from deepof.visuals_utils import (
     calculate_FSTTC,
     calculate_simple_association,
 )
+import deepof.visuals_utils
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -1173,15 +1174,6 @@ def plot_enrichment(
             palette = ['C0','C1','C2','C3','C4','C5','C6','C7','C8','C9']
         cond_to_color = {cond: palette[i % len(palette)] for i, cond in enumerate(all_exp_conditions)}
 
-        def contiguous_segments(mask: np.ndarray):
-            # yields slices for contiguous True blocks
-            if mask.ndim != 1:
-                mask = np.asarray(mask).ravel()
-            if not mask.any():
-                return []
-            edges = np.where(np.diff(np.r_[False, mask, False]))[0].reshape(-1, 2)
-            return [slice(s, e) for s, e in edges]
-
         # get smallest non-zero average
         mu_min=np.min([np.min(plot_means[k][np.where(plot_means[k]>0)]) for k in plot_means.keys()])
         lower_bound = np.min([mu_min/10,0.01]) # calculate lower bound for plot
@@ -1200,7 +1192,7 @@ def plot_enrichment(
 
             color = cond_to_color[k]
             first = True
-            for sl in contiguous_segments(valid):
+            for sl in deepof.visuals_utils.contiguous_segments(valid):
                 th = theta[sl]
                 mu_seg = mu[sl]
                 up = upper[sl]
@@ -4044,9 +4036,20 @@ def plot_behavior_trends(
     ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
 
     enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
-    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in tehse bisn only have little data
-    df=df.dropna(subset =[behavior_to_plot]) # exclude time bins with NaNs (which will also exclude them from statistics)
-    
+    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
+    if not all(enough_data_per_bin):
+        warning_message = (
+            "\033[38;5;208m\n"
+            f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
+            f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
+            "\033[0m"
+        )
+        print(warning_message)    
+
+    # exclude time bins that are always NaN (which will also exclude them from statistics)
+    mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
+    df = df[mask].copy()
+
     assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
     # Calculate mean values and errors accross samples
@@ -4080,7 +4083,7 @@ def plot_behavior_trends(
             (df["exp_condition"] == condition_values[1]) & (df["time_bin"] == k),
             behavior_to_plot,
         ].values
-        d = abs(deepof.visuals_utils.cohend(array_a, array_b))  # Calc d
+        d = abs(deepof.visuals_utils.cohend(array_a[~np.isnan(array_a)], array_b[~np.isnan(array_b)]))  # Calc d
         d_effect_size = deepof.visuals_utils.cohend_effect_size(d)  # Est. effect size
         # Collect data
         new_row = pd.DataFrame(
@@ -4221,74 +4224,123 @@ def plot_behavior_trends(
                 mask[int_pos[i - 1] + 1 : int_pos[i]] = True
 
     # Plot the mean value lines for each group
-    for i in range(2):
-        # Interpolate the data to create a smooth line
-        interp_func = interp1d(mid_angles, mean_values[i], kind="cubic")
-        smooth_mean_values = interp_func(smooth_mean_angles)
-        masked_angles = np.ma.masked_array(smooth_mean_angles, mask)  # mask lines
-        masked_values = np.ma.masked_array(smooth_mean_values, mask)
-        ax.plot(
-            masked_angles,
-            masked_values,
-            linewidth=3,
-            label=f"{[condition_values[0],condition_values[1]][i]}",
-            color=colors[i],
-            linestyle="-",
-            alpha=0.8,
-        )
+    # --- Plot means, markers and errors for each group ---------------------------------
+    marker_handles = [None, None]
+    smooth_err_values = [None, None]
 
-    # Plot markers for each group
-    marker_handles = [0, 0]
     for i in range(2):
-        masked_mid_angles = np.ma.masked_array(mid_angles, hide_time_bins)
-        masked_mean_values = np.ma.masked_array(mean_values[i], hide_time_bins)
+        y_mean = mean_values[i]
+        y_err = error_values[i]
+        color = colors[i]
+        label = condition_values[i]  # same as [condition_values[0], condition_values[1]][i]
+
+        # -------------------------------------------------------------------------
+        # 1) Smooth mean value lines over contiguous non-NaN segments
+        # -------------------------------------------------------------------------
+        valid_mean = ~np.isnan(y_mean)
+        first_segment = True
+
+        for sl in deepof.visuals_utils.contiguous_segments(valid_mean):
+            x_seg = mid_angles[sl]
+            y_seg = y_mean[sl]
+
+            # Interpolate only within this contiguous segment
+            interp_func = interp1d(x_seg, y_seg, kind="cubic")
+
+            # Take only the part of smooth_mean_angles that lies inside this segment
+            seg_mask = (
+                (smooth_mean_angles >= x_seg[0])
+                & (smooth_mean_angles <= x_seg[-1])
+            )
+            x_smooth_seg = smooth_mean_angles[seg_mask]
+            y_smooth_seg = interp_func(x_smooth_seg)
+
+            # Apply the external mask on the smooth grid
+            x_masked = np.ma.masked_array(x_smooth_seg, mask[seg_mask])
+            y_masked = np.ma.masked_array(y_smooth_seg, mask[seg_mask])
+
+            ax.plot(
+                x_masked,
+                y_masked,
+                linewidth=3,
+                label=label if first_segment else None,  # avoid repeated legend entries
+                color=color,
+                linestyle="-",
+                alpha=0.8,
+            )
+            first_segment = False
+
+        # -------------------------------------------------------------------------
+        # 2) Markers at original mid_angles (also hide NaNs)
+        # -------------------------------------------------------------------------
+        point_mask = hide_time_bins | np.isnan(y_mean)
+
+        masked_mid_angles = np.ma.masked_array(mid_angles, point_mask)
+        masked_mean_values = np.ma.masked_array(y_mean, point_mask)
+
         marker_handles[i] = ax.plot(
             masked_mid_angles,
             masked_mean_values,
             marker="o",
             linestyle="",
-            color=ax.lines[i].get_color(),
+            color=color,
             linewidth=2,
-        )  # Use the same color as the line
+        )[0]
 
-    # Interpolate error bars
-    smooth_err_values = []
-    for i in range(2):
-        interp_sem_func = interp1d(mid_angles, error_values[i], kind="cubic")
-        smooth_err_values.append(
-            interp_sem_func(mid_angles)
-        )  # Use the original angles array
+        # -------------------------------------------------------------------------
+        # 3) Error interpolation over contiguous non-NaN segments
+        #    (use original mid_angles grid, but avoid NaNs for interp1d)
+        # -------------------------------------------------------------------------
+        smooth_err = np.full_like(y_err, np.nan, dtype=float)
 
-    # Plot the error as lines above and below the mean values
-    for i in range(2):
+        valid_err = (~np.isnan(y_err)) & (~np.isnan(y_mean))
+        for sl in deepof.visuals_utils.contiguous_segments(valid_err):
+            x_seg = mid_angles[sl]
+            err_seg = y_err[sl]
+
+            interp_sem_func = interp1d(x_seg, err_seg, kind="cubic")
+            # still evaluate on the original grid within this segment
+            smooth_err[sl] = interp_sem_func(x_seg)
+
+        smooth_err_values[i] = smooth_err
+
+        # -------------------------------------------------------------------------
+        # 4) Plot error lines and shaded error band
+        # -------------------------------------------------------------------------
+        err_mask = point_mask | np.isnan(smooth_err)
+
+        x_err = np.ma.masked_array(mid_angles, err_mask)
+        upper = np.ma.masked_array(y_mean + smooth_err, err_mask)
+        lower = np.ma.masked_array(y_mean - smooth_err, err_mask)
+
+        # Error lines above and below the mean (now actually lines, not empty style)
         ax.plot(
-            masked_mid_angles,
-            mean_values[i] + smooth_err_values[i],
-            linestyle="",
-            color=colors[i],
+            x_err,
+            upper,
+            linestyle="-",
+            color=color,
             alpha=0.8,
         )
         ax.plot(
-            masked_mid_angles,
-            mean_values[i] - smooth_err_values[i],
-            linestyle="",
-            color=colors[i],
+            x_err,
+            lower,
+            linestyle="-",
+            color=color,
             alpha=0.8,
         )
 
-    # Shade error
-    for i in range(2):
+        # Shaded error band
         ax.fill_between(
-            masked_mid_angles,
-            mean_values[i] + smooth_err_values[i],
-            mean_values[i] - smooth_err_values[i],
-            color=colors[i],
+            x_err,
+            lower,
+            upper,
+            color=color,
             alpha=0.15,
         )
 
     # Set custom ticks and labels for the y axes
     ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18, y=1.15)
-    max_value = np.max(mean_values)
+    max_value = np.nanmax(mean_values)
     y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
     ax.set_yticks(y_ticks)
 
@@ -4311,7 +4363,7 @@ def plot_behavior_trends(
 
         # Add legend of first part of plot
         legend_1 = ax.legend(
-            handles=[marker_handles[0][0], marker_handles[1][0]],
+            handles=[marker_handles[0], marker_handles[1]],
             labels=[condition_values[0], condition_values[1]],
             fontsize=12,
             loc="upper right",
@@ -4336,7 +4388,7 @@ def plot_behavior_trends(
 
         # Add legend
         legend_1 = ax.legend(
-            handles=[marker_handles[0][0], marker_handles[1][0]],
+            handles=[marker_handles[0], marker_handles[1]],
             labels=[condition_values[0], condition_values[1]],
             fontsize=12,
             loc="upper right",
