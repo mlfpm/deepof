@@ -21,14 +21,7 @@ from hypothesis.extra.numpy import arrays
 import deepof.data
 import deepof.model_utils
 from deepof.data import TableDict
-
-
-# Generate soft counts
-@st.composite
-def get_soft_counts(draw, n_max=50, m_max=10):
-    n = draw(st.integers(1, n_max)); m = draw(st.integers(1, m_max))
-    raw = draw(arrays(np.float32, (n, m), elements=st.floats(0.0010000000474974513, 1.0, allow_nan=False, allow_infinity=False, width=32)))
-    return raw / raw.sum(axis=1, keepdims=True)
+from tests.test_objects.test_objects import get_soft_counts
 
 
 def test_find_learning_rate():

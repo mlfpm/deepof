@@ -2462,14 +2462,14 @@ def rolling_speed(
 
 
 def get_behavior_mask_and_confidence(
-    tab: Union[pd.DataFrame, np.ndarray],
+    tab: Union[pd.DataFrame],
     behaviors: List[str],  
     supervised_export: bool,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:  # Changed return type to DataFrame
     """Generates a boolean mask and a confidence dataframe for given behaviors.
 
     Args:
-        tab (Union[pd.DataFrame, np.ndarray]): Table with supervised or unsupervised behaviors.
+        tab (Union[pd.DataFrame]): Table with supervised or unsupervised behaviors, converted to a data frame.
         behaviors (List(str)): List of behavior names.
         supervised_export (bool): Does the given table contain supervised or unsupervised behaviors? 
 

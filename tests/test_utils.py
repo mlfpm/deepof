@@ -26,6 +26,7 @@ from shapely.geometry import Point, Polygon
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
+from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 # AUXILIARY FUNCTIONS #
 
@@ -761,6 +762,36 @@ def test_rolling_speed(dframe, sampler):
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
     assert np.all(np.std(speeds1) >= np.std(speeds2))
+
+
+@given(
+        soft_counts=get_soft_counts(),
+        supervised_tables=get_supervised_tables(),
+        n_behaviors=st.integers(min_value=1, max_value=10),
+        supervised_export=st.booleans(),
+        )
+def test_get_behavior_mask_and_confidence(soft_counts, supervised_tables, n_behaviors, supervised_export):
+
+    if supervised_export:
+        behaviors=supervised_tables.columns[0:np.min([len(supervised_tables.columns),n_behaviors])]
+        input_tab=supervised_tables
+        mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
+    else:
+        behaviors=['col_'+str(k) for k in range(0,np.min([soft_counts.shape[1],n_behaviors]))]  
+        cols = [f"col_{i}" for i in range(soft_counts.shape[1])]  # unique column names
+        input_tab=pd.DataFrame(soft_counts,columns=cols)
+
+        mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
+
+    # Check that elements from teh first column are included in the mask, if they happen to be true maximums of their rows
+    if input_tab.shape[1]>1:
+        first_col_is_max=input_tab.iloc[:,0]>input_tab.iloc[:,1:].max(axis=1)
+        assert all(mask['col_0'][first_col_is_max]==True)
+
+    # Check basic properties like matching shapes and such
+    assert mask.shape[1]==len(behaviors) and confidence.shape[1]==len(behaviors)
+    assert mask.shape == confidence.shape
+    assert np.all(np.isin(mask, [0, 1]))
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
