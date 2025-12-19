@@ -21,7 +21,7 @@ from hypothesis.extra.numpy import arrays
 import deepof.data
 import deepof.model_utils
 from deepof.data import TableDict
-from tests.test_objects.test_objects import get_soft_counts
+from deepof.test_objects.test_objects import get_soft_counts
 
 
 def test_find_learning_rate():

@@ -26,7 +26,7 @@ from shapely.geometry import Point, Polygon
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
-from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 # AUXILIARY FUNCTIONS #
 
