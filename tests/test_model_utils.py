@@ -23,6 +23,13 @@ import deepof.model_utils
 from deepof.data import TableDict
 
 
+# Generate soft counts
+@st.composite
+def get_soft_counts(draw, n_max=50, m_max=10):
+    n = draw(st.integers(1, n_max)); m = draw(st.integers(1, m_max))
+    raw = draw(arrays(np.float32, (n, m), elements=st.floats(0.0010000000474974513, 1.0, allow_nan=False, allow_infinity=False, width=32)))
+    return raw / raw.sum(axis=1, keepdims=True)
+
 
 def test_find_learning_rate():
     X = np.random.uniform(0, 10, [1500, 5])
@@ -37,6 +44,17 @@ def test_find_learning_rate():
     )
 
     deepof.model_utils.find_learning_rate(test_model, data=dataset)
+
+
+@given(soft_counts=get_soft_counts())
+def test_get_hardcounts(soft_counts):
+    # I do not really get why this specific version of the hards counts generation operates on column wise soft counts, but thsi transpose is necessary
+    soft_counts=soft_counts.transpose()
+    hard = deepof.model_utils.get_hard_counts(soft_counts).numpy()
+    mask = (soft_counts == soft_counts.max(axis=1, keepdims=True)).astype(np.float32)
+    np.testing.assert_allclose(hard, mask.sum(axis=0) + 1.0, atol=1e-5)
+    assert hard.shape == (soft_counts.shape[1],)
+    assert np.all(hard >= 1.0)
 
 
 @given(
