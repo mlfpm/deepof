@@ -2051,7 +2051,9 @@ def extract_windows(
 
             # winner takes all, whole window is set to most frequent class    
             elif aggregate=="wta":
-                tab, _ = mode(tab, axis=1, keepdims=True)
+                tab, _ = mode(tab, axis=1)
+                if len(tab.shape)==2:
+                    tab = tab[:, None, :]
             elif aggregate=="lta":
                 N, W, D = tab.shape
 
