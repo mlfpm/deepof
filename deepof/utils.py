@@ -2043,11 +2043,12 @@ def extract_windows(
             # take average of window as label
             elif aggregate=="mid":
                 mid = tab.shape[1] // 2
-                tab=tab[:, mid, :]  
+                tab=tab[:, mid:mid+1, :]  
             # take mid point of window as label
             elif aggregate=="mean":
                 tab=tab.mean(axis=1)
                 tab = tab[:, None, :]
+
             # winner takes all, whole window is set to most frequent class    
             elif aggregate=="wta":
                 tab, _ = mode(tab, axis=1, keepdims=True)
@@ -2059,8 +2060,6 @@ def extract_windows(
                     rows, counts = np.unique(tab[i], return_counts=True, axis=0)
                     tab_loser[i,:] = rows[np.argmin(counts)]  # least frequent slice
                 tab = tab_loser
-
-
 
             if shuffle:
                 shuffle_idcs = np.random.choice(

@@ -508,6 +508,41 @@ def test_rolling_window(window):
 
 @settings(deadline=None)
 @given(
+    to_window=get_soft_counts(n_min=50,n_max=100),
+    window=st.data(),
+    shuffle=st.booleans(),
+    aggregate=st.one_of(st.just(None),st.just('mean'),st.just('mid'),st.just('wta'),st.just('lta'))
+)
+def test_extract_windows(to_window,window,shuffle,aggregate):
+    
+    
+    window_step = window.draw(st.integers(min_value=1, max_value=5))
+    window_size = 5 * window_step
+    to_window_dict={'key1':to_window,'key2':to_window}
+
+
+    windowed, output_shape = deepof.utils.extract_windows(
+        to_window_dict,
+        window_size,
+        window_step,
+        save_as_paths=False,
+        shuffle=shuffle,
+        aggregate=aggregate  
+    )
+    
+    # Check if aggregation correctly reduces dimensionality
+    if aggregate is not None:
+        assert windowed['key1'].shape[1]==1 and windowed['key2'].shape[1]==1 and output_shape[1]==1
+    else:
+        assert windowed['key1'].shape[1]==window_size and windowed['key2'].shape[1]==window_size and output_shape[1]==window_size
+    # Check if dimensionality was increased by window dimension
+    assert len(windowed['key1'].shape) == len(to_window.shape) + 1
+    # Check if first dimensions has shrunk to correct size as derived from window and step sizes
+    assert windowed['key1'].shape[0] == int((to_window.shape[0]-window_size)/window_step+1)
+
+
+@settings(deadline=None)
+@given(
     alpha=st.data(),
     series=arrays(
         dtype=float,
