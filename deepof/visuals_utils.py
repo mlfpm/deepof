@@ -1222,6 +1222,16 @@ def calculate_simple_association(
     return Q
 
 
+def contiguous_segments(mask: np.ndarray):
+    # yields slices for contiguous True blocks
+    if mask.ndim != 1:
+        mask = np.asarray(mask).ravel()
+    if not mask.any():
+        return []
+    edges = np.where(np.diff(np.r_[False, mask, False]))[0].reshape(-1, 2)
+    return [slice(s, e) for s, e in edges]
+
+
 ######
 #Functions not included in property based testing for not having a clean return
 ######
@@ -1517,16 +1527,6 @@ def plot_arena(
             lw=3,
             ls="--",
         )
-
-
-def contiguous_segments(mask: np.ndarray):
-    # yields slices for contiguous True blocks
-    if mask.ndim != 1:
-        mask = np.asarray(mask).ravel()
-    if not mask.any():
-        return []
-    edges = np.where(np.diff(np.r_[False, mask, False]))[0].reshape(-1, 2)
-    return [slice(s, e) for s, e in edges]
         
 
 def heatmap(

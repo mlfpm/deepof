@@ -41,6 +41,8 @@ from deepof.visuals_utils import (
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
 )
+from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+
 
 # TESTING SOME AUXILIARY FUNCTIONS #
 
@@ -653,3 +655,16 @@ def test_calculate_simple_association(max_val,preceding_behavior,proximate_behav
 
     # Yule's coefficient Q can only reach values in the range between -1 and 1
     assert(1 >= Q and Q >=-1)
+
+@given(
+    binary_table=get_supervised_tables(n_min=1, n_max=1, m_min=1, m_max=100),
+)
+def test_contiguous_segments(binary_table):
+    # yields slices for contiguous True blocks
+
+    binary_array=binary_table.to_numpy()
+    slices=deepof.visuals_utils.contiguous_segments(binary_array)
+
+    assert len(slices) <= np.sum(binary_array)
+    if (binary_array==1).any():
+        assert np.where(binary_array)[1][0] == slices[0].start
