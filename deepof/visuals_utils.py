@@ -604,9 +604,9 @@ def cohend(array_a: np.array, array_b: np.array):
         / (n1 + n2 - 2)
     )
     # Check if the pooled standard deviation is 0
-    if s == 0:
+    if s < 1e-10:
         # Handle the case when the standard deviation is 0 by setting effect size to 0
-        print("Standard deviation is 0. Setting Cohen's d to 0.")
+        print("Standard deviation is close to 0 (std < 1e-10). Setting Cohen's d to 0.")
         return 0
     else:
         # Calculate the effect size (Cohen's d)

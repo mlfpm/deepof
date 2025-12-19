@@ -290,16 +290,16 @@ def test_create_bin_pairs(L_array, N_time_bins):
 
 @given(
     array_a=st.lists(
-        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=5, max_size=500
+        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=1, max_size=500
     ),
     array_b=st.lists(
-        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=5, max_size=500
+        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=1, max_size=500
     ),
     array_c=st.lists(
-        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=5, max_size=500
+        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=1, max_size=500
     ),
     array_d=st.lists(
-        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=5, max_size=500
+        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=1, max_size=500
     ),
 )
 def test_cohend(array_a, array_b, array_c, array_d):
