@@ -317,12 +317,17 @@ def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
     silence_diagonal=st.booleans(),
     aggregate=st.booleans(),
     normalize=st.booleans(),
+    supervised=st.booleans(),
     diagonal_behavior_counting=st.one_of(st.just("Frames"),st.just("Time"),st.just("Events"),st.just("Transitions"))
 )
-def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting):
+def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting, supervised):
 
     # Define a test embedding dictionary
     tab_dict = {i: np.random.choice(a=[False, True], size=(100, num_features), p=[0.5,0.5]) for i in range(len(exp_conditions))}
+
+    # Transform to dataFrame
+    if supervised:
+        tab_dict = {key: pd.DataFrame(val, columns=[str(c) for c in range(0,tab_dict[key].shape[1])]) for key, val in tab_dict.items()} 
 
     # Create local_bin_info
     bin_info = {i: {} for i in range(len(exp_conditions))}
@@ -359,8 +364,16 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
     if aggregate:
         assert len(transitions_dict)==len(exp_conditions)
     # Normalization implies no values greater 1
-    if normalize:
+    if normalize and not supervised:
         assert (transitions_dict[list(transitions_dict.keys())[0]]<=1).all()
+    # In the supervised case we normalize based on the number of paired events,
+    # respectively the upper bound becomes the column wise number of "Trues" -1
+    # (there cannot be more transitions than events) excluding aggregate, as then 
+    # keys no longer match (new group bound keys that summarize multiple tables into one)
+    elif normalize and supervised and not aggregate:
+        assert all([(transitions_dict[key].sum(axis=0)<tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
+
+
     # Diagonal behavior counting
     if diagonal_behavior_counting == "Frames":
 
@@ -403,10 +416,11 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
         diagonal_behavior_counting="Events"
         )
 
-        # The number of Frames will be always greater or equal than any otehr of the diagonal counting options
+        # The number of Frames will be always greater or equal than any other of the diagonal counting options
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_transitions[list(transitions_dict_transitions.keys())[0]].diagonal()).all()
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_time[list(transitions_dict_time.keys())[0]].diagonal()).all()
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_events[list(transitions_dict_events.keys())[0]].diagonal()).all()
+
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])

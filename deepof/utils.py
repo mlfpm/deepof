@@ -1000,7 +1000,12 @@ def count_transitions(
     transitions_dict = {}
     paired_events_dict = {}
     normalize_events = False
-               
+
+    # Determine normalization method based on table type (pandas = supervised)
+    is_pandas_table=get_dt(tab_dict,list(tab_dict.keys())[0],only_metainfo=True).get('columns') is not None
+    normalize_events=False
+    if is_pandas_table and normalize:
+        normalize_events=True           
     for z, key in enumerate(tab_dict.keys()):
 
         columns = None
@@ -1009,7 +1014,7 @@ def count_transitions(
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
                 load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-            # Create empty tab, in case load range does not contain any valid frames
+        # Create empty tab, in case load range does not contain any valid frames
         if load_range is not None and len(load_range)==0:
             meta_info = get_dt(tab_dict,key,only_metainfo=True)
             tab = np.zeros([1,meta_info["num_cols"]])
@@ -1027,12 +1032,8 @@ def count_transitions(
             if columns is None:
                 columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
             tab=pd.DataFrame(tab_soft, columns=columns)
-            if normalize:
-                normalize_events=False
         else:
             columns = tab.columns
-            if normalize:
-                normalize_events=True
         
         # Drop non-binary columns (speed column in supervised)
         for col in columns:
