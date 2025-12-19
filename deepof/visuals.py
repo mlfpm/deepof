@@ -4223,7 +4223,6 @@ def plot_behavior_trends(
             if i > 0:
                 mask[int_pos[i - 1] + 1 : int_pos[i]] = True
 
-    # Plot the mean value lines for each group
     # --- Plot means, markers and errors for each group ---------------------------------
     marker_handles = [None, None]
     smooth_err_values = [None, None]
@@ -4232,7 +4231,7 @@ def plot_behavior_trends(
         y_mean = mean_values[i]
         y_err = error_values[i]
         color = colors[i]
-        label = condition_values[i]  # same as [condition_values[0], condition_values[1]][i]
+        label = condition_values[i]  
 
         # -------------------------------------------------------------------------
         # 1) Smooth mean value lines over contiguous non-NaN segments
@@ -4313,7 +4312,7 @@ def plot_behavior_trends(
         upper = np.ma.masked_array(y_mean + smooth_err, err_mask)
         lower = np.ma.masked_array(y_mean - smooth_err, err_mask)
 
-        # Error lines above and below the mean (now actually lines, not empty style)
+        # Error lines above and below the mean
         ax.plot(
             x_err,
             upper,

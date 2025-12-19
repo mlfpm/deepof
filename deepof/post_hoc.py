@@ -323,6 +323,7 @@ def recluster(
         covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
         min_states: Minimum number of states to use for the HMM if automatic search is enabled.
         max_states: Maximum number of states to use for the HMM if automatic search is enabled.
+        exclude_keys (list): list of keys to exclude
         save: Whether to save the trained model or not.
 
     Returns:
@@ -420,6 +421,10 @@ def recluster(
             ),
         )
 
+    # remove experiment conditions for which potentially no soft_counts were generated
+    exp_conds=coordinates.get_exp_conditions
+    exp_conds=exp_conds = {key: coordinates.get_exp_conditions[key] for key in soft_counts.keys() if key in coordinates.get_exp_conditions}
+
     # Predict on each animal experiment
     soft_counts = hmm_model.predict_proba(concat_embeddings)
     soft_counts = deepof.data.TableDict(
@@ -429,7 +434,7 @@ def recluster(
         },
         typ="unsupervised_counts",
         table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables"),
-        exp_conditions=coordinates.get_exp_conditions,
+        exp_conditions=exp_conds,
     )
 
     if len(model_selection) > 0:
