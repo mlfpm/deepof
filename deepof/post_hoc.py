@@ -423,7 +423,9 @@ def recluster(
 
     # remove experiment conditions for which potentially no soft_counts were generated
     exp_conds=coordinates.get_exp_conditions
-    exp_conds=exp_conds = {key: coordinates.get_exp_conditions[key] for key in soft_counts.keys() if key in coordinates.get_exp_conditions}
+    exp_conds=exp_conds = {key: coordinates.get_exp_conditions[key] for key in embeddings.keys() if key in coordinates.get_exp_conditions}
+    if len(exp_conds)==0:
+        exp_conds=None
 
     # Predict on each animal experiment
     soft_counts = hmm_model.predict_proba(concat_embeddings)
