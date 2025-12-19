@@ -164,17 +164,21 @@ def test_bpart_distance(cordarray):
         ).map(lambda x: x + np.random.uniform(0, 10)),
     )
 )
-def test_angle(abc):
+def test_angles(abc):
     a, b, c = abc
 
     angles = []
     for i, j, k in zip(a, b, c):
-        ang = np.arccos(
-            (np.dot(i - j, k - j) / (np.linalg.norm(i - j) * np.linalg.norm(k - j)))
-        )
-        angles.append(ang)
+        cosv = np.dot(i - j, k - j) / (np.linalg.norm(i - j) * np.linalg.norm(k - j))
+        angles.append(np.arccos(np.clip(cosv, -1.0, 1.0)))
+    angles = np.array(angles)
 
-    assert np.allclose(deepof.utils.angle([a, b, c]), np.array(angles))
+    ang = deepof.utils.angle([a, b, c])
+    s_ang = deepof.utils.signed_angle([a, b, c])
+    ang_from_signed = np.arccos(np.clip(s_ang[:, 1], -1.0, 1.0))  # cos(theta) -> [0, pi]
+
+    assert np.allclose(ang, angles)
+    assert np.allclose(ang_from_signed, angles)
 
 
 @settings(max_examples=10, deadline=None)
