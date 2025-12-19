@@ -34,7 +34,7 @@ from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
@@ -2006,9 +2006,10 @@ def extract_windows(
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
         shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
         aggregate (str): Aggregate  Instead of extracting full windows. Extracts full windows if none (default), otherwise options are:
-            "mean" : 
-            "mid" :
-            "wta" :
+            "mean" : average windows to one value
+            "mid" : take middle of windows as window value
+            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as teh window value
+            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as teh window value
         windows_desc (str): Progress bar label
 
     Returns:
@@ -2049,7 +2050,17 @@ def extract_windows(
                 tab = tab[:, None, :]
             # winner takes all, whole window is set to most frequent class    
             elif aggregate=="wta":
-                raise NotImplementedError('to do')
+                tab, _ = mode(tab, axis=1, keepdims=True)
+            elif aggregate=="lta":
+                N, W, D = tab.shape
+
+                tab_loser = np.empty([N,1,D], dtype=int)
+                for i in range(N):
+                    rows, counts = np.unique(tab[i], return_counts=True, axis=0)
+                    tab_loser[i,:] = rows[np.argmin(counts)]  # least frequent slice
+                tab = tab_loser
+
+
 
             if shuffle:
                 shuffle_idcs = np.random.choice(
