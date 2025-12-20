@@ -954,7 +954,7 @@ class Project:
                     pbar.update()
 
 
-        except KeyError:
+        except KeyError: # pragma: no cover
             set_of_required_bps=set(item for sublist in bridges for item in sublist)
             # Workaround to allow for line breaks in key error message (key error behaves differently than all other errors)
             error_message=deepof.utils.KeyErrorMessage(
