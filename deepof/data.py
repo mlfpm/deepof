@@ -2479,7 +2479,7 @@ class Coordinates:
                     if len(to_preprocess[k].keys())>0:
                         shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
                     else:
-                        shapes=(0,)
+                        shapes=[(0,),(0,),(0,)]
                     pbar.update()
                 shapes=tuple(shapes)
 

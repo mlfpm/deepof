@@ -622,8 +622,9 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
+    full_nan_table=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id):
+def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -649,6 +650,13 @@ def test_get_graph_dataset(mode, sampler, random_id):
         animal_ids=animal_ids,
         table_format=".h5",
     ).create(force=True, test=True)
+
+    if full_nan_table:
+       #simulate missing data
+       key_with_nans=list(prun._tables.keys())[0]
+       prun._tables[key_with_nans].iloc[::]=np.nan 
+       prun._distances[key_with_nans].iloc[::]=np.nan 
+       prun._angles[key_with_nans].iloc[::]=np.nan
 
     graph_dset, shapes, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
@@ -676,6 +684,11 @@ def test_get_graph_dataset(mode, sampler, random_id):
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
+    
+    # data from nan table was removed
+    if full_nan_table:
+        assert len(graph_dset[0])==0
+        assert len(shapes[0])==1 and len(shapes[3])==3
 
 
 @settings(deadline=None)

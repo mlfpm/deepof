@@ -2019,6 +2019,8 @@ def extract_windows(
     """   
     # Iterate over all experiments and populate them
     out_len=0
+    window_len=0
+    n_features=0
 
     with tqdm(total=len(to_window.keys()), desc=f"{windows_desc:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
         for key in to_window.keys():
@@ -2070,11 +2072,13 @@ def extract_windows(
                 tab = tab[shuffle_idcs]
 
             out_len=out_len+tab.shape[0]
+            window_len=tab.shape[1]
+            n_features=tab.shape[2]
             to_window[key] = save_dt(tab,tab_path,save_as_paths)
             pbar.update()
 
 
-    output_shape=(out_len,tab.shape[1],tab.shape[2])
+    output_shape=(out_len,window_len,n_features)
     return to_window, output_shape
 
 
