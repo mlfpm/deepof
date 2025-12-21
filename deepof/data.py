@@ -3302,7 +3302,7 @@ class TableDict(dict):
         keys=np.array(list(current_table_dict.keys()))
 
         if isinstance(test_videos,int):
-            rng = np.random.seed(42)
+            #rng = np.random.seed(42)
             test_indices = np.random.choice(
                 range(len(current_table_dict)), test_videos, replace=False, 
             )
