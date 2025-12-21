@@ -93,6 +93,7 @@ def plot_heatmaps(
     roi_number: int = None,
     animals_in_roi: list = None,
     display_rois: bool = True,
+    in_roi_criterion: str = "Center",
     # Others
     display_arena: bool = True,
     xlim: float = None,
@@ -118,6 +119,7 @@ def plot_heatmaps(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse                  
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         display_rois (bool): Display the active ROI, if a ROI was selected. Defaults to True.              
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
@@ -148,7 +150,7 @@ def plot_heatmaps(
     if isinstance(bodyparts,str):
         bodyparts=[bodyparts]
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animals_in_roi=animals_in_roi)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, animals_in_roi=animals_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -250,6 +252,7 @@ def plot_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center",
     # Visualization parameters
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
@@ -269,6 +272,7 @@ def plot_gantt(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse                  
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -294,6 +298,7 @@ def plot_gantt(
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
         roi_number=roi_number,
+        in_roi_criterion = in_roi_criterion,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
@@ -316,6 +321,7 @@ def plot_gantt(
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
         roi_number=roi_number,
+        in_roi_criterion = in_roi_criterion,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,

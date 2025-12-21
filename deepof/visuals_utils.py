@@ -753,9 +753,9 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
     if downsampled_at_all:
         print(
             "\033[33m\n"
-            f"Selected range exceeds {samples_max} samples and has been "
-            f"{'downsampled' if down_sample else 'cut'}. "
-            "To disable this, increase 'samples_max' or set 'down_sample=False'."
+            f"Info! Selected range exceeds {samples_max} samples and has been "
+            f"{'downsampled' if down_sample else 'cut'} by a factor of approx. {int((full_length-1)/samples_max)}\n"
+            "To avoid this, increase 'samples_max'. This will also result in increased computation time"
             "\033[0m"
         )
 
@@ -1608,8 +1608,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
-                cut=0,
-                bw_adjust=0.3,
+                #cut=0,
+                #bw_adjust=0.5,
                 alpha=1,
                 ax=ax[i],
                 **kwargs,
@@ -1620,8 +1620,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
-                cut=0,
-                bw_adjust=0.3,
+                #cut=0,
+                #bw_adjust=0.5,
                 alpha=1,
                 ax=ax,
                 **kwargs,
