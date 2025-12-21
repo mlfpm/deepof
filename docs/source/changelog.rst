@@ -2,7 +2,7 @@ Changelog
 =========
 
 
-[0.8.2] - 2025-07-XX
+[0.8.2] - 2025-08-30
 ====================
 
 Added
@@ -15,18 +15,22 @@ Added
 
 Changed
 -------
-- Refactored all functiosn related to the export for annotated videos
+- Updated `automatically_recognize_arena` to use an average of 100 frames for detection instead of previous "mouse-in-center"-frame
+- Refactored all functions related to the export for annotated videos
 - Refactored table preprocessing
 - Refactored window data sampling
 - Refactored area, angle and distance data extraction
 - Refactored function for plot input validation
 - Refactored time bin preprocessing
-- Refactored otehr, smaller individual functions
+- Refactored other, smaller individual functions
 - Moved arena functionality out of `utils.py` into new file `arena_utils.py`
 - Moded video export functionality out of `visuals.py` into new file `export_video.py`
 - The arena detection GUI now has a maximum size
 - Made bodypart key error that arises during angle calculation more informative
 
+Deprecated
+----------
+- During the rework of the unsupervised pipeline we plan to replace some of the old models and options with new ones
 
 Removed
 -------
@@ -34,7 +38,9 @@ Removed
 
 Bug Fixes
 ---------
+- Fixed a bug that led to wrong frames being selected for automatic arena detection, resulting in bad arena shapes
 - Fixed a bug in video annotation for annotating with soft counts
+- Fixed a bug in video export that made it impossible to export multiple videos at once udner specific circumstances
 - Fixed bug that caused problems with circular manual projects during arena detection
 - Fixed invisible warnings after supervised annotation calculation
 - Fixed double-warnings
@@ -51,7 +57,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2025-XX-XX
+- Release Date: 2025-08-30
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.7.1/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
@@ -188,7 +194,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2024-08-21
+- Release Date: 2025-06-27
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.7.1/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
@@ -218,7 +224,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2024-08-21
+- Release Date: 2024-08-27
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.7.1/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
