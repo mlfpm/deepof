@@ -3445,7 +3445,7 @@ def export_annotated_video(
         if isinstance(soft_counts[first_key], dict):
             soft_counts[first_key] = get_dt(soft_counts,first_key)
 
-        if cluster_names is None or len(cluster_names) != len(behaviors):
+        if cluster_names is None or behaviors is None or len(cluster_names) != len(behaviors):
             cluster_names = behaviors
         #unify tab_dict name
         tab_dict=soft_counts
