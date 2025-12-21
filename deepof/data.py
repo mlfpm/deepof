@@ -85,8 +85,8 @@ import deepof.annotation_utils
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
 import deepof.model_utils
 import deepof.models
-import deepof.clustering.models_new
-import deepof.clustering.model_utils_new
+#import deepof.clustering.models_new
+#import deepof.clustering.model_utils_new
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
