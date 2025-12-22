@@ -36,15 +36,12 @@ import deepof.utils
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
     ),
-    custom_bodyparts=st.booleans(),
+    table_bodyparts=st.booleans(),
 )
-def test_project_init(table_type, arena_detection, custom_bodyparts):
+def test_project_init(table_type, arena_detection, table_bodyparts):
 
-    if custom_bodyparts or table_type == "npy":
-        custom_bodyparts = [
-            "".join(random.choice(string.ascii_lowercase) for _ in range(10))
-            for _ in range(14)
-        ]
+    if table_bodyparts or table_type == "npy":
+        table_bodyparts = ["Nose", "Left_ear", "Right_ear", "Spine_1", "Center", "Spine_2", "Left_fhip", "Right_fhip", "Left_bhip", "Right_bhip", "Tail_base", "Tail_1", "Tail_2", "Tail_tip"]
 
     # Add path to SLEAP tables if necessary
     tables_path = "Tables"
@@ -60,11 +57,11 @@ def test_project_init(table_type, arena_detection, custom_bodyparts):
             ".", "tests", "test_examples", "test_single_topview", tables_path
         ),
         project_name=f"test_{table_type[1:]}",
-        rename_bodyparts=(None if not custom_bodyparts else custom_bodyparts),
+        rename_bodyparts=(None if not table_bodyparts else table_bodyparts),
         bodypart_graph=(
             "deepof_14"
-            if not custom_bodyparts
-            else {custom_bodyparts[0]: custom_bodyparts[1:]}
+            if not table_bodyparts
+            else {table_bodyparts[0]: table_bodyparts[1:]}
         ),
         arena=arena_detection,
         video_scale=380,
@@ -625,8 +622,9 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
+    full_nan_table=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id):
+def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -652,6 +650,13 @@ def test_get_graph_dataset(mode, sampler, random_id):
         animal_ids=animal_ids,
         table_format=".h5",
     ).create(force=True, test=True)
+
+    if full_nan_table:
+       #simulate missing data
+       key_with_nans=list(prun._tables.keys())[0]
+       prun._tables[key_with_nans].iloc[::]=np.nan 
+       prun._distances[key_with_nans].iloc[::]=np.nan 
+       prun._angles[key_with_nans].iloc[::]=np.nan
 
     graph_dset, shapes, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
@@ -679,6 +684,11 @@ def test_get_graph_dataset(mode, sampler, random_id):
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
+    
+    # data from nan table was removed
+    if full_nan_table:
+        assert len(graph_dset[0])==0
+        assert len(shapes[0])==1 and len(shapes[3])==3
 
 
 @settings(deadline=None)

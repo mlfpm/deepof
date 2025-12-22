@@ -7,6 +7,7 @@
 import os
 from datetime import date, datetime
 from typing import Any, List, NewType, Tuple, Union
+import copy
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -152,7 +153,7 @@ def nce_loss(history, future, similarity, temperature=0.1):  # pragma: no cover
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     all_sim = K.exp(sim / temperature)
@@ -178,7 +179,7 @@ def dcl_loss(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
@@ -222,7 +223,7 @@ def fc_loss(
 
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim))
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg_sim = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
 
@@ -231,7 +232,7 @@ def fc_loss(
     # Top-K cancellation only
     if elimination_topk == 0:
         elimination_topk = 1
-    tri_mask = np.ones(N * (N - 1), dtype=np.bool).reshape(N, N - 1)
+    tri_mask = np.ones(N * (N - 1), dtype=bool).reshape(N, N - 1)
     tri_mask[:, -elimination_topk:] = False
     neg = tf.reshape(
         tf.boolean_mask(sorted_sim, tri_mask), [N, N - elimination_topk - 1]
@@ -256,7 +257,7 @@ def hard_loss(
     sim = similarity(history, future)
     pos_sim = K.exp(tf.linalg.tensor_diag_part(sim) / temperature)
 
-    tri_mask = np.ones(N**2, dtype=np.bool).reshape(N, N)
+    tri_mask = np.ones(N**2, dtype=bool).reshape(N, N)
     tri_mask[np.diag_indices(N)] = False
     neg = tf.reshape(tf.boolean_mask(sim, tri_mask), [N, N - 1])
     neg_sim = K.exp(neg / temperature)
@@ -1191,7 +1192,7 @@ def embedding_model_fitting(
         save_checkpoints (bool): Whether to save checkpoints during training.
         save_weights (bool): Whether to save the weights of the autoencoder after training.
         input_type (str): Input type of the TableDict objects used for preprocessing. For logging purposes only.
-        bin_info (dict): Dictionary containing numpy integer arrays for each experiment. Each array denotes the samples to be sampled from teh respective experiment.
+        bin_info (dict): Dictionary containing numpy integer arrays for each experiment. Each array denotes the samples to be sampled from the respective experiment.
 
         # VaDE Model specific parameters
         kl_annealing_mode (str): Mode to use for KL annealing. Must be one of "linear" (default), or "sigmoid".
@@ -1549,8 +1550,16 @@ def embedding_per_video(
         if any([isinstance(i, CensNetConv) for i in model.encoder.layers]):
             graph = True
 
+    keys_to_drop=[]
     window_size = model.layers[0].input_shape[0][1]
     for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+
+        dict_to_preprocess = to_preprocess.filter_videos([key])
+        #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
+        dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
+        if dict_to_preprocess[key].isna().all().all():
+            keys_to_drop.append(key)
+            continue
 
         #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
         print("")
@@ -1558,7 +1567,7 @@ def embedding_per_video(
         if graph:
             processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
                 animal_id=animal_id,
-                precomputed_tab_dict=to_preprocess.filter_videos([key]),
+                precomputed_tab_dict=dict_to_preprocess,
                 preprocess=True,
                 scale=scale,
                 window_size=window_size,
@@ -1569,7 +1578,7 @@ def embedding_per_video(
 
         else:
 
-            processed_exp, _, _ = to_preprocess.filter_videos([key]).preprocess(
+            processed_exp, _, _ = dict_to_preprocess.preprocess(
                 coordinates=coordinates,
                 scale=scale,
                 window_size=window_size,
@@ -1597,6 +1606,15 @@ def embedding_per_video(
         #to not flood the output with loading bars
         clear_output()
 
+    # Notify user about key removal, if applicable 
+    exp_conds=copy.copy(coordinates.get_exp_conditions)
+    if len(keys_to_drop) > 0:
+        for key in keys_to_drop:
+            del exp_conds[key]
+        print(
+            f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
+        )
+
     if contrastive:
         soft_counts = deepof.post_hoc.recluster(
             coordinates, embeddings, pretrained=pretrained, **kwargs
@@ -1611,13 +1629,13 @@ def embedding_per_video(
             embeddings,
             typ="unsupervised_embedding",
             table_path=table_path, 
-            exp_conditions=coordinates.get_exp_conditions,
+            exp_conditions=exp_conds,
         ),
         deepof.data.TableDict(
             soft_counts,
             typ="unsupervised_counts",
             table_path=table_path, 
-            exp_conditions=coordinates.get_exp_conditions,
+            exp_conditions=exp_conds,
         ),
     )
 

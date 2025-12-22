@@ -1,8 +1,88 @@
 Changelog
 =========
 
+[0.8.4] - 2025-12-22
+====================
 
-[0.8.2] - 2025-08-30
+Added
+-------
+- In `plot_embeddings` color_by can now take supervised behavior names as options
+- The plot function `plot_behavior_trends` now also has a max_samples option
+- New `get_contrastive_soft_counts` function to replace old extremely slow hmm reclustering on contrastive inference
+- New plot option `in_roi_criterion` for most plots that allow to dertmine the bodypart or list of bodyparts that should denote if a mouse is inside of a ROI
+- New signed angles function (currently not yet accessible by users in this version)
+- New aggregation options to `extract_windows` 
+- Supervised behaviors as colour_by option in `plot_embeddings` 
+
+Changed
+-------
+- Updated several tutorials to explain new functionality
+- Changed bodypart renaming functionality in project definition to be more useful (gets explained in custom lables tutorial)
+- Refactored `preprocess` function
+- Refactored `animate_skeleton` function
+- New assertion for UMAP of `plot_embeddings` with more helpful info output than default error 
+- New assertion in `plot_embeddings` to check for cluster collapse
+- Clearer error depition in `plot_behavior_trends`
+- Updated `get_training_set` to also accept a list with exact test-video keys 
+- Started to restructure automated testing
+- Shortened downsadownsample info print a bit
+
+Deprecated
+----------
+- During the rework of the unsupervised pipeline we plan to replace some of the old models and options with new ones
+
+Removed
+-------
+- Old bodypart renaming functionality for project definition (now replaced with new one explained in tutorials) 
+  as this only led to bodyparts getting custom names that in turn then could not be used anywhere anymore 
+
+Bug Fixes
+---------
+- Several bug fixes in the context of the extreme edge case of all-NaN videos in which no mouse is visible for even one frame. 
+  - No more crashes of `supervised_annotations` for empty tables 
+  - Preprocessing now skips empty tables
+  - ROIs work now correctly with empty tables
+  - Empty tables are now correctly handled in various plots
+
+- Fixed a bug in `animate_skeleton` to handle case in which not enough valid frames are found in selected range
+- Fixed a bug in the y-axis scaling of `plot_behavior_trends`
+- Fixed a visualization bug in `plot_enrichment` that caused the error lines to cut accross the plots if the data had gap-bins
+- Fixed a numpy datatype in models to not cause errors with booleans in rare edge cases
+- Fixed a bug in behaviorwise ROI extraction
+- Fixed a bug due to which `bin_info` could get ignored in `output_videos_per_cluster` 
+- Fixed a bug with experiment condition in video export
+- Fixed a bug due to which the time index column was not correctly saved in the database but instead reconstructed as a range
+- Fixed a bug in get_graph_dataset for the edge case of the test dataset being defined but not containing data
+- Fixed empty load range bug when accessing database
+- Fixed a bug in `get_behavior_colors` that led to the video export not working correctly for the edge case of exporting a single two-mouse behavior
+- Fixed issue with ROI filter not getting applied to additional checkpoints in Gantt plots
+- Fixed inverted time axis of signals added on top of Gantt plots 
+- Fixed a bug in `count_transitions` that led to a partially empty output in an edge case
+- Small stability fix in `coehns_d` function 
+- Small stability fix in `_align_trajectories`
+- Various small fixes in `output_annotated_video`
+- Made indexing in set_missing_animals more robust 
+- Added assertion to ensure a consistent sampling rate in project definition
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+- current tensorflow models cannot access the GPU on windows systems and are hence very slow. They will be replaced with pytorch models in the next major update
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2025-12-22
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.8.4/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
+[0.8.3] - 2025-08-30
 ====================
 
 Added
@@ -59,7 +139,7 @@ Additional Information
 ----------------------
 - Release Date: 2025-08-30
 - Supported Platforms: Windows, Linux, MacOS
-- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Download Link: https://pypi.org/project/deepof/0.8.3/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
 - Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
 
@@ -196,7 +276,7 @@ Additional Information
 ----------------------
 - Release Date: 2025-06-27
 - Supported Platforms: Windows, Linux, MacOS
-- Download Link: https://pypi.org/project/deepof/0.7.1/
+- Download Link: https://pypi.org/project/deepof/0.8.1/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
 - Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
 

@@ -25,8 +25,18 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ONE_ANIMAL_COLOR_MAP, TWO_ANIMALS_COLOR_MAP, DEEPOF_8_BODYPARTS, DEEPOF_11_BODYPARTS, DEEPOF_14_BODYPARTS, BODYPART_COLORS
-
+from deepof.config import (
+    PROGRESS_BAR_FIXED_WIDTH,
+    ONE_ANIMAL_COLOR_MAP,
+    TWO_ANIMALS_COLOR_MAP,
+    DEEPOF_8_BODYPARTS,
+    DEEPOF_11_BODYPARTS,
+    DEEPOF_14_BODYPARTS,
+    BODYPART_COLORS,
+    SINGLE_BEHAVIORS,
+    SYMMETRIC_BEHAVIORS,
+    ASYMMETRIC_BEHAVIORS,
+)
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -111,14 +121,16 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         pass
     elif type(animal_ids) == str:
         animal_ids=[animal_ids]
+    # extract aids from data frame columns    
     elif type(animal_ids)==pd.DataFrame:
         animal_ids_raw=animal_ids.columns
-        animal_ids_raw=[re.search(r'^[^_]+', string)[0] for string in animal_ids_raw]
-        # in case of only one animal what is found is only behavior names
-        if "speed" in animal_ids_raw:
-            animal_ids=None
-        else:
-            animal_ids=list(np.sort(np.unique(animal_ids_raw)))
+        # Get list of all aids in each behavior
+        animal_ids_raw=[s.split('_')[:-1] for s in animal_ids_raw]
+        # Flatten list
+        flat_aid_list = [aid for aid_list in animal_ids_raw for aid in aid_list]
+        animal_ids=list(np.sort(np.unique(flat_aid_list)))
+        if len(animal_ids) == 0:
+            animal_ids = ['']
     else:
         animal_ids=list(np.sort(animal_ids))
         
@@ -147,13 +159,17 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     #######
 
     # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing", "speed"]
-    symmetric_behaviors=["nose2nose","sidebyside","sidereside"]
-    asymmetric_behaviors=["nose2tail","nose2body","following"]
+    single_behaviors=SINGLE_BEHAVIORS
+    symmetric_behaviors=SYMMETRIC_BEHAVIORS
+    asymmetric_behaviors=ASYMMETRIC_BEHAVIORS
 
     # create names of supervised behaviors from animal ids and raw behavior names in correct order
-    if animal_ids is None or len(animal_ids)==1:
+    if animal_ids is None or animal_ids[0]=='':
         supervised = single_behaviors
+        color_map = ONE_ANIMAL_COLOR_MAP
+    elif len(animal_ids)==1:
+        supervised = single_behaviors
+        supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
@@ -347,7 +363,7 @@ def _filter_embeddings(
             for key, val in soft_counts.items()
             if key in coordinates.get_exp_conditions.keys()
         }
-    elif supervised_annotations is not None:
+    if supervised_annotations is not None:
         supervised_annotations = {
             key: val
             for key, val in supervised_annotations.items()
@@ -462,13 +478,6 @@ def _process_animation_data(
     twoDim_embeddings = reducers[1].transform(reducers[0].transform(cur_embeddings))
 
 
-    # Center sliding window instances
-    try:
-        win_size = coords.shape[0] - twoDim_embeddings.shape[0]
-    except AttributeError:
-        win_size = coords.shape[0] - twoDim_embeddings[0].shape[1]
-    coords = coords[win_size // 2 : -win_size // 2]
-
     # Ensure that shapes are matching
     assert (
         twoDim_embeddings.shape[0] == coords.shape[0]
@@ -484,18 +493,23 @@ def _process_animation_data(
 
         assert selected_cluster in set(
             hard_counts
-        ), "selected cluster should be in the clusters provided"
+        ), "The cluster you selected did not occur in the data range given!"
 
-        cluster_embedding = [twoDim_embeddings[hard_counts == selected_cluster]]
+        cluster_embedding = twoDim_embeddings[hard_counts == selected_cluster]
         confidence_indices = confidence_indices[
             hard_counts == selected_cluster
         ]
 
         coords = coords.loc[hard_counts == selected_cluster, :]
         coords = coords.loc[confidence_indices, :]
-        cluster_embedding = cluster_embedding[0][confidence_indices]
+        cluster_embedding = cluster_embedding[confidence_indices]
         concat_embedding = concat_embedding[full_confidence_indices]
         hard_counts = hard_counts[full_confidence_indices]
+
+        assert coords.shape[0]>0, (
+            "In the given range the selected cluster did occur, but was only predicted with low confidence or in very short sections!\n"
+            "Either increase bin_size, increase min_confidence or lower min_bout_duration!"
+        )
 
     else:
         cluster_embedding = twoDim_embeddings
@@ -590,9 +604,9 @@ def cohend(array_a: np.array, array_b: np.array):
         / (n1 + n2 - 2)
     )
     # Check if the pooled standard deviation is 0
-    if s == 0:
+    if s < 1e-10:
         # Handle the case when the standard deviation is 0 by setting effect size to 0
-        print("Standard deviation is 0. Setting Cohen's d to 0.")
+        print("Standard deviation is close to 0 (std < 1e-10). Setting Cohen's d to 0.")
         return 0
     else:
         # Calculate the effect size (Cohen's d)
@@ -739,9 +753,9 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
     if downsampled_at_all:
         print(
             "\033[33m\n"
-            f"Selected range exceeds {samples_max} samples and has been "
-            f"{'downsampled' if down_sample else 'cut'}. "
-            "To disable this, increase 'samples_max' or set 'down_sample=False'."
+            f"Info! Selected range exceeds {samples_max} samples and has been "
+            f"{'downsampled' if down_sample else 'cut'} by a factor of approx. {int((full_length-1)/samples_max)}\n"
+            "To avoid this, increase 'samples_max'. This will also result in increased computation time"
             "\033[0m"
         )
 
@@ -916,7 +930,7 @@ def _apply_rois_to_bin_info(
         coordinates (coordinates): coordinates object for the current project. Used to get video paths.
         roi_number (int): number of the roi 
         bin_info_time (dict): A dictionary containing start and end positions or indices for plotting 
-        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
     """
 
     animal_ids=coordinates._animal_ids
@@ -999,15 +1013,18 @@ def _get_behaviorwise_behaviors_in_roi(
         return cur_supervised # No relevant columns to process further.
 
     # 3. Apply ROI masks animal by animal, but only to their relevant columns.
-    # We must iterate through all animals in bin_info, not just target_ids.
     for animal_id, roi_mask in local_bin_info.items():
         if animal_id == "time":
             continue
+        # if there is more than one mosue, add underscores
+        animal_id_suffix = animal_id
+        if len(local_bin_info)>2:
+            animal_id_suffix = animal_id + "_"
             
         # Find which of the valid_cols are associated with the current animal_id
         cols_for_this_animal = [
             col for col in valid_cols 
-            if _get_col_base_name(col).startswith(animal_id)
+            if (animal_id_suffix) in _get_col_base_name(col)
         ]
         
         if cols_for_this_animal:
@@ -1047,6 +1064,8 @@ def get_supervised_behaviors_in_roi(
         cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
     elif roi_mode == "behaviorwise":
         cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    else:
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")
             
     return cur_supervised
 
@@ -1203,6 +1222,16 @@ def calculate_simple_association(
     return Q
 
 
+def contiguous_segments(mask: np.ndarray):
+    # yields slices for contiguous True blocks
+    if mask.ndim != 1:
+        mask = np.asarray(mask).ravel()
+    if not mask.any():
+        return []
+    edges = np.where(np.diff(np.r_[False, mask, False]))[0].reshape(-1, 2)
+    return [slice(s, e) for s, e in edges]
+
+
 ######
 #Functions not included in property based testing for not having a clean return
 ######
@@ -1214,6 +1243,7 @@ def _validate_parameter(
     valid_options: List[Any],
     is_list: bool = False,
     custom_error_if_empty: Optional[str] = None,
+    only_one_of_many: Optional[bool] = True
 ): # pragma: no cover
     """
     A generic helper to validate a single parameter against a list of valid options.
@@ -1254,10 +1284,15 @@ def _validate_parameter(
         options_preview = str(valid_options[:5])[1:-1]
         if len(valid_options) > 5:
             options_preview += ", ..."
-            
-        raise ValueError(
-            f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
-        )
+
+        if only_one_of_many:    
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+            )
+        else:
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
+            )
 
 
 #not covered by testing as the only purpose of this function is to throw specific exceptions
@@ -1272,6 +1307,7 @@ def _check_enum_inputs(
     condition_values: Optional[List[str]] = None,
     behaviors: Optional[List[str]] = None,
     bodyparts: Optional[List[str]] = None,
+    in_roi_bodyparts: Optional[List[str]] = None,
     animal_id: Optional[str] = None,
     center: Optional[str] = None,
     visualization: Optional[str] = None,
@@ -1299,6 +1335,7 @@ def _check_enum_inputs(
         condition_values (Optional[List[str]]): Specific condition values to plot.
         behaviors (Optional[List[str]]): List of animal behaviors to analyze.
         bodyparts (Optional[List[str]]): List of body parts to plot.
+        in_roi_bodyparts (Optional[List[str]]): List of body parts to plot, excluding animal ids, including "all".
         animal_id (Optional[str]): ID of a specific animal.
         center (Optional[str]): Center point for position normalization (e.g., 'arena').
         visualization (Optional[str]): Visualization mode (e.g., 'networks', 'heatmaps').
@@ -1324,7 +1361,9 @@ def _check_enum_inputs(
     condition_values = _to_list_if_str(condition_values)
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
+    in_roi_bodyparts = _to_list_if_str(in_roi_bodyparts)
     animals_in_roi = _to_list_if_str(animals_in_roi)
+    
 
     # =========================================================================
     # 2. GENERATE LISTS OF VALID OPTIONS
@@ -1356,6 +1395,12 @@ def _check_enum_inputs(
         cols = get_dt(coordinates._tables, key, only_metainfo=True)['columns']
         all_bps.extend([c[0] for c in cols])
     bodypart_opts = [bp for bp in np.unique(all_bps) if bp not in coordinates._excluded]
+    # remove ids for in roi version
+    if(len(coordinates._animal_ids)>1):
+        in_roi_bodypart_opts=[bp.partition("_")[2] for bp in bodypart_opts]
+    else:
+        in_roi_bodypart_opts=copy.copy(bodypart_opts)
+    in_roi_bodypart_opts = in_roi_bodypart_opts + ["all"]
 
     animal_id_opts = coordinates._animal_ids
     
@@ -1368,33 +1413,39 @@ def _check_enum_inputs(
     center_opts = ["arena"]
     vis_opts = ["networks", "heatmaps"] if origin == "plot_transitions" else ["confusion_matrix", "balanced_accuracy"]
     agg_exp_opts = ["time on cluster", "mean", "median"]
-    color_by_opts = ["cluster", "exp_condition", "exp_id"]
     roi_mode_opts = ["mousewise", "behaviorwise"]
+    color_by_opts = ["cluster", "exp_condition", "exp_id"]
+    colour_by_is_behaviors=False
+    if colour_by is not None and isinstance(colour_by,list):
+        colour_by = _to_list_if_str(colour_by)
+        color_by_opts=behavior_opts
+        colour_by_is_behaviors=True
 
     # =========================================================================
     # 3. CONFIGURE AND RUN VALIDATION CHECKS
     # Format: (param_name, param_value, valid_options, is_list, custom_error)
     # =========================================================================
     validation_checks = [
-        ("experiment_ids", experiment_ids, exp_id_opts, True, None),
-        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!"),
-        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'."),
-        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'."),
-        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model."),
-        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!"),
-        ("bodyparts", bodyparts, bodypart_opts, True, None),
-        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None),
-        ("animal_id", animal_id, animal_id_opts, False, None),
-        ("center", center, center_opts, False, None),
-        ("visualization", visualization, vis_opts, False, None),
-        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None),
-        ("colour_by", colour_by, color_by_opts, False, None),
-        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project."),
-        ("roi_mode", roi_mode, roi_mode_opts, False, None),
+        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True),
+        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True),
+        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False),
+        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True),
+        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", True),
+        ("bodyparts", bodyparts, bodypart_opts, True, None, False),
+        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False),
+        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True),
+        ("animal_id", animal_id, animal_id_opts, False, None, True),
+        ("center", center, center_opts, False, None, True),
+        ("visualization", visualization, vis_opts, False, None, True),
+        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True),
+        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False),
+        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True),
+        ("roi_mode", roi_mode, roi_mode_opts, False, None, True),
     ]
 
-    for name, value, options, is_list, error_msg in validation_checks:
-        _validate_parameter(name, value, options, is_list, error_msg)
+    for name, value, options, is_list, error_msg, only_one_of_many in validation_checks:
+        _validate_parameter(name, value, options, is_list, error_msg, only_one_of_many)
 
     # =========================================================================
     # 4. HANDLE SPECIAL CASES AND WARNINGS
@@ -1476,7 +1527,7 @@ def plot_arena(
             lw=3,
             ls="--",
         )
-     
+        
 
 def heatmap(
     dframe: pd.DataFrame,
@@ -1549,7 +1600,7 @@ def heatmap(
         )
 
     for i, bpart in enumerate(bodyparts):
-        heatmap = dframe[bpart].loc[mask]
+        heatmap = dframe[bpart].loc[mask].dropna()
 
         if len(bodyparts) > 1:
             sns.kdeplot(
@@ -1557,6 +1608,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
+                #cut=0,
+                #bw_adjust=0.5,
                 alpha=1,
                 ax=ax[i],
                 **kwargs,
@@ -1567,6 +1620,8 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
+                #cut=0,
+                #bw_adjust=0.5,
                 alpha=1,
                 ax=ax,
                 **kwargs,

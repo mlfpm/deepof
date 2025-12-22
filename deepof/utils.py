@@ -34,12 +34,13 @@ from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
+import deepof.utils
 
 
 
@@ -690,10 +691,10 @@ def set_missing_animals(
     for animal_id in animal_ids:
         for k, tab in tab_dict.filter_id(animal_id).items():
             try:
-                missing_times = tab[presence_masks[k][animal_id] == 0]
+                missing_times = tab[np.array(presence_masks[k][animal_id] == 0)]
             except KeyError:
                 missing_times = tab[
-                    presence_masks[k].sum(axis=1) < (len(animal_ids) - 1)
+                    np.array(presence_masks[k].sum(axis=1) < (len(animal_ids) - 1))
                 ]
 
             tab_dict[k].loc[missing_times.index, missing_times.columns] = np.nan
@@ -817,6 +818,31 @@ def angle(bpart_array: np.array) -> np.array:
     ang = np.arccos(cosine_angle)
 
     return ang
+
+
+def signed_angle(bpart_array: np.array) -> np.array:
+    """Return a numpy.ndarray with the signed angles between the provided instances.
+
+    Args:
+        bpart_array (numpy.array): 2D positions over time for a bodypart.
+
+    Returns:
+        ang (np.array): 1D angles between the three-point-instances.
+
+    """
+    a, b, c = bpart_array
+
+    ab = a - b
+    bc = c - b 
+    
+    dot = (ab * bc).sum(-1)
+
+    det = ab[..., 0] * bc[..., 1] - ab[..., 1] * bc[..., 0]
+    theta = np.arctan2(det, dot)          # (-π, π]
+    ang_sin = np.sin(theta)             # [-1, 1]
+    ang_cos = np.cos(theta)             # [-1, 1]
+
+    return np.stack([ang_sin,ang_cos],axis=1)
 
 
 def compute_areas(polygon_xy_stack: np.array) -> np.array:
@@ -948,8 +974,8 @@ def count_transitions(
         tab_dict (table_dict): Dictionary with behavior data (supervised or unsupervised soft_counts)
         exp_conditions (dict): Dictionary containg the experiment conditions for each experiment.
         bin_info (dict): dictionary containing indices to plot for all experiments
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
-        delta_T: Time after teh offset of one behavior during which the onset of the next behavior counts as a transition      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
+        delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         frame_rate (float): Frame rate of the corresponding project
         silence_diagonal (bool): If True, diagonals are set to zero.
         aggregate (bool): If True, sums matrices per experimental condition; else per experiment.
@@ -974,7 +1000,12 @@ def count_transitions(
     transitions_dict = {}
     paired_events_dict = {}
     normalize_events = False
-               
+
+    # Determine normalization method based on table type (pandas = supervised)
+    is_pandas_table=get_dt(tab_dict,list(tab_dict.keys())[0],only_metainfo=True).get('columns') is not None
+    normalize_events=False
+    if is_pandas_table and normalize:
+        normalize_events=True           
     for z, key in enumerate(tab_dict.keys()):
 
         columns = None
@@ -983,7 +1014,7 @@ def count_transitions(
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
                 load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
-            # Create empty tab, in case load range does not contain any valid frames
+        # Create empty tab, in case load range does not contain any valid frames
         if load_range is not None and len(load_range)==0:
             meta_info = get_dt(tab_dict,key,only_metainfo=True)
             tab = np.zeros([1,meta_info["num_cols"]])
@@ -1001,12 +1032,8 @@ def count_transitions(
             if columns is None:
                 columns = [f"Cluster_{i}" for i in range(tab_soft.shape[1])] #create useful column names
             tab=pd.DataFrame(tab_soft, columns=columns)
-            if normalize:
-                normalize_events=False
         else:
             columns = tab.columns
-            if normalize:
-                normalize_events=True
         
         # Drop non-binary columns (speed column in supervised)
         for col in columns:
@@ -1299,24 +1326,42 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
     Args:
         tab (dataTable): Datatable containing mouse tracking data.
         aid (str): ainimal id of the mouse to check
-        in_roi_criterion (str): Criterion for in roi check, checks by "Center" bodypart being inside or outside of roi by default   
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse   
         roi_polygon (np.ndarray): 2D numpy array containing the coordinats of the ROI
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
     Returns:
         mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
     """
 
+    # Make to list
+    if isinstance(in_roi_criterion,str):
+        in_roi_criterion=[in_roi_criterion]
+    # Multi animal case
     if aid != "":
-        points=np.array(tab[aid+"_"+in_roi_criterion])
+        # If "all", take all bodyparts in table of animal aid
+        if "all" in in_roi_criterion:
+            in_roi_criterion=np.unique([col[0] for col in tab.columns if col[0].startswith(aid)])
+        # Otherwise add aid to bodypart names to only get bodyparts of animal aid
+        else:
+            in_roi_criterion = [aid+"_"+bodypart for bodypart in in_roi_criterion]
+        all_points=tab[in_roi_criterion]
+    # Single animal case
     else:
-        points=np.array(tab[in_roi_criterion])
+        # If "all", take all bodyparts i.e. full table
+        if "all" in in_roi_criterion:
+            all_points=tab
+        else:
+            all_points=tab[in_roi_criterion]
     if type(roi_polygon)==tuple:
         roi_polygon=np.array(roi_polygon)
 
-    if run_numba:
-        mouse_in_polygon=deepof.utils.point_in_polygon_numba(points,roi_polygon)
-    else:
-        mouse_in_polygon=deepof.utils.point_in_polygon(points,roi_polygon)
+    # Iterate over chosen bodyparts and only keep the ones in which all bodyparts exist
+    mouse_in_polygon = np.ones([all_points.shape[0]]).astype(bool)
+    for bodypart in all_points.columns.get_level_values(0).unique():
+        if run_numba:            
+            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon_numba(np.array(all_points[bodypart]),roi_polygon)
+        else:
+            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon(np.array(all_points[bodypart]),roi_polygon)
 
     return mouse_in_polygon
 
@@ -1374,7 +1419,7 @@ def load_table(
     tab: str,
     table_path: str,
     table_format: str,
-    rename_bodyparts: list = None,
+    rename_bodyparts_dict: dict = None,
     animal_ids: list = None,
 ):
     """Loads a table into a structured pandas data frame.
@@ -1385,7 +1430,7 @@ def load_table(
         tab (str): Name of the file containing the tracks.
         table_path (string): Full path to the file containing the tracks.
         table_format (str): type of the files to load, coming from either DeepLabCut (CSV and H5) and (S)LEAP (NPY).
-        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+        rename_bodyparts_dict (dict): dictionary of bodypart names given in the table corresponding to deepOFs bodypart names.
         animal_ids (list): List with the animal ids in case of multiple tracked animals. Is expected to be None if there is only a single animal getting tracked.
         
     Returns:
@@ -1431,14 +1476,16 @@ def load_table(
             loaded_tab = np.load(os.path.join(table_path, tab), "r")
 
             # Check that body part names are provided
-            slp_bodyparts = rename_bodyparts
+            slp_bodyparts = rename_bodyparts_dict.keys()
             if not animal_ids[0]:
                 slp_animal_ids = [str(i) for i in range(loaded_tab.shape[1])]
             else:
                 slp_animal_ids = animal_ids
         assert len(slp_bodyparts) == loaded_tab.shape[2], (
             "Some body part names appear to be in excess or missing.\n"
-            " If you used the rename_bodyparts argument, check if you set it correctly.\n"
+            f" The table you loaded has {loaded_tab.shape[2]} columns but no headers.\n"
+            " Respectively you should choose appropriate bodypart names from deepof8, 11 or 14\n" 
+            " and use privide these with rename_bodyparts as a list input" 
             " Otherwise, there might be an issue with the tables in your Tables-folder"
         )
 
@@ -1468,10 +1515,10 @@ def load_table(
         loaded_tab = pd.concat([multi_index.iloc[1:], loaded_tab], axis=0)
         loaded_tab.columns = multi_index.loc["scorer"]
 
-    if rename_bodyparts is not None:
+    if rename_bodyparts_dict is not None:
         loaded_tab = rename_track_bps(
             loaded_tab,
-            rename_bodyparts,
+            rename_bodyparts_dict,
             (animal_ids if table_format in ["h5", "csv"] else [""]),
         )
 
@@ -1479,35 +1526,47 @@ def load_table(
 
 
 def rename_track_bps(
-    loaded_tab: pd.DataFrame, rename_bodyparts: list, animal_ids: list
+    loaded_tab: pd.DataFrame, rename_bodyparts_dict: list, animal_ids: list
 ):
     """Renames all body parts in the provided dataframe.
 
     Args:
         loaded_tab (pd.DataFrame): Data frame containing the loaded tracks. Likelihood for (S)LEAP files is imputed as 1.0 (tracked values) or 0.0 (missing values).
-        rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP files.
+        rename_bodyparts_dict (dict): dictionary of bodypart names given in the table corresponding to deepOFs bodypart names.
         animal_ids (list): list of IDs to use for the animals present in the provided tracking files.
+        bodypart_graph (str): DeepOF bodypart graph that is going to be used
 
     Returns:
         renamed_tab (pd.DataFrame): Data frame with renamed body parts
 
     """
-    renamed_tab = copy.deepcopy(loaded_tab)
+    # Does not operate on a copy but the loaded project table directly! 
+    if rename_bodyparts_dict is None:
+        return loaded_tab
 
+    bp_row = loaded_tab.loc["bodyparts", :]
+    
+    # Block to make sure that all bodyparts that should be replaced also occur with that name in the given table
     if not animal_ids[0]:
-        current_bparts = loaded_tab.loc["bodyparts", :].unique()
+        current_bparts = bp_row.unique()
     else:
         current_bparts = list(
             map(
                 lambda x: "_".join(x.split("_")[1:]),
-                loaded_tab.loc["bodyparts", :].unique(),
+                bp_row.unique(),
             )
         )
+    for bp in rename_bodyparts_dict.keys():
+        if not bp in current_bparts:
+            raise ValueError(f"\"{bp}\" does not correspond to any bodypart in the given table!\n Table bodyparts are {np.unique(current_bparts)}!")
+    
+    # Actual replacement of old table bp names with new ones
+    bp_row.replace(rename_bodyparts_dict, inplace=True, regex=True)
+    
+    # Should have been changed in place, this is just to be sure 
+    loaded_tab.loc["bodyparts", :] = bp_row
 
-    for old, new in zip(current_bparts, rename_bodyparts):
-        renamed_tab.replace(old, new, inplace=True, regex=True)
-
-    return renamed_tab
+    return loaded_tab
 
 
 def scale_table(
@@ -1788,7 +1847,7 @@ def smooth_boolean_array(
         # check if any behavior was detected
         offsets = np.where(batch)[0]
         if len(offsets) == 0:
-            continue  # skip batch if tehre was no detected activity
+            continue  # skip batch if there was no detected activity
 
         # Process the current batch
         batch_bursts = kleinberg(offsets, gamma=0.3, s=sigma)
@@ -1816,7 +1875,7 @@ def multi_step_paired_smoothing(
     """This filtering approach will first gradually merge together very close behavioral instances (how close is regulated by min_length), 
     then filter out remaining short instances. In this way multiple instances close to each other are kept and united and isolated very 
     short bursts are filtered out. It replaces the kleinberg filtering approach with a similar idea as kleinberg was too susceptible to 
-    merge events together that were relatively distant on teh time scale.
+    merge events together that were relatively distant on the time scale.
 
         Args:
             behavior_in (numpy.ndarray): Boolean instances of detected raw behavior.
@@ -1866,7 +1925,7 @@ def multi_step_paired_smoothing(
     not_behavior = moving_average(not_behavior, lag=min_length).astype(np.bool_)
 
     # Due to the widening step, it will happen that frames are simutaneously beheavior and not behavior.
-    # To resolve tehse conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
+    # To resolve these conflicts, first run a larger moving average giving float values as a "percentage" of activeness / passiveness
     behavior_avg = moving_average(behavior, lag=min_length*4).astype(float)
     not_behavior_avg = moving_average(not_behavior, lag=min_length*4).astype(float)
 
@@ -1932,6 +1991,7 @@ def extract_windows(
     window_step: int,
     save_as_paths: bool = False,
     shuffle: bool = False,
+    aggregate: str = None,
     windows_desc : str = "Get windows"
 ) -> np.ndarray:
     """Apply the rupture method independently to each experiment, and concatenate into a single dataset at the end.
@@ -1945,6 +2005,11 @@ def extract_windows(
         window_step (int): specifies the stride of the sliding window.
         save_as_paths (bool): save result as paths in dictionary instead of keeping it in RAM
         shuffle (bool): Whether to shuffle the data for each dataset. Defaults to False.
+        aggregate (str): Aggregate  Instead of extracting full windows. Extracts full windows if none (default), otherwise options are:
+            "mean" : average windows to one value
+            "mid" : take middle of windows as window value
+            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as teh window value
+            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as teh window value
         windows_desc (str): Progress bar label
 
     Returns:
@@ -1954,6 +2019,8 @@ def extract_windows(
     """   
     # Iterate over all experiments and populate them
     out_len=0
+    window_len=0
+    n_features=0
 
     with tqdm(total=len(to_window.keys()), desc=f"{windows_desc:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
         for key in to_window.keys():
@@ -1972,6 +2039,32 @@ def extract_windows(
                 window_size,
                 window_step,
             )
+            # Extrakt raw windows
+            if aggregate is None:
+                pass
+            # take average of window as label
+            elif aggregate=="mid":
+                mid = tab.shape[1] // 2
+                tab=tab[:, mid:mid+1, :]  
+            # take mid point of window as label
+            elif aggregate=="mean":
+                tab=tab.mean(axis=1)
+                tab = tab[:, None, :]
+
+            # winner takes all, whole window is set to most frequent class    
+            elif aggregate=="wta":
+                tab, _ = mode(tab, axis=1)
+                if len(tab.shape)==2:
+                    tab = tab[:, None, :]
+            elif aggregate=="lta":
+                N, W, D = tab.shape
+
+                tab_loser = np.empty([N,1,D], dtype=int)
+                for i in range(N):
+                    rows, counts = np.unique(tab[i], return_counts=True, axis=0)
+                    tab_loser[i,:] = rows[np.argmin(counts)]  # least frequent slice
+                tab = tab_loser
+
             if shuffle:
                 shuffle_idcs = np.random.choice(
                     tab.shape[0], tab.shape[0], replace=False
@@ -1979,11 +2072,13 @@ def extract_windows(
                 tab = tab[shuffle_idcs]
 
             out_len=out_len+tab.shape[0]
+            window_len=tab.shape[1]
+            n_features=tab.shape[2]
             to_window[key] = save_dt(tab,tab_path,save_as_paths)
             pbar.update()
 
 
-    output_shape=(out_len,tab.shape[1],tab.shape[2])
+    output_shape=(out_len,window_len,n_features)
     return to_window, output_shape
 
 
@@ -2369,6 +2464,47 @@ def rolling_speed(
 
 
     return speeds#.fillna(0.0)
+
+
+def get_behavior_mask_and_confidence(
+    tab: Union[pd.DataFrame],
+    behaviors: List[str],  
+    supervised_export: bool,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:  # Changed return type to DataFrame
+    """Generates a boolean mask and a confidence dataframe for given behaviors.
+
+    Args:
+        tab (Union[pd.DataFrame]): Table with supervised or unsupervised behaviors, converted to a data frame.
+        behaviors (List(str)): List of behavior names.
+        supervised_export (bool): Does the given table contain supervised or unsupervised behaviors? 
+
+    Returns:
+        np.ndarray: Mask of confidence indices to keep.
+
+    """
+    
+    # Guards
+    if type(behaviors)==str:
+        behaviors=[behaviors]
+    if type(tab)==pd.DataFrame:
+        assert all([behavior in list(tab.columns) for behavior in behaviors]), "Error! Some of the given behavior names do not exist within the behavior data table!"
+
+    # In supervised case, allow multiple behaviors at once
+    if supervised_export:
+        df = tab.copy()
+        mask = df[behaviors] > 0.1
+        confidence = df[behaviors]
+    # In unsupervised case, only identify most likely behavior
+    else:
+        most_likely_behavior = tab.idxmax(axis=1)
+        df = pd.DataFrame(tab, columns=behaviors)
+        # Build a mask DataFrame where each column is True only if that
+        # behavior was the most likely one for that row.
+        mask = pd.DataFrame(
+            {b: (most_likely_behavior == b) for b in behaviors}
+        )
+        confidence = df[behaviors]
+    return mask, confidence
 
 
 def filter_short_bouts(

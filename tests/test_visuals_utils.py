@@ -41,6 +41,8 @@ from deepof.visuals_utils import (
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
 )
+from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+
 
 # TESTING SOME AUXILIARY FUNCTIONS #
 
@@ -253,10 +255,11 @@ def test_process_animation_data(min_confidence,min_bout_duration,selected_cluste
     )
 
     #create random embeddings and soft counts
-    cur_embeddings = np.random.normal(size=(len(features)*len(coordinates)-5, 10))
-    counts = np.abs(np.random.normal(size=(len(features)*len(coordinates)-5, 2)))
+    cur_embeddings = np.random.normal(size=(len(features)*len(coordinates), 10))
+    counts = np.abs(np.random.normal(size=(len(features)*len(coordinates), 2)))
     cur_soft_counts = counts / counts.sum(axis=1)[:, None]
-
+    cur_soft_counts[0:6,:]=[1,0] # add strongly confident bouts to not trigger assert
+    cur_soft_counts[-1:-6:-1,:]=[0,1]
     
     (   
         coords,
@@ -289,16 +292,16 @@ def test_create_bin_pairs(L_array, N_time_bins):
 
 @given(
     array_a=st.lists(
-        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=5, max_size=500
+        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=1, max_size=500
     ),
     array_b=st.lists(
-        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=5, max_size=500
+        elements=st.floats(min_value=-10e10, max_value=-0.00001), min_size=1, max_size=500
     ),
     array_c=st.lists(
-        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=5, max_size=500
+        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=1, max_size=500
     ),
     array_d=st.lists(
-        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=5, max_size=500
+        elements=st.floats(min_value=0.00001, max_value=10e10), min_size=1, max_size=500
     ),
 )
 def test_cohend(array_a, array_b, array_c, array_d):
@@ -424,7 +427,7 @@ def test_preprocess_time_bins(
 @given(
     mode=st.one_of(st.just("single"), st.just("multi")),
     bin_size=st.one_of(st.just(100), st.just(50)),
-    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose")),
+    in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose"), st.just("all"), st.just(["Spine_1","Center","Spine_2"])),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
 def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
@@ -479,7 +482,7 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
 
 @settings(deadline=None)
 @given(
-    animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3),
+    animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3).filter(lambda s: len(s) == len(set(s))),
     bins = st.lists(
         st.integers(min_value=0, max_value=99),
         min_size=10,
@@ -487,8 +490,9 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
         unique=True
     ).map(sorted),
     supervised_behavior = st.booleans(),
+    roi_mode = st.one_of(st.just("mousewise"),st.just("behaviorwise"))
 )
-def test_get_rois(animal_ids, bins, supervised_behavior):
+def test_get_rois(animal_ids, bins, supervised_behavior, roi_mode):
 
     animal_ids=list(animal_ids)
     if len(animal_ids)==0:
@@ -530,7 +534,7 @@ def test_get_rois(animal_ids, bins, supervised_behavior):
         behavior="_"
 
     # get ROIs with different methods
-    cur_supervised_filtered = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids)
+    cur_supervised_filtered = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids,roi_mode=roi_mode)
     cur_unsupervised_filtered = get_unsupervised_behaviors_in_roi(cur_unsupervised[bins], local_bin_info, animal_ids)
     frames = get_behavior_frames_in_roi(behavior, local_bin_info, animal_ids)
 
@@ -540,13 +544,82 @@ def test_get_rois(animal_ids, bins, supervised_behavior):
     # if there is only one supervised behavior, frames represent the non-nan positions in cur_supervised after filtering
     elif len(animal_ids)==1:
         assert (cur_supervised.iloc[frames] == cur_supervised_filtered.dropna()).all().all()
-    # For multiple animals, selecting frames based on a random behavior is always greator or equal the number of non-nan supervised rows
+    # For multiple animals, selecting frames based on a random behavior is always greater or equal the number of non-nan supervised rows
     # (because the more rows will be set to nan the more mice are involved in a behavior)
     else:
         assert (len(cur_supervised.iloc[frames]) >= len(cur_supervised_filtered.dropna()))
-    # unsupervised always onyl filters by one animal, supervised can filter by combinations, respectively supervised can filter out more but not less
+    # unsupervised always only filters by one animal, supervised can filter by combinations, respectively supervised can filter out more but not less
     assert (len((cur_unsupervised_filtered[~np.isnan(cur_unsupervised_filtered).any(axis=1)]))) >= len(cur_supervised_filtered.dropna())
 
+
+@settings(deadline=None)
+@given(
+    animal_ids=st.text(alphabet=string.ascii_letters, min_size=0, max_size=3).filter(lambda s: len(s) == len(set(s))),
+    bins = st.lists(
+        st.integers(min_value=0, max_value=99),
+        min_size=10,
+        max_size=100,
+        unique=True
+    ).map(sorted),
+)
+def test_mousewise_behaviorwise(animal_ids, bins):
+
+    animal_ids=list(animal_ids)
+    mono_mouse = False
+    if len(animal_ids)==0:
+        animal_ids=['']
+        mono_mouse=True
+
+    num_rows = 100
+    num_cols = 10
+
+    # Generate column names with random animal_id combinations
+    column_names = []
+    for col_num in range(1, num_cols + 1):
+        k = random.randint(1, len(animal_ids))
+        subset = random.sample(animal_ids, k)
+        subset.sort()
+        if animal_ids[0] != '':
+            prefix = '_'.join(subset)
+            column_names.append(f"{prefix}_{col_num}")
+        else:
+            column_names.append(f"{col_num}")
+
+    # Create supervised DataFrame with binary values
+    cur_supervised = pd.DataFrame(
+        np.random.randint(2, size=(num_rows, num_cols)),
+        columns=column_names
+    )
+
+    # Convert DataFrame to numpy array for bin info generation
+    cur_unsupervised = cur_supervised.to_numpy().astype(float)
+
+    # Create local_bin_info
+    local_bin_info = {"time": np.array(bins)}
+    for k, animal_id in enumerate(animal_ids):
+        local_bin_info[animal_id] = cur_unsupervised[bins,k].astype(bool)
+
+    # get ROIs with different methods
+    # will set full rows of cur_supervised to NaN if not all required mice are present
+    cur_supervised_filtered_mousewise = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids,roi_mode="mousewise")
+    # will set individual values of cur_supervised to NaN based on not all mice for behavior being present
+    cur_supervised_filtered_behaviorwise = get_supervised_behaviors_in_roi(cur_supervised.iloc[bins], local_bin_info, animal_ids,roi_mode="behaviorwise")
+
+    # Since mousewise sets full rows to NaN, all behaviors will always have an equal number of NaNs
+    assert len(set(cur_supervised_filtered_mousewise.isna().sum()))==1 
+
+    #If there is only one mouse, mousewise and behaviorwise are identical
+    if mono_mouse:
+        assert cur_supervised_filtered_mousewise.equals(cur_supervised_filtered_behaviorwise)
+    # Otherwise, with multiple mice...
+    else:
+        positions_all_mice = [c for c in cur_supervised_filtered_mousewise.columns if set(animal_ids) <= set(c.split('_'))]
+        positions_not_all_mice = [c for c in cur_supervised_filtered_mousewise.columns if not set(animal_ids) <= set(c.split('_'))]
+        # ...if all mice are involved in a behavior, mousewise and behaviorwise are identical
+        cur_supervised_filtered_mousewise[positions_all_mice].equals(cur_supervised_filtered_behaviorwise[positions_all_mice])
+        # ...if not all mice are involved, there will always be at least as many NaNs in the mousewise case or more as it filters behaviors more strictly
+        cur_supervised_filtered_mousewise[positions_not_all_mice].isna().sum().sum() >= cur_supervised_filtered_behaviorwise[positions_not_all_mice].isna().sum().sum()
+        
 
 @settings(deadline=None)
 @given(
@@ -582,3 +655,16 @@ def test_calculate_simple_association(max_val,preceding_behavior,proximate_behav
 
     # Yule's coefficient Q can only reach values in the range between -1 and 1
     assert(1 >= Q and Q >=-1)
+
+@given(
+    binary_table=get_supervised_tables(n_min=1, n_max=1, m_min=1, m_max=100),
+)
+def test_contiguous_segments(binary_table):
+    # yields slices for contiguous True blocks
+
+    binary_array=binary_table.to_numpy()
+    slices=deepof.visuals_utils.contiguous_segments(binary_array)
+
+    assert len(slices) <= np.sum(binary_array)
+    if (binary_array==1).any():
+        assert np.where(binary_array)[1][0] == slices[0].start

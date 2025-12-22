@@ -23,6 +23,69 @@ from deepof.data import TableDict
 
 
 @settings(deadline=None, max_examples=25)
+@given(states=st.sampled_from([3, "aic", "bic"]))
+def test_get_contrastive_soft_counts(states):
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_single_topview",
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            "test_single_topview",
+            "Tables",
+        ),
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        animal_ids=[""],
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    embeddings = {i: np.random.normal(size=(100, 10)) for i in range(10)}
+
+    embeddings=deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=None, 
+        exp_conditions=None,
+    )
+    
+    #if states == "priors":
+    #    # Define a test matrix of soft counts
+    #    soft_counts = {}
+    #    for i in range(10):
+    #        counts = np.abs(np.random.normal(size=(100, 2)))
+    #        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    #else:
+    #    soft_counts = None
+
+    deepof.post_hoc.get_contrastive_soft_counts(
+        prun,
+        embeddings,
+        states=states,
+        min_states=2,
+        max_states=3,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+
+
+
+@settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
 
@@ -391,7 +454,7 @@ def test_chunk_summary_statistics():
 )
 def test_shap_pipeline(mode, sampler):
 
-    np.random.seed(42)
+    # np.random.seed(42)
     prun = deepof.data.Project(
         project_path=os.path.join(
             ".", "tests", "test_examples", "test_{}_topview".format(mode)

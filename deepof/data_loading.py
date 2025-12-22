@@ -89,7 +89,7 @@ def get_dt(
             }
         if load_range is None:
             sliced = raw_data
-        elif isinstance(load_range, list) and len(load_range) == 2:
+        elif isinstance(load_range, (list,np.ndarray)) and len(load_range) == 2:
             sliced = raw_data.iloc[load_range[0]:load_range[1]+1]
         else:
             sliced = raw_data.iloc[load_range]
@@ -122,6 +122,19 @@ def get_dt(
         db_path = raw_data["duckdb_file"]
         table_name = sanitize_table_name(raw_data["table"])
 
+        # early return in case of empty load range 
+        if load_range is not None and len(load_range) == 0:
+            with DataManager(db_path) as manager:
+                result = manager.load(
+                    table_name,
+                    return_path=return_path,
+                    only_metainfo=True,
+                    load_index=False,
+                    load_range=[0]
+                )   
+            return (pd.DataFrame(columns=result['columns']), path) if return_path else pd.DataFrame(columns=result['columns'])
+
+
         with DataManager(db_path) as manager:
             result = manager.load(
                 table_name,
@@ -142,11 +155,11 @@ def get_dt(
     return (raw_data, path) if return_path else raw_data
 
 
-@_suppress_warning(
-    warn_messages=[
-        "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
-    ]
-)
+#@_suppress_warning(
+#    warn_messages=[
+#        "Creating an ndarray from ragged nested sequences .* is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray."
+#    ]
+#)
 def save_dt(
     dt: Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray]],
     folder_path: str,

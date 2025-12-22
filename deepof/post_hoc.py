@@ -11,7 +11,7 @@ import warnings
 from collections import Counter, defaultdict
 from itertools import product
 from multiprocessing import cpu_count
-from typing import Any, NewType, Union
+from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
 import ot
@@ -36,8 +36,10 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from typing import Optional, Union
+from sklearn.mixture import GaussianMixture
+import torch
 
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 import deepof.data
 import deepof.utils
 import deepof.visuals_utils
@@ -50,10 +52,7 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-def _fit_hmm_range(
-    concat_embeddings, states, min_states, max_states, covariance_type="full"
-):
-
+def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="diag"):
     """Auxiliary function for fitting a range of HMMs with different number of states.
 
     Args:
@@ -64,45 +63,241 @@ def _fit_hmm_range(
         covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
 
     """
-    hmm_models = []
+
+    # Collect sequences, validate dims, crop to common length
+    seq_list = [np.asarray(v) for v in embeddings.values()]
+    if not seq_list:
+        raise ValueError("No sequences provided.")
+    d = seq_list[0].shape[1]
+    for s in seq_list:
+        if s.ndim != 2 or s.shape[1] != d:
+            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")
+    min_T = min(s.shape[0] for s in seq_list)
+    X = np.stack([s[:min_T].astype(np.float32, copy=False) for s in seq_list], axis=0)  # (N, T, D)
+    n_obs = X.shape[0] * X.shape[1]
+
+    def n_params(n_states, n_features, cov):
+        cov = (cov or "diag").lower()
+        if cov == "full":
+            cov_params = n_features * (n_features + 1) // 2
+        elif cov == "sphere":
+            cov_params = 1
+        else:  # diag
+            cov_params = n_features
+        per_state = n_features + cov_params
+        return n_states * per_state + n_states * (n_states - 1)  # transitions only
+
     model_selection = []
+    best_model, best_score = None, np.inf
+
     for i in tqdm.tqdm(range(min_states, max_states + 1)):
-
         try:
+            used_cov = covariance_type
             try:
-                model = DenseHMM(
-                    [Normal(covariance_type=covariance_type) for _ in range(i)]
-                )
-                model = model.fit(concat_embeddings)
-            except:
-                model = DenseHMM([Normal(covariance_type="diag") for _ in range(i)])
-                model = model.fit(concat_embeddings)
+                m = DenseHMM([Normal(covariance_type=used_cov) for _ in range(i)]).fit(X)
+            except Exception:
+                if covariance_type != "diag":
+                    used_cov = "diag"
+                    m = DenseHMM([Normal(covariance_type="diag") for _ in range(i)]).fit(X)
+                else:
+                    raise
 
-            hmm_models.append(model)
+            ll = m.log_probability(X).numpy()
+            total_ll = float(np.sum(ll)) if hasattr(ll, "__len__") else float(ll)
 
-            # Compute AIC and BIC
-            n_features = concat_embeddings.shape[2]
-            n_params = i * (n_features + n_features * (n_features + 1) / 2) + i * (
-                i - 1
-            )
-            log_likelihood = float(model.log_probability(concat_embeddings).mean())
+            k = n_params(i, d, used_cov)
             if states == "aic":
-                model_selection.append(2 * n_params - 2 * log_likelihood)
+                score = 2.0 * k - 2.0 * total_ll
             elif states == "bic":
-                model_selection.append(
-                    n_params * np.log(concat_embeddings.shape[0]) - 2 * log_likelihood
-                )
+                score = k * np.log(max(1, n_obs)) - 2.0 * total_ll
+            else:
+                score = np.nan
 
-        except (np.linalg.LinAlgError, IndexError):
+            model_selection.append(float(score))
+
+            if states in ("aic", "bic"):
+                if score < best_score:
+                    best_model, best_score = m, score
+                else:
+                    del m  # free non-best fit
+            else:
+                if best_model is None:
+                    best_model = m
+
+        except Exception:
             model_selection.append(np.inf)
+            continue
 
-    if states in ["aic", "bic"]:
-        hmm_model = hmm_models[np.argmin(model_selection)]
+    if best_model is None:
+        raise RuntimeError("All HMM fits failed across the requested range.")
+    return best_model, model_selection
+    
+
+def get_contrastive_soft_counts(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],                 
+    states: Union[str, int] = "bic",                   
+    min_states: int = 2,
+    max_states: int = 25,
+    # Emissions
+    reg_covar: float = 1e-5,
+    sample_size: int = 500000,                        
+    random_state: int = 0,
+    # Sticky HMM
+    p_stay: float = 0.95,                              
+):
+    """Extract soft counts for contrastive model based on .
+
+    Args:
+        embeddings (Dict[str, np.ndarray]): Embeddings dictionarym ay contain the embeddinsg directly or database paths.
+        states Union[str, int]: Either the number of states / clusters directly (int) or the scoring method to determine the best number of clusters (str). Options are "aic" and "bic".
+        min_states (int): Minimum number of states / clusters to test.
+        max_states (int): Maximum number of states / clusters to test.
+        reg_covar (float): 
+        sample_size (int): Number of samples to fit the GMMs on
+        random_state (int): Number of random state for reproducibility
+        p_stay (float): Prior chance to switch clusters from frame to frame for initialization
+
+    """
+    # ---- helpers ----
+    def _fit_diag_gmm(emb_dict, C, reg, max_n, seed):
+        """Fit a diagonal GaussianMixture (sklearn) on a subset of embeddings and return (means, variances and weights for all fitted distributions)."""
+        Z = emb_dict.sample_windows_from_data(N_windows_tab=int(max_n/len(emb_dict)))[0]
+        gm = GaussianMixture(n_components=C, covariance_type="diag", reg_covar=reg,
+                             max_iter=200, tol=1e-3, random_state=seed, init_params="kmeans")
+        gm.fit(Z)
+        return gm.means_.astype(np.float32), gm.covariances_.astype(np.float32), gm.weights_.astype(np.float32)
+
+    def _log_emissions_diag(Z: np.ndarray, mu: np.ndarray, var: np.ndarray) -> np.ndarray:
+        """Compute log p(Z_t | c) under diagonal Gaussians; returns [T, C]."""
+        var = np.maximum(var, 1e-10)
+        diff = Z[:, None, :] - mu[None, :, :]         # [T, C, D]
+        quad = (diff * diff) / var[None, :, :]        # [T, C, D]
+        quad = quad.sum(axis=2)                       # [T, C]
+        logdet = np.log(var).sum(axis=1)              # [C]
+        const = Z.shape[1] * np.log(2.0 * np.pi)
+        return -0.5 * (const + logdet[None, :] + quad)
+
+    def _make_sticky_A(pi: np.ndarray, p_stay: float) -> np.ndarray:
+        """Construct sticky transition A = p_stay*I + (1-p_stay)*(1*π^T); row-stochastic and positive."""
+        C = pi.shape[0]
+        A = p_stay * np.eye(C, dtype=np.float64) + (1.0 - p_stay) * (np.ones((C, 1)) @ pi[None, :])
+        A = np.maximum(A, 1e-12)
+        return A / A.sum(axis=1, keepdims=True)
+
+    def _logsumexp(x: np.ndarray, axis=-1, keepdims=True):
+        """Stable log-sum-exp along an axis."""
+        m = np.max(x, axis=axis, keepdims=True)
+        return np.log(np.sum(np.exp(x - m), axis=axis, keepdims=True)) + m
+
+    def _forward_loglik(log_emiss: np.ndarray, log_A: np.ndarray, log_pi0: np.ndarray) -> float:
+        """Run forward pass only and return the sequence log-likelihood (sum of per-step normalizers)."""
+        T, C = log_emiss.shape
+        alpha = log_pi0 + log_emiss[0]
+        ll = _logsumexp(alpha, axis=-1, keepdims=True).squeeze(0).item()
+        alpha -= _logsumexp(alpha, axis=-1, keepdims=True)
+        for t in range(1, T):
+            trans = alpha[:, None] + log_A
+            alpha = log_emiss[t] + _logsumexp(trans, axis=0, keepdims=True).squeeze(0)
+            ct = _logsumexp(alpha, axis=-1, keepdims=True).squeeze(0).item()
+            ll += ct
+            alpha -= ct
+        return float(ll)
+
+    def _forward_backward(log_emiss: np.ndarray, log_A: np.ndarray, log_pi0: np.ndarray) -> np.ndarray:
+        """Compute posterior p(c_t | z_1:T) via forward–backward; returns [T, C] (rows sum to 1)."""
+        T, C = log_emiss.shape
+        alpha = np.empty((T, C), dtype=np.float64)
+        beta  = np.empty((T, C), dtype=np.float64)
+        alpha[0] = log_pi0 + log_emiss[0]
+        alpha[0] -= _logsumexp(alpha[0]).squeeze(0)
+        for t in range(1, T):
+            trans = alpha[t-1][:, None] + log_A
+            alpha[t] = log_emiss[t] + _logsumexp(trans, axis=0).squeeze(0)
+            alpha[t] -= _logsumexp(alpha[t]).squeeze(0)
+        beta[-1] = 0.0
+        for t in range(T-2, -1, -1):
+            trans = log_A + (log_emiss[t+1] + beta[t+1])[None, :]
+            beta[t] = _logsumexp(trans, axis=1).squeeze(1)
+            beta[t] -= _logsumexp(beta[t]).squeeze(0)
+        log_gamma = alpha + beta
+        log_gamma -= _logsumexp(log_gamma, axis=1)
+        return np.exp(log_gamma).astype(np.float32, copy=False)
+    
+    # ---- select K ----
+    def _fit_params_for_K(K: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, random_state)
+
+    def _score_K(K: int, criterion: str) -> Tuple[float, float]:
+        """caclulates the score for the given number of clusters (K)"""
+        mu, var, pi = _fit_params_for_K(K)
+        A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
+        log_A  = np.log(np.maximum(A, 1e-12))
+        log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
+        logL = 0.0
+        T_total=0
+        for k in keys:
+            cur_embedding = get_dt(embeddings, k)
+            Z = cur_embedding.astype(np.float32, copy=False)
+            log_emiss = _log_emissions_diag(Z, mu, var).astype(np.float64, copy=False)
+            logL += _forward_loglik(log_emiss, log_A, log_pi)
+            # Only for not aic, but since mebeddings are loaded here anyways...
+            T_total+=cur_embedding.shape[0]
+        p = 2 * K * D + (K - 1)  # emissions (means+vars) + prior
+        if criterion == "aic":
+            score = 2 * p - 2 * logL
+        elif criterion == "bic":
+            score = p * np.log(max(T_total, 1)) - 2 * logL
+        else:
+            NotImplementedError("invalid states type, try \"aic\", \"bic\" or give a number of states / clusters directly") 
+        return float(score), float(logL)
+
+    # ---- prepare ----
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    D = get_dt(embeddings,keys[0],only_metainfo=True)['shape'][1]
+
+    model_selection: List[Tuple[int, float, float]] = []
+    # Determine best number of clusters, if states is not given as int
+    if isinstance(states, int):
+        K_best = int(states)
     else:
-        hmm_model = hmm_models[0]
+        crit = str(states).lower()
+        Ks = list(range(max(2, min_states), max(min_states, max_states)+1))
+        best_score, K_best = None, None
+        for K in tqdm.tqdm(Ks, desc=f"{'Optimizing number of clusters':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step"):
 
-    return hmm_model, model_selection
+            score, logL = _score_K(K, criterion=crit)
+            model_selection.append((K, score, logL))
+            if (best_score is None) or (score < best_score):
+                best_score, K_best = score, K
 
+    # ---- final decode with best K ----
+    mu, var, pi = _fit_params_for_K(K_best)
+    A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
+    log_A  = np.log(np.maximum(A, 1e-12))
+    log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
+
+    # Generate softcounts 
+    soft_counts = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+    for key in tqdm.tqdm(keys, desc=f"{'Extracting soft counts':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z = get_dt(embeddings,key).astype(np.float32, copy=False)
+        log_emiss = _log_emissions_diag(Z, mu, var).astype(np.float64, copy=False)
+        cur_soft_counts = _forward_backward(log_emiss, log_A, log_pi)
+
+        soft_counts[key] = deepof.utils.save_dt(cur_soft_counts,table_path,coordinates._very_large_project)
+
+    # Create table dict
+    soft_counts = deepof.data.TableDict(
+        soft_counts, typ="unsupervised_counts", table_path=table_path, exp_conditions=coordinates.get_exp_conditions
+    )
+
+    if isinstance(states, str):
+        return soft_counts, model_selection
+    return soft_counts
+    
 
 def recluster(
     coordinates: coordinates,
@@ -111,9 +306,9 @@ def recluster(
     min_confidence: float = 0.75,
     states: Union[str, int] = "aic",
     pretrained: Union[bool, str] = False,
-    covariance_type: str = "full",
+    covariance_type: str = "diag",
     min_states: int = 2,
-    max_states: int = 25,
+    max_states: int = 12,
     save: bool = True,
 ):
     """Recluster the data using a HMM-based approach. If soft_counts is provided, the model will use the soft cluster assignments as priors for a semi-supervised HMM.
@@ -128,6 +323,7 @@ def recluster(
         covariance_type: Type of covariance matrix to use for the HMM. Can be either "full", "diag", or "sphere".
         min_states: Minimum number of states to use for the HMM if automatic search is enabled.
         max_states: Maximum number of states to use for the HMM if automatic search is enabled.
+        exclude_keys (list): list of keys to exclude
         save: Whether to save the trained model or not.
 
     Returns:
@@ -203,11 +399,11 @@ def recluster(
 
         # Fit a range of HMMs with different number of states
         hmm_model, model_selection = _fit_hmm_range(
-            concat_embeddings,
+            embeddings,
             states,
             min_states,
             max_states,
-            covariance_type=covariance_type,
+            covariance_type="diag",
         )
 
     # Save the best model
@@ -225,6 +421,12 @@ def recluster(
             ),
         )
 
+    # remove experiment conditions for which potentially no soft_counts were generated
+    exp_conds=coordinates.get_exp_conditions
+    exp_conds=exp_conds = {key: coordinates.get_exp_conditions[key] for key in embeddings.keys() if key in coordinates.get_exp_conditions}
+    if len(exp_conds)==0:
+        exp_conds=None
+
     # Predict on each animal experiment
     soft_counts = hmm_model.predict_proba(concat_embeddings)
     soft_counts = deepof.data.TableDict(
@@ -234,7 +436,7 @@ def recluster(
         },
         typ="unsupervised_counts",
         table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables"),
-        exp_conditions=coordinates.get_exp_conditions,
+        exp_conditions=exp_conds,
     )
 
     if len(model_selection) > 0:
@@ -261,7 +463,7 @@ def get_time_on_cluster(
         reduce_dim (bool): Whether to reduce the dimensionality of the embeddings to 2D. If False, the embeddings are kept in their original dimensionality.
         bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions of all sections for given embeddings and ROIs
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
 
  
     Returns:
@@ -354,7 +556,7 @@ def get_aggregated_embedding(
         agg (str): The aggregation method to use. Can be either "mean" or "median".
         bin_info (Union[dict,np.ndarray]): A dictionary or single array containing start and end positions or indices of all sections for given embeddings
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                       
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                       
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
 
     Returns:
@@ -408,7 +610,7 @@ def get_aggregated_embedding(
         warning_message = (
             "\033[38;5;208m\n"  # Set text color to orange
             "Warning! Some rows of aggregated embeddings contained NaNs that were dropped! This can happen if the\n"
-            "time bins are short or ROIs are strict, which leads to behaviors never occuring in the set parameters.\n"
+            "time bins are short or ROIs are strict, which leads to behaviors never occuring in some experiments.\n"
             f"In total {np.round((1-agg_embedding_clean.shape[0]/n_rows)*10000)/100} % of all rows were removed."
             "\033[0m"  # Reset text color
         )
@@ -632,7 +834,7 @@ def enrichment_across_conditions(
         plot_speed (bool): plot "speed" behavior
         bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROIs
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         normalize (bool): Whether to normalize the population of each cluster across conditions.
 
@@ -741,7 +943,7 @@ def compute_transition_matrix_per_condition(
         silence_diagonal (bool): If True, diagonal elements on the transition matrix are set to zero.
         bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROI information
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded        
         aggregate (str): Whether to aggregate the embeddings across time.
         normalize (str): Whether to normalize the population of each cluster across conditions.
 
@@ -836,6 +1038,10 @@ def compute_steady_state(
 
 def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
     """Compute UMAP embeddings for visualization purposes."""
+    
+    # Check if clusters have collapsed
+    assert np.unique(cluster_assignments).size > 1, "LDA could not be computed, as these soft_counts correspond to a collapsed model that only contains a single cluster!"
+    
     lda = LinearDiscriminantAnalysis(
         n_components=np.min([embeddings.shape[1], len(set(cluster_assignments)) - 1]),
     )

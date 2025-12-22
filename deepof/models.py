@@ -162,6 +162,7 @@ def get_recurrent_encoder(
     return Model([x, a], encoder_output, name="recurrent_encoder")
 
 
+
 # noinspection PyCallingNonCallable
 def get_recurrent_decoder(
     input_shape: tuple,

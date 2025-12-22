@@ -468,7 +468,7 @@ def augment_with_neighbors(X_huddle, window=5, step=1, window_out=11):
     X_augmented = pd.concat(augmented_dfs, axis=1)
 
     # Filter columns that contain 'speed'
-    filtered_columns = [col for col in X_augmented.columns if 'speed' in col]
+    filtered_columns = [col for col in X_augmented.columns if 'speed' in col] # or '0' in col]
 
     # Select only the filtered columns
     X_augmented = X_augmented[filtered_columns]
@@ -1014,8 +1014,9 @@ def supervised_tagging(
                 backbone.remove(bp)
 
         #calculate overall length of bodypart chain i.e. mouse length
-        indices=np.random.choice(np.arange(0, len(raw_coords)), size=np.min([5000, len(raw_coords)]), replace=False)
-        if len(backbone)>1:
+        subset_cols = [col for col in raw_coords.columns if col[0] in backbone]
+        if len(backbone)>1 and len(raw_coords.dropna(subset=subset_cols))>=400: 
+            indices=np.random.choice(raw_coords.dropna(subset=subset_cols).index, size=np.min([5000, len(raw_coords.dropna(subset=subset_cols))]), replace=False)
             mouse_lens_raw=0
             for bp_pos in range(0, len(backbone)-1):
                 mouse_lens_raw+=np.apply_along_axis(
@@ -1245,12 +1246,13 @@ def supervised_tagging(
         animal_id=_id,
         )
 
+        # Experimental and too unspecific
         #tag_dict[_id + undercond + "digging"] = digging(
         #speeds,
         #dists,
+        #likelihoods,
         #_id + undercond,
         #close_range,
-        #likelihoods,
         #params["stationary_threshold"],
         #params["nose_likelihood"],
         #params["min_follow_frames"],
@@ -1293,12 +1295,12 @@ def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, thresh
 
     Args:
         df (pd.DataFrame): Dataframe containing coordinates of multiple mice
-        mouse_id (str): Id of teh target mouse
+        mouse_id (str): Id of the target mouse
         bodypart (str): Bodypart of the target mouse that should be used for distance calculation
         threshold (float): Maximum distance that triggers "closeness"
 
     Returns:
-        proximity_mask (np.array): Boolean numpy array set to True for each frame in which the lected bodypart of the selected mosue was closer than threshold to any otehr mouse, False otehrwise.
+        proximity_mask (np.array): Boolean numpy array set to True for each frame in which the lected bodypart of the selected mosue was closer than threshold to any other mouse, False otherwise.
 
     """    
     target = f"{mouse_id}{bodypart}"

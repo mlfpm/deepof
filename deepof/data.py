@@ -85,6 +85,8 @@ import deepof.annotation_utils
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
 import deepof.model_utils
 import deepof.models
+#import deepof.clustering.models_new
+#import deepof.clustering.model_utils_new
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
@@ -94,7 +96,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.8.3"
+current_deepof_version="0.8.4"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -330,7 +332,8 @@ class Project:
             table_list
         ), "Unequal number of videos and tables. Please check your file structure"
 
-        #turn tables and videos into dictionaries with same keys
+
+        # Turn tables and videos into dictionaries with same keys
         self.tables={}
         self.videos={}
         for i, tab in enumerate(table_list):
@@ -341,6 +344,27 @@ class Project:
                 tab_name = tab.split(".")[0]
             self.tables[tab_name]=table_list[i]
             self.videos[tab_name]=video_list[i]
+
+        # Verify that all videos have the same frame rate
+        fpses={}
+        for key, vid in self.videos.items(): 
+            current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, vid))
+            fps = float(current_video_cap.get(cv2.CAP_PROP_FPS))
+            current_video_cap.release()
+            fpses[key]=fps
+
+        min_key, min_val = min(fpses.items(), key=lambda item: item[1])
+        max_key, max_val = max(fpses.items(), key=lambda item: item[1])
+        max_diff = max_val - min_val
+
+        assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (e.g. {min_key}: {min_val} fps and {max_key}: {max_val} fps)"
+
+        if max_diff>0:
+            warnings.warn(
+                f"\033[38;5;208m"
+                f"The sampling rate of some of your videos differ. The maximum difference is {min_key}: {min_val} fps and {max_key}: {max_val} fps! Proceed with cauthion"
+                f"\033[0m"
+            )
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -360,6 +384,33 @@ class Project:
             self.run_numba = True
         if frames_max > 360000 or frames_sum > 900000: #roughly one 4 hour video at 25 fps or 10 hours of recording material in total
             self.very_large_project = True
+
+        # If the bodypart names in his table deviate from the ones deepOF expects, the user can rename them 
+        rename_bodyparts_dict = None
+        if rename_bodyparts is not None and isinstance(rename_bodyparts, list) and "npy" not in table_format:
+            if len(rename_bodyparts) == 8:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_8").nodes                            
+            elif len(rename_bodyparts) == 11:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
+            elif len(rename_bodyparts) == 14:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
+            else:
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!")
+            
+            # Creates a dictionary assigning table bp names to corresponding deepOF bp names
+            rename_bodyparts_dict = {}
+            node_assignment_string = f"Your custom bodypart names will be assigned to deepOF bodyparts as follows:\n"
+            for deepof_node, custom_node in zip(pattern, rename_bodyparts):
+                node_assignment_string += f"{deepof_node} : {custom_node},\n"
+                rename_bodyparts_dict[custom_node] = deepof_node
+            node_assignment_string+=f"If this assignment is incorrect, please update your \"bodypart_names\" list with the correct order and rerun the project creation" 
+            print(node_assignment_string)
+        # Special case table format npy with no headers. Here rename_bodyparts functions as a list of bodypart names with only the keys being used
+        elif "npy" in table_format:
+            rename_bodyparts_dict={}
+            for bp in rename_bodyparts:
+                rename_bodyparts_dict[bp]=bp
+
 
         # Init the rest of the parameters
         self.angles = True
@@ -384,7 +435,7 @@ class Project:
         self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
         self.segmentation_path = sam_checkpoint_path
-        self.rename_bodyparts = rename_bodyparts
+        self.rename_bodyparts_dict = rename_bodyparts_dict
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -527,7 +578,7 @@ class Project:
         """Loads a table and handles multi-animal formatting."""
         table = deepof.utils.load_table(
             self.tables[key], self.source_table_path, self.table_format,
-            self.rename_bodyparts, self.animal_ids
+            self.rename_bodyparts_dict, self.animal_ids
         )
 
         is_multi_animal = "individuals" in table.index
@@ -854,7 +905,7 @@ class Project:
 
 
     def get_angles(self, tab_dict: table_dict) -> dict:
-        """Compute all the angles between adjacent bodypart trios per video and per frame in all datasets in teh given table dictionary.
+        """Compute all the angles between adjacent bodypart trios per video and per frame in all datasets in the given table dictionary.
 
         Args:
             tab_dict (table_dict): Table dictionary of pandas DataFrames containing the trajectories of all bodyparts.
@@ -883,14 +934,14 @@ class Project:
                     dats = []
                     for clique in bridges:
                         dat = pd.DataFrame(
-                            deepof.utils.angle(
+                            deepof.utils.angle(   #signed_angle
                                 np.transpose(
                                     np.array(tab[clique]).reshape([tab.shape[0], 3, 2])
                                 ,(1, 0, 2))
-                            ).T
+                            )
                         )
 
-                        dat.columns = [tuple(clique)]
+                        dat.columns = [tuple([cl for cl in clique])] #[tuple([cl+'_sin' for cl in clique]),tuple([cl+'_cos' for cl in clique])] #for compatibility with tuple column name assessment
                         dats.append(dat)
 
                     dats = pd.concat(dats, axis=1)
@@ -904,9 +955,9 @@ class Project:
                     pbar.update()
 
 
-        except KeyError:
+        except KeyError: # pragma: no cover
             set_of_required_bps=set(item for sublist in bridges for item in sublist)
-            # Workaround to allow for line breaks in key error message (key error behaves differently than all otehr errors)
+            # Workaround to allow for line breaks in key error message (key error behaves differently than all other errors)
             error_message=deepof.utils.KeyErrorMessage(
                     "Could not find expected bodypart or bodyparts: " + str(set_of_required_bps-set(tab.columns.levels[0])) + ".\n "
                     "Are you using a custom labelling scheme? Our tutorials may help!\n "
@@ -1432,8 +1483,8 @@ class Coordinates:
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count the mouse as "inside" the ROI.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the saving location of the processed table, if false, return the full table. 
             
@@ -1607,7 +1658,9 @@ class Coordinates:
         all_columns = []
 
         for aid in animal_ids:
-            align_bp_name = f"{aid}{'_' if aid else ''}{align}"
+            if aid:
+                aid=aid+'_'
+            align_bp_name = f"{aid}{align}"
             
             # Define alignment columns and remaining columns for the animal
             align_cols = [(align_bp_name, "phi" if polar else "x"),
@@ -1684,8 +1737,8 @@ class Coordinates:
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
-            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count teh mouse as "inside" the ROI.
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
+            in_roi_criterion (str): Bodypart of a mouse that has to be in the ROI to count the mouse as "inside" the ROI.
     
         Returns:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
@@ -1747,7 +1800,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
@@ -1812,7 +1865,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             filter_on_graph (bool): If True, only distances between connected nodes in the DeepOF graph representations are kept. Otherwise, all distances between bodyparts are returned.
 
         Returns:
@@ -1866,7 +1919,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -1931,7 +1984,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
@@ -1977,7 +2030,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
             file_name (str): Name of the file for saving
             return_path (bool): if True, Return only the path to the processed table, if false, return the full table. 
 
@@ -2039,7 +2092,7 @@ class Coordinates:
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select. "all" (default) computes the areas for all animals. Declared in self._animal_ids.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+            animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
 
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
@@ -2207,10 +2260,8 @@ class Coordinates:
         )
 
         with open(pkl_out, "wb") as handle:
-            if file is None:
-                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            else:
-                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
     @deepof.data_loading._suppress_warning(
         warn_messages=[
@@ -2256,45 +2307,62 @@ class Coordinates:
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
-
+        
         N_steps=5
+        if precomputed_tab_dict is not None:           
+            N_steps=1
         with tqdm(total=N_steps, desc=f"{'Loading tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
-                               
-            pbar.set_postfix(step="Loading coords")
-
-            # Get all relevant features
-            coords = self.get_coords(
-                selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
-            )
-
-            pbar.update()
-            pbar.set_postfix(step="Loading speeds")
-
-            speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
-
-            pbar.update()
-            pbar.set_postfix(step="Loading distances")
-
-            dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
-
-            pbar.update()
-            pbar.set_postfix(step="Loading angles")
-
-            #angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
-
-            # Merge and extract names
-            tab_dict = coords.merge(
-                speeds,
-                #angles,
-                dists,
-                save_as_paths=return_as_paths
-                )
-            
-            pbar.update()
-            pbar.set_postfix(step="Get graph info")
-
+                            
             if precomputed_tab_dict is not None:  # pragma: no cover
-                tab_dict = precomputed_tab_dict
+                tab_dict = precomputed_tab_dict 
+                
+                
+                # get first distance only for column names
+                dists = self.get_distances_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
+                edge_feature_names = list(dists.keys())
+                # Same for angles
+                angles = self.get_angles_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
+                angle_feature_names = list(angles.keys())
+
+                pbar.update()
+            else:  
+                
+                pbar.set_postfix(step="Loading coords")
+
+                # Get all relevant features
+                coords = self.get_coords(
+                    selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
+                )
+
+                pbar.update()
+                pbar.set_postfix(step="Loading speeds")
+
+                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
+
+                pbar.update()
+                pbar.set_postfix(step="Loading distances")
+
+                dists = self.get_distances(selected_id=animal_id, return_path=return_as_paths)
+                #get edge names from table
+                edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
+
+                pbar.update()
+                pbar.set_postfix(step="Loading angles")
+
+                angles = self.get_angles(selected_id=animal_id, return_path=return_as_paths)
+                #get angle names from table
+                angle_feature_names = get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns']
+
+                # Merge and extract names
+                tab_dict = coords.merge(
+                    speeds,
+                    #angles,
+                    dists,
+                    save_as_paths=return_as_paths
+                    )
+                                
+                pbar.update()
+            pbar.set_postfix(step="Get graph info")
 
             # Get corresponding feature graph
             graph = deepof.utils.connect_mouse(
@@ -2329,12 +2397,6 @@ class Coordinates:
 
             tab_dict._connectivity = graph
 
-            #read table metadata
-            if type(list(dists.values())[0]) == dict:
-                edge_feature_names = get_dt(dists,list(dists.keys())[0], only_metainfo=True)['columns']
-            else:
-                edge_feature_names = list(list(dists.values())[0].columns)
-
             if type(list(tab_dict.values())[0]) == dict:
                 feature_names = pd.Index(get_dt(tab_dict,list(tab_dict.keys())[0], only_metainfo=True)['columns'])
             else:
@@ -2349,11 +2411,19 @@ class Coordinates:
 
             # Sort indices to have always the same node order
             node_sorting_indices = []
+            angle_sorting_indices = []
             edge_sorting_indices = []
             for n in node_feature_names:
                 for j, f in enumerate(feature_names):
                     if n == f:
                         node_sorting_indices.append(j)
+
+            for n in angle_feature_names:
+                for j, f in enumerate(feature_names):
+                    if n == f:
+                        angle_sorting_indices.append(j)
+
+            
 
             inner_link_bool_mask = []
             for e in [tuple(sorted(e)) for e in list(graph.edges)]:
@@ -2383,6 +2453,7 @@ class Coordinates:
    
             shapes=[]
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+                edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
                 for k in range(0,len(to_preprocess)):
                 
                     num_rows=0
@@ -2393,14 +2464,11 @@ class Coordinates:
                         if result and len(result)==2 :
                             tab = result[0]
                             table_path = result[1]
-                        dataset = (
-                            tab[:, :, ~feature_names.isin(edge_feature_names)][
-                                :, :, node_sorting_indices
-                            ],
-                            tab[:, :, feature_names.isin(edge_feature_names)][
-                                :, :, edge_sorting_indices
-                            ],
-                        )
+                        tab_nodes = tab[:, :, node_sorting_indices]
+                        tab_edges = tab[:, :, edge_sorting_indices] 
+                        tab_angles = tab[:, :, angle_sorting_indices]                    
+                        dataset = ( tab_nodes, tab_edges, tab_angles)
+
                         num_rows=num_rows+tab.shape[0]
                     
 
@@ -2410,9 +2478,9 @@ class Coordinates:
                         to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
                     if len(to_preprocess[k].keys())>0:
-                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
+                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
                     else:
-                        shapes=(0,)
+                        shapes=[(0,),(0,),(0,)]
                     pbar.update()
                 shapes=tuple(shapes)
 
@@ -2499,7 +2567,7 @@ class Coordinates:
             "min_follow_frames": int(self._frame_rate/4),      # Minimum time mouse needs to follow, Quarter of a second
             "follow_tol": 25,                                  # Tail base of followed mouse needs to be 25 mm or closer to Nose of following mouse up to follow_frames in the past
             "climb_tol": 0.15,                                 # If mouse nouse is 15% or more of it's length outside of the arena for it to count as climbing
-            "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from teh arena edge or closer
+            "sniff_arena_tol": 12.5,                           # Noses needs to be 12.5 mm apart from the arena edge or closer
             "min_immobility": int(self._frame_rate),           # Min Time interval the mouse needs to be immobile to be counted as immobility, 1 second 
             #"max_immobility": 120*int(self._frame_rate),      # Max Time interval the mouse needs to be immobile to be counted as immobility, 2 minutes (anything longer is counted as "sleeping")                              
             "stationary_threshold": 40,                        # 40 mm per s, Speed below which the mouse is considered to only move neglegibly, before: 2 pixel per frame
@@ -2816,6 +2884,8 @@ class Coordinates:
             Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
         """
         
+        ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+        # not needed anymore after refactor
         # extract from Tuple
         preprocessed_train, _= preprocessed_object
         pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
@@ -2838,8 +2908,11 @@ class Coordinates:
         bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
         bin_info.update(bin_info_test)
 
+        ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
-
+        ###
+        # Improve after refactor
+        # Select path to apropriate pretrained model
         if pretrained:
             pretrained_path = os.path.join(
                 self._project_path,
@@ -3207,7 +3280,7 @@ class TableDict(dict):
         return merged_tables
 
     def get_training_set(
-        self, current_table_dict: table_dict, test_videos: int = 0
+        self, current_table_dict: table_dict, test_videos: Union[int, list] = 0
     ) -> tuple:
         """Generate training and test sets as table_dicts for model training.
 
@@ -3215,7 +3288,7 @@ class TableDict(dict):
 
         Args:
             current_table_dict (table_dict): table_dict object containing the data to be used for training.
-            test_videos (int): Number of videos to be used for testing. Defaults to 0.
+            test_videos (Union[int, list]): Number of videos to be used for testing or keys of test videos. Defaults to 0.
 
         Returns:
             IF there are no test videos:
@@ -3229,15 +3302,22 @@ class TableDict(dict):
 
         keys=np.array(list(current_table_dict.keys()))
 
-        test_indices = np.random.choice(
-            range(len(current_table_dict)), test_videos, replace=False
-        )
-
-        test_keys = keys[test_indices]
-        train_keys = np.delete(keys, test_indices)
+        if isinstance(test_videos,int):
+            #rng = np.random.seed(42)
+            test_indices = np.random.choice(
+                range(len(current_table_dict)), test_videos, replace=False, 
+            )
+            test_keys = keys[test_indices]
+        elif isinstance(test_videos,list) and all([key in list(current_table_dict.keys()) for key in test_videos]):
+            
+            test_keys = test_videos
+        else:
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")
+        
+        train_keys = list(set(keys)-set(test_keys))
 
         X_test = TableDict({},current_table_dict._type, current_table_dict._table_path)
-        if test_videos > 0:
+        if len(test_keys) > 0:
             try:
                 X_test = current_table_dict.filter_videos(test_keys)   
                 X_train = current_table_dict.filter_videos(train_keys)  
@@ -3258,8 +3338,256 @@ class TableDict(dict):
             test_keys,
         )
 
-    # noinspection PyTypeChecker,PyGlobalUndefined
+
     def preprocess(
+        self,
+        coordinates: coordinates,
+        handle_ids: str = "concat",
+        window_size: int = 25,
+        window_step: int = 1,
+        # binning info
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max: int = 227272,
+        # other parameters
+        scale: str = "standard",
+        pretrained_scaler: Any = None,
+        test_videos: int = 0,
+        verbose: int = 0,
+        filter_low_variance: bool = False,
+        interpolate_normalized: int = 10,
+        file_name: str = "preprocessed",
+        save_as_paths: Optional[bool] = None,
+        shuffle: bool = False,
+        skip_angles: bool = True,
+    ) -> np.ndarray:
+
+        available_mem = psutil.virtual_memory().available * 0.9
+        N_rows_max = int(available_mem / ((33 + 11) * window_size * 8))
+        if samples_max is None:
+            samples_max = N_rows_max
+        elif samples_max > N_rows_max:  # pragma: no cover
+            warnings.warn(
+                "\033[38;5;208m\nWarning! The selected number of samples may exceed your available memory.\033[0m"
+            )
+
+        keys_list = list(self.keys())
+
+        bin_info = _preprocess_time_bins(
+            coordinates=coordinates,
+            bin_size=bin_size,
+            bin_index=bin_index,
+            precomputed_bins=precomputed_bins,
+            tab_dict_for_binning=self,
+            samples_max=samples_max,
+        )
+
+        if save_as_paths is None:
+            save_as_paths = False
+            if coordinates._very_large_project:
+                save_as_paths = True
+
+        if scale and scale not in {"robust", "standard", "minmax"}:
+            raise ValueError("Invalid scaler. Select one of standard, minmax or robust")  # pragma: no cover
+
+        resave_after_global = bool(scale) and (scale == "standard" and bool(interpolate_normalized))
+
+        # IMPORTANT: create a proper TableDict-like container (not a plain dict)
+        try:
+            table_temp = type(self)({}, self._type, self._table_path)
+        except Exception:
+            # Fallback: deepcopy and clear contents, preserving metadata
+            table_temp = copy.deepcopy(self)
+            for k in list(table_temp.keys()):
+                del table_temp[k]
+
+        rng = np.random.RandomState(42)
+        samples_for_fit = []
+        global_scaler = None
+        keys_to_drop=[]
+    
+        with tqdm(total=len(keys_list), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+            for key in keys_list:
+                tab = get_dt(self, key)
+                tab = tab.iloc[bin_info[key]]
+                #skip if selected table range has only NaNs and reduce keys_list
+                if tab.isna().all().all():
+                    keys_to_drop.append(key)
+                    pbar.update()
+                    continue
+
+                if filter_low_variance:
+                    keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                    tab = tab.iloc[:, keep_cols]
+                    assert len(tab.columns) > 0, (
+                        "Error! During preprocessing the entire table was filtered out due to low variance!\n"
+                        "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
+                    )
+                
+                # Remove angle columns and put them back at the end of the loop
+                if skip_angles:
+                    angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
+                    angle_cols = tab.loc[:,angle_col_mask].copy()
+                    tab = tab.drop(columns=angle_cols)
+
+                if scale:
+
+                    current_tab_local = deepof.utils.scale_table(
+                        feature_array=tab,
+                        scale=scale,
+                        global_scaler=None,
+                    )
+
+                    float_mask = (tab.dtypes == float).values
+                    n_take = min(samples_max, len(tab))
+                    if n_take > 0:
+                        idx = rng.choice(len(tab), size=n_take, replace=False)
+                        samples_for_fit.append(current_tab_local[idx][:, float_mask])
+
+                    if not resave_after_global:
+                        tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
+                        tab = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
+
+                #re-add unprocessed angle columns
+                if skip_angles:
+                    for i, col in enumerate(angle_cols):
+                        tab.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
+
+                table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                table_temp[key] = save_dt(tab, table_path, save_as_paths)
+
+                pbar.update()
+        
+        # Remove all keys to invalid tables
+        keys_list = [key for key in keys_list if key not in keys_to_drop]
+        if len(keys_to_drop) > 0:
+            print(
+                f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
+            )
+
+        if scale:
+            if scale == "standard":
+                global_scaler = StandardScaler()
+            elif scale == "minmax":
+                global_scaler = MinMaxScaler()
+            else:
+                global_scaler = RobustScaler()
+
+            if pretrained_scaler is None:
+                if samples_for_fit:
+                    concat_array = np.vstack(samples_for_fit)
+                    global_scaler.fit(concat_array)
+                else:
+                    # Will error if there are zero features
+                    global_scaler.fit(np.empty((0, 0)))
+            else:
+                global_scaler = pretrained_scaler
+
+        if resave_after_global:
+            with tqdm(total=len(keys_list), desc=f"{'Rescaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+                for key in keys_list:
+                    tab = get_dt(self, key)
+                    tab = tab.iloc[bin_info[key]]
+
+                    if filter_low_variance:
+                        keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                    list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                        tab = tab.iloc[:, keep_cols]
+
+                    # Remove angle columns and put them back at the end of the loop
+                    if skip_angles:
+                        angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
+                        angle_cols = tab.loc[:,angle_col_mask].copy()
+                        tab = tab.drop(columns=angle_cols)
+
+                    # local -> global scaling 
+                    current_tab_local = deepof.utils.scale_table(
+                        feature_array=tab,
+                        scale=scale,
+                        global_scaler=None,
+                    )
+                    tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
+
+                    current_tab_global = deepof.utils.scale_table(
+                        feature_array=tab_local_df,
+                        scale=scale,
+                        global_scaler=global_scaler,
+                    )
+                    tab_scaled = pd.DataFrame(current_tab_global, columns=tab.columns, index=tab.index)
+
+                    if scale == "standard" and interpolate_normalized:
+                        cur_tab = tab_scaled.to_numpy(copy=True)
+                        try:
+                            cur_tab[cur_tab > interpolate_normalized] = np.nan
+                            cur_tab[cur_tab < -interpolate_normalized] = np.nan
+                        except TypeError:  # pragma: no cover
+                            cur_tab[
+                                np.append(
+                                    (cur_tab[:, :-1].astype(float) > interpolate_normalized),
+                                    np.array([[False] * len(cur_tab)]).T,
+                                    axis=1,
+                                )
+                            ] = np.nan
+                            cur_tab[
+                                np.append(
+                                    (cur_tab[:, :-1].astype(float) < -interpolate_normalized),
+                                    np.array([[False] * len(cur_tab)]).T,
+                                    axis=1,
+                                )
+                            ] = np.nan
+
+                        tab_scaled = (
+                            pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
+                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                            .interpolate(limit_direction="both")
+                        )
+
+                        # Interpolate angle columns to avoid nans as only actual preprocesing step
+                        angle_cols_nans_interpolated = (
+                            angle_cols
+                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
+                            .interpolate(limit_direction="both")
+                        )
+                    
+                    #re-add unprocessed angle columns
+                    if skip_angles:
+                        for i, col in enumerate(angle_cols_nans_interpolated):
+                            tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols_nans_interpolated[col])
+
+                    table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                    table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
+
+                    pbar.update()
+
+        X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
+
+        X_train, train_shape = deepof.utils.extract_windows(
+            to_window=X_train,
+            window_size=window_size,
+            window_step=window_step,
+            save_as_paths=save_as_paths,
+            shuffle=shuffle,
+            windows_desc="Get training windows",
+        )
+
+        if test_videos and len(test_index) > 0:
+            X_test, test_shape = deepof.utils.extract_windows(
+                to_window=X_test,
+                window_size=window_size,
+                window_step=window_step,
+                save_as_paths=save_as_paths,
+                shuffle=shuffle,
+                windows_desc="Get testing windows",
+            )
+        else:
+            test_shape = (0,)
+
+        return (X_train, X_test), (train_shape, test_shape), global_scaler
+
+    # noinspection PyTypeChecker,PyGlobalUndefined
+    def preprocess_old(
         self,
         coordinates: coordinates,
         handle_ids: str = "concat",
@@ -3280,7 +3608,7 @@ class TableDict(dict):
         file_name = 'preprocessed',
         save_as_paths = None,
         shuffle: bool = False,
-    ) -> np.ndarray:
+    ) -> np.ndarray: # pragma: no cover
         """Preprocess the loaded dataset before feeding to unsupervised embedding models.
 
         Capable of returning training and test sets ready for model training.
@@ -3311,6 +3639,28 @@ class TableDict(dict):
             global_scaler: global scaler that was used for scaling
         
         """
+        #double call of old and new version for comparison purposes
+        X_tuple, shape_tuple, global_scaler_new = self.preprocess_new(
+            coordinates,
+            handle_ids,
+            window_size,
+            window_step,
+            #binning info
+            bin_size,
+            bin_index,
+            precomputed_bins,
+            samples_max,  #corresponds to 1GB of memory when using default settings
+            #other parameters
+            scale,
+            pretrained_scaler,
+            test_videos,
+            verbose,
+            filter_low_variance,
+            interpolate_normalized,
+            file_name,
+            save_as_paths,
+            shuffle
+        ,)
         
         #get available memory -10% as buffer
         available_mem=psutil.virtual_memory().available*0.9
@@ -3331,12 +3681,6 @@ class TableDict(dict):
         table_temp = copy.deepcopy(self)
 
         bin_info=_preprocess_time_bins(coordinates=coordinates, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=self, samples_max=samples_max)
-
-
-        #determine the number of rows to use
-        #N_elements_max=int(1000000000/8) #up to 1GB in save space
-        #num_cols=get_dt(self, list(self.keys())[0], only_metainfo=True)['num_cols'] 
-        #samples_max=int(N_elements_max/(window_size*num_cols)*window_step)
 
         #save outputs as paths if first table is larger than a threshold
         if save_as_paths is None:
@@ -3519,10 +3863,69 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
+        assert np.sum([np.sum(np.sum(np.abs(get_dt(X_tuple[0],key)-get_dt(X_train,key)))) for key in X_train.keys()]) < 0.0000001
+        if X_test is not None and len(X_test.keys()) > 0:
+            assert np.sum([np.sum(np.sum(np.abs(get_dt(X_tuple[1],key)-get_dt(X_test,key)))) for key in X_test.keys()]) < 0.0000001
+        assert shape_tuple[0]==train_shape
+        assert shape_tuple[1]==test_shape
+
+        def scalers_equivalent(a, b, rtol=1e-7, atol=1e-9) -> bool:
+            import numpy as np
+            from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
+            # Same type required
+            if type(a) is not type(b):
+                return False
+
+            # Pick the key hyperparameters and learned attributes to compare
+            if isinstance(a, StandardScaler):
+                params = ["with_mean", "with_std"]
+                attrs  = ["mean_", "scale_"]
+            elif isinstance(a, MinMaxScaler):
+                params = ["feature_range"]
+                attrs  = ["min_", "scale_"]
+            elif isinstance(a, RobustScaler):
+                params = ["quantile_range", "with_centering", "with_scaling"]
+                attrs  = ["center_", "scale_"]
+            else:
+                # Fallback: compare all params and common learned attrs
+                params = sorted(a.get_params().keys())
+                attrs  = [n for n in ("mean_", "scale_", "min_", "center_", "data_min_", "data_max_", "data_range_") if hasattr(a, n)]
+
+            # Compare hyperparameters (must be identical)
+            pa, pb = a.get_params(deep=True), b.get_params(deep=True)
+            for p in params:
+                if pa.get(p, None) != pb.get(p, None):
+                    return False
+
+            # Helper to compare numbers/arrays with tolerance
+            def _close(x, y):
+                if isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+                    return x.shape == y.shape and np.allclose(x, y, rtol=rtol, atol=atol, equal_nan=True)
+                if isinstance(x, (list, tuple)) and isinstance(y, (list, tuple)):
+                    xa, ya = np.asarray(x), np.asarray(y)
+                    return xa.shape == ya.shape and np.allclose(xa, ya, rtol=rtol, atol=atol, equal_nan=True)
+                # scalars or other simple types
+                try:
+                    return (x == y) or (np.isfinite([x, y]).all() and np.isclose(x, y, rtol=rtol, atol=atol))
+                except Exception:
+                    return x == y
+
+            # Compare learned attributes
+            for attr in attrs:
+                if not hasattr(a, attr) or not hasattr(b, attr):
+                    return False
+                if not _close(getattr(a, attr), getattr(b, attr)):
+                    return False
+
+            return True
+        
+        assert scalers_equivalent(global_scaler,global_scaler_new)
 
         if verbose:
             print("Done!")
 
+    
         return (X_train, X_test), (train_shape, test_shape), global_scaler
 
     def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:

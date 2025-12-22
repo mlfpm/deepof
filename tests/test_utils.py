@@ -26,6 +26,7 @@ from shapely.geometry import Point, Polygon
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
+from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 # AUXILIARY FUNCTIONS #
 
@@ -164,17 +165,21 @@ def test_bpart_distance(cordarray):
         ).map(lambda x: x + np.random.uniform(0, 10)),
     )
 )
-def test_angle(abc):
+def test_angles(abc):
     a, b, c = abc
 
     angles = []
     for i, j, k in zip(a, b, c):
-        ang = np.arccos(
-            (np.dot(i - j, k - j) / (np.linalg.norm(i - j) * np.linalg.norm(k - j)))
-        )
-        angles.append(ang)
+        cosv = np.dot(i - j, k - j) / (np.linalg.norm(i - j) * np.linalg.norm(k - j))
+        angles.append(np.arccos(np.clip(cosv, -1.0, 1.0)))
+    angles = np.array(angles)
 
-    assert np.allclose(deepof.utils.angle([a, b, c]), np.array(angles))
+    ang = deepof.utils.angle([a, b, c])
+    s_ang = deepof.utils.signed_angle([a, b, c])
+    ang_from_signed = np.arccos(np.clip(s_ang[:, 1], -1.0, 1.0))  # cos(theta) -> [0, pi]
+
+    assert np.allclose(ang, angles)
+    assert np.allclose(ang_from_signed, angles)
 
 
 @settings(max_examples=10, deadline=None)
@@ -313,12 +318,17 @@ def test_extend_behaviors_numba(tab_numpy,frame_rate,delta_T):
     silence_diagonal=st.booleans(),
     aggregate=st.booleans(),
     normalize=st.booleans(),
+    supervised=st.booleans(),
     diagonal_behavior_counting=st.one_of(st.just("Frames"),st.just("Time"),st.just("Events"),st.just("Transitions"))
 )
-def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting):
+def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delta_T,frame_rate,silence_diagonal,aggregate,normalize,diagonal_behavior_counting, supervised):
 
     # Define a test embedding dictionary
     tab_dict = {i: np.random.choice(a=[False, True], size=(100, num_features), p=[0.5,0.5]) for i in range(len(exp_conditions))}
+
+    # Transform to dataFrame
+    if supervised:
+        tab_dict = {key: pd.DataFrame(val, columns=[str(c) for c in range(0,tab_dict[key].shape[1])]) for key, val in tab_dict.items()} 
 
     # Create local_bin_info
     bin_info = {i: {} for i in range(len(exp_conditions))}
@@ -355,8 +365,16 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
     if aggregate:
         assert len(transitions_dict)==len(exp_conditions)
     # Normalization implies no values greater 1
-    if normalize:
+    if normalize and not supervised:
         assert (transitions_dict[list(transitions_dict.keys())[0]]<=1).all()
+    # In the supervised case we normalize based on the number of paired events,
+    # respectively the upper bound becomes the column wise number of "Trues" -1
+    # (there cannot be more transitions than events) excluding aggregate, as then 
+    # keys no longer match (new group bound keys that summarize multiple tables into one)
+    elif normalize and supervised and not aggregate:
+        assert all([(transitions_dict[key].sum(axis=0)<tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
+
+
     # Diagonal behavior counting
     if diagonal_behavior_counting == "Frames":
 
@@ -399,10 +417,11 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
         diagonal_behavior_counting="Events"
         )
 
-        # The number of Frames will be always greater or equal than any otehr of the diagonal counting options
+        # The number of Frames will be always greater or equal than any other of the diagonal counting options
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_transitions[list(transitions_dict_transitions.keys())[0]].diagonal()).all()
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_time[list(transitions_dict_time.keys())[0]].diagonal()).all()
         assert (transitions_dict[list(transitions_dict.keys())[0]].diagonal()>=transitions_dict_events[list(transitions_dict_events.keys())[0]].diagonal()).all()
+
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -485,6 +504,41 @@ def test_rolling_window(window):
 
     assert len(rolled_a.shape) == len(a.shape) + 1
     assert rolled_a.shape[1] == window_size
+
+
+@settings(deadline=None)
+@given(
+    to_window=get_soft_counts(n_min=50,n_max=100),
+    window=st.data(),
+    shuffle=st.booleans(),
+    aggregate=st.one_of(st.just(None),st.just('mean'),st.just('mid'),st.just('wta'),st.just('lta'))
+)
+def test_extract_windows(to_window,window,shuffle,aggregate):
+    
+    
+    window_step = window.draw(st.integers(min_value=1, max_value=5))
+    window_size = 5 * window_step
+    to_window_dict={'key1':to_window,'key2':to_window}
+
+
+    windowed, output_shape = deepof.utils.extract_windows(
+        to_window_dict,
+        window_size,
+        window_step,
+        save_as_paths=False,
+        shuffle=shuffle,
+        aggregate=aggregate  
+    )
+    
+    # Check if aggregation correctly reduces dimensionality
+    if aggregate is not None:
+        assert windowed['key1'].shape[1]==1 and windowed['key2'].shape[1]==1 and output_shape[1]==1
+    else:
+        assert windowed['key1'].shape[1]==window_size and windowed['key2'].shape[1]==window_size and output_shape[1]==window_size
+    # Check if dimensionality was increased by window dimension
+    assert len(windowed['key1'].shape) == len(to_window.shape) + 1
+    # Check if first dimensions has shrunk to correct size as derived from window and step sizes
+    assert windowed['key1'].shape[0] == int((to_window.shape[0]-window_size)/window_step+1)
 
 
 @settings(deadline=None)
@@ -742,6 +796,36 @@ def test_rolling_speed(dframe, sampler):
     assert speeds1.shape[0] == dframe.shape[0]
     assert speeds1.shape[1] == dframe.shape[1] // 2
     assert np.all(np.std(speeds1) >= np.std(speeds2))
+
+
+@given(
+        soft_counts=get_soft_counts(),
+        supervised_tables=get_supervised_tables(),
+        n_behaviors=st.integers(min_value=1, max_value=10),
+        supervised_export=st.booleans(),
+        )
+def test_get_behavior_mask_and_confidence(soft_counts, supervised_tables, n_behaviors, supervised_export):
+
+    if supervised_export:
+        behaviors=supervised_tables.columns[0:np.min([len(supervised_tables.columns),n_behaviors])]
+        input_tab=supervised_tables
+        mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
+    else:
+        behaviors=['col_'+str(k) for k in range(0,np.min([soft_counts.shape[1],n_behaviors]))]  
+        cols = [f"col_{i}" for i in range(soft_counts.shape[1])]  # unique column names
+        input_tab=pd.DataFrame(soft_counts,columns=cols)
+
+        mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
+
+    # Check that elements from teh first column are included in the mask, if they happen to be true maximums of their rows
+    if input_tab.shape[1]>1:
+        first_col_is_max=input_tab.iloc[:,0]>input_tab.iloc[:,1:].max(axis=1)
+        assert all(mask['col_0'][first_col_is_max]==True)
+
+    # Check basic properties like matching shapes and such
+    assert mask.shape[1]==len(behaviors) and confidence.shape[1]==len(behaviors)
+    assert mask.shape == confidence.shape
+    assert np.all(np.isin(mask, [0, 1]))
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])

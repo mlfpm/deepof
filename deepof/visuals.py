@@ -12,7 +12,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import chain, combinations, product
-from typing import Any, List, NewType, Union
+from typing import Any, List, NewType, Union, Optional
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -31,6 +31,7 @@ from scipy.signal import savgol_filter
 from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
+import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
@@ -61,6 +62,7 @@ from deepof.visuals_utils import (
     calculate_FSTTC,
     calculate_simple_association,
 )
+import deepof.visuals_utils
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -91,6 +93,7 @@ def plot_heatmaps(
     roi_number: int = None,
     animals_in_roi: list = None,
     display_rois: bool = True,
+    in_roi_criterion: str = "Center",
     # Others
     display_arena: bool = True,
     xlim: float = None,
@@ -116,7 +119,8 @@ def plot_heatmaps(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse                  
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         display_rois (bool): Display the active ROI, if a ROI was selected. Defaults to True.              
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
@@ -143,8 +147,10 @@ def plot_heatmaps(
         condition_values=[condition_value],
         roi_number=roi_number,
     )
+    if isinstance(bodyparts,str):
+        bodyparts=[bodyparts]
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, animals_in_roi=animals_in_roi)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, animals_in_roi=animals_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:
@@ -246,6 +252,7 @@ def plot_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center",
     # Visualization parameters
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
@@ -265,7 +272,8 @@ def plot_gantt(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse                  
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
@@ -290,6 +298,7 @@ def plot_gantt(
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
         roi_number=roi_number,
+        in_roi_criterion = in_roi_criterion,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         behaviors_to_plot=instances_to_plot,
@@ -312,6 +321,7 @@ def plot_gantt(
         soft_counts=soft_counts,
         supervised_annotations=supervised_annotations,
         roi_number=roi_number,
+        in_roi_criterion = in_roi_criterion,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
         experiments_to_plot=instances_to_plot,
@@ -334,6 +344,7 @@ def _plot_experiment_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -353,8 +364,9 @@ def _plot_experiment_gantt(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI)
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse           
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -374,6 +386,7 @@ def _plot_experiment_gantt(
         animals_in_roi = animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -425,7 +438,7 @@ def _plot_experiment_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # get indices to be plotted
     bin_indices=bin_info[experiment_id]["time"]
@@ -459,13 +472,16 @@ def _plot_experiment_gantt(
         behaviors_to_plot = behavior_ids
 
     # set gantt matrix
-    n_available_features = len(behavior_ids)
+    n_base_features = len(behavior_ids)
     n_features = len(behaviors_to_plot)
     gantt = np.zeros([len(behaviors_to_plot), len(bin_indices)])
 
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if roi_number is not None:
+            # ROI filter wit hgeneral approach
+            additional_checkpoints = get_unsupervised_behaviors_in_roi(additional_checkpoints.transpose(), bin_info[experiment_id], animals_in_roi).transpose()
         if behaviors_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -489,7 +505,7 @@ def _plot_experiment_gantt(
 
     # Iterate over features and plot
     rows = 0
-    for feature in range(n_available_features):
+    for feature in range(n_base_features):
 
         # skip if feature is not selected for plotting
         if behavior_ids[feature] not in behaviors_to_plot:
@@ -510,7 +526,7 @@ def _plot_experiment_gantt(
         gantt_matrix=gantt,
         plot_type=plot_type,
         instance_id=experiment_id,
-        n_available_instances=n_available_features,
+        n_available_instances=n_base_features,
         instances_to_plot=behaviors_to_plot,
         colors=colors,
         bin_indices=bin_indices,
@@ -533,6 +549,7 @@ def _plot_behavior_gantt(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -552,8 +569,9 @@ def _plot_behavior_gantt(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded 
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)        
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         soft_counts (table_dict): table dict with soft cluster assignments per animal experiment across time.
         supervised_annotations (table_dict): table dict with supervised annotations per video. new figure will be created.
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
@@ -574,6 +592,7 @@ def _plot_behavior_gantt(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -620,7 +639,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -652,6 +671,9 @@ def _plot_behavior_gantt(
     # If available, add additional checkpoints to the Gantt matrix
     if additional_checkpoints is not None:
         additional_checkpoints = additional_checkpoints.iloc[:, bin_indices]
+        if roi_number is not None:
+            # ROI filter wit hgeneral approach
+            additional_checkpoints = get_unsupervised_behaviors_in_roi(additional_checkpoints.transpose(), bin_info[all_experiments[0]], animals_in_roi).transpose()
         if experiments_to_plot is not None:
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
@@ -750,7 +772,18 @@ def gantt_plotter(
     
     colors = [color for color in colors if color is not None]
 
-    N_colors=int(np.nanmax(gantt_matrix))
+    N_colors=0
+    if np.isnan(gantt_matrix).all():
+        warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                f"Warning! Your selected section for Gantt plotting contains only NaNs!\n"
+                f"This can happen if you select a ROI that no mouse entered in the given time interval.\n"
+                f"\"Missing\" behavior is not defined for ROIs since it only denotes if a mouse was tracked."
+                "\033[0m"  # Reset text color
+            )
+        warnings.warn(warning_message)
+    else:
+        N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
     #N_colors=len(col_indices)
     sns.heatmap(
@@ -770,6 +803,8 @@ def gantt_plotter(
             standard_signal = (signal_overlay - signal_overlay.min()) / (
                 signal_overlay.max() - signal_overlay.min()
             )
+            # mirror on x axis as it get's mirrored again during plotting
+            standard_signal=-(standard_signal-1)
             sns.lineplot(
                 x=signal_overlay.index[0 : len(bin_indices)],
                 y=standard_signal[bin_indices] + rows,
@@ -787,21 +822,31 @@ def gantt_plotter(
 
     # Iterate over additional checkpoints and plot
     if additional_checkpoints is not None:
+        gantt_cp = gantt_matrix.copy()
+        gantt_cp[
+            [i for i in range(gantt_matrix.shape[0]) if i < n_instances]
+        ] = np.nan
+        if (gantt_cp>1).any():
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! \"additional_checkpoints\" assumes binary data, your input data exceeds values of 1 and was capped at it (<=0.001 = 0, >0.001=1)!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+
+        gantt_cp[gantt_cp>0.001]=1
+        gantt_cp[gantt_cp<=0.001]=0
         for checkpoint in range(additional_checkpoints.shape[0]):
-            gantt_cp = gantt_matrix.copy()
-            gantt_cp[
-                [i for i in range(gantt_matrix.shape[0]) if i != n_instances + checkpoint]
-            ] = np.nan
             plt.axhline(y=n_instances + checkpoint, color="k", linewidth=0.5)
 
-            sns.heatmap(
-                data=gantt_cp,
-                cbar=False,
-                cmap=LinearSegmentedColormap.from_list(
-                    "deepof", ["white", "black"], N=2
-                ),
-                ax=ax,
-            )
+        sns.heatmap(
+            data=gantt_cp,
+            cbar=False,
+            cmap=LinearSegmentedColormap.from_list(
+                "deepof", ["white", "black"], N=2
+            ),
+            ax=ax,
+        )
 
     # set x-ticks
     plt.xticks([])
@@ -899,6 +944,7 @@ def plot_enrichment(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise", 
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -922,8 +968,9 @@ def plot_enrichment(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.     
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded        
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded        
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
@@ -943,6 +990,7 @@ def plot_enrichment(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -996,7 +1044,7 @@ def plot_enrichment(
             tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # Get cluster enrichment across conditions for the desired settings
     enrichment = deepof.post_hoc.enrichment_across_conditions(
@@ -1122,58 +1170,56 @@ def plot_enrichment(
                 + [err_values[all_exp_conditions[k]][x_bin_labels[0]]]
             )
 
-        # Plot means as lines and extract color of these lines
-        colors = {}
-        for k in plot_means:
-            plot_handle = ax.plot(
-                mid_angles, plot_means[k], linewidth=3, label=f"{k}", alpha=0.8
-            )
-            colors[k] = plot_handle[0].get_color()
+        # Use midpoints but drop the duplicated closing point
+        theta = np.unwrap(mid_angles[:-1])  # unwrap to make angles strictly increasing
+        eps = 1e-8  # small positive floor for log scale
 
-        # Plot markers for each group
-        marker_handles = []
-        for k in plot_means:
-            marker_handles.append(
-                ax.plot(
-                    mid_angles,
-                    plot_means[k],
-                    marker="o",
-                    linestyle="",
-                    color=colors[k],
-                    linewidth=2,
-                )
-            )
+        # Fixed colors per condition (don't rely on the property cycle being in sync)
+        palette = plt.rcParams['axes.prop_cycle'].by_key().get('color', None)
+        if not palette:
+            palette = ['C0','C1','C2','C3','C4','C5','C6','C7','C8','C9']
+        cond_to_color = {cond: palette[i % len(palette)] for i, cond in enumerate(all_exp_conditions)}
 
-        # Plot the error as lines above and below the mean values
-        for k in plot_means:
-            ax.plot(
-                mid_angles,
-                plot_means[k] + plot_errs[k],
-                linestyle="",
-                color=colors[k],
-                alpha=0.8,
-            )
-            ax.plot(
-                mid_angles,
-                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
-                linestyle="",
-                color=colors[k],
-                alpha=0.8,
-            )
+        # get smallest non-zero average
+        mu_min=np.min([np.min(plot_means[k][np.where(plot_means[k]>0)]) for k in plot_means.keys()])
+        lower_bound = np.min([mu_min/10,0.01]) # calculate lower bound for plot
+        
+        # Plot means, markers, error lines and shaded bands, split at NaNs/gaps
+        for k in all_exp_conditions:
+            mu = np.asarray(plot_means[k][:-1], dtype=float)
+            sd = np.asarray(plot_errs[k][:-1], dtype=float)
 
-        # Shade Error
-        for k in plot_means:
-            ax.fill_between(
-                mid_angles,
-                plot_means[k] + plot_errs[k],
-                np.maximum(plot_means[k] - plot_errs[k], np.min(plot_means[k]) * 0.1),
-                color=colors[k],
-                alpha=0.15,
-            )
+            upper = mu + sd
+            lower = mu - sd
+
+            # valid where finite and positive (log scale)
+            valid = np.isfinite(mu) & np.isfinite(upper) & np.isfinite(lower)
+            valid &= (mu > eps) & (upper > eps) 
+
+            color = cond_to_color[k]
+            first = True
+            for sl in deepof.visuals_utils.contiguous_segments(valid):
+                th = theta[sl]
+                mu_seg = mu[sl]
+                up = upper[sl]
+                lo = np.clip(lower[sl], lower_bound, None)
+
+                # mean line + markers (label only once per condition)
+                ax.plot(th, mu_seg, linewidth=3, color=color, alpha=0.8, label=k if first else None)
+                ax.plot(th, mu_seg, marker="o", linestyle="", color=color, linewidth=2)
+
+                # error lines
+                ax.plot(th, up, linestyle="--", color=color, alpha=0.6, linewidth=1)
+                ax.plot(th, lo, linestyle="--", color=color, alpha=0.6, linewidth=1)
+
+                # shaded std band
+                ax.fill_between(th, lo, up, color=color, alpha=0.15)
+
+                first = False
 
     else:
         # Plot a barchart grouped per experimental conditions
-        np.random.seed(42) #to ensure the outlier points are always jittered te same (relevant for automatic testing)
+        np.random.seed(42) #to ensure the outlier points are always jittered the same (relevant for automatic testing)
         sns.barplot(
             data=enrichment,
             x="cluster",
@@ -1445,7 +1491,7 @@ def plot_transitions(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
@@ -1603,6 +1649,7 @@ def count_all_events(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
     # Others
     counting_mode = "Events",
 ):
@@ -1617,7 +1664,8 @@ def count_all_events(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse         
         counting_mode (str): How to count behaviors. Options: 
             - "Frames": Total frames where behavior is active (after extension)
             - "Time": Total time where behavior is active
@@ -1631,6 +1679,7 @@ def count_all_events(
         soft_counts=soft_counts,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
     Counting_mode_options=["Frames","Time","Events","Transitions"]  
     if counting_mode not in Counting_mode_options:
@@ -1652,7 +1701,7 @@ def count_all_events(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # create tabdict dictionary to iterate over options
     load_range = None
@@ -1679,7 +1728,7 @@ def count_all_events(
         column_counts={}
         for col in tab.columns:
             series = tab[col]
-            series.fillna(0,inplace=True)
+            series=series.fillna(0)
             # skip non-binary columns (e.g. speed column)
             if (series > 1.0001).any():
                 continue
@@ -1728,13 +1777,13 @@ def plot_associations(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                      
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         condition_values (list): Experimental condition values to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition. If two condition values are given as a list, the difference between both sets of corresponding experiments is plotted
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         behaviors (list): List of behaviors to include in the plot. Should be given as "[Cluster_0, Cluster_1..." in case of soft_counts.
-        exclude_given_behaviors (bool): If True, will instead of only including given behaviors in the plot exclude tehse behaviors and plot all other behaviors. Defaults to False.
-        delta_T (float): Maximum time delay after teh end of any behavior instance during which following behaviors are still counted as associated. 
+        exclude_given_behaviors (bool): If True, will instead of only including given behaviors in the plot exclude these behaviors and plot all other behaviors. Defaults to False.
+        delta_T (float): Maximum time delay after the end of any behavior instance during which following behaviors are still counted as associated. 
         association_metric (str): Association metric that should be used to determine if two behaviors are associated. Options are "odds_ratio" and "FSTTC". Defaults to FSTTC.
         get_values (bool): Determines if the plotted matrix should also be returned as an 2D array. Defaults to False.
         ax (list): axes where to plot the current figure. If not provided, a new figure will be created.
@@ -1999,6 +2048,7 @@ def plot_stationary_entropy(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
     # Visualization parameters
     add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
@@ -2017,7 +2067,8 @@ def plot_stationary_entropy(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                           
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                           
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
@@ -2031,6 +2082,7 @@ def plot_stationary_entropy(
         exp_condition=exp_condition,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None:
         animals_in_roi = coordinates._animal_ids
@@ -2058,7 +2110,7 @@ def plot_stationary_entropy(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     if (any([np.sum(bin_info[key]["time"]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
@@ -2246,7 +2298,7 @@ def plot_normative_log_likelihood(
             for key, val in embeddings._exp_conditions.items()
         }
 
-    embedding_dataset.index = embeddings._exp_conditions.keys()
+    #embedding_dataset.index = embeddings._exp_conditions.keys()
     embedding_dataset.sort_values(
         "experimental condition",
         key=lambda x: x == normative_model,
@@ -2290,6 +2342,7 @@ def plot_embeddings(
     roi_number: int = None,
     animals_in_roi: Union[str,list] = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -2301,7 +2354,7 @@ def plot_embeddings(
     aggregate_experiments: str = None,
     samples: int = 500,
     show_aggregated_density: bool = True,
-    colour_by: str = "exp_condition",
+    colour_by: str = "cluster",
     ax: Any = None,
     save: bool = False,
 ):
@@ -2317,8 +2370,9 @@ def plot_embeddings(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                          
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                          
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         min_confidence (float): minimum confidence in cluster assignments used for quality control filtering.                
         normative_model (str): Name of the cohort to use as controls. If provided, fits a Gaussian density to the control global animal embeddings, and reports the difference in likelihood across all instances of the provided experimental condition. Statistical parameters can be controlled via **kwargs (see full documentation for details).
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -2327,7 +2381,7 @@ def plot_embeddings(
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
-        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', or 'exp_id'.
+        colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', 'exp_id' or, if supervised behaviors are given, also any supervised behavior.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -2335,6 +2389,7 @@ def plot_embeddings(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
         normative_model=normative_model,
         exp_condition=exp_condition,
         aggregate_experiments=aggregate_experiments,
@@ -2342,7 +2397,10 @@ def plot_embeddings(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
+    if type(colour_by)==str:
+        colour_by=[colour_by]
     if supervised_annotations is not None and roi_number is not None and animals_in_roi is not None:
         raise ValueError(
             '"No animal_id can be selected when supeprvised_annotations are analyzed with a ROI as this would result in empty aggregations!"'
@@ -2371,23 +2429,25 @@ def plot_embeddings(
     if supervised_annotations is not None and any(
         [embeddings is not None, soft_counts is not None]
     ):
-        raise ValueError(
-            "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
-        )      
+        pass
+        #raise ValueError(
+        #    "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
+        #)      
 
-    # preprocess information given for time binning
-    if supervised_annotations is not None:
-        bin_info_time = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
-        )
-    else:
+    # preprocess information given for time binning, 
+    # default to embeddings as embeddings are always the length of supervised_annotations or shorter
+    if embeddings is not None:
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
             tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
+    else:
+        bin_info_time = _preprocess_time_bins(
+            coordinates, bin_size, bin_index, precomputed_bins, 
+            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
+        )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
     
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
@@ -2447,12 +2507,20 @@ def plot_embeddings(
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
 
+
             sample_ids = np.random.choice(
                 range(current_emb.shape[0]), samples, replace=False
             )
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
             emb_to_plot[key] = current_emb[sample_ids]
+
+            # If given, prepare supervised annotations analogously to embeddings (same sample positions)
+            if sup_annots_to_plot is not None:
+                current_sup = get_dt(sup_annots_to_plot,key)
+                current_sup = current_sup.iloc[valid_samples[key]]
+                sup_annots_to_plot[key] = current_sup.iloc[sample_ids]
+
         get_behavior_frames_in_roi._warning_issued = False
                
 
@@ -2481,6 +2549,25 @@ def plot_embeddings(
             ]
         )
 
+        behavior_labels=np.zeros(cluster_assignments.shape)
+        behavior_names="None"
+        behavior_labels_fin=pd.Series(range(0,len(cluster_assignments)))
+        behavior_labels_fin[:]=''
+        if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_cond","exp_id"]:
+            # Concatenate experiments and align experimental conditions
+            behavior_names = colour_by
+            for k in range(len(behavior_names)):
+                behavior_labels = np.concatenate(
+                    [get_dt(sup_annots_to_plot,key)[behavior_names[k]] 
+                        for key in sup_annots_to_plot],
+                    axis=0
+                )
+                behavior_labels[np.isnan(behavior_labels)]=0 #set possible nans to zero
+                behavior_labels_fin[behavior_labels.astype(bool)==True]=behavior_names[k]
+            colour_by="behaviors"
+        else:
+            colour_by=colour_by[0]
+
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
         reducers = deepof.post_hoc.compute_UMAP(concat_embeddings, cluster_assignments)
@@ -2504,6 +2591,7 @@ def plot_embeddings(
                 "confidence": confidence,
                 "cluster": cluster_assignments,
                 "experimental condition": np.repeat(concat_hue, lens),
+                "behaviors": behavior_labels_fin
             }
         )
 
@@ -2623,7 +2711,7 @@ def plot_embeddings(
             )
             warnings.warn(warning_message)
 
-    if not aggregate_experiments:
+    if not aggregate_experiments and colour_by in ["cluster"]:
         if ax is None:
             plt.legend("", frameon=False)
         else:
@@ -2667,24 +2755,25 @@ def animate_skeleton(
     embeddings: table_dict = None,
     soft_counts: table_dict = None,
     # Time selection parameters
-    bin_size: Union[int, str] = None,
-    bin_index: Union[int, str] = None,
-    precomputed_bins: np.ndarray = None,
-    samples_max: int =20000,  
+    bin_size: Union[int, str, None] = None,
+    bin_index: Union[int, str, None] = None,
+    precomputed_bins: Optional[np.ndarray] = None,
+    samples_max: int = 20000,
     # ROI functionality
-    roi_number: int = None,  
-    animals_in_roi: list = None,
+    roi_number: Optional[int] = None,
+    animals_in_roi: Optional[Union[str, Sequence[str]]] = None,
+    in_roi_criterion: Union[str, Sequence[str]] = "Center",
     # other parameters
-    animal_id: list = None,
-    center: str = "arena",
-    align: str = None,
-    sampling_rate: float = None, 
+    animal_id: Optional[Union[str, Sequence[str]]] = None,
+    center: Union[str, bool] = "arena",
+    align: Optional[str] = None,
+    sampling_rate: Optional[float] = None,
     min_confidence: float = 0.0,
-    min_bout_duration: int = None,
-    selected_cluster: np.ndarray = None,
+    min_bout_duration: Optional[int] = None,
+    selected_cluster: Optional[np.ndarray] = None,
     display_arena: bool = True,
     legend: bool = True,
-    save: bool = None,
+    save: Optional[Union[bool, str]] = None,
     dpi: int = 100,
 ):
     """Render a FuncAnimation object with embeddings and/or motion trajectories over time.
@@ -2692,85 +2781,143 @@ def animate_skeleton(
     Args:
         coordinates (coordinates): deepof Coordinates object.
         experiment_id (str): Name of the experiment to display.
-        embeddings (Union[List, np.ndarray]): UMAP 2D embedding of the datapoints provided. If not None, a second animation shows a parallel animation with the currently selected embedding, colored by cluster if cluster_assignments are available.
-        soft_counts (np.ndarray): contain sorted cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified component are returned. Defaults to None.
-        bin_size (Union[int,str]): bin size for time filtering.
-        bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
-        precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
+        embeddings (table_dict): UMAP or latent embedding for each experiment. If not None, a second animation shows the embedding, colored by cluster if available.
+        soft_counts (table_dict): soft cluster assignments for all instances in data. If provided together with selected_cluster, only instances of the specified
+        component are rendered. Defaults to None. bin_size (Union[int, str, None]): bin size for time filtering.
+        bin_index (Union[int, str, None]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
+        precomputed_bins (np.ndarray, optional): precomputed time bins. If provided, bin_size and bin_index are ignored.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
-        animal_id (list): ID list of animals to display. If None (default) it shows all animals.
-        center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
-        align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).       
-        sampling_rate (float): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
+        roi_number (int, optional): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded).
+        animals_in_roi (str or list of str, optional): IDs of animals that need to be inside the active ROI. All frames in which any of the given animals are not inside the ROI get excluded.
+        in_roi_criterion (str or list of str): Criterion for in-roi check: a single bodypart, a list of bodyparts or "all" bodyparts of a mouse.
+        animal_id (str or list of str, optional): ID list of animals to display. If None (default) it shows all animals.
+        center (str or bool): Name of the body part to which the positions will be centered. If False, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
+        align (str, optional): Body part to which later processes will align the frames.
+        sampling_rate (float, optional): Sampling rate for the video. If None is given, the same one as in the video recordings will be used.
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
-        min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
-        display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
-        legend (bool): whether to add a color-coded legend to multi-animal plots. Defaults to True when there are more than one animal in the representation, False otherwise.
-        save (str): name of the file where to save the produced animation.
-        dpi (int): dots per inch of the figure to create.
+        min_bout_duration (int, optional): Minimum number of frames to render a cluster assignment bout.
+        selected_cluster (np.ndarray, optional): Cluster to filter.
+        display_arena (bool): Whether to plot a dashed line with an overlying arena perimeter.
+        legend (bool): Whether to add a color-coded legend to multi-animal plots.
+        save (bool or str, optional): If not None, save the animation. If a string is provided, it is added as a suffix in the auto-generated file name.
+        dpi (int): Dots per inch of the figure to create.
 
     """
-    # initial check if enum-like inputs were given correctly
+    # ----------------------------------------------------------------------
+    # Initial check if enum-like inputs were given correctly
+    # ----------------------------------------------------------------------
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
         animal_id=animal_id,
         center=center,
         roi_number=roi_number,
+        in_roi_bodyparts=in_roi_criterion,
     )
-    if animal_id is None:
-        animal_id = coordinates._animal_ids
-    if type(animal_id)==str:
-        animal_id=[animal_id]
-    if animals_in_roi is None:
-        animals_in_roi = coordinates._animal_ids
-    if type(animals_in_roi)==str:
-        animals_in_roi=[animals_in_roi]
 
+    # Small helper to normalize animal id arguments to a list of strings
+    def _normalize_id_list(ids, default):
+        if ids is None:
+            return list(default)
+        if isinstance(ids, str):
+            return [ids]
+        return list(ids)
+
+    # Normalize animal ids
+    if hasattr(coordinates, "_animal_ids"):
+        all_animals = list(coordinates._animal_ids)
+    else:
+        all_animals = []
+
+    animal_id = _normalize_id_list(animal_id, all_animals)
+    animals_in_roi = _normalize_id_list(animals_in_roi, all_animals)
+
+    # ----------------------------------------------------------------------
+    # Time binning and ROI filtering
+    # ----------------------------------------------------------------------
+    tab_dict_for_binning = embeddings if embeddings is not None else None
 
     bin_info_time = _preprocess_time_bins(
-    coordinates, bin_size, bin_index, precomputed_bins, samples_max=samples_max,
+        coordinates,
+        bin_size,
+        bin_index,
+        precomputed_bins,
+        samples_max=samples_max,
+        tab_dict_for_binning=tab_dict_for_binning,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(
+        coordinates, roi_number, bin_info_time, in_roi_criterion
+    )
 
-    if sampling_rate is None:
-        sampling_rate=coordinates._frame_rate
-
-    if embeddings is not None:
-        #Get data for requested experiment
-        cur_embeddings=get_dt(embeddings, experiment_id)
-        cur_soft_counts=get_dt(soft_counts, experiment_id)
+    # Get available frames to display based on binning
+    if roi_number is None:
+        frames = bin_info[experiment_id]["time"]
     else:
-        cur_embeddings=None
-        cur_soft_counts=None
+        # A pseudo behavior is constructed from the animal ids that contains all
+        # ids intended to be inside the ROI.
+        frames = get_behavior_frames_in_roi(
+            "_".join(animals_in_roi) + "_",
+            bin_info[experiment_id],
+            animal_ids=animals_in_roi,
+        )
+        get_behavior_frames_in_roi._warning_issued = False
 
-    #scales is now a dictionary which simplifies things
-    coords = coordinates.get_coords_at_key(center=center, align=align, scale=coordinates._scales[experiment_id], key=experiment_id)
+    # Convert frames to an integer numpy array for consistent indexing
+    frames = np.asarray(frames, dtype=int)
 
-    # Filter requested animals
-    coords_list=[]
-    for aid in animal_id:
-        coords_list.append(deepof.utils.filter_animal_id_in_table(table=coords, selected_id=aid))
-    coords=pd.concat(coords_list,axis=1)
+    assert len(frames)>0, "The chosen combination of bins and ROIS did not yield any relevant frames to plot!"
 
-    # Sort column index to allow for multiindex slicing
-    coords = coords.sort_index(ascending=True, inplace=False, axis=1)
-
-    # Get output scale
-    x_dv = np.maximum(
-        np.abs(coords.loc[:, (slice("x"), ["x"])].min().mean()),
-        np.abs(coords.loc[:, (slice("x"), ["x"])].max().mean()),
-    )
-    y_dv = np.maximum(
-        np.abs(coords.loc[:, (slice("x"), ["y"])].min().mean()),
-        np.abs(coords.loc[:, (slice("x"), ["y"])].max().mean()),
-    )
+    # ----------------------------------------------------------------------
+    # Sampling rate & embedding data for the requested experiment
+    # ----------------------------------------------------------------------
+    if sampling_rate is None:
+        sampling_rate = coordinates._frame_rate
 
     if embeddings is not None:
-        # Get and process data to plot from coordinates object
+        cur_embeddings = get_dt(embeddings, experiment_id)
+        cur_soft_counts = get_dt(soft_counts, experiment_id)
+    else:
+        cur_embeddings = None
+        cur_soft_counts = None
+
+    # ----------------------------------------------------------------------
+    # Coordinates preprocessing (centering, alignment, selection of animals)
+    # ----------------------------------------------------------------------
+    coords = coordinates.get_coords_at_key(
+        center=center,
+        align=align,
+        scale=coordinates._scales[experiment_id],
+        key=experiment_id,
+        animals_in_roi=animal_id,
+    )
+
+    # If we also have embeddings, align coords length to embeddings length
+    if cur_embeddings is not None:
+        win_size = coords.shape[0] - cur_embeddings.shape[0]
+        # Keep the center section
+        coords = coords.iloc[win_size // 2 : -win_size // 2]
+
+        # Apply frame selection to embeddings/soft_counts
+        cur_embeddings = cur_embeddings[frames, :]
+        cur_soft_counts = cur_soft_counts[frames, :]
+
+    # Slice coords according to selected frame range
+    coords = coords.iloc[frames, :]
+
+    # ----------------------------------------------------------------------
+    # Get output scale (use coords before possible cluster filtering)
+    # ----------------------------------------------------------------------
+    # Select x and y coordinates by MultiIndex level (level 1: 'x'/'y')
+    coords_x_for_scale = coords.xs("x", level=1, axis=1).to_numpy()
+    coords_y_for_scale = coords.xs("y", level=1, axis=1).to_numpy()
+
+    x_dv = float(np.max(np.abs(coords_x_for_scale))) if coords_x_for_scale.size else 1.0
+    y_dv = float(np.max(np.abs(coords_y_for_scale))) if coords_y_for_scale.size else 1.0
+
+    # ----------------------------------------------------------------------
+    # Embedding post-processing (UMAP etc.)
+    # ----------------------------------------------------------------------
+    if embeddings is not None:
         (
             coords,
             cur_embeddings,
@@ -2786,18 +2933,35 @@ def animate_skeleton(
             selected_cluster,
         )
 
-    # Define canvas
-    fig = plt.figure(figsize=((16 if cur_embeddings is not None else 8), 8), dpi=dpi)
+    # After _process_animation_data, recompute the x/y arrays used for animation
+    coords_x_df = coords.xs("x", level=1, axis=1)
+    coords_y_df = coords.xs("y", level=1, axis=1)
+    coords_x = coords_x_df.to_numpy()
+    coords_y = coords_y_df.to_numpy()
 
-    # If embeddings are provided, add projection plot to the left
-    if cur_embeddings is not None:
+    n_frames = coords.shape[0]
+
+    # ----------------------------------------------------------------------
+    # Define canvas
+    # ----------------------------------------------------------------------
+    fig = plt.figure(
+        figsize=((16 if embeddings is not None else 8), 8),
+        dpi=dpi,
+    )
+
+    # ----------------------------------------------------------------------
+    # Embedding subplot (if provided)
+    # ----------------------------------------------------------------------
+    if embeddings is not None:
         ax1 = fig.add_subplot(121)
 
+        # Background scatter of all valid embeddings
         _scatter_embeddings(concat_embedding, hard_counts, ax1, show=False)
 
-        # Plot current position
+        # Plot current position(s) as large markers
         umap_scatter = {}
         for i, emb in enumerate(cur_embeddings):
+            # cur_embeddings is a list of arrays, each (n_frames, 2)
             umap_scatter[i] = ax1.scatter(
                 emb[0, 0],
                 emb[0, 1],
@@ -2815,118 +2979,132 @@ def animate_skeleton(
         ax1.set_xlabel("UMAP-1")
         ax1.set_ylabel("UMAP-2")
 
-    # Add skeleton animation
-    ax2 = fig.add_subplot((122 if cur_embeddings is not None else 111))
+    # ----------------------------------------------------------------------
+    # Skeleton subplot
+    # ----------------------------------------------------------------------
+    ax2 = fig.add_subplot((122 if embeddings is not None else 111))
 
-    # Plot!
-    init_x = coords.loc[:, (slice("x"), ["x"])].iloc[0, :]
-    init_y = coords.loc[:, (slice("x"), ["y"])].iloc[0, :]
+    # Plot initialization: first frame
+    init_x = coords_x[0]
+    init_y = coords_y[0]
 
     # If there are more than one animal in the representation, display each in a different color
-    hue = None
-    cmap_all = ListedColormap(sns.color_palette("tab10", len(coordinates._animal_ids)))
-    positions = [coordinates._animal_ids.index(item) for item in animal_id]
-    cmap = ListedColormap([cmap_all(pos)for pos in positions])
-    #cmap = cmap[]
+    cmap_all = ListedColormap(
+        sns.color_palette("tab10", len(coordinates._animal_ids))
+    )
+    positions = [coordinates._animal_ids.index(a) for a in animal_id]
+    # Select colors for the requested animals in a stable way
+    colors_all = list(cmap_all.colors)
+    selected_colors = [colors_all[pos] for pos in positions]
+    cmap = ListedColormap(selected_colors)
 
+    # Compute hue: one value per point (bodypart) based on the animal id prefix
+    x_columns = coords_x_df.columns.to_list()  # level-0 labels, e.g. 'B_Nose', 'W_Nose'
+    hue = np.zeros(len(x_columns), dtype=int)
+    for idx, aid in enumerate(animal_id):
+        prefix = aid if aid.endswith("_") else f"{aid}_"
+        mask = np.array([col.startswith(prefix) for col in x_columns], dtype=bool)
+        hue[mask] = idx
+
+    # Polygons per animal
     polygons = [_get_polygon_coords(coords, aid) for aid in animal_id]
 
-    hue = np.zeros(len(np.array(init_x)))
-    for i, id in enumerate(animal_id):
+    # Create legend only once, using the selected colors
+    if legend:
+        custom_labels = [
+            ax2.scatter([], [], color=selected_colors[i], lw=3)
+            for i in range(len(animal_id))
+        ]
+        ax2.legend(custom_labels, animal_id, loc="upper right")
 
-        hue[coords.columns.levels[0].str.startswith(id)] = i
-
-        # Set a custom legend outside the plot, with the color of each animal
-
-        if legend:
-            custom_labels = [
-                plt.scatter(
-                    [np.inf],
-                    [np.inf],
-                    color=cmap(i / len(animal_id)),
-                    lw=3,
-                )
-                for i in range(len(animal_id))
-            ]
-            ax2.legend(custom_labels, animal_id, loc="upper right")
-
+    # Main scatter for bodyparts
     skeleton_scatter = ax2.scatter(
-        x=np.array(init_x),
-        y=np.array(init_y),
+        x=init_x,
+        y=init_y,
         cmap=cmap,
-        label="Original",
         c=hue,
+        label="Original",
     )
 
+    # Create polygon patches and tail lines, and keep explicit handles
+    head_patches = []
+    body_patches = []
     tail_lines = []
-    for p, aid in enumerate(polygons):
-        ax2.add_patch(
-            patches.Polygon(
-                aid[0][0, :].reshape(-1, 2),
-                closed=True,
-                fc=cmap.colors[p],
-                ec=cmap.colors[p],
-                alpha=0.5,
-            )
+
+    for p, poly in enumerate(polygons):
+        head = poly[0][0, :].reshape(-1, 2)
+        body = poly[1][0, :].reshape(-1, 2)
+        tail = poly[2][0, :].reshape(-1, 2)
+
+        head_patch = patches.Polygon(
+            head,
+            closed=True,
+            fc=selected_colors[p],
+            ec=selected_colors[p],
+            alpha=0.5,
         )
-        ax2.add_patch(
-            patches.Polygon(
-                aid[1][0, :].reshape(-1, 2),
-                closed=True,
-                fc=cmap.colors[p],
-                ec=cmap.colors[p],
-                alpha=0.5,
-            )
+        body_patch = patches.Polygon(
+            body,
+            closed=True,
+            fc=selected_colors[p],
+            ec=selected_colors[p],
+            alpha=0.5,
         )
-        tail_lines.append(ax2.plot(*aid[2][0, :].reshape(-1, 2).T))
+        ax2.add_patch(head_patch)
+        ax2.add_patch(body_patch)
+
+        (tail_line,) = ax2.plot(
+            tail[:, 0],
+            tail[:, 1],
+            color=selected_colors[p],
+        )
+
+        head_patches.append(head_patch)
+        body_patches.append(body_patch)
+        tail_lines.append(tail_line)
 
     if display_arena and center in [False, "arena"] and align is None:
         plot_arena(coordinates, center, "black", ax2, key=experiment_id)
 
-    # Update data in main plot
+    # ----------------------------------------------------------------------
+    # Animation update function
+    # ----------------------------------------------------------------------
     def animation_frame(i):
-
-        if cur_embeddings is not None:
-            # Update umap scatter
-            for j, xy in umap_scatter.items():
+        # Update UMAP scatter(s) if present
+        if embeddings is not None:
+            for j, scatter in umap_scatter.items():
                 umap_x = cluster_embedding[j][i, 0]
                 umap_y = cluster_embedding[j][i, 1]
-
-                umap_scatter[j].set_offsets(np.c_[umap_x, umap_y])
+                scatter.set_offsets(np.c_[umap_x, umap_y])
 
         # Update skeleton scatter plot
-        x = coords.loc[:, (slice("x"), ["x"])].iloc[i, :]
-        y = coords.loc[:, (slice("x"), ["y"])].iloc[i, :]
-
+        x = coords_x[i]
+        y = coords_y[i]
         skeleton_scatter.set_offsets(np.c_[x, y])
 
-        for p, aid in enumerate(polygons):
-            # Update polygons
-            ax2.patches[2 * p].set_xy(aid[0][i, :].reshape(-1, 2))
-            ax2.patches[2 * p + 1].set_xy(aid[1][i, :].reshape(-1, 2))
+        # Update polygons and tails
+        for p, poly in enumerate(polygons):
+            head = poly[0][i, :].reshape(-1, 2)
+            body = poly[1][i, :].reshape(-1, 2)
+            tail = poly[2][i, :].reshape(-1, 2)
 
-            # Update tails
-            tail_lines[p][0].set_xdata(aid[2][i, :].reshape(-1, 2)[:, 0])
-            tail_lines[p][0].set_ydata(aid[2][i, :].reshape(-1, 2)[:, 1])
+            head_patches[p].set_xy(head)
+            body_patches[p].set_xy(body)
+            tail_lines[p].set_data(tail[:, 0], tail[:, 1])
 
-        if cur_embeddings is not None:
-            return umap_scatter, skeleton_scatter
+        if embeddings is not None:
+            # Return artists for completeness; FuncAnimation does not use them
+            return tuple(umap_scatter.values()) + (skeleton_scatter,)
+        return (skeleton_scatter,)
 
-        return skeleton_scatter
-
-    #get frames to display based on binning
-    if roi_number is None:
-        frames = bin_info[experiment_id]["time"]
-    else:
-        #a pseudo behavior gets constructed from the animal ids that contains all ids intended to be inside the roi.
-        frames = get_behavior_frames_in_roi('_'.join(animals_in_roi) + '_', bin_info[experiment_id], animal_ids=animals_in_roi)
-        get_behavior_frames_in_roi._warning_issued = False
-
+    # ----------------------------------------------------------------------
+    # Build animation
+    # ----------------------------------------------------------------------
     animation = FuncAnimation(
         fig,
         func=animation_frame,
-        frames=frames,
-        interval=int(np.round(1000 // sampling_rate)),
+        frames=n_frames,
+        interval=int(round(1000.0 / sampling_rate)),
     )
 
     ax2.set_title(
@@ -2937,23 +3115,24 @@ def animate_skeleton(
     ax2.set_ylabel("y")
 
     if center not in [False, "arena"]:
-
         ax2.set_xlim(-1.5 * x_dv, 1.5 * x_dv)
         ax2.set_ylim(-1.5 * y_dv, 1.5 * y_dv)
 
     ax2.invert_yaxis()
-
     plt.tight_layout()
 
+    # ----------------------------------------------------------------------
+    # Optional saving
+    # ----------------------------------------------------------------------
     if save is not None:
-        save = os.path.join(
+        save_path = os.path.join(
             coordinates._project_path,
             coordinates._project_name,
             "Out_videos",
             "deepof_embedding_animation{}_{}_start{}-duration{}_{}.mp4".format(
                 (f"_{save}" if isinstance(save, str) else ""),
                 (
-                    "cluster={}".format(selected_cluster)
+                    f"cluster={selected_cluster}"
                     if selected_cluster is not None
                     else experiment_id
                 ),
@@ -2963,8 +3142,8 @@ def animate_skeleton(
             ),
         )
 
-        writevideo = FFMpegWriter(fps=sampling_rate)
-        animation.save(save, writer=writevideo)
+        writer = FFMpegWriter(fps=int(round(sampling_rate)))
+        animation.save(save_path, writer=writer)
 
     return animation.to_html5_video()
 
@@ -3179,6 +3358,7 @@ def export_annotated_video(
     roi_number: int =None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     #others
     behaviors: list = None,
     experiment_id: str = None,
@@ -3203,13 +3383,14 @@ def export_annotated_video(
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
         frame_limit_per_video (int): number of frames to render per video. If None, all frames are included for all videos.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse           
         behaviors (list): Behaviors or Clusters to that get exported. If none is given, all are exported for softcounts and only nose2nose is exported for supervised annotations. If multiple behaviors are given as a list, one video can get annotated with multiple different behaviors
         experiment_id (str): if provided, data coming from a particular experiment is used. If not, all experiments are exported.
         min_confidence (float): minimum confidence threshold for a frame to be considered part of a cluster.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
-        display_time (bool): Displays current time in top left corner of teh video frame
+        display_time (bool): Displays current time in top left corner of the video frame
         display_counter (bool): Displays event counter for each displayed event.
         display_arena (bool): Displays arena for each video.
         display_markers (bool): Displays mouse body parts on top of the mice.
@@ -3227,6 +3408,8 @@ def export_annotated_video(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
+        #behaviors=behaviors,
     )
     # Create video config
     video_export_config = VideoExportConfig(
@@ -3235,6 +3418,7 @@ def export_annotated_video(
         display_arena=display_arena,
         display_markers=display_markers,
         display_mouse_labels=display_mouse_labels,
+        supervised_export=supervised_annotations is not None,
     )   
 
     if animals_in_roi is None or roi_mode=="behaviorwise":
@@ -3274,21 +3458,42 @@ def export_annotated_video(
 
     #preprocess time bins            
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict,
+        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=np.inf
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
     
     # special case: an experiment id was given
     if experiment_id is not None:
 
-        # get frames for this experiment id
+        # get current tab and video path
+        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
+
+        # Reformat current tab into data table with cluster names as column names
+        if soft_counts is not None:
+            all_cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
+            cur_tab=pd.DataFrame(cur_tab,columns=all_cluster_names)
+
+        # Set default behavior if no behaviors were given
         if behaviors is None and supervised_annotations is not None:
-            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
             behaviors = [cur_tab.columns[0]]
-        elif behaviors is not None and behaviors[0] == "all" and supervised_annotations is not None:
-            cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-            behaviors = cur_tab.columns     
+            print(
+            f'\033[33mInfo! No supervised behaviors selected, default to {cur_tab.columns[0]}! (enter "all" if you want all behaviors exported)\033[0m'
+            )
+        elif "all" in behaviors and supervised_annotations is not None:
+            behaviors = list(cur_tab.columns) 
+            behaviors = [behavior for behavior in behaviors if not "speed" in behavior]
+            cluster_names = behaviors
+        elif behaviors is None:
+            behaviors = list(cur_tab.columns)
+
+        # Filter out low certainty behaviors (only relevant in unsupervised case)
+        behavior_mask, _ = deepof.utils.get_behavior_mask_and_confidence(
+            cur_tab, behaviors, video_export_config.supervised_export
+        )
+        cur_tab=behavior_mask.astype(float)
+        
+        # Get frames for this experiment id
         if roi_number is not None:
             if roi_mode == "behaviorwise":
                 behavior_in=behaviors[0]
@@ -3298,16 +3503,9 @@ def export_annotated_video(
                 behavior_in=None
             frames=get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[experiment_id], animal_ids=animals_in_roi)
         else:
-            frames=bin_info[experiment_id]["time"]
-        # get current tab and video path
-        cur_tab=copy.deepcopy(get_dt(tab_dict, experiment_id))
-        
-        # reformat current tab into data table with cluster names as column names
-        if soft_counts is not None:
-            all_cluster_names = ["Cluster_"+ str(k) for k in range(soft_counts[first_key].shape[1])]
-            cur_tab=pd.DataFrame(cur_tab,columns=all_cluster_names)
+            frames=bin_info[experiment_id]["time"]     
 
-        # handle defaults
+        # Handle frame defaults
         if frame_limit_per_video is None:
             frame_limit_per_video = np.inf
 
@@ -3319,7 +3517,7 @@ def export_annotated_video(
             experiment_id=experiment_id,                
             tab=cur_tab,
             behaviors=behaviors,
-            config=video_export_config,
+            video_export_config=video_export_config,
             frames=frames,
             out_path=out_path,
             behaviors_renamed=cluster_names
@@ -3348,7 +3546,7 @@ def export_annotated_video(
             min_confidence=min_confidence,
             min_bout_duration=min_bout_duration,
             out_path=out_path,
-            config=video_export_config,
+            video_export_config=video_export_config,
             roi_mode=roi_mode,
         )
 
@@ -3524,10 +3722,12 @@ def plot_behavior_trends(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Visualization
     hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
@@ -3552,8 +3752,9 @@ def plot_behavior_trends(
     N_time_bins (int): Number of time bins for data separation. Defaults to 24.
     custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
     roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
-    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+    animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
     roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+    in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse    
     hide_time_bins (List[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all tiem bins.    
     polar_depiction (bool): if True, display as polar plot. Defaults to True.
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
@@ -3579,6 +3780,7 @@ def plot_behavior_trends(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -3593,6 +3795,7 @@ def plot_behavior_trends(
 
     # Init exp_condition if not given
     if not exp_condition:
+        assert coordinates.get_exp_conditions is not None, "Please load your experiment conditions first!"
         exp_condition = coordinates.get_exp_conditions[
             next(iter(coordinates.get_exp_conditions))
         ].columns[0]
@@ -3638,6 +3841,24 @@ def plot_behavior_trends(
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
+    
+    #####
+    # Get ROI bin info
+    ##### 
+
+    #create full time bins covering entire signal
+    if supervised_annotations is not None:
+        bin_info_time = _preprocess_time_bins(
+        coordinates, None, None, None, samples_max=samples_max,
+        tab_dict_for_binning=supervised_annotations,
+        )
+    else:            
+        bin_info_time = _preprocess_time_bins(
+            coordinates, None, None, None, samples_max=samples_max, 
+            tab_dict_for_binning=soft_counts,
+        )
+    # Create ROI bins
+    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -3647,11 +3868,13 @@ def plot_behavior_trends(
 
     # Init hidden bins if not given
     if not hide_time_bins:
-        hide_time_bins = [False] * len(custom_time_bins)
+        hide_time_bins = np.array([False] * len(custom_time_bins))
     elif not len(hide_time_bins) == len(custom_time_bins):
         raise ValueError(
             f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
         )
+    else:
+       hide_time_bins= np.array(hide_time_bins)
 
     # Set behavior ids
     if plot_type == "unsupervised":
@@ -3662,7 +3885,6 @@ def plot_behavior_trends(
     elif plot_type == "supervised":
         keys=list(supervised_annotations.keys())
         behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
-
 
     #####
     # Some validity checks and more formatting
@@ -3723,26 +3945,6 @@ def plot_behavior_trends(
             f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
         )
     
-    #####
-    # Get ROI bin info
-    ##### 
-
-    if roi_number is not None:
-        #create full time bins covering entire signal
-        if supervised_annotations is not None:
-            bin_info_time = _preprocess_time_bins(
-            coordinates, None, None, None, 
-            tab_dict_for_binning=supervised_annotations,
-            )
-        else:            
-            bin_info_time = _preprocess_time_bins(
-                coordinates, None, None, None,  
-                tab_dict_for_binning=soft_counts,
-            )
-        # Create ROI bins
-        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
-
-
 
     #####
     # Collect data for plotting
@@ -3761,32 +3963,62 @@ def plot_behavior_trends(
             continue
 
         if plot_type == "unsupervised":
-            data_set=get_dt(soft_counts,key)
+            data_set=get_dt(soft_counts,key,load_range=roi_bin_info[key]['time'])
             if roi_number is not None:
                 data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
             index_dict_fn = lambda x: x[
                 :, int(re.search(r"\d+", behavior_to_plot).group())
             ]
         elif plot_type == "supervised":
-            data_set=get_dt(supervised_annotations,key)
+            data_set=get_dt(supervised_annotations,key,load_range=roi_bin_info[key]['time'])
             if roi_number is not None:
                 data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
             index_dict_fn = lambda x: x[
                 behavior_to_plot
             ]  # Specialized index functions to handle differing data_snippet formatting
 
+        # time vector aligned with loaded data_set
+        t = np.asarray(roi_bin_info[key]["time"])
+
         # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
         for i, (bin_start, bin_end) in enumerate(custom_time_bins):
 
-            #get current snippet
-            data_snippet=data_set[bin_start:bin_end]
+            # Inclusive end to mimic the original semantics
+            in_bin = (t >= bin_start) & (t <= bin_end)
 
-            behavior_timebin = np.nansum(index_dict_fn(data_snippet))
-            if normalize or behavior_to_plot == "speed":
-                behavior_timebin = behavior_timebin / len(
-                    index_dict_fn(data_snippet)
-                )
-            
+            if not np.any(in_bin):
+                behavior_timebin = np.nan
+            else:
+                data_snippet = data_set[in_bin]
+                vals = index_dict_fn(data_snippet)
+                vals = np.asarray(vals)
+
+                if behavior_to_plot == "speed":
+                    # time-weighted average speed
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.average(vals[val_mask])
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+
+                elif normalize:
+                    # fraction of time (or prob.) within bin
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+                else: #don't normalize
+                    val_mask = ~np.isnan(vals)
+                    behavior_timebin = (
+                        np.nansum(vals[val_mask])/coordinates._frame_rate
+                        if np.any(val_mask)
+                        else np.nan
+                    )
+
+
             new_row = pd.DataFrame(
                 [
                     {
@@ -3799,9 +4031,31 @@ def plot_behavior_trends(
             df = pd.concat([df, new_row], ignore_index=True)
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
-    # Normalize frames to reflect seconds
-    df[behavior_to_plot] = df[behavior_to_plot] / coordinates._frame_rate
-    
+    #Remove missing values (less than 20% of values remainign per group) 
+    min_frac = 0.05 #20
+    num_bins = len(custom_time_bins)
+
+    # Create table denoting teh nan percentage for each group and bin
+    coverage = df.pivot_table(
+        index="time_bin", columns="exp_condition", values=behavior_to_plot,
+        aggfunc=lambda s: s.notna().mean()
+    ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
+
+    enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
+    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
+    if not all(enough_data_per_bin):
+        warning_message = (
+            "\033[38;5;208m\n"
+            f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
+            f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
+            "\033[0m"
+        )
+        print(warning_message)    
+
+    # exclude time bins that are always NaN (which will also exclude them from statistics)
+    mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
+    df = df[mask].copy()
+
     assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
 
     # Calculate mean values and errors accross samples
@@ -3835,7 +4089,7 @@ def plot_behavior_trends(
             (df["exp_condition"] == condition_values[1]) & (df["time_bin"] == k),
             behavior_to_plot,
         ].values
-        d = abs(deepof.visuals_utils.cohend(array_a, array_b))  # Calc d
+        d = abs(deepof.visuals_utils.cohend(array_a[~np.isnan(array_a)], array_b[~np.isnan(array_b)]))  # Calc d
         d_effect_size = deepof.visuals_utils.cohend_effect_size(d)  # Est. effect size
         # Collect data
         new_row = pd.DataFrame(
@@ -3975,75 +4229,125 @@ def plot_behavior_trends(
             if i > 0:
                 mask[int_pos[i - 1] + 1 : int_pos[i]] = True
 
-    # Plot the mean value lines for each group
-    for i in range(2):
-        # Interpolate the data to create a smooth line
-        interp_func = interp1d(mid_angles, mean_values[i], kind="cubic")
-        smooth_mean_values = interp_func(smooth_mean_angles)
-        masked_angles = np.ma.masked_array(smooth_mean_angles, mask)  # mask lines
-        masked_values = np.ma.masked_array(smooth_mean_values, mask)
-        ax.plot(
-            masked_angles,
-            masked_values,
-            linewidth=3,
-            label=f"{[condition_values[0],condition_values[1]][i]}",
-            color=colors[i],
-            linestyle="-",
-            alpha=0.8,
-        )
+    # --- Plot means, markers and errors for each group ---------------------------------
+    marker_handles = [None, None]
+    smooth_err_values = [None, None]
 
-    # Plot markers for each group
-    marker_handles = [0, 0]
     for i in range(2):
-        masked_mid_angles = np.ma.masked_array(mid_angles, hide_time_bins)
-        masked_mean_values = np.ma.masked_array(mean_values[i], hide_time_bins)
+        y_mean = mean_values[i]
+        y_err = error_values[i]
+        color = colors[i]
+        label = condition_values[i]  
+
+        # -------------------------------------------------------------------------
+        # 1) Smooth mean value lines over contiguous non-NaN segments
+        # -------------------------------------------------------------------------
+        valid_mean = ~np.isnan(y_mean)
+        first_segment = True
+
+        for sl in deepof.visuals_utils.contiguous_segments(valid_mean):
+            x_seg = mid_angles[sl]
+            y_seg = y_mean[sl]
+
+            # Interpolate only within this contiguous segment
+            interp_func = interp1d(x_seg, y_seg, kind="cubic")
+
+            # Take only the part of smooth_mean_angles that lies inside this segment
+            seg_mask = (
+                (smooth_mean_angles >= x_seg[0])
+                & (smooth_mean_angles <= x_seg[-1])
+            )
+            x_smooth_seg = smooth_mean_angles[seg_mask]
+            y_smooth_seg = interp_func(x_smooth_seg)
+
+            # Apply the external mask on the smooth grid
+            x_masked = np.ma.masked_array(x_smooth_seg, mask[seg_mask])
+            y_masked = np.ma.masked_array(y_smooth_seg, mask[seg_mask])
+
+            ax.plot(
+                x_masked,
+                y_masked,
+                linewidth=3,
+                label=label if first_segment else None,  # avoid repeated legend entries
+                color=color,
+                linestyle="-",
+                alpha=0.8,
+            )
+            first_segment = False
+
+        # -------------------------------------------------------------------------
+        # 2) Markers at original mid_angles (also hide NaNs)
+        # -------------------------------------------------------------------------
+        point_mask = hide_time_bins | np.isnan(y_mean)
+
+        masked_mid_angles = np.ma.masked_array(mid_angles, point_mask)
+        masked_mean_values = np.ma.masked_array(y_mean, point_mask)
+
         marker_handles[i] = ax.plot(
             masked_mid_angles,
             masked_mean_values,
             marker="o",
             linestyle="",
-            color=ax.lines[i].get_color(),
+            color=color,
             linewidth=2,
-        )  # Use the same color as the line
+        )[0]
 
-    # Interpolate error bars
-    smooth_err_values = []
-    for i in range(2):
-        interp_sem_func = interp1d(mid_angles, error_values[i], kind="cubic")
-        smooth_err_values.append(
-            interp_sem_func(mid_angles)
-        )  # Use the original angles array
+        # -------------------------------------------------------------------------
+        # 3) Error interpolation over contiguous non-NaN segments
+        #    (use original mid_angles grid, but avoid NaNs for interp1d)
+        # -------------------------------------------------------------------------
+        smooth_err = np.full_like(y_err, np.nan, dtype=float)
 
-    # Plot the error as lines above and below the mean values
-    for i in range(2):
+        valid_err = (~np.isnan(y_err)) & (~np.isnan(y_mean))
+        for sl in deepof.visuals_utils.contiguous_segments(valid_err):
+            x_seg = mid_angles[sl]
+            err_seg = y_err[sl]
+
+            interp_sem_func = interp1d(x_seg, err_seg, kind="cubic")
+            # still evaluate on the original grid within this segment
+            smooth_err[sl] = interp_sem_func(x_seg)
+
+        smooth_err_values[i] = smooth_err
+
+        # -------------------------------------------------------------------------
+        # 4) Plot error lines and shaded error band
+        # -------------------------------------------------------------------------
+        err_mask = point_mask | np.isnan(smooth_err)
+
+        x_err = np.ma.masked_array(mid_angles, err_mask)
+        upper = np.ma.masked_array(y_mean + smooth_err, err_mask)
+        lower = np.ma.masked_array(y_mean - smooth_err, err_mask)
+
+        # Error lines above and below the mean
         ax.plot(
-            masked_mid_angles,
-            mean_values[i] + smooth_err_values[i],
-            linestyle="",
-            color=colors[i],
+            x_err,
+            upper,
+            linestyle="--",
+            color=color,
             alpha=0.8,
+            linewidth=1,
         )
         ax.plot(
-            masked_mid_angles,
-            mean_values[i] - smooth_err_values[i],
-            linestyle="",
-            color=colors[i],
+            x_err,
+            lower,
+            linestyle="--",
+            color=color,
             alpha=0.8,
+            linewidth=1,
         )
 
-    # Shade error
-    for i in range(2):
+        # Shaded error band
         ax.fill_between(
-            masked_mid_angles,
-            mean_values[i] + smooth_err_values[i],
-            mean_values[i] - smooth_err_values[i],
-            color=colors[i],
+            x_err,
+            lower,
+            upper,
+            color=color,
             alpha=0.15,
         )
 
     # Set custom ticks and labels for the y axes
     ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18, y=1.15)
-    max_value = np.max(mean_values)
+    max_value = np.nanmax(mean_values)
     y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
     ax.set_yticks(y_ticks)
 
@@ -4066,7 +4370,7 @@ def plot_behavior_trends(
 
         # Add legend of first part of plot
         legend_1 = ax.legend(
-            handles=[marker_handles[0][0], marker_handles[1][0]],
+            handles=[marker_handles[0], marker_handles[1]],
             labels=[condition_values[0], condition_values[1]],
             fontsize=12,
             loc="upper right",
@@ -4081,11 +4385,17 @@ def plot_behavior_trends(
 
         # Add axis labels
         ax.set_xlabel("Time Bins", fontsize=12)
-        ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
+
+        if behavior_to_plot == "speed":
+            ax.set_ylabel(f"{behavior_to_plot} [avg. speed]", fontsize=12)
+        elif normalize:
+            ax.set_ylabel(f"{behavior_to_plot} [%]", fontsize=12)
+        else:
+            ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
 
         # Add legend
         legend_1 = ax.legend(
-            handles=[marker_handles[0][0], marker_handles[1][0]],
+            handles=[marker_handles[0], marker_handles[1]],
             labels=[condition_values[0], condition_values[1]],
             fontsize=12,
             loc="upper right",
@@ -4232,6 +4542,7 @@ def get_roi_data(
     roi_number: int,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -4246,8 +4557,9 @@ def get_roi_data(
         coordinates (coordinates): deepOF project where the data is stored.
         table_dict (table_dict): table dict with information for ROi extraction. Can be supervised or unsupervised data.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded)       
-        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of teh ROI get excluded                                                  
+        animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                                                  
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+        in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
@@ -4262,6 +4574,7 @@ def get_roi_data(
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
     )
     if coordinates._very_large_project and experiment_id is None:
         raise NotImplementedError(
@@ -4286,7 +4599,7 @@ def get_roi_data(
         tab_dict_for_binning=table_dict, samples_max=samples_max,
     )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)    
 
     object_out={}
     for key in exp_ids:
