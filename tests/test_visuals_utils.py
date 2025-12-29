@@ -24,6 +24,7 @@ from shutil import rmtree
 import warnings
 
 import deepof.data
+import deepof.visuals_utils
 from deepof.data import TableDict
 from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
@@ -56,6 +57,22 @@ def test_time_conversion(second, full_second):
     second = np.round(second * 10**9) / 10**9 #up to 9 digits allowed
     second_second=time_to_seconds(seconds_to_time(float(second), cut_milliseconds=False)) 
     assert second == second_second #this pun is intended and necessary
+
+
+@given(
+    r=st.integers(min_value=0, max_value=255),
+    g=st.integers(min_value=0, max_value=255),
+    b=st.integers(min_value=0, max_value=255),
+)
+def test_color_conversion(r, g, b):
+    bgr_color = (b, g, r)
+    rgb_color = (r, g, b)
+    
+    # Test BGR -> hex -> BGR round trip
+    assert bgr_color == deepof.visuals_utils.hex_to_BGR(deepof.visuals_utils.BGR_to_hex(bgr_color))
+    
+    # Test that RGB_to_hex and BGR_to_hex produce the same hex for equivalent colors
+    assert deepof.visuals_utils.RGB_to_hex(rgb_color) == deepof.visuals_utils.BGR_to_hex(bgr_color)
 
 
 @settings(max_examples=2, deadline=None)
