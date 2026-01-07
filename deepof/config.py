@@ -9,9 +9,10 @@ TWO_ANIMALS_COLOR_MAP = ['#081ee4', '#aa2e47', '#d62246', '#179c79', '#06d6a0', 
 DEEPOF_8_BODYPARTS = ['Center', 'Left_ear', 'Left_fhip', 'Nose', 'Right_ear', 'Right_fhip', 'Tail_base', 'Tail_tip']
 DEEPOF_11_BODYPARTS = ['Center', 'Left_bhip', 'Left_ear', 'Left_fhip', 'Nose', 'Right_bhip', 'Right_ear', 'Right_fhip', 'Spine_1', 'Spine_2', 'Tail_base']
 DEEPOF_14_BODYPARTS = ['Center', 'Left_bhip', 'Left_ear', 'Left_fhip', 'Nose', 'Right_bhip', 'Right_ear', 'Right_fhip', 'Spine_1', 'Spine_2', 'Tail_1', 'Tail_2', 'Tail_base', 'Tail_tip']
-SINGLE_BEHAVIORS=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing", "speed"]
+SINGLE_BEHAVIORS=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing"]
 SYMMETRIC_BEHAVIORS=["nose2nose","sidebyside","sidereside"]
 ASYMMETRIC_BEHAVIORS=["nose2tail","nose2body","following"]
+CONTINUOUS_BEHAVIORS=["distance","cum_distance","speed"]
 
 ROI_COLORS = [(204,  20,  20),
        (204, 131,  20),

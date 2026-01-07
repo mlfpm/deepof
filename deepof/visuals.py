@@ -35,7 +35,7 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS
+from deepof.config import ROI_COLORS, CONTINUOUS_BEHAVIORS
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
@@ -452,7 +452,7 @@ def _plot_experiment_gantt(
         behavior_ids = [
             col
             for col in data_frame.columns
-            if "speed" not in col
+            if not col.endswith(tuple(CONTINUOUS_BEHAVIORS))
         ]
 
     # only keep valid ids
@@ -1865,9 +1865,10 @@ def plot_associations(
     elif not exclude_given_behaviors:
         behaviors = list(set(available_behaviors)-set(behaviors))
     # Always exclude
-    always_exclude=["speed"]
+    always_exclude=CONTINUOUS_BEHAVIORS
     if coordinates._animal_ids is not None:
-        always_exclude = [id + "_" + "speed" for id in coordinates._animal_ids]
+        for con_behavior in CONTINUOUS_BEHAVIORS:
+            always_exclude = [id + "_" + con_behavior for id in coordinates._animal_ids]
     behaviors = behaviors + always_exclude
 
     if experiment_id is not None:
@@ -3482,7 +3483,7 @@ def export_annotated_video(
             )
         elif "all" in behaviors and supervised_annotations is not None:
             behaviors = list(cur_tab.columns) 
-            behaviors = [behavior for behavior in behaviors if not "speed" in behavior]
+            behaviors = [behavior for behavior in behaviors if not behavior.endswith(tuple(CONTINUOUS_BEHAVIORS))]
             cluster_names = behaviors
         elif behaviors is None:
             behaviors = list(cur_tab.columns)
@@ -3993,7 +3994,7 @@ def plot_behavior_trends(
                 vals = index_dict_fn(data_snippet)
                 vals = np.asarray(vals)
 
-                if behavior_to_plot == "speed":
+                if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
                     # time-weighted average speed
                     val_mask = ~np.isnan(vals)
                     behavior_timebin = (
@@ -4386,8 +4387,10 @@ def plot_behavior_trends(
         # Add axis labels
         ax.set_xlabel("Time Bins", fontsize=12)
 
-        if behavior_to_plot == "speed":
-            ax.set_ylabel(f"{behavior_to_plot} [avg. speed]", fontsize=12)
+        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+            candidates = [s for s in CONTINUOUS_BEHAVIORS if behavior_to_plot.endswith(s)]
+            closest_suffix = max(candidates, key=len)
+            ax.set_ylabel(f"{behavior_to_plot} [avg. " + closest_suffix +"]", fontsize=12)    
         elif normalize:
             ax.set_ylabel(f"{behavior_to_plot} [%]", fontsize=12)
         else:

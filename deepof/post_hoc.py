@@ -39,7 +39,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.mixture import GaussianMixture
 import torch
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, CONTINUOUS_BEHAVIORS
 import deepof.data
 import deepof.utils
 import deepof.visuals_utils
@@ -871,9 +871,9 @@ def enrichment_across_conditions(
 
             #only keep speed column or only drop speed column
             if plot_speed:
-                selected_columns = [col for col in current_sa.columns if "speed" in col]
+                selected_columns = [col for col in current_sa.columns if col.endswith("speed")]
             else:
-                selected_columns = [col for col in current_sa.columns if "speed" not in col]
+                selected_columns = [col for col in current_sa.columns if not col.endswith(tuple(CONTINUOUS_BEHAVIORS))]
 
             table = current_sa[selected_columns]
 

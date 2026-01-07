@@ -36,6 +36,7 @@ from deepof.config import (
     SINGLE_BEHAVIORS,
     SYMMETRIC_BEHAVIORS,
     ASYMMETRIC_BEHAVIORS,
+    CONTINUOUS_BEHAVIORS,
 )
 
 
@@ -229,16 +230,17 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
     # Process single mouse behaviors
     for animal_id in animal_ids:
         for behavior in single_behaviors:
-            if behavior != "missing" and behavior != "speed":
+            if behavior != "missing" and behavior not in CONTINUOUS_BEHAVIORS:
                 combined = f"{animal_id}_{behavior}"
                 result.append(combined)
     
     # Add missing
     if "missing" in single_behaviors:            
         result = result + [id + "_missing" for id in animal_ids] 
-    # Add speed
-    if "speed" in single_behaviors:            
-        result = result + [id + "_speed" for id in animal_ids]           
+    # Add continuous behaviors
+    for cont_behavior in CONTINUOUS_BEHAVIORS:
+        if cont_behavior in single_behaviors:            
+            result = result + [id + "_" +cont_behavior for id in animal_ids]           
     
     return result
 

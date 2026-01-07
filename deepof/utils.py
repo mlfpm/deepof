@@ -37,7 +37,7 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.utils
@@ -1037,7 +1037,7 @@ def count_transitions(
         
         # Drop non-binary columns (speed column in supervised)
         for col in columns:
-            if col.endswith('_speed') or col == 'speed':
+            if col.endswith(tuple(CONTINUOUS_BEHAVIORS)):
                 tab=tab.drop(columns=[col])
 
         # Update columns
@@ -2403,7 +2403,7 @@ def rolling_speed(
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
-    """Return the average speed over n frames in pixels per frame.
+    """Return the average speed over n frames in mm per second.
 
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.

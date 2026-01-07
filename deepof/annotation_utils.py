@@ -965,6 +965,7 @@ def supervised_tagging(
     # Extract arena information from coordinates object
     arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
     arena_type = coord_object._arena
+    frame_rate = coord_object._frame_rate
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
@@ -1081,8 +1082,8 @@ def supervised_tagging(
         
 
     @_suppress_warning(warn_messages=["All-NaN slice encountered"])
-    def overall_speed(ovr_speeds, _id, ucond):
-        """Return the overall speed of a mouse."""
+    def get_continuous_measures(ovr_speeds, _id, ucond, frame_rate):
+        """Return the overall speed and cumulative distance of each mouse."""
         bparts = [
             "Center",
             "Spine_1",
@@ -1104,7 +1105,14 @@ def supervised_tagging(
         ]
         array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
-        return np.insert(avg_speed, 0, np.nan, axis=0)
+        avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
+
+        # convert from mm per second to mm
+        avg_distance = avg_speed * 1/frame_rate
+
+        cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
+
+        return avg_distance, cum_distance, avg_speed
 
     # Get all animal ID combinations
     animal_pairs = list(combinations(animal_ids, 2))
@@ -1280,7 +1288,7 @@ def supervised_tagging(
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
-        tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
+        tag_dict[_id + undercond + "distance"], tag_dict[_id + undercond + "cum_distance"], tag_dict[_id + undercond + "speed"] = get_continuous_measures(speeds, _id, undercond, frame_rate)
 
 
 
