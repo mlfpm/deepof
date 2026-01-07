@@ -219,11 +219,11 @@ def plot_heatmaps(
     )
     
     if display_arena:
-        for hmap in heatmaps:
+        for hmap in heatmaps.ravel():
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
     if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
-        for hmap in heatmaps:
+        for hmap in heatmaps.ravel():
             color = BGR_to_hex(ROI_COLORS[roi_number-1])
             plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
 

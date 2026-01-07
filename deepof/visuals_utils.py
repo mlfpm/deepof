@@ -1530,6 +1530,19 @@ def plot_arena(
             ls="--",
         )
         
+def get_square_shape_for_gridlike_plot(N):
+    """get best number of rows and columns for grid like plots"""
+    assert N > 0
+    assert isinstance(N, int)
+    
+    sqrt_n = np.sqrt(N)
+    # Find divisor closest to sqrt(N)
+    n_cols = min(
+        (d for d in range(int(sqrt_n), 0, -1) if N % d == 0),
+        key=lambda d: abs(d - sqrt_n)
+    )
+    n_rows = N // n_cols
+    return n_rows, n_cols
 
 def heatmap(
     dframe: pd.DataFrame,
@@ -1564,13 +1577,16 @@ def heatmap(
     """
     # noinspection PyTypeChecker
     if ax is None:
+
+        n_rows,n_cols=get_square_shape_for_gridlike_plot(len(bodyparts))
+
         heatmaps, ax = plt.subplots(
-            1,
-            len(bodyparts),
+            n_rows, 
+            n_cols,
             sharex=True,
             sharey=True,
             dpi=dpi,
-            figsize=(8 * len(bodyparts), 8),
+            figsize=(8 * n_cols, 8 * n_rows),
         )
 
     if isinstance(dframe, dict):
@@ -1601,7 +1617,7 @@ def heatmap(
             mask, (0, len(dframe) - len(mask)), "constant", constant_values=False
         )
 
-    for i, bpart in enumerate(bodyparts):
+    for x, bpart in zip(ax.ravel(),bodyparts):
         heatmap = dframe[bpart].loc[mask].dropna()
 
         if len(bodyparts) > 1:
@@ -1613,7 +1629,7 @@ def heatmap(
                 #cut=0,
                 #bw_adjust=0.5,
                 alpha=1,
-                ax=ax[i],
+                ax=x,
                 **kwargs,
             )
         else:
@@ -1625,12 +1641,12 @@ def heatmap(
                 #cut=0,
                 #bw_adjust=0.5,
                 alpha=1,
-                ax=ax,
+                ax=x,
                 **kwargs,
             )
             ax = np.array([ax])
 
-    for x, bp in zip(ax, bodyparts):
+    for x, bp in zip(ax.ravel(), bodyparts):
         if xlim is not None:
             x.set_xlim(xlim)
         if ylim is not None:
@@ -1650,6 +1666,7 @@ def heatmap(
                 ),
             )
         )
+
 
     return ax
 
