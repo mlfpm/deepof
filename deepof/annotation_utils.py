@@ -1105,11 +1105,13 @@ def supervised_tagging(
         ]
         array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
-        avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
+        # / 1000 to get to m per s 
+        avg_speed = np.insert(avg_speed, 0, np.nan, axis=0) /1000
 
-        # convert from mm per second to mm
-        avg_distance = avg_speed * 1/frame_rate
+        # convert from m per second to m
+        avg_distance = avg_speed * 1/frame_rate 
 
+        # in meters
         cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
 
         return avg_distance, cum_distance, avg_speed

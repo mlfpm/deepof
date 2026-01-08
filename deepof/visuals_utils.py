@@ -173,7 +173,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
-        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
+        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
         color_map = TWO_ANIMALS_COLOR_MAP
 
     supervised_max = 1
@@ -198,7 +198,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     return colors
 
 
-def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_behaviors, single_behaviors):
+def generate_behavior_combinations(animal_ids, symmetric_behaviors=True, asymmetric_behaviors=True, single_behaviors=True, continuous_behaviors=True):
     """
     Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
 
@@ -212,6 +212,24 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
         list: A list of strings with the combined animal IDs and behaviors.
     """
     result = []
+    # Defaults for boolean true false inputs if no list of names is given
+    if symmetric_behaviors==True:
+        symmetric_behaviors = SYMMETRIC_BEHAVIORS
+    elif symmetric_behaviors==False:
+        symmetric_behaviors=[]
+    if asymmetric_behaviors==True:
+        asymmetric_behaviors = ASYMMETRIC_BEHAVIORS
+    elif asymmetric_behaviors==False:
+        asymmetric_behaviors=[]
+    if single_behaviors==True:
+        single_behaviors = SINGLE_BEHAVIORS
+    elif single_behaviors==False:
+        single_behaviors=[]
+    if continuous_behaviors==True:   
+        continuous_behaviors=CONTINUOUS_BEHAVIORS
+    elif continuous_behaviors==False:
+        continuous_behaviors=[]
+
     
     # Process symmetric paired behaviors
     for behavior in symmetric_behaviors:
@@ -238,9 +256,8 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
     if "missing" in single_behaviors:            
         result = result + [id + "_missing" for id in animal_ids] 
     # Add continuous behaviors
-    for cont_behavior in CONTINUOUS_BEHAVIORS:
-        if cont_behavior in single_behaviors:            
-            result = result + [id + "_" +cont_behavior for id in animal_ids]           
+    for cont_behavior in continuous_behaviors:
+        result = result + [id + "_" +cont_behavior for id in animal_ids]           
     
     return result
 
@@ -589,6 +606,9 @@ def cohend(array_a: np.array, array_b: np.array):
         Medium Effect Size: d=0.50
         Large Effect Size: d=0.80.
     """
+    if not hasattr(cohend, '_warning_issued'):
+        cohend._warning_issued = False
+
     if len(array_a)<2 or len(array_b) < 2:
         warnings.warn(
             '\033[33mInfo! At least one of the selected groups has only one element!\n Setting cohens D to 0!\033[0m'
@@ -606,9 +626,10 @@ def cohend(array_a: np.array, array_b: np.array):
         / (n1 + n2 - 2)
     )
     # Check if the pooled standard deviation is 0
-    if s < 1e-10:
+    if s < 1e-10 and not cohend._warning_issued:
         # Handle the case when the standard deviation is 0 by setting effect size to 0
         print("Standard deviation is close to 0 (std < 1e-10). Setting Cohen's d to 0.")
+        cohend._warning_issued = True
         return 0
     else:
         # Calculate the effect size (Cohen's d)
@@ -1379,6 +1400,7 @@ def _check_enum_inputs(
     if supervised_annotations:
         first_key = list(supervised_annotations.keys())[0]
         behavior_opts.extend(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
+        behavior_opts.extend(coordinates._animal_ids)
     if soft_counts:
         first_key = list(soft_counts.keys())[0]
         n_clusters = get_dt(soft_counts, first_key, only_metainfo=True)['num_cols']
@@ -1433,7 +1455,7 @@ def _check_enum_inputs(
         ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False),
         ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True),
         ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True),
-        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", True),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False),
         ("bodyparts", bodyparts, bodypart_opts, True, None, False),
         ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False),
         ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True),
