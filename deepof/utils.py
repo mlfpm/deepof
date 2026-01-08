@@ -2403,7 +2403,7 @@ def rolling_speed(
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
-    """Return the average speed over n frames in mm per second.
+    """Return the average speed over n frames in millimeters per second.
 
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.

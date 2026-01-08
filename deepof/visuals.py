@@ -390,7 +390,7 @@ def _plot_experiment_gantt(
     )
     if isinstance(behaviors_to_plot, str):
         behaviors_to_plot=[behaviors_to_plot]
-    if  all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
+    if  behaviors_to_plot is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
         behaviors_to_plot = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot)
 
 
@@ -587,6 +587,11 @@ def _plot_behavior_gantt(
 
     """
 
+    # extra check for special situation
+    if any([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in [behavior_id]]):
+        raise ValueError(
+            f'Invalid value "{behavior_id}". The Gantt plot can only compare one behavior accross conditions in behavior mode!'
+        )
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -1083,7 +1088,7 @@ def plot_enrichment(
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed [mm/s]"
+        y_axis_label = "average speed [m/s]"
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100
