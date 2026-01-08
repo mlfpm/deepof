@@ -230,34 +230,39 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors=True, asymmet
     elif continuous_behaviors==False:
         continuous_behaviors=[]
 
+    if animal_ids is None:
+        animal_ids=[""]
+    else:
+        animal_ids=[id + "_" for id in animal_ids]
+
     
     # Process symmetric paired behaviors
     for behavior in symmetric_behaviors:
         for pair in itertools.combinations(animal_ids, 2):
             # Sort the pair to ensure consistent order and avoid duplicates
             sorted_pair = sorted(pair)
-            combined = f"{sorted_pair[0]}_{sorted_pair[1]}_{behavior}"
+            combined = f"{sorted_pair[0]}{sorted_pair[1]}{behavior}"
             result.append(combined)
     
     # Process asymmetric paired behaviors
     for behavior in asymmetric_behaviors:
         for pair in itertools.permutations(animal_ids, 2):
-            combined = f"{pair[0]}_{pair[1]}_{behavior}"
+            combined = f"{pair[0]}{pair[1]}{behavior}"
             result.append(combined)
     
     # Process single mouse behaviors
     for animal_id in animal_ids:
         for behavior in single_behaviors:
             if behavior != "missing" and behavior not in CONTINUOUS_BEHAVIORS:
-                combined = f"{animal_id}_{behavior}"
+                combined = f"{animal_id}{behavior}"
                 result.append(combined)
     
     # Add missing
     if "missing" in single_behaviors:            
-        result = result + [id + "_missing" for id in animal_ids] 
+        result = result + [id + "missing" for id in animal_ids] 
     # Add continuous behaviors
     for cont_behavior in continuous_behaviors:
-        result = result + [id + "_" +cont_behavior for id in animal_ids]           
+        result = result + [id + cont_behavior for id in animal_ids]           
     
     return result
 

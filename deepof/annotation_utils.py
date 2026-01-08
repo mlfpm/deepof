@@ -1290,7 +1290,7 @@ def supervised_tagging(
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
-        tag_dict[_id + undercond + "distance"], tag_dict[_id + undercond + "cum_distance"], tag_dict[_id + undercond + "speed"] = get_continuous_measures(speeds, _id, undercond, frame_rate)
+        tag_dict[_id + undercond + "distance"], tag_dict[_id + undercond + "cum-distance"], tag_dict[_id + undercond + "speed"] = get_continuous_measures(speeds, _id, undercond, frame_rate)
 
 
 

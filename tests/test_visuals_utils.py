@@ -109,6 +109,10 @@ def test_get_behavior_colors(experiment_type):
     supervised = prun.supervised_annotation()
     behaviors=list(supervised['test'].keys())
 
+    # remove continuous behaviors (they currently do not get a color attributed)
+    continuous_behaviors=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
+    behaviors=list(set(behaviors)-set(continuous_behaviors))
+
     colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
     colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
 

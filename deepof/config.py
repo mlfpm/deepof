@@ -12,7 +12,7 @@ DEEPOF_14_BODYPARTS = ['Center', 'Left_bhip', 'Left_ear', 'Left_fhip', 'Nose', '
 SINGLE_BEHAVIORS=["climb-arena", "sniff-arena", "immobility", "stat-lookaround", "stat-active", "stat-passive", "moving", "sniffing", "missing"]
 SYMMETRIC_BEHAVIORS=["nose2nose","sidebyside","sidereside"]
 ASYMMETRIC_BEHAVIORS=["nose2tail","nose2body","following"]
-CONTINUOUS_BEHAVIORS=["distance","cum_distance","speed"]
+CONTINUOUS_BEHAVIORS=["distance","cum-distance","speed"]
 
 ROI_COLORS = [(204,  20,  20),
        (204, 131,  20),
