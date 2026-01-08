@@ -2624,10 +2624,6 @@ class Coordinates:
         Args:
             center (str): Body part to center coordinates on. "Center" by default.
             align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
-            video_output (bool): It outputs a fully annotated video for each experiment indicated in a list. If set to "all", it will output all videos. False by default.
-            frame_limit (int): Only applies if video_output is not False. Indicates the maximum number of frames per video to output.
-            debug (bool): Only applies if video_output is not False. If True, all videos will include debug information, such as the detected arena and the preprocessed tracking tags.
-            n_jobs (int): Number of jobs to use for parallel processing. Only applies if video_output is not set to False. 
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.

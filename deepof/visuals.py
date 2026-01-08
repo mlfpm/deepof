@@ -4687,3 +4687,93 @@ def get_roi_data(
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
     return object_out
+
+
+
+def create_supervised_summary(
+    coordinates: coordinates,
+    supervised_annotations: table_dict,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
+    # Time selection parameters
+    bin_index: Union[int, str] = None,
+    bin_size: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int =100000,
+    save_table = True,
+    ):   
+
+    _check_enum_inputs(
+        coordinates,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
+    )
+    
+    # Prepare bin info
+    bin_info_time = deepof.visuals_utils._preprocess_time_bins(
+    coordinates, 
+    bin_size, 
+    bin_index, 
+    precomputed_bins=precomputed_bins, 
+    tab_dict_for_binning=supervised_annotations, 
+    samples_max=samples_max,
+    )
+    bin_info = deepof.visuals_utils._apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    animal_ids = coordinates._animal_ids
+    frame_rate=coordinates._frame_rate
+
+    experiment_ids=list(supervised_annotations.keys())
+
+    for i, experiment_id in enumerate(experiment_ids):
+
+        bin_indices=bin_info[experiment_id]["time"]
+
+        conditions=coordinates.get_exp_conditions[experiment_id].copy()
+        frame_row_info=conditions.reset_index(drop=True)
+        frame_row_info.insert(0, 'experiment_id', experiment_id)
+
+
+        supervised_binned=get_dt(supervised_annotations,experiment_id)
+
+        if roi_number is not None:
+            supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, roi_mode)
+
+        supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
+        supervised_speed = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["speed"])
+        supervised_distance = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["distance"])
+        supervised_cum_distance = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["cum_distance"])
+
+
+
+        # behaviors in seconds
+        frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])/frame_rate).to_frame().T.add_suffix(' [s]')
+
+        # averages of continuous behaviors
+        frame_row_behavior_2_1=(supervised_binned[supervised_speed].mean()).to_frame().T.add_suffix('_mean [m/s]')
+        frame_row_behavior_2_2=(supervised_binned[supervised_distance].mean()).to_frame().T.add_suffix('_mean [m]')
+        frame_row_behavior_2_3=(supervised_binned[supervised_cum_distance].mean()).to_frame().T.add_suffix('_mean [m]')
+
+        frame_row_behavior_2_4=(supervised_binned[supervised_speed].std()).to_frame().T.add_suffix('_std [m/s]')
+        frame_row_behavior_2_5=(supervised_binned[supervised_distance].std()).to_frame().T.add_suffix('_std [m]')
+        frame_row_behavior_2_6=(supervised_binned[supervised_cum_distance].std()).to_frame().T.add_suffix('_std [m]')
+
+
+        df_row = pd.concat([frame_row_info, frame_row_behavior_1,frame_row_behavior_2_1,frame_row_behavior_2_2,frame_row_behavior_2_3,
+                frame_row_behavior_2_4,frame_row_behavior_2_5,frame_row_behavior_2_6], axis=1)
+
+        if i == 0:
+            df = df_row
+        else:   
+            df = pd.concat([df, df_row], ignore_index=True)
+
+    if save_table:
+        out_path = os.path.join(coordinates._project_path, coordinates._project_name, "./Out_tables")
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
+        df.to_csv(path_or_buf=os.path.join(out_path, "supervised_summary.csv"), sep=',', na_rep='')
+    return df
