@@ -146,16 +146,12 @@ def get_arenas(
                     cur_scales = scales[list(scales.keys())[-1]]
                     
                 elif arena == "circular-manual":
-                    cur_arena_params = fit_ellipse_to_polygon(arena_corners)
-                    cur_scales=list(
-                        np.array(
-                            [
-                                cur_arena_params[0][0]*(arena_dims/arena_dist),
-                                cur_arena_params[0][1]*(arena_dims/arena_dist),
-                                arena_dist
-                            ]
-                        )
-                    ) + [arena_dims]
+                    cur_arena_params = fit_ellipse_to_polygon(arena_corners, return_ellipse=False)
+                    cur_scales=[
+                        *(np.mean(cur_arena_params, axis=0)*(arena_dims/arena_dist)),
+                        arena_dist,
+                        arena_dims,
+                    ]
                 elif arena == "polygonal-manual":
                     cur_arena_params = arena_corners
                     cur_scales=[
@@ -217,7 +213,9 @@ def get_arenas(
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
-                arena_params={'test2': ((200, 195), (167, 169), 14.071887016296387), 'test': ((200, 195), (167, 169), 14.071887016296387)}
+                cur_arena_params_1 = fit_ellipse_to_polygon(((200, 195), (167, 169), 14.071887016296387), return_ellipse=False)
+                cur_arena_params_2 = fit_ellipse_to_polygon(((200, 195), (167, 169), 14.071887016296387), return_ellipse=False)
+                arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
                 roi_dicts={'test': rois, 'test2': rois} 
@@ -262,7 +260,7 @@ def get_arenas(
             arena_dists={}
             for key in videos.keys():    
                 
-                arena_parameters, h, w = automatically_recognize_arena(
+                arena_parameters_raw, h, w = automatically_recognize_arena(
                     coordinates=coordinates,
                     videos=videos,
                     vid_key=key,
@@ -275,35 +273,29 @@ def get_arenas(
 
                 if "polygonal" in arena:
 
+                    arena_parameters=arena_parameters_raw
+
                     closest_side_points = closest_side(
                         simplify_polygon(arena_parameters), arena_reference[:2]
                     )
 
                     arena_dist=dist(*closest_side_points)
 
-                    scales[key]=[
-                            *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
-                            arena_dist,
-                            arena_dims,
-                        ]
-                                    
 
                 elif "circular" in arena:
-                    # scales contains the coordinates of the center of the arena,
+                    # arena_parameters_raw here contain the coordinates of the center of the arena,
                     # the absolute diameter measured from the video in pixels, and
                     # the provided diameter in mm (1 -default- equals not provided)
 
-                    arena_dist=np.mean([arena_parameters[1][0], arena_parameters[1][1]])* 2
+                    arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
 
-                    scales[key]=list(
-                            np.array(
-                                [
-                                    arena_parameters[0][0]*(arena_dims/arena_dist),
-                                    arena_parameters[0][1]*(arena_dims/arena_dist),
-                                    arena_dist,
-                                ]
-                            )
-                        )+ [arena_dims]
+                    arena_parameters = extract_corners_from_arena(arena_parameters_raw)
+
+                scales[key]=[
+                        *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
+                        arena_dist,
+                        arena_dims,
+                    ]
 
                 arena_dists[key] = arena_dist                           
                 arena_params[key]=arena_parameters
@@ -362,9 +354,9 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
     """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
-        if "polygonal" in arena:
+        if isinstance(arena_params[key], np.ndarray): # polygonal
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
-        elif "circular" in arena:
+        elif isinstance(arena_params[key], Tuple): # circular
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
     return arena_params
 
@@ -528,7 +520,7 @@ def automatically_recognize_arena(
         # Save frame with mask and arena detected
         frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
 
-        if "circular" in arena_type:
+        if isinstance(arena, Tuple): # Circular (legacy) "circular" in arena_type:
             cv2.ellipse(
                 img=frame_with_arena,
                 center=arena[0],
@@ -540,7 +532,7 @@ def automatically_recognize_arena(
                 thickness=3,
             )
 
-        elif "polygonal" in arena_type:
+        elif isinstance(arena, np.ndarray): # Polygonal "polygonal" in arena_type:
 
             cv2.polylines(
                 img=frame_with_arena,
@@ -721,16 +713,20 @@ def extract_polygonal_arena_coordinates(
     return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1]
 
 
-def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
+def fit_ellipse_to_polygon(polygon: list, return_ellipse=True):  # pragma: no cover
     """Fit an ellipse to the provided polygon.
 
     Args:
         polygon (list): List of (x,y) coordinates of the corners of the polygon.
 
-    Returns:
-        center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
-        axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
-        ellipse_angle (float): Angle of the ellipse.
+    If return_ellipse:
+        Returns:
+            center_coordinates (tuple): (x,y) coordinates of the center of the ellipse.
+            axes_length (tuple): (a,b) semi-major and semi-minor axes of the ellipse.
+            ellipse_angle (float): Angle of the ellipse.
+    else:
+        Returns:
+            vertices-coordinates (np.array): array of (x,y) points on the ellipse edge
 
     """
     # Detect the main ellipse containing the arena
@@ -742,7 +738,11 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
 
     ellipse_angle = ellipse_params[2]
 
-    return center_coordinates, axes_length, ellipse_angle
+    if return_ellipse:
+        return center_coordinates, axes_length, ellipse_angle
+    else:
+        vertices = extract_corners_from_arena((center_coordinates, axes_length, ellipse_angle))
+        return vertices
 
 def get_first_length(arena_corners, w_ratio, h_ratio):
     """gets the length of the first edge in arena_corners"""
@@ -1165,7 +1165,7 @@ def retrieve_corners_from_image(
         color = roi_colors[current_roi-1]
     else:
         raise ValueError(
-            "only up to 20 ROIs are allowed (what for do you even need so many ROIs?)"
+            "only up to 20 ROIs are allowed (what do you even need so many ROIs for?)"
         )
 
 

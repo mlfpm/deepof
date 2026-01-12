@@ -9,7 +9,7 @@ import copy
 import pickle
 import warnings
 from itertools import combinations
-from typing import Any, List, NewType, Union
+from typing import Any, List, NewType, Union, Tuple
 
 import numba as nb
 import numpy as np
@@ -192,7 +192,7 @@ def climb_arena(
     inplace=True,
     )
 
-    if arena_type.startswith("circular"):
+    if isinstance(arena, Tuple): # Circular (legacy) arena_type.startswith("circular"):
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
         angle = arena[2]
@@ -205,7 +205,7 @@ def climb_arena(
             threshold=tol,
         ).to_numpy()
 
-    elif arena_type.startswith("polygon"):
+    elif isinstance(arena, np.ndarray): #polygonal arena_type.startswith("polygon"):
 
         # intermediary for testing, will be replaced with length-based condition
         if run_numba:
@@ -226,7 +226,7 @@ def climb_arena(
 
     else:
         raise NotImplementedError(
-            "Supported values for arena_type are ['polygonal-manual', 'circular-manual', 'circular-autodetect']"
+            "Supported values for arena_type are ['polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect']"
         )
 
     return climbing
@@ -272,7 +272,7 @@ def sniff_object(
         animal_id += "_"
 
     if s_object == "arena":
-        if arena_type.startswith("circular"):
+        if isinstance(arena, Tuple): # Circular (legacy)   arena_type.startswith("circular"):
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
             angle = arena[2]
@@ -294,7 +294,7 @@ def sniff_object(
                 threshold=tol,
             )
 
-        elif arena_type.startswith("polygon"):
+        elif isinstance(arena, np.array): # Polygonal   arena_type.startswith("polygon"):
 
             # intermediary for testing, will be replaced with length-based condition
             if run_numba:

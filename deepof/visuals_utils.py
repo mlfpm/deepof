@@ -1505,7 +1505,7 @@ def plot_arena(
     elif key != "average":
         arena = copy.copy(coordinates._roi_dicts[key][roi_number])
 
-    if "circular" in coordinates._arena and roi_number is None:
+    if isinstance(coordinates._arena_params[list(coordinates._arena_params.keys())[0]], Tuple) and roi_number is None:
 
         if key == "average":
             arena = [
@@ -1527,7 +1527,7 @@ def plot_arena(
             )
         )
 
-    elif "polygonal" in coordinates._arena or roi_number is not None:
+    elif isinstance(coordinates._arena_params[list(coordinates._arena_params.keys())[0]], np.ndarray) or roi_number is not None:
 
         if center == "arena" and key == "average":
 
