@@ -739,6 +739,7 @@ def fit_ellipse_to_polygon(polygon: list):  # pragma: no cover
     # Parameters to return
     center_coordinates = tuple([int(i) for i in ellipse_params[0]])
     axes_length = tuple([int(i) // 2 for i in ellipse_params[1]])
+
     ellipse_angle = ellipse_params[2]
 
     return center_coordinates, axes_length, ellipse_angle
@@ -942,9 +943,9 @@ def extract_corners_from_arena(
     if isinstance(arena_params, tuple):
         # Validate the structure of the ellipse tuple
         try:
-            (center, diameters, angle) = arena_params
+            (center, radii, angle) = arena_params
             if not (isinstance(center, (tuple, list)) and len(center) == 2 and
-                    isinstance(diameters, (tuple, list)) and len(diameters) == 2 and
+                    isinstance(radii, (tuple, list)) and len(radii) == 2 and
                     isinstance(angle, (float, int))):
                 raise ValueError
         except (ValueError, TypeError):
@@ -955,7 +956,7 @@ def extract_corners_from_arena(
 
         # Unpack parameters
         center_x, center_y = center
-        radius_x, radius_y = diameters
+        radius_x, radius_y = radii
                
         # Convert angle from degrees to radians for numpy's trig functions
         angle_rad = np.deg2rad(angle)

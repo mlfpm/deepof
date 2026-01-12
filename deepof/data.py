@@ -1885,7 +1885,7 @@ class Coordinates:
 
         # 4. Calculate speed/derivatives
         if speed:
-            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="dists")
+            tab = self._calculate_derivatives(tab, speed + 1, typ="dists")
 
         # 5. Handle missing animals based on quality data
         tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
@@ -1915,7 +1915,7 @@ class Coordinates:
         """Return a table_dict object with the angles between body parts animal as values.
 
         Args:
-            degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
+            degrees (bool): If True, angles are converted to degrees; otherwise they remain in radians (default).
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
@@ -1980,7 +1980,7 @@ class Coordinates:
         Args:
             key (str): key for requested distance
             quality: (table_dict): Quality information for current data Frame
-            degrees (bool): If True (default), the angles will be in degrees. Otherwise they will be converted to radians.
+            degrees (bool): If True, angles are converted to degrees; otherwise they remain in radians (default).
             speed (int): The derivative to use for speed.
             selected_id (str): The id of the animal to select.
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
@@ -2007,7 +2007,7 @@ class Coordinates:
 
         # 5. Calculate speed/derivatives
         if speed:
-            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="angles")
+            tab = self._calculate_derivatives(tab, speed + 1, typ="angles")
 
         # 6. Handle missing animals based on quality data
         tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
@@ -2116,7 +2116,7 @@ class Coordinates:
 
         # 5. Calculate speed/derivatives
         if speed:
-            tab = self._calculate_derivatives(tab, speed + 1, frame_rate=1, typ="areas")
+            tab = self._calculate_derivatives(tab, speed + 1, typ="areas")
 
         # 6. Handle missing animals based on quality data
         tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
