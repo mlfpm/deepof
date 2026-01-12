@@ -1615,6 +1615,9 @@ def heatmap(
             dpi=dpi,
             figsize=(8 * n_cols, 8 * n_rows),
         )
+    # Turn into array for streamlined processing
+    if not isinstance(ax,np.ndarray):    
+        ax = np.array([ax])
 
     if isinstance(dframe, dict):
 
