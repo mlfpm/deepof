@@ -671,11 +671,10 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
     )
     #adjust scaling
     scaling_ratio = coords._scales[video_key][3]/coords._scales[video_key][2]
-    if "polygonal" in detection_mode:
-        arena_parameters=np.array(arena_parameters)*scaling_ratio
-    elif "circular" in detection_mode:
-        arena_parameters=(tuple(np.array(arena_parameters[0])*scaling_ratio),tuple(np.array(arena_parameters[1])*scaling_ratio),arena_parameters[2])
-
+    if "circular" in detection_mode:
+        arena_parameters=deepof.arena_utils.extract_corners_from_arena(arena_parameters)
+    arena_parameters=np.array(arena_parameters)*scaling_ratio
+    
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", arena_type, "deepof_project"
@@ -752,12 +751,8 @@ def test_detection_modes(detection_mode):
     
     #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
     assert len(coords._arena_params)==2
-    if detection_mode=="polygonal-autodetect":
-        assert isinstance(coords._arena_params['test'], np.ndarray)
-        assert isinstance(coords._arena_params['test2'], np.ndarray)
-    else:
-        assert isinstance(coords._arena_params['test'], tuple)
-        assert isinstance(coords._arena_params['test2'], tuple)
+    assert isinstance(coords._arena_params['test'], np.ndarray)
+    assert isinstance(coords._arena_params['test2'], np.ndarray)
     assert (coords._video_resolution['test'][0]<coords._video_resolution['test'][1])
     assert (coords._video_resolution['test2'][0]<coords._video_resolution['test2'][1])
     assert (len(coords._scales['test'])==4)
