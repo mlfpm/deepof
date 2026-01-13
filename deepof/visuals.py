@@ -3422,7 +3422,7 @@ def export_annotated_video(
     )
     if isinstance(behaviors, str):
         behaviors=[behaviors]
-    if  all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors]) and len(np.unique(behaviors))==len(behaviors):
+    if  behaviors is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors]) and len(np.unique(behaviors))==len(behaviors):
         behaviors = deepof.visuals_utils.generate_behavior_combinations(behaviors)
     # Create video config
     video_export_config = VideoExportConfig(

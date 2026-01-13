@@ -294,7 +294,7 @@ def sniff_object(
                 threshold=tol,
             )
 
-        elif isinstance(arena, np.array): # Polygonal   arena_type.startswith("polygon"):
+        elif isinstance(arena, np.ndarray): # Polygonal   arena_type.startswith("polygon"):
 
             # intermediary for testing, will be replaced with length-based condition
             if run_numba:
