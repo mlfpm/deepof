@@ -415,6 +415,8 @@ class Project:
         # Init the rest of the parameters
         self.angles = True
         self.animal_ids = animal_ids if animal_ids is not None else [""]
+        if isinstance(self.animal_ids,str):
+            self.animal_ids = [self.animal_ids] 
         self.areas = True
         self.bodypart_graph = bodypart_graph
         self.connectivity = None

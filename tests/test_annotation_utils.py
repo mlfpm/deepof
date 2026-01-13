@@ -334,3 +334,101 @@ def test_frame_corners(w, h):
         == "test"
     )
 
+
+@settings(max_examples=8, deadline=None)
+@given(
+    test_case=st.one_of(
+        st.just("polygonal"), st.just("circular"), st.just("multi")
+    ),
+    bodypart_graph=st.one_of(
+        st.just("deepof_14"), st.just("deepof_8")
+    ),
+)
+def test_annotation_consistency(test_case,bodypart_graph):
+
+    if test_case=="circular":
+        detection_mode="circular-autodetect"
+        arena_type="test_single_topview"
+        animal_ids=""
+    elif test_case=="polygonal":
+        detection_mode="polygonal-autodetect"
+        arena_type="test_square_arena_topview"
+        animal_ids=""
+    elif test_case == "multi":  
+        detection_mode="circular-autodetect"  
+        arena_type="test_multi_topview"
+        animal_ids=["B","W"]
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Tables"
+        ),
+        arena=detection_mode,
+        bodypart_graph=bodypart_graph,
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        animal_ids=animal_ids
+    ).create(force=True, test=True)
+
+    prun = prun.supervised_annotation()
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", arena_type, "deepof_project"
+        )
+    )
+
+    assert isinstance(prun, deepof.data.TableDict)
+    assert prun._type == "supervised"
+
+    # confirm units
+    if test_case == "polygonal" and bodypart_graph=="deepof_14":
+        cmp_dict = {
+            'climb-arena': 11.0, 
+            'sniff-arena': 18.0,
+            'immobility': 16.0, 
+            'stat-lookaround': 105.0, 
+            'stat-active': 191.0, 
+            'stat-passive': 0.0, 
+            'moving': 256.0, 
+            'sniffing': 146.0, 
+            'distance': 2.104996, 
+            'cum-distance': 447.33070099999986, 
+            'speed': 31.574939999999998, 
+            'missing': 0
+            }
+        for key in cmp_dict.keys():
+            assert np.abs(np.sum(prun['test'][key])-cmp_dict[key]) < 1e-5
+    if test_case == "circular" and bodypart_graph=="deepof_8":
+        cmp_dict = {
+            'climb-arena': 0.0,
+            'sniff-arena': 20.0,
+            'immobility': 0.0,
+            'stat-lookaround': 14.0,
+            'stat-active': 0.0,
+            'stat-passive': 16.0,
+            'moving': 80.0,
+            'sniffing': 6.0,
+            'distance': 0.5660630000000001,
+            'cum-distance': 20.469716000000002,
+            'speed': 14.150442874,
+            'missing': 0}
+        for key in cmp_dict.keys():
+            assert np.abs(np.sum(prun['test'][key])-cmp_dict[key]) < 1e-5
+    if test_case == "multi" and bodypart_graph=="deepof_14":
+        cmp_dict = {'B_W_nose2nose': 0.0, 'B_W_sidebyside': 0.0, 'B_W_sidereside': 0.0, 'B_W_nose2tail': 0.0, 
+                    'W_B_nose2tail': 0.0, 'B_W_nose2body': 6.0, 'W_B_nose2body': 0.0, 'B_W_following': 0.0, 
+                    'W_B_following': 0.0, 'B_climb-arena': 0.0, 'B_sniff-arena': 0.0, 'B_immobility': 0.0, 
+                    'B_stat-lookaround': 20.0, 'B_stat-active': 62.0, 'B_stat-passive': 0.0, 'B_moving': 34.0, 
+                    'B_sniffing': 43.0, 'B_distance': 0.261196, 'B_cum-distance': 12.495753999999998, 'B_speed': 6.529377608000001, 
+                    'W_climb-arena': 0.0, 'W_sniff-arena': 0.0, 'W_immobility': 0.0, 'W_stat-lookaround': 0.0, 'W_stat-active': 0.0, 
+                    'W_stat-passive': 0.0, 'W_moving': 96.0, 'W_sniffing': 1.0, 'W_distance': 0.787064, 'W_cum-distance': 36.938672, 
+                    'W_speed': 19.675025872, 'B_missing': 0, 'W_missing': 0}
+        for key in cmp_dict.keys():
+            assert np.abs(np.sum(prun['test'][key])-cmp_dict[key]) < 1e-5
