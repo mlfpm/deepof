@@ -1,4 +1,5 @@
 import os
+import hashlib
 import h5py
 import math
 import numpy as np
@@ -11,6 +12,7 @@ def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
     assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, likelihood)!"
     final_shape = (*data.shape[:-1], int(data.shape[2]/3), 3)
     return data.reshape(final_shape)
+
 
 class BatchDictDataset:
     def __init__(
@@ -29,9 +31,10 @@ class BatchDictDataset:
         self.dataset_name = dataset_name
         self.return_angles = return_angles
         self.supervised_dict = supervised_dict
-        # Determine if teh dataset has angles
+        
+        # Determine if the dataset has angles
         self.has_angles = False
-        if get_dt(preprocessed_dict,list(preprocessed_dict.keys())[0])[2].size > 0:
+        if get_dt(preprocessed_dict, list(preprocessed_dict.keys())[0])[2].size > 0:
             self.has_angles = True
 
         self.X_path = os.path.join(dataset_folder, dataset_name + 'X_data.h5')
@@ -40,7 +43,6 @@ class BatchDictDataset:
         self.y_path = os.path.join(dataset_folder, dataset_name + 'y_data.h5')
         self.idx_path = os.path.join(dataset_folder, dataset_name + 'video_idx.npy')
 
-
         if in_memory:
             self._load_all_to_memory(preprocessed_dict)
         else:
@@ -48,22 +50,20 @@ class BatchDictDataset:
 
     def _load_all_to_memory(self, preprocessed_dict: Dict):
         print("BatchDictDataset: loading to memory...")
-        all_x, all_a, all_ang, all_y, all_video_idx = [], [], [], [], [] 
+        all_x, all_a, all_ang, all_y, all_video_idx = [], [], [], [], []
         keys = list(preprocessed_dict.keys())
         for i, key in enumerate(keys):
             X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
             all_x.append(reorder_and_reshape(X_batch))
             all_a.append(np.expand_dims(a_batch, -1))
             all_ang.append(np.expand_dims(ang_batch, -1))
-            
-            
+
             if self.supervised_dict is not None:
                 y_batch = self.supervised_dict[key]
                 assert y_batch.shape[0] == X_batch.shape[0], \
                     f"Shape mismatch for key {key}: X has {X_batch.shape[0]} rows, Y has {y_batch.shape[0]}"
                 all_y.append(y_batch)
 
-            
             all_video_idx.append(np.full(X_batch.shape[0], i, dtype=np.int32))
 
         X = np.concatenate(all_x, axis=0)
@@ -82,7 +82,7 @@ class BatchDictDataset:
         else:
             self.Ang_tensor = None
         self.video_idx = torch.from_numpy(video_idx.astype(np.int32))
-        
+
         # Process supervised Y tensor
         if self.supervised_dict is not None:
             Y = np.concatenate(all_y, axis=0)
@@ -93,7 +93,6 @@ class BatchDictDataset:
             self.Y_tensor = None
             self.y_shape = None
 
-
         self.x_shape = tuple(self.X_tensor.shape[1:])
         self.a_shape = tuple(self.A_tensor.shape[1:])
         if self.has_angles:
@@ -103,18 +102,93 @@ class BatchDictDataset:
         self.length = int(self.X_tensor.shape[0])
         print(f"In-memory dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, a_shape: {self.a_shape}, ang_shape: {self.ang_shape}")
 
-    def _init_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int], force_rebuild: bool = True):
+    def _does_need_build(self, preprocessed_dict: Dict) -> Tuple[bool, str]:
+        """Check if HDF5 dataset needs rebuild by comparing metadata."""
+        # Quick file existence checks
+        required = [self.X_path, self.a_path, self.idx_path]
+        if self.has_angles:
+            required.append(self.ang_path)
+        if self.supervised_dict is not None:
+            required.append(self.y_path)
+
+        for fpath in required:
+            if not os.path.exists(fpath):
+                return True, f"Missing: {os.path.basename(fpath)}"
+
+        # Compute expected metadata from preprocessed_dict
+        keys = list(preprocessed_dict.keys())
+        keys_hash = hashlib.md5(','.join(sorted(str(k) for k in keys)).encode()).hexdigest()
+
+        X_first, a_first, ang_first = get_dt(preprocessed_dict, keys[0])
+        expected_shapes = {
+            'x': tuple(reorder_and_reshape(X_first[:1]).shape[1:]),
+            'a': tuple(np.expand_dims(a_first[:1], -1).shape[1:]),
+        }
+        if self.has_angles and ang_first.size > 0:
+            expected_shapes['ang'] = tuple(np.expand_dims(ang_first[:1], -1).shape[1:])
+        if self.supervised_dict is not None:
+            expected_shapes['y'] = tuple(self.supervised_dict[keys[0]][:1].shape[1:])
+
+        try:
+            # Check main X file and metadata
+            with h5py.File(self.X_path, 'r') as f:
+                if 'X' not in f:
+                    return True, "Corrupted X_data.h5"
+                if not f.attrs.get('build_complete', False):
+                    return True, "Previous build incomplete"
+
+                stored_hash = f.attrs.get('keys_hash', None)
+                if stored_hash is not None and stored_hash != keys_hash:
+                    return True, "Video keys changed"
+
+                if tuple(f['X'].shape[1:]) != expected_shapes['x']:
+                    return True, "X shape mismatch"
+                n_samples = f['X'].shape[0]
+
+            # Check other HDF5 files
+            checks = [('a', self.a_path, 'a')]
+            if self.has_angles and 'ang' in expected_shapes:
+                checks.append(('ang', self.ang_path, 'ang'))
+            if self.supervised_dict is not None:
+                checks.append(('y', self.y_path, 'y'))
+
+            for key, path, ds_name in checks:
+                with h5py.File(path, 'r') as f:
+                    if ds_name not in f:
+                        return True, f"Corrupted {os.path.basename(path)}"
+                    if tuple(f[ds_name].shape[1:]) != expected_shapes[key]:
+                        return True, f"{key.upper()} shape mismatch"
+
+            # Check video index
+            video_idx = np.load(self.idx_path)
+            if len(np.unique(video_idx)) != len(keys):
+                return True, "Video count mismatch"
+
+            # Verify sample count if hash was missing (backward compat)
+            if stored_hash is None:
+                expected_n = sum(get_dt(preprocessed_dict, k)[0].shape[0] for k in keys)
+                if n_samples != expected_n:
+                    return True, "Sample count mismatch"
+
+            return False, "Dataset up-to-date"
+
+        except (OSError, KeyError) as e:
+            return True, f"Error reading files: {e}"
+
+    def _init_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int], force_rebuild: bool = False):
         os.makedirs(self.dataset_folder, exist_ok=True)
-        
-        # Check Y path
-        y_missing = (self.supervised_dict is not None) and (not os.path.exists(self.y_path))
-        need_build = force_rebuild or (not os.path.exists(self.X_path) or not os.path.exists(self.a_path) or not os.path.exists(self.ang_path) or not os.path.exists(self.idx_path) or y_missing)
-        
-        if need_build: 
+
+        if force_rebuild:
+            need_build, reason = True, "Force rebuild requested"
+        else:
+            need_build, reason = self._does_need_build(preprocessed_dict)
+
+        if need_build:
             print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
+            print(f"  Reason: {reason}")
             self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
         else:
-            print(f"BatchDictDataset: found existing HDF5 at {self.dataset_folder}")
+            print(f"BatchDictDataset: reusing existing HDF5 at {self.dataset_folder}")
 
         with h5py.File(self.X_path, 'r') as f:
             X_ds = f['X']
@@ -127,20 +201,20 @@ class BatchDictDataset:
             with h5py.File(self.ang_path, 'r') as f:
                 Ang_ds = f['ang']
                 self.ang_shape = tuple(Ang_ds.shape[1:])
-        else: 
+        else:
             Ang_ds = None
             self.ang_shape = None
-            
+
         # Load Y shape
         self._h5_Y = None
         self._Y = None
         if os.path.exists(self.y_path) and self.supervised_dict is not None:
-             with h5py.File(self.y_path, 'r') as f:
+            with h5py.File(self.y_path, 'r') as f:
                 Y_ds = f['y']
                 self.y_shape = tuple(Y_ds.shape[1:])
         else:
             self.y_shape = None
-        
+
         self._h5_X = None
         self._h5_A = None
         self._h5_Ang = None
@@ -148,11 +222,13 @@ class BatchDictDataset:
 
     def _build_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int]):
         keys = list(preprocessed_dict.keys())
+        keys_hash = hashlib.md5(','.join(sorted(str(k) for k in keys)).encode()).hexdigest()
+        
         total_samples = 0
         shapes_X = None
         shapes_A = None
         shapes_Ang = None
-        shapes_Y = None 
+        shapes_Y = None
         video_indices = []
 
         for i, key in enumerate(keys):
@@ -164,12 +240,12 @@ class BatchDictDataset:
                 shapes_X = tuple(sample_X.shape[1:])
                 shapes_A = tuple(sample_A.shape[1:])
                 shapes_Ang = tuple(sample_Ang.shape[1:])
-                
+
                 # Check Y shape
                 if self.supervised_dict is not None:
                     sample_Y = self.supervised_dict[key][:1]
                     shapes_Y = tuple(sample_Y.shape[1:])
-                
+
             n = int(X_batch.shape[0])
             total_samples += n
             video_indices.append(np.full(n, i, dtype=np.int32))
@@ -183,6 +259,9 @@ class BatchDictDataset:
         f_Y = h5py.File(self.y_path, 'w') if self.supervised_dict is not None else None
 
         try:
+            # Mark build as incomplete at start
+            f_X.attrs['build_complete'] = False
+            
             X_dset = f_X.create_dataset(
                 'X', shape=(total_samples, *shapes_X), dtype='float32',
                 chunks=(h5_chunk_len, *shapes_X), compression=None, shuffle=False, fletcher32=False,
@@ -199,7 +278,7 @@ class BatchDictDataset:
                     chunks=(h5_chunk_len, *shapes_Ang), compression=None, shuffle=False, fletcher32=False,
                     maxshape=(total_samples, *shapes_Ang),
                 )
-            
+
             # Create Y dataset
             Y_dset = None
             if f_Y is not None:
@@ -216,28 +295,35 @@ class BatchDictDataset:
                 X_re = reorder_and_reshape(X_batch).astype(np.float32, copy=False)
                 A_re = np.expand_dims(a_batch, -1).astype(np.float32, copy=False)
                 Ang_re = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
-              
+
                 X_dset[idx:idx+n] = X_re
                 A_dset[idx:idx+n] = A_re
                 if ang_batch.size > 0:
                     Ang_dset[idx:idx+n] = Ang_re
-                
+
                 # Write Y data with assertion
                 if Y_dset is not None:
                     y_batch = self.supervised_dict[key]
-                    # Assertion to ensure shapes match exactly
                     assert y_batch.shape[0] == n, \
                         f"Shape mismatch for key {key}: X has {n} rows, Y has {y_batch.shape[0]}. Check windowing."
-                    
+
                     Y_re = y_batch.astype(np.float32, copy=False)
                     Y_dset[idx:idx+n] = Y_re
-                
+
                 idx += n
+
+            # Store metadata and mark build complete
+            f_X.attrs['keys_hash'] = keys_hash
+            f_X.attrs['n_videos'] = len(keys)
+            f_X.attrs['n_samples'] = total_samples
+            f_X.attrs['build_complete'] = True
+            
         finally:
             f_X.close()
             f_A.close()
             f_Ang.close()
-            if f_Y is not None: f_Y.close() 
+            if f_Y is not None:
+                f_Y.close()
 
         video_indices = np.concatenate(video_indices, axis=0)
         np.save(self.idx_path, video_indices)
@@ -251,14 +337,14 @@ class BatchDictDataset:
             x = self.X_tensor[idx]
             a = self.A_tensor[idx]
             vid = int(self.video_idx[idx].item() if torch.is_tensor(self.video_idx) else self.video_idx[idx])
-            
+
             ret = [x, a]
             if self.return_angles:
                 ret.append(self.Ang_tensor[idx])
-            
+
             if self.Y_tensor is not None:
                 ret.append(self.Y_tensor[idx])
-            
+
             ret.append(vid)
             return tuple(ret)
         else:
@@ -268,11 +354,11 @@ class BatchDictDataset:
                 self._X = self._h5_X['X']
                 self._A = self._h5_A['a']
                 self._vid = np.load(self.idx_path, mmap_mode='r')
-                
+
                 if self.return_angles:
-                    self._h5_Ang =  h5py.File(self.ang_path, 'r')
+                    self._h5_Ang = h5py.File(self.ang_path, 'r')
                     self._Ang = self._h5_Ang['ang']
-                
+
                 if self.supervised_dict is not None and os.path.exists(self.y_path):
                     self._h5_Y = h5py.File(self.y_path, 'r')
                     self._Y = self._h5_Y['y']
@@ -284,18 +370,18 @@ class BatchDictDataset:
             x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
             a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
             vid = int(self._vid[idx])
-            
+
             ret = [x, a]
             if self.return_angles:
                 ang_np = self._Ang[idx]
                 ang = torch.from_numpy(np.ascontiguousarray(ang_np)).float()
                 ret.append(ang)
-            
+
             if self._Y is not None:
                 y_np = self._Y[idx]
                 y_val = torch.from_numpy(np.ascontiguousarray(y_np)).float()
                 ret.append(y_val)
-            
+
             ret.append(vid)
             return tuple(ret)
 
@@ -374,7 +460,7 @@ class _H5BatchIterableDataset(IterableDataset):
         x_path: str,
         a_path: str,
         ang_path: str,
-        y_path: Optional[str], ############### HERE!
+        y_path: Optional[str],
         idx_path: str,
         batch_size: int,
         n_samples: Optional[int] = None,
@@ -390,7 +476,7 @@ class _H5BatchIterableDataset(IterableDataset):
         self.x_path = x_path
         self.a_path = a_path
         self.ang_path = ang_path
-        self.y_path = y_path ############### HERE!
+        self.y_path = y_path
         self.idx_path = idx_path
         self.batch_size = int(batch_size)
         self.n_samples = int(n_samples) if n_samples is not None else None
@@ -414,13 +500,13 @@ class _H5BatchIterableDataset(IterableDataset):
     def __iter__(self):
         X_h5 = h5py.File(self.x_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
         A_h5 = h5py.File(self.a_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
-        
+
         Y_h5 = None
         Y = None
         if self.y_path is not None and os.path.exists(self.y_path):
             Y_h5 = h5py.File(self.y_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
             Y = Y_h5['y']
-        
+
         video_idx = np.load(self.idx_path, mmap_mode='r')
 
         X = X_h5['X']
@@ -455,33 +541,37 @@ class _H5BatchIterableDataset(IterableDataset):
             x_np = X[s:e]
             a_np = A[s:e]
             vid = video_idx[s:e]
-            
+
             ang_np = Ang[s:e] if Ang is not None else None
-            y_np = Y[s:e] if Y is not None else None 
+            y_np = Y[s:e] if Y is not None else None
 
             if self.shuffle and self.permute_within_block:
                 perm = np.random.default_rng().permutation(e - s)
                 x_np = x_np[perm]
                 a_np = a_np[perm]
-                if ang_np is not None: ang_np = ang_np[perm]
-                if y_np is not None: y_np = y_np[perm] 
+                if ang_np is not None:
+                    ang_np = ang_np[perm]
+                if y_np is not None:
+                    y_np = y_np[perm]
                 vid = vid[perm]
 
             x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
             a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
             vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
-            
+
             batch = [x, a]
             if ang_np is not None:
                 batch.append(torch.from_numpy(np.ascontiguousarray(ang_np)).float())
-            
+
             if y_np is not None:
                 batch.append(torch.from_numpy(np.ascontiguousarray(y_np)).float())
-            
+
             batch.append(vid_t)
             yield tuple(batch)
 
         X_h5.close()
         A_h5.close()
-        if Ang_h5 is not None: Ang_h5.close()
-        if Y_h5 is not None: Y_h5.close() 
+        if Ang_h5 is not None:
+            Ang_h5.close()
+        if Y_h5 is not None:
+            Y_h5.close()
