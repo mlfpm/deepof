@@ -20,13 +20,11 @@ class BatchDictDataset:
         preprocessed_dict: Dict,
         dataset_folder: str,
         dataset_name: str,
-        in_memory: bool = False,
         force_rebuild: bool = False,
         h5_chunk_len: Optional[int] = None,
         return_angles: Optional[bool] = False,
         supervised_dict: Optional[Dict] = None,
     ):
-        self.in_memory = in_memory
         self.dataset_folder = dataset_folder
         self.dataset_name = dataset_name
         self.return_angles = return_angles
@@ -43,64 +41,8 @@ class BatchDictDataset:
         self.y_path = os.path.join(dataset_folder, dataset_name + 'y_data.h5')
         self.idx_path = os.path.join(dataset_folder, dataset_name + 'video_idx.npy')
 
-        if in_memory:
-            self._load_all_to_memory(preprocessed_dict)
-        else:
-            self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len)
+        self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len)
 
-    def _load_all_to_memory(self, preprocessed_dict: Dict):
-        print("BatchDictDataset: loading to memory...")
-        all_x, all_a, all_ang, all_y, all_video_idx = [], [], [], [], []
-        keys = list(preprocessed_dict.keys())
-        for i, key in enumerate(keys):
-            X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
-            all_x.append(reorder_and_reshape(X_batch))
-            all_a.append(np.expand_dims(a_batch, -1))
-            all_ang.append(np.expand_dims(ang_batch, -1))
-
-            if self.supervised_dict is not None:
-                y_batch = self.supervised_dict[key]
-                assert y_batch.shape[0] == X_batch.shape[0], \
-                    f"Shape mismatch for key {key}: X has {X_batch.shape[0]} rows, Y has {y_batch.shape[0]}"
-                all_y.append(y_batch)
-
-            all_video_idx.append(np.full(X_batch.shape[0], i, dtype=np.int32))
-
-        X = np.concatenate(all_x, axis=0)
-        A = np.concatenate(all_a, axis=0)
-        Ang = np.concatenate(all_ang, axis=0)
-        video_idx = np.concatenate(all_video_idx, axis=0)
-
-        X = np.ascontiguousarray(X, dtype=np.float32)
-        A = np.ascontiguousarray(A, dtype=np.float32)
-        Ang = np.ascontiguousarray(Ang, dtype=np.float32)
-
-        self.X_tensor = torch.from_numpy(X)
-        self.A_tensor = torch.from_numpy(A)
-        if self.has_angles:
-            self.Ang_tensor = torch.from_numpy(Ang)
-        else:
-            self.Ang_tensor = None
-        self.video_idx = torch.from_numpy(video_idx.astype(np.int32))
-
-        # Process supervised Y tensor
-        if self.supervised_dict is not None:
-            Y = np.concatenate(all_y, axis=0)
-            Y = np.ascontiguousarray(Y, dtype=np.float32)
-            self.Y_tensor = torch.from_numpy(Y)
-            self.y_shape = tuple(self.Y_tensor.shape[1:])
-        else:
-            self.Y_tensor = None
-            self.y_shape = None
-
-        self.x_shape = tuple(self.X_tensor.shape[1:])
-        self.a_shape = tuple(self.A_tensor.shape[1:])
-        if self.has_angles:
-            self.ang_shape = tuple(self.Ang_tensor.shape[1:])
-        else:
-            self.ang_shape = None
-        self.length = int(self.X_tensor.shape[0])
-        print(f"In-memory dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, a_shape: {self.a_shape}, ang_shape: {self.ang_shape}")
 
     def _does_need_build(self, preprocessed_dict: Dict) -> Tuple[bool, str]:
         """Check if HDF5 dataset needs rebuild by comparing metadata."""
@@ -333,57 +275,43 @@ class BatchDictDataset:
         return self.length
 
     def __getitem__(self, idx: int):
-        if self.in_memory:
-            x = self.X_tensor[idx]
-            a = self.A_tensor[idx]
-            vid = int(self.video_idx[idx].item() if torch.is_tensor(self.video_idx) else self.video_idx[idx])
 
-            ret = [x, a]
+        if self._h5_X is None:
+            self._h5_X = h5py.File(self.X_path, 'r')
+            self._h5_A = h5py.File(self.a_path, 'r')
+            self._X = self._h5_X['X']
+            self._A = self._h5_A['a']
+            self._vid = np.load(self.idx_path, mmap_mode='r')
+
             if self.return_angles:
-                ret.append(self.Ang_tensor[idx])
+                self._h5_Ang = h5py.File(self.ang_path, 'r')
+                self._Ang = self._h5_Ang['ang']
 
-            if self.Y_tensor is not None:
-                ret.append(self.Y_tensor[idx])
+            if self.supervised_dict is not None and os.path.exists(self.y_path):
+                self._h5_Y = h5py.File(self.y_path, 'r')
+                self._Y = self._h5_Y['y']
+            else:
+                self._Y = None
 
-            ret.append(vid)
-            return tuple(ret)
-        else:
-            if self._h5_X is None:
-                self._h5_X = h5py.File(self.X_path, 'r')
-                self._h5_A = h5py.File(self.a_path, 'r')
-                self._X = self._h5_X['X']
-                self._A = self._h5_A['a']
-                self._vid = np.load(self.idx_path, mmap_mode='r')
+        x_np = self._X[idx]
+        a_np = self._A[idx]
+        x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
+        a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
+        vid = int(self._vid[idx])
 
-                if self.return_angles:
-                    self._h5_Ang = h5py.File(self.ang_path, 'r')
-                    self._Ang = self._h5_Ang['ang']
+        ret = [x, a]
+        if self.return_angles:
+            ang_np = self._Ang[idx]
+            ang = torch.from_numpy(np.ascontiguousarray(ang_np)).float()
+            ret.append(ang)
 
-                if self.supervised_dict is not None and os.path.exists(self.y_path):
-                    self._h5_Y = h5py.File(self.y_path, 'r')
-                    self._Y = self._h5_Y['y']
-                else:
-                    self._Y = None
+        if self._Y is not None:
+            y_np = self._Y[idx]
+            y_val = torch.from_numpy(np.ascontiguousarray(y_np)).float()
+            ret.append(y_val)
 
-            x_np = self._X[idx]
-            a_np = self._A[idx]
-            x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
-            a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
-            vid = int(self._vid[idx])
-
-            ret = [x, a]
-            if self.return_angles:
-                ang_np = self._Ang[idx]
-                ang = torch.from_numpy(np.ascontiguousarray(ang_np)).float()
-                ret.append(ang)
-
-            if self._Y is not None:
-                y_np = self._Y[idx]
-                y_val = torch.from_numpy(np.ascontiguousarray(y_np)).float()
-                ret.append(y_val)
-
-            ret.append(vid)
-            return tuple(ret)
+        ret.append(vid)
+        return tuple(ret)
 
     def make_loader(
         self,
@@ -402,18 +330,6 @@ class BatchDictDataset:
     ) -> DataLoader:
         if persistent_workers is None:
             persistent_workers = num_workers > 0
-
-        if self.in_memory:
-            return DataLoader(
-                self,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                drop_last=drop_last,
-                num_workers=num_workers,
-                pin_memory=pin_memory,
-                persistent_workers=persistent_workers,
-                prefetch_factor=prefetch_factor if num_workers > 0 else None,
-            )
 
         if iterable_for_h5:
             iterable = _H5BatchIterableDataset(
