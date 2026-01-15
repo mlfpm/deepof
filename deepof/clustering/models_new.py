@@ -1190,18 +1190,6 @@ def _act(name: str) -> nn.Module:
     raise ValueError(f"Unsupported activation: {name}")
 
 
-class BatchNorm1dKerasFP32(nn.BatchNorm1d):
-    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01 (Keras uses 0.99)."""
-    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
-        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        _dbg_report_nan("Encoder.BatchNorm1dKerasFP32.input", x)
-        y = super().forward(x.float())
-        _dbg_report_nan("Encoder.BatchNorm1dKerasFP32.output", y)
-        return y.to(dtype=x.dtype)
-
-
 def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtype=torch.float32) -> torch.Tensor:
     """Generate sinusoidal positional encodings."""
     pe = torch.zeros(max_len, d_model, dtype=dtype, device=device)
@@ -1210,68 +1198,66 @@ def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtyp
     pe[:, 0::2] = torch.sin(position * div_term)
     n_odd = pe[:, 1::2].shape[1]
     pe[:, 1::2] = torch.cos(position * div_term)[:, :n_odd]
-    pe = pe.unsqueeze(0)  # (1, max_len, d_model)
-    _dbg_report_nan("Encoder.PositionalEncoding.pe", pe)
-    return pe
+    return pe.unsqueeze(0)  # (1, max_len, d_model)
+
+
+class BatchNorm1dKerasFP32(nn.BatchNorm1d):
+    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01."""
+    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
+        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = super().forward(x.float())
+        return y.to(dtype=x.dtype)
 
 
 class MultiHeadAttentionPT(nn.Module):
-    """Multi-head attention layer compatible with Keras implementation."""
+    """Multi-head attention using PyTorch's optimized scaled_dot_product_attention."""
     def __init__(self, in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
         super().__init__()
         self.in_dim = int(in_dim)
         self.num_heads = int(num_heads)
         self.key_dim = int(key_dim)
         self.inner_dim = self.num_heads * self.key_dim
+        self.dropout_p = float(dropout)
 
-        self.q_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
-        self.k_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
-        self.v_proj = nn.Linear(self.in_dim, self.inner_dim, bias=True)
-        self.out_proj = nn.Linear(self.inner_dim, self.in_dim, bias=True)
-        self.dropout = nn.Dropout(dropout)
+        self.q_proj = nn.Linear(self.in_dim, self.inner_dim, bias=False)
+        self.k_proj = nn.Linear(self.in_dim, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.in_dim, self.inner_dim, bias=False)
+        self.out_proj = nn.Linear(self.inner_dim, self.in_dim, bias=False)
 
         for m in [self.q_proj, self.k_proj, self.v_proj, self.out_proj]:
             nn.init.xavier_uniform_(m.weight)
-            nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
         B, T, _ = x.shape
-        _dbg_report_nan("Encoder.MHA.input_x", x)
+        
+        # Project to Q, K, V and reshape for multi-head
+        q = self.q_proj(x).view(B, T, self.num_heads, self.key_dim).transpose(1, 2)  # (B, H, T, K)
+        k = self.k_proj(x).view(B, T, self.num_heads, self.key_dim).transpose(1, 2)
+        v = self.v_proj(x).view(B, T, self.num_heads, self.key_dim).transpose(1, 2)
 
-        def proj(linear: nn.Linear):
-            y = linear(x)
-            return y.reshape(B, T, self.num_heads, self.key_dim).permute(0, 2, 1, 3).contiguous()
-
-        q = proj(self.q_proj)
-        k = proj(self.k_proj)
-        v = proj(self.v_proj)
-        _dbg_report_nan("Encoder.MHA.q", q)
-        _dbg_report_nan("Encoder.MHA.k", k)
-        _dbg_report_nan("Encoder.MHA.v", v)
-
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B,H,T,T)
-        _dbg_report_nan("Encoder.MHA.scores_before_mask", scores)
-
+        # Convert boolean mask to attention mask format if needed
+        # scaled_dot_product_attention expects: True = masked out (for attn_mask with is_causal=False)
         if attn_mask is not None:
-            mask_k = attn_mask.unsqueeze(1).unsqueeze(2)  # (B,1,1,T)
-            scores = scores.masked_fill(mask_k, float("-inf"))
+            # Input mask: True = pad/invalid -> we want to mask these out
+            # SDPA with attn_mask: positions with -inf are masked out
+            if attn_mask.dtype == torch.bool:
+                # Expand mask for broadcast: (B, T) -> (B, 1, 1, T)
+                attn_mask = attn_mask.unsqueeze(1).unsqueeze(2)
+                attn_mask = attn_mask.expand(B, self.num_heads, T, T)
+                attn_mask = torch.where(attn_mask, torch.tensor(float('-inf'), device=x.device), torch.tensor(0.0, device=x.device))
 
-        _dbg_report_nan("Encoder.MHA.scores_after_mask", scores)
+        # Use PyTorch's optimized attention (FlashAttention when available)
+        attn_out = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout_p if self.training else 0.0,
+        )
 
-        attn = torch.softmax(scores, dim=-1)
-        attn = torch.nan_to_num(attn, nan=0.0)
-        _dbg_report_nan("Encoder.MHA.attn_softmax", attn)
-        attn = self.dropout(attn)
-
-        ctx = torch.matmul(attn, v)  # (B,H,T,K)
-        _dbg_report_nan("Encoder.MHA.ctx", ctx)
-        ctx = ctx.permute(0, 2, 1, 3).contiguous().reshape(B, T, self.inner_dim)
-        out = self.out_proj(ctx)
-        _dbg_report_nan("Encoder.MHA.out", out)
-
-        if attn_mask is not None:
-            out = out.masked_fill(attn_mask.unsqueeze(-1), 0.0)
-        _dbg_report_nan("Encoder.MHA.out_after_mask", out)
+        # Reshape back
+        attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, self.inner_dim)
+        out = self.out_proj(attn_out)
         return out
 
 
@@ -1279,88 +1265,103 @@ class TransformerEncoderLayerPT(nn.Module):
     """Transformer encoder layer with post-normalization."""
     def __init__(self, key_dim: int, num_heads: int, dff: int, rate: float = 0.1):
         super().__init__()
-        self.mha = MultiHeadAttentionPT(in_dim=key_dim, num_heads=num_heads, key_dim=key_dim, dropout=rate)
+        self.mha = MultiHeadAttentionPT(in_dim=key_dim, num_heads=num_heads, key_dim=key_dim // num_heads, dropout=rate)
         self.dropout1 = nn.Dropout(rate)
         self.norm1 = nn.LayerNorm(key_dim, eps=1e-6)
 
-        self.ffn1 = nn.Linear(key_dim, dff)
-        self.act = nn.ReLU()
-        self.ffn2 = nn.Linear(dff, key_dim)
+        self.ffn = nn.Sequential(
+            nn.Linear(key_dim, dff),
+            nn.ReLU(),
+            nn.Linear(dff, key_dim),
+        )
         self.dropout2 = nn.Dropout(rate)
         self.norm2 = nn.LayerNorm(key_dim, eps=1e-6)
 
-        for m in [self.ffn1, self.ffn2]:
-            nn.init.xavier_uniform_(m.weight)
-            nn.init.zeros_(m.bias)
+        for m in self.ffn.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor = None) -> torch.Tensor:
-        _dbg_report_nan("Encoder.EncLayer.input", x)
         attn_out = self.mha(x, attn_mask=attn_mask)
-        _dbg_report_nan("Encoder.EncLayer.attn_out", attn_out)
         x = self.norm1(x + self.dropout1(attn_out))
-        _dbg_report_nan("Encoder.EncLayer.residual1", x)
-        ff = self.ffn2(self.act(self.ffn1(x)))
-        _dbg_report_nan("Encoder.EncLayer.ff_out", ff)
-        x = self.norm2(x + self.dropout2(ff))
-        _dbg_report_nan("Encoder.EncLayer.residual2", x)
+        ff_out = self.ffn(x)
+        x = self.norm2(x + self.dropout2(ff_out))
         return x
 
 
 class TransformerCorePT(nn.Module):
-    """Core transformer: Conv1D embedding -> positional encoding -> transformer layers."""
-    def __init__(self, in_channels: int, key_dim: int, num_layers: int, num_heads: int, dff: int, max_pos: int, rate: float = 0.1):
+    """Core transformer: Linear embedding -> positional encoding -> transformer layers."""
+    def __init__(
+        self,
+        in_channels: int,
+        key_dim: int,
+        num_layers: int,
+        num_heads: int,
+        dff: int,
+        max_pos: int,
+        rate: float = 0.1,
+        return_sequences: bool = True,
+    ):
         super().__init__()
         self.key_dim = int(key_dim)
         self.max_pos = int(max_pos)
+        self.return_sequences = return_sequences
         self.dropout = nn.Dropout(rate)
 
-        self.embed = nn.Conv1d(in_channels, self.key_dim, kernel_size=1, bias=True)
+        # Input projection
+        self.embed = nn.Linear(in_channels, self.key_dim)
         nn.init.xavier_uniform_(self.embed.weight)
         nn.init.zeros_(self.embed.bias)
 
+        # Transformer layers
         self.layers = nn.ModuleList([
             TransformerEncoderLayerPT(key_dim=self.key_dim, num_heads=num_heads, dff=dff, rate=rate) 
             for _ in range(int(num_layers))
         ])
 
+        # Positional encoding buffer
         pe = sinusoidal_positional_encoding(self.max_pos, self.key_dim)
         self.register_buffer("pos_encoding", pe, persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: (B, T, in_channels)
+        Returns:
+            (B, T, key_dim) if return_sequences else (B, key_dim)
+        """
         B, T, _ = x.shape
-        _dbg_report_nan("Encoder.Core.input_x", x)
         
-        # Compute mask for all-zero timesteps
+        # Compute padding mask (True = pad/invalid)
         with torch.no_grad():
-            mask = torch.all(x == 0.0, dim=-1)
+            mask = torch.all(x == 0.0, dim=-1)  # (B, T)
 
-        # FIX: safe 1x1 conv in fp32 with optional sanitization
-        x_bct = x.transpose(1, 2)                 # (B, C_in, T)
-        y_bct = _safe_pointwise_conv1d(self.embed, x_bct, out_dtype=x.dtype, name_prefix="Encoder.Core.embed")
-        y = y_bct.transpose(1, 2)                  # (B, T, key_dim)
-        _dbg_report_nan("Encoder.Core.after_embed", y)
-
+        # Embed
+        y = self.embed(x)
         y = F.relu(y)
-        _dbg_report_nan("Encoder.Core.after_relu", y)
         y = y * (self.key_dim ** 0.5)
-        _dbg_report_nan("Encoder.Core.after_scale", y)
 
         # Add positional encoding
         if T > self.pos_encoding.size(1):
-            self.pos_encoding = sinusoidal_positional_encoding(T, self.key_dim, device=x.device).to(self.pos_encoding.dtype)
+            self.pos_encoding = sinusoidal_positional_encoding(T, self.key_dim, device=x.device, dtype=x.dtype)
         y = y + self.pos_encoding[:, :T, :].to(y.dtype)
-        _dbg_report_nan("Encoder.Core.after_posenc", y)
         y = self.dropout(y)
 
         # Apply transformer layers
-        for li, layer in enumerate(self.layers):
+        for layer in self.layers:
             y = layer(y, attn_mask=mask)
-            _dbg_report_nan(f"Encoder.Core.layer[{li}].out", y)
-        return y
 
+        if self.return_sequences:
+            return y  # (B, T, key_dim)
+        else:
+            return y[:, -1, :]  # (B, key_dim) - last timestep
 
 class TFMEncoderPT(nn.Module):
-    """PyTorch implementation of TensorFlow Transformer Encoder with optional GNN."""
+    """
+    PyTorch Transformer Encoder with optional GNN.
+    Mirrors the TCN encoder structure for consistency.
+    """
     def __init__(
         self,
         input_shape: Tuple[int, int, int],        # (W, N, NF)
@@ -1368,49 +1369,85 @@ class TFMEncoderPT(nn.Module):
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         use_gnn: bool = True,
-        num_layers: int = 4,
-        num_heads: int = 8,
+        num_layers: int = 2,      # Reduced from 4 for speed
+        num_heads: int = 4,       # Reduced from 8 for speed
         dff: int = 128,
         dropout_rate: float = 0.1,
+        key_dim: int = None,      # Allow explicit key_dim
     ):
         super().__init__()
         self.use_gnn = use_gnn
         self.latent_dim = int(latent_dim)
         self.W, self.N, self.NF = input_shape
         _, self.E, self.EF = edge_feature_shape
-        assert adjacency_matrix.shape[0] == self.N == adjacency_matrix.shape[1], "Adjacency must be NxN"
+        
+        assert adjacency_matrix.shape[0] == self.N == adjacency_matrix.shape[1], \
+            "Adjacency must be NxN and match input nodes."
 
-        key_dim = self.N * self.NF
+        # Use reasonable key_dim (must be divisible by num_heads)
+        if key_dim is None:
+            key_dim = min(64, self.N * self.NF)
+            # Ensure divisible by num_heads
+            key_dim = (key_dim // num_heads) * num_heads
+            key_dim = max(key_dim, num_heads)  # At least num_heads
+        self.key_dim = int(key_dim)
 
         if use_gnn:
-            # Node transformer
+            # Node transformer: processes each node's temporal sequence
             self.node_tf = TransformerCorePT(
-                in_channels=self.NF, key_dim=key_dim,
-                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+                in_channels=self.NF,
+                key_dim=self.key_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                dff=dff,
+                max_pos=self.W,
+                rate=dropout_rate,
+                return_sequences=False,  # Only need last timestep
             )
-            # Edge transformer
+            
+            # Edge transformer: processes each edge's temporal sequence
             self.edge_tf = TransformerCorePT(
-                in_channels=1, key_dim=key_dim,
-                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+                in_channels=self.EF,
+                key_dim=self.key_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                dff=dff,
+                max_pos=self.W,
+                rate=dropout_rate,
+                return_sequences=False,  # Only need last timestep
             )
 
-            # Spatial GNN
-            self.spatial_gnn_block = CensNetConvPT(node_channels=self.latent_dim, edge_channels=self.latent_dim, activation="relu")
+            # Spatial GNN block
+            self.spatial_gnn_block = CensNetConvPT(
+                node_channels=self.latent_dim,
+                edge_channels=self.latent_dim,
+                activation="relu"
+            )
+            
+            # Precompute and register graph matrices
             lap, edge_lap, inc = self.spatial_gnn_block.preprocess(torch.tensor(adjacency_matrix))
             self.register_buffer("laplacian", lap.float())
             self.register_buffer("edge_laplacian", edge_lap.float())
             self.register_buffer("incidence", inc.float())
 
-            final_in = 2 * self.N * self.latent_dim
+            # Input to head: node features + edge features after GNN
+            final_in = (self.N * self.latent_dim) + (self.E * self.latent_dim)
+            
         else:
             # Single transformer for flattened input
             self.flat_tf = TransformerCorePT(
-                in_channels=self.N * self.NF, key_dim=key_dim,
-                num_layers=num_layers, num_heads=num_heads, dff=dff, max_pos=self.W, rate=dropout_rate
+                in_channels=self.N * self.NF,
+                key_dim=self.key_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                dff=dff,
+                max_pos=self.W,
+                rate=dropout_rate,
+                return_sequences=False,
             )
-            final_in = self.W * self.N * self.NF
+            final_in = self.key_dim
 
-        # MLP head
+        # MLP head: matches TCN encoder structure
         self.head = nn.Sequential(
             nn.Linear(final_in, 2 * self.latent_dim),
             nn.ReLU(),
@@ -1428,65 +1465,79 @@ class TFMEncoderPT(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: (B, W, N, NF) - node features over time
+            a: (B, W, E, EF) - edge features over time
+        Returns:
+            (B, latent_dim) - encoded representation
+        """
         B, W, N, NF = x.shape
-        B2, W2, E, EF = a.shape
-        _dbg_report_nan("Encoder.TFMEncoder.input_x", x)
-        _dbg_report_nan("Encoder.TFMEncoder.input_a", a)
-        assert B == B2 and W == W2
-        assert (W, N, NF) == (self.W, self.N, self.NF)
+        _, _, E, EF = a.shape
+        
+        assert (W, N, NF) == (self.W, self.N, self.NF), \
+            f"Input shape mismatch: got ({W}, {N}, {NF}), expected ({self.W}, {self.N}, {self.NF})"
 
         if self.use_gnn:
-            # Process nodes using TF's transpose-reshape-transpose pattern
+            # === Process Nodes ===
+            # Reshape to process each node's time series independently
+            # Following the same memory layout as TCN encoder
             x_flat = x.view(B, W, N * NF)
-            x_transposed = x_flat.permute(2, 1, 0)  # (N*NF, W, B)
-            x_reshaped = x_transposed.reshape(NF, W, N, B)  # (NF, W, N, B)
-            x_nodes = x_reshaped.permute(3, 2, 1, 0)  # (B, N, W, NF)
-            _dbg_report_nan("Encoder.TFMEncoder.x_nodes", x_nodes)
+            x_transposed = x_flat.permute(2, 1, 0)           # (N*NF, W, B)
+            x_reshaped = x_transposed.reshape(NF, W, N, B)   # (NF, W, N, B)
+            x_nodes = x_reshaped.permute(3, 2, 1, 0)         # (B, N, W, NF)
             
-            node_in = x_nodes.reshape(B * N, W, NF)
-            _dbg_report_nan("Encoder.TFMEncoder.node_in", node_in)
-            node_out = self.node_tf(node_in).view(B, N, W, -1)
-            _dbg_report_nan("Encoder.TFMEncoder.node_out", node_out)
-            nodes_flat = node_out.reshape(B, N, W * (self.N * self.NF))
-            _dbg_report_nan("Encoder.TFMEncoder.nodes_flat", nodes_flat)
+            node_in = x_nodes.reshape(B * N, W, NF)          # (B*N, W, NF)
+            node_out = self.node_tf(node_in)                 # (B*N, key_dim)
+            nodes_encoded = node_out.view(B, N, self.key_dim)  # (B, N, key_dim)
 
-            # Process edges using TF's transpose-reshape-transpose pattern
-            EEF = E * EF
-            a_flat = a.view(B, W, EEF)
-            a_transposed = a_flat.permute(2, 1, 0)  # (EEF, W, B)
-            a_reshaped = a_transposed.reshape(1, W, EEF, B)  # (1, W, EEF, B)
-            a_edges = a_reshaped.permute(3, 2, 1, 0)  # (B, EEF, W, 1)
-            _dbg_report_nan("Encoder.TFMEncoder.a_edges", a_edges)
+            # === Process Edges ===
+            # Reshape to process each edge's time series independently
+            # Same pattern as TCN encoder
+            a_flat = a.view(B, W, E * EF)
+            a_transposed = a_flat.permute(2, 1, 0)           # (E*EF, W, B)
+            a_reshaped = a_transposed.reshape(EF, W, E, B)   # (EF, W, E, B)
+            a_edges = a_reshaped.permute(3, 2, 1, 0)         # (B, E, W, EF)
             
-            edge_in = a_edges.reshape(B * EEF, W, 1)
-            _dbg_report_nan("Encoder.TFMEncoder.edge_in", edge_in)
-            edge_out = self.edge_tf(edge_in).view(B, EEF, W, -1)
-            _dbg_report_nan("Encoder.TFMEncoder.edge_out", edge_out)
-            edges_flat = edge_out.reshape(B, self.N, W * (self.N * self.NF))
-            _dbg_report_nan("Encoder.TFMEncoder.edges_flat", edges_flat)
-                    
-            # Apply spatial GNN
+            edge_in = a_edges.reshape(B * E, W, EF)          # (B*E, W, EF)
+            edge_out = self.edge_tf(edge_in)                 # (B*E, key_dim)
+            edges_encoded = edge_out.view(B, E, self.key_dim)  # (B, E, key_dim)
+
+            # === Apply Spatial GNN ===
+            adj_tuple = (self.laplacian, self.edge_laplacian, self.incidence)
             x_nodes_g, x_edges_g = self.spatial_gnn_block([
-                nodes_flat, (self.laplacian, self.edge_laplacian, self.incidence), edges_flat
+                nodes_encoded,
+                adj_tuple,
+                edges_encoded
             ])
-            _dbg_report_nan("Encoder.TFMEncoder.x_nodes_g", x_nodes_g)
-            _dbg_report_nan("Encoder.TFMEncoder.x_edges_g", x_edges_g)
+            x_nodes_g = F.relu(x_nodes_g)
+            x_edges_g = F.relu(x_edges_g)
 
-            # Concatenate node and edge features
-            enc = torch.cat([x_nodes_g, x_edges_g], dim=1).reshape(B, -1)
-            _dbg_report_nan("Encoder.TFMEncoder.enc_concat", enc)
+            # Concatenate flattened node and edge features
+            enc = torch.cat([
+                x_nodes_g.reshape(B, -1),
+                x_edges_g.reshape(B, -1)
+            ], dim=-1)
             
         else:
-            # Non-GNN path: simple transformer on flattened input
-            x_flat = x.view(B, W, N * NF)
-            _dbg_report_nan("Encoder.TFMEncoder.x_flat", x_flat)
-            seq_out = self.flat_tf(x_flat)
-            _dbg_report_nan("Encoder.TFMEncoder.seq_out", seq_out)
-            enc = seq_out.reshape(B, -1)
+            # === Non-GNN path ===
+            x_flat = x.view(B, W, N * NF)  # (B, W, N*NF)
+            enc = self.flat_tf(x_flat)     # (B, key_dim)
 
-        # Apply MLP head
-        out = self.head(enc.float()).to(enc.dtype)
-        _dbg_report_nan("Encoder.TFMEncoder.head_out", out)
+        # === Apply MLP head ===
+        # Stabilize input similar to TCN encoder
+        head_in = enc.float()
+        rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()
+        head_in = head_in / rms.clamp(min=1.0)
+        head_in = head_in.clamp(min=-1e4, max=1e4)
+        head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
+        
+        out = self.head(head_in)
+
+        # Force diversity during training by batch standardization
+        if self.training and out.size(0) > 1:
+            out = (out - out.mean(dim=0, keepdim=True)) / (out.std(dim=0, keepdim=True).clamp(min=0.1))
+
         return out
     
 
@@ -1665,10 +1716,8 @@ def create_masks_pt(inp_3d: torch.Tensor):
 
 
 class MultiHeadAttentionGeneralPT(nn.Module):
-    """
-    Multi-head attention with separate in_dims for query and key/value,
-    using boolean keep masks (True=keep, False=mask-out).
-    """
+    """Multi-head cross-attention using PyTorch 2.0+ optimized SDPA."""
+    
     def __init__(self, q_in_dim: int, kv_in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
         super().__init__()
         self.q_in = int(q_in_dim)
@@ -1676,12 +1725,12 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         self.num_heads = int(num_heads)
         self.key_dim = int(key_dim)
         self.inner_dim = self.num_heads * self.key_dim
+        self.dropout_p = float(dropout)
 
         self.q_proj = nn.Linear(self.q_in, self.inner_dim, bias=True)
         self.k_proj = nn.Linear(self.kv_in, self.inner_dim, bias=True)
         self.v_proj = nn.Linear(self.kv_in, self.inner_dim, bias=True)
         self.out_proj = nn.Linear(self.inner_dim, self.q_in, bias=True)
-        self.dropout = nn.Dropout(dropout)
 
         for m in [self.q_proj, self.k_proj, self.v_proj, self.out_proj]:
             nn.init.xavier_uniform_(m.weight)
@@ -1696,63 +1745,44 @@ class MultiHeadAttentionGeneralPT(nn.Module):
         return_attention_scores: bool = True,
     ):
         B, Tq, _ = query.shape
-        _dbg_report_nan("Decoder.MHAGeneral.query", query)
-        _dbg_report_nan("Decoder.MHAGeneral.key", key)
-        _dbg_report_nan("Decoder.MHAGeneral.value", value)
-        Bk, Tk, _ = key.shape
-        assert B == Bk, "Batch mismatch between query and key/value"
+        Tk = key.shape[1]
 
-        def proj(x, linear: nn.Linear):
-            y = linear(x)  # (B, T, H*K)
-            return y.view(B, -1, self.num_heads, self.key_dim).permute(0, 2, 1, 3).contiguous()  # (B,H,T,K)
+        q = self.q_proj(query).reshape(B, Tq, self.num_heads, self.key_dim).transpose(1, 2)
+        k = self.k_proj(key).reshape(B, Tk, self.num_heads, self.key_dim).transpose(1, 2)
+        v = self.v_proj(value).reshape(B, Tk, self.num_heads, self.key_dim).transpose(1, 2)
 
-        q = proj(query, self.q_proj)   # (B, H, Tq, K)
-        k = proj(key, self.k_proj)     # (B, H, Tk, K)
-        v = proj(value, self.v_proj)   # (B, H, Tk, K)
-        _dbg_report_nan("Decoder.MHAGeneral.q", q)
-        _dbg_report_nan("Decoder.MHAGeneral.k", k)
-        _dbg_report_nan("Decoder.MHAGeneral.v", v)
-
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)  # (B, H, Tq, Tk)
-        _dbg_report_nan("Decoder.MHAGeneral.scores_before_mask", scores)
-
+        # Convert keep-mask to SDPA format
+        sdpa_mask = None
         if attn_mask is not None:
-            if attn_mask.ndim == 2:        # (B, Tk)
-                keep = attn_mask[:, None, None, :].expand(B, self.num_heads, Tq, Tk)
-            elif attn_mask.ndim == 3:      # (B, Tq, Tk)
-                keep = attn_mask[:, None, :, :].expand(B, self.num_heads, Tq, Tk)
-            elif attn_mask.ndim == 4:      # (B, 1 or H, Tq, Tk)
-                keep = attn_mask
-                if keep.size(1) == 1:
-                    keep = keep.expand(B, self.num_heads, Tq, Tk)
-            else:
-                raise ValueError(f"Unsupported attn_mask shape: {attn_mask.shape}")
-            if keep.dtype != torch.bool:
-                keep = keep > 0
-            keep = keep.to(scores.device)
+            if attn_mask.dtype == torch.bool:
+                # Your masks use True=keep, SDPA uses True=masked for boolean
+                # So we need to invert
+                if attn_mask.dim() == 2:  # (B, Tk)
+                    sdpa_mask = (~attn_mask).unsqueeze(1).unsqueeze(2)  # (B, 1, 1, Tk)
+                elif attn_mask.dim() == 4:  # (B, 1, Tq, Tk)
+                    sdpa_mask = ~attn_mask
 
-            scores = scores.masked_fill(~keep, float("-inf"))
-        else:
-            keep = torch.ones_like(scores, dtype=torch.bool, device=scores.device)
+        ctx = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=sdpa_mask,
+            dropout_p=self.dropout_p if self.training else 0.0,
+            is_causal=False,
+        )
 
-        _dbg_report_nan("Decoder.MHAGeneral.scores_after_mask", scores)
-
-        attn = torch.softmax(scores, dim=-1)
-        attn = torch.nan_to_num(attn, nan=0.0)
-        attn = attn * keep.to(attn.dtype)  # explicit zero for masked keys
-        _dbg_report_nan("Decoder.MHAGeneral.attn_softmax", attn)
-        attn = self.dropout(attn)
-
-        ctx = torch.matmul(attn, v)  # (B,H,Tq,K)
-        _dbg_report_nan("Decoder.MHAGeneral.ctx", ctx)
-        ctx = ctx.permute(0, 2, 1, 3).contiguous().view(B, Tq, self.inner_dim)
-        out = self.out_proj(ctx)  # (B,Tq,q_in)
-        _dbg_report_nan("Decoder.MHAGeneral.out", out)
+        ctx = ctx.transpose(1, 2).reshape(B, Tq, self.inner_dim)
+        out = self.out_proj(ctx)
 
         if return_attention_scores:
-            return out, attn
-        else:
-            return out
+            # Compute attention weights separately only if needed (slower path)
+            with torch.no_grad():
+                scores = torch.matmul(q, k.transpose(-2, -1)) / (self.key_dim ** 0.5)
+                if sdpa_mask is not None:
+                    scores = scores.masked_fill(sdpa_mask, float('-inf'))
+                attn_weights = torch.softmax(scores, dim=-1)
+                attn_weights = torch.nan_to_num(attn_weights, nan=0.0)
+            return out, attn_weights
+        
+        return out
 
 
 class TransformerDecoderLayerPT(nn.Module):
@@ -1867,94 +1897,166 @@ class DecoderCorePT(nn.Module):
 
 
 class TFMDecoderPT(nn.Module):
+    """
+    Transformer decoder that FORCES latent usage by concatenating 
+    latent to every timestep, not using cross-attention.
+    """
     def __init__(
         self,
         output_shape: Tuple[int, int],  # (W, D_in)
         latent_dim: int,
         num_layers: int = 2,
-        num_heads: int = 8,
+        num_heads: int = 4,
         dff: int = 128,
         dropout_rate: float = 0.1,
-        teacher_forcing_mode: str = "shifted",   # "shifted" | "zeros" | "dropout"
+        # Legacy params (ignored but kept for compatibility)
+        teacher_forcing_mode: str = "zeros",
         input_dropout_p: float = 0.0,
         self_attn_diag_only: bool = False,
     ):
         super().__init__()
         self.W, self.D_in = output_shape
         self.latent_dim = int(latent_dim)
-        self.model_dim = self.D_in
-        self.memory_dim = 4 * self.latent_dim
-
-        assert teacher_forcing_mode in {"shifted", "zeros", "dropout"}
-        self.teacher_forcing_mode = teacher_forcing_mode
-        self.input_dropout_p = float(input_dropout_p)
-        self.self_attn_diag_only = bool(self_attn_diag_only)
-
-        self.generator_mlp = nn.Sequential(
+        
+        # Expand latent dimension
+        self.expanded_latent_dim = 4 * self.latent_dim
+        
+        # Latent expansion MLP
+        self.latent_expand = nn.Sequential(
             nn.Linear(self.latent_dim, self.latent_dim),
-            BatchNorm1dKerasFP32(self.latent_dim, eps=1e-3),
+            nn.GELU(),
             nn.Linear(self.latent_dim, 2 * self.latent_dim),
-            nn.ReLU(),
-            BatchNorm1dKerasFP32(2 * self.latent_dim, eps=1e-3),
-            nn.Linear(2 * self.latent_dim, 4 * self.latent_dim),
-            nn.ReLU(),
-            BatchNorm1dKerasFP32(4 * self.latent_dim, eps=1e-3),
+            nn.GELU(),
+            nn.Linear(2 * self.latent_dim, self.expanded_latent_dim),
+            nn.GELU(),
         )
-        for m in self.generator_mlp.modules():
+        
+        # Model dimension = expanded latent (latent is THE input, not cross-attended)
+        self.model_dim = self.expanded_latent_dim
+        
+        # Positional encoding
+        pe = sinusoidal_positional_encoding(self.W, self.model_dim)
+        self.register_buffer("pos_encoding", pe, persistent=False)
+        
+        # Causal self-attention layers (NO cross-attention)
+        self.layers = nn.ModuleList([
+            CausalSelfAttentionLayer(
+                d_model=self.model_dim,
+                num_heads=num_heads,
+                dff=dff,
+                dropout=dropout_rate,
+            )
+            for _ in range(num_layers)
+        ])
+        
+        # Output projection to data dimension
+        self.output_proj = nn.Linear(self.model_dim, self.D_in)
+        
+        # Probabilistic output head
+        self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=self.D_in, data_dim=self.D_in)
+        
+        # Initialize
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool = None):
+        """
+        Args:
+            g: (B, latent_dim) - latent code from encoder
+            x_target: (B, W, D_in) - target sequence (only used for validity mask)
+        """
+        B, W, D = x_target.shape
+        assert (W, D) == (self.W, self.D_in), f"Shape mismatch: got ({W}, {D}), expected ({self.W}, {self.D_in})"
+        
+        # Compute validity mask from target
+        with torch.no_grad():
+            validity_mask = ~torch.all(x_target == 0.0, dim=-1)  # (B, W)
+        
+        # === KEY CHANGE: Latent is THE input, not cross-attended ===
+        # Expand latent
+        g_expanded = self.latent_expand(g)  # (B, expanded_latent_dim)
+        
+        # Repeat latent for each timestep - this IS the decoder input
+        h = g_expanded.unsqueeze(1).expand(-1, self.W, -1).contiguous()  # (B, W, model_dim)
+        
+        # Add positional encoding to differentiate timesteps
+        if self.W > self.pos_encoding.size(1):
+            self.pos_encoding = sinusoidal_positional_encoding(
+                self.W, self.model_dim, device=g.device, dtype=g.dtype
+            )
+        h = h + self.pos_encoding[:, :self.W, :].to(h.dtype)
+        
+        # Causal self-attention layers
+        for layer in self.layers:
+            h = layer(h)
+        
+        # Project to output dimension
+        h = self.output_proj(h)  # (B, W, D_in)
+        
+        return self.prob_decoder(h, validity_mask)
+
+
+class CausalSelfAttentionLayer(nn.Module):
+    """Causal self-attention layer (no cross-attention)."""
+    def __init__(self, d_model: int, num_heads: int, dff: int, dropout: float = 0.1):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        assert self.head_dim * num_heads == d_model, "d_model must be divisible by num_heads"
+        
+        self.q_proj = nn.Linear(d_model, d_model, bias=False)
+        self.k_proj = nn.Linear(d_model, d_model, bias=False)
+        self.v_proj = nn.Linear(d_model, d_model, bias=False)
+        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+        
+        self.norm1 = nn.LayerNorm(d_model, eps=1e-6)
+        self.norm2 = nn.LayerNorm(d_model, eps=1e-6)
+        
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, dff),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dff, d_model),
+        )
+        
+        self.dropout = nn.Dropout(dropout)
+        
+        # Initialize
+        for m in [self.q_proj, self.k_proj, self.v_proj, self.out_proj]:
+            nn.init.xavier_uniform_(m.weight)
+        for m in self.ffn.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
-
-        self.decoder = DecoderCorePT(
-            model_dim=self.model_dim,
-            memory_dim=self.memory_dim,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            dff=dff,
-            max_pos=self.W,
-            rate=dropout_rate,
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, D = x.shape
+        
+        # Pre-norm self-attention
+        x_norm = self.norm1(x)
+        
+        q = self.q_proj(x_norm).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x_norm).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x_norm).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        # Causal attention with Flash Attention
+        attn_out = F.scaled_dot_product_attention(
+            q, k, v,
+            is_causal=True,
+            dropout_p=self.dropout.p if self.training else 0.0,
         )
-        self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=self.model_dim, data_dim=self.D_in)
-
-    def forward(self, g: torch.Tensor, x_target: torch.Tensor, training: bool = None):
-        B, W, D = x_target.shape
-        assert (W, D) == (self.W, self.D_in)
-        _dbg_report_nan("Decoder.TFMDecoder.input_g", g)
-        _dbg_report_nan("Decoder.TFMDecoder.input_x_target", x_target)
-        is_training = self.training if training is None else bool(training)
-
-        with torch.no_grad():
-            validity_mask = torch.logical_not(torch.all(x_target == 0.0, dim=-1))  # (B, W)
-
-        # Teacher-forced input (unchanged)
-        if self.teacher_forcing_mode == "shifted":
-            x_in = torch.zeros_like(x_target); x_in[:, 1:, :] = x_target[:, :-1, :]
-        elif self.teacher_forcing_mode == "zeros":
-            x_in = torch.zeros_like(x_target)
-        else:  # "dropout"
-            x_in = torch.zeros_like(x_target); x_in[:, 1:, :] = x_target[:, :-1, :]
-            if is_training and self.input_dropout_p > 0.0:
-                mask = (torch.rand(B, W, 1, device=x_in.device) > self.input_dropout_p).to(x_in.dtype)
-                mask[:, 0, :] = 0.0
-                x_in = x_in * mask
-        _dbg_report_nan("Decoder.TFMDecoder.x_in", x_in)
-
-        gen = self.generator_mlp(g.float()).to(x_target.dtype)
-        _dbg_report_nan("Decoder.TFMDecoder.gen", gen)
-        memory = gen.unsqueeze(1).expand(-1, self.W, -1).contiguous()
-        _dbg_report_nan("Decoder.TFMDecoder.memory", memory)
-
-        if self.self_attn_diag_only:
-            la_keep = torch.eye(W, dtype=torch.bool, device=x_target.device)
-        else:
-            la_keep = create_look_ahead_mask_pt(W, device=x_target.device)
-        combined_mask_3d = la_keep.unsqueeze(0).unsqueeze(0).expand(B, 1, W, W)
-        padding_mask_2d = torch.ones(B, 1, 1, W, dtype=torch.bool, device=x_target.device)
-
-        hidden, _ = self.decoder(x_in, memory, combined_mask_3d, padding_mask_2d, training=is_training)
-        _dbg_report_nan("Decoder.TFMDecoder.hidden", hidden)
-        dist = self.prob_decoder(hidden, validity_mask)
-        return dist
+        
+        attn_out = attn_out.transpose(1, 2).reshape(B, T, D)
+        x = x + self.dropout(self.out_proj(attn_out))
+        
+        # Pre-norm FFN
+        x = x + self.dropout(self.ffn(self.norm2(x)))
+        
+        return x
     
 
 def get_transformer_decoder(
