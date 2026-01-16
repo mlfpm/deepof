@@ -6,9 +6,10 @@
 
 import os
 from datetime import date, datetime
-from typing import Any, List, NewType, Tuple, Union, Dict, Callable
+from typing import Any, List, NewType, Tuple, Union, Dict, Callable, Optional
 from contextlib import nullcontext
 import copy
+from dataclasses import dataclass, asdict
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -59,6 +60,177 @@ tf.autograph.set_verbosity(0)
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
+
+
+### CONFIGS
+@dataclass
+class CommonFitCfg:
+    # Core identity
+    model_name: str = "VaDE"
+    encoder_type: str = "recurrent"
+
+    # Training loop
+    batch_size: int = 1024
+    latent_dim: int = 6
+    epochs: int = 10
+    n_components: int = 10
+
+    # IO / logging
+    output_path: str = "."
+    data_path: str = "."
+    log_history: bool = True
+    pretrained: Optional[str] = None
+    save_weights: bool = True
+    run: int = 0
+
+    # System
+    num_workers: int = 0
+    prefetch_factor: int = 0
+    use_amp: bool = False
+
+    # Shared regularization knobs
+    interaction_regularization: float = 0.0
+    kmeans_loss: float = 0.0
+
+    kl_annealing_mode: str = "sigmoid"
+    kl_max_weight: float = 1.0
+    kl_warmup: int = 5
+    kl_end_weight: float = 0.2
+    kl_cooldown: int = 5
+
+    # Diagnostics
+    diag_max_batches: int = 4
+
+
+@dataclass
+class TurtleTeacherCfg:
+    # Teacher on/off + core
+    use_turtle_teacher: bool = False
+    teacher_gamma: float = 8.0
+    teacher_outer_steps: int = 500
+    teacher_inner_steps: int = 100
+    teacher_normalize_feats: bool = True
+
+    teacher_head_temp: float = 0.35
+    teacher_task_temp: float = 0.35
+    teacher_alpha_sample_entropy: float = 2.0
+
+    # Distillation (VaDE)
+    lambda_distill: float = 4.0
+    lambda_decay_start: float = 10.0
+    distill_sharpen_T: float = 0.5
+    distill_conf_weight: bool = False
+    distill_conf_thresh: float = 0.3
+
+    # Distillation (generic head for VQVAE/Contrastive)
+    generic_lambda_distill: float = 2.0
+    generic_distill_sharpen_T: float = 0.5
+    generic_distill_conf_weight: bool = True
+    generic_distill_conf_thresh: float = 0.6
+    generic_distill_warmup_epochs: int = 1
+
+    distill_class_reweight_beta: float = 1.0
+    distill_class_reweight_cap: float = 3.0
+
+    # Views
+    include_latent_view: bool = True,
+    include_edges_view: bool = False
+    include_nodes_view: bool = True
+    include_angles_view: bool = False
+    include_supervised_view: bool = False
+    pca_nodes_dim: int = 32
+    pca_edges_dim: int = 32
+    pca_angles_dim: int = 32
+
+    # Refresh
+    teacher_refresh_every: Optional[int] = None
+    teacher_freeze_at: Optional[int] = 10
+    teacher_refresh_mode: str = "views"
+    reinit_gmm_on_refresh: bool = False
+
+
+@dataclass
+class VaDECfg:
+    reg_cat_clusters: float = 0.0
+    recluster: bool = False
+    freeze_gmm_epochs: int = 0
+    freeze_decoder_epochs: int = 0
+    prior_loss_weight: float = 0.0
+
+    reg_scatter_weight: float = 0.0
+    temporal_cohesion_weight: float = 0.0
+    reg_scatter_beta: float = 1.0
+    repel_weight: float = 0.0
+    repel_length_scale: float = 1.0
+
+    tf_cluster_weight: float = 0.0
+    nonempty_weight: float = 2e-2
+
+
+@dataclass
+class ContrastiveCfg:
+    temperature: float = 0.1
+    contrastive_similarity_function: str = "cosine"
+    contrastive_loss_function: str = "nce"
+    beta: float = 0.1
+    tau: float = 0.1
+
+
+def _append_cfg(lines, title: str, cfg) -> None:
+    if cfg is None:
+        return
+
+    lines.append(f"[{title}]")
+    d = asdict(cfg)  # flat dict
+    for k in d.keys(): 
+        lines.append(f"{k}: {d[k]}")
+    lines.append("")  # spacer
+
+
+def save_model_info(
+    ckpt_path: str,
+    *,
+    stage: str,
+    epoch: Optional[int] = None,
+    train_steps: Optional[int] = None,
+    val_total: Optional[float] = None,
+    score_value: Optional[float] = None,
+    extra: Optional[dict] = None,
+    # NEW: configs passed in (or you can close over them)
+    common_cfg=None,
+    teacher_cfg=None,
+    vade_cfg=None,
+    contrastive_cfg=None,
+) -> None:
+    info_path = os.path.splitext(ckpt_path)[0] + "_info.txt"
+    lines = []
+    lines.append(f"stage: {stage}")
+    if epoch is not None:
+        lines.append(f"epoch: {int(epoch)}")
+    if train_steps is not None:
+        lines.append(f"train_steps: {int(train_steps)}")
+    if val_total is not None:
+        lines.append(f"val_total: {float(val_total)}")
+    if score_value is not None:
+        lines.append(f"score_value: {float(score_value)}")
+    lines.append("")
+
+    # Dump configs
+    _append_cfg(lines, "common_cfg", common_cfg)
+    _append_cfg(lines, "teacher_cfg", teacher_cfg)
+    _append_cfg(lines, "vade_cfg", vade_cfg)
+    _append_cfg(lines, "contrastive_cfg", contrastive_cfg)
+
+    if extra:
+        lines.append("[extra]")
+        for k in sorted(extra.keys()):
+            lines.append(f"{k}: {extra[k]}")
+        lines.append("")
+
+    os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+    with open(info_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
 
 ### CONTRASTIVE LEARNING UTILITIES
 def select_contrastive_loss_pt(

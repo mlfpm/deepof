@@ -630,7 +630,7 @@ class Project:
         self.connectivity = {aid: model_dict[f"{aid}{self.model}"] for aid in self.animal_ids}
 
         # Reset excluded bodyparts to base list without ids
-        self.exclude_bodyparts =  raw_excluded_bodyparts
+        self.exclude_bodyparts = raw_excluded_bodyparts
 
     def _filter_irrelevant_bodyparts(self, table: pd.DataFrame) -> pd.DataFrame:
         """Removes bodyparts not present in the connectivity graph or explicitly excluded."""
@@ -3340,7 +3340,6 @@ class TableDict(dict):
     def preprocess(
         self,
         coordinates: coordinates,
-        handle_ids: str = "concat",
         window_size: int = 25,
         window_step: int = 1,
         # binning info
@@ -3352,7 +3351,6 @@ class TableDict(dict):
         scale: str = "standard",
         pretrained_scaler: Any = None,
         test_videos: int = 0,
-        verbose: int = 0,
         filter_low_variance: bool = False,
         interpolate_normalized: int = 10,
         file_name: str = "preprocessed",
