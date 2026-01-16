@@ -2996,7 +2996,7 @@ class GaussianMixtureLatentPT(nn.Module):
         self.n_components = n_components
         self.latent_dim = latent_dim
         self.kmeans_weight = kmeans
-        self.lens_enabled = lens_enabled
+        self.lens_enabled = False # lens_enabled
         self.mixture_dim = (24 if self.lens_enabled else self.latent_dim)
 
         # --- Trainable Parameters for the GMM components ---
