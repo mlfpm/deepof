@@ -117,7 +117,9 @@ class TurtleTeacherCfg:
 
     # Distillation (VaDE)
     lambda_distill: float = 4.0
-    lambda_decay_start: float = 10.0
+    lambda_decay_start: int = 10
+    lambda_end_weight: float = 0.2,
+    lambda_cooldown: int = 10,
     distill_sharpen_T: float = 0.5
     distill_conf_weight: bool = False
     distill_conf_thresh: float = 0.3
@@ -145,7 +147,6 @@ class TurtleTeacherCfg:
     # Refresh
     teacher_refresh_every: Optional[int] = None
     teacher_freeze_at: Optional[int] = 10
-    teacher_refresh_mode: str = "views"
     reinit_gmm_on_refresh: bool = False
 
 

@@ -135,36 +135,46 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
 
 def get_contrastive_soft_counts(
     coordinates,
-    embeddings: Dict[str, np.ndarray],                 
-    states: Union[str, int] = "bic",                   
+    embeddings: Dict[str, np.ndarray],
+    states: Union[str, int] = "bic",
     min_states: int = 2,
     max_states: int = 25,
     # Emissions
     reg_covar: float = 1e-5,
-    sample_size: int = 500000,                        
+    sample_size: int = 500000,
     random_state: int = 0,
     # Sticky HMM
-    p_stay: float = 0.95,                              
+    p_stay: float = 0.95,
+    # Optional priors (if soft_counts are given)
+    soft_counts: Optional[Dict[str, np.ndarray]] = None,
+    min_confidence: Optional[float] = 0.75,
+    prior_weight: float = 1.0,
 ):
-    """Extract soft counts for contrastive model based on .
+    """Extract soft counts for contrastive model.
 
-    Args:
-        embeddings (Dict[str, np.ndarray]): Embeddings dictionarym ay contain the embeddinsg directly or database paths.
-        states Union[str, int]: Either the number of states / clusters directly (int) or the scoring method to determine the best number of clusters (str). Options are "aic" and "bic".
-        min_states (int): Minimum number of states / clusters to test.
-        max_states (int): Maximum number of states / clusters to test.
-        reg_covar (float): 
-        sample_size (int): Number of samples to fit the GMMs on
-        random_state (int): Number of random state for reproducibility
-        p_stay (float): Prior chance to switch clusters from frame to frame for initialization
+    If `soft_counts` is provided, it is used as a per-frame prior over states (clusters),
+    biasing the forward–backward posteriors (HMM smoothing) without running EM training.
 
+    Notes:
+      - If `soft_counts` is provided, K is taken from its second dimension (and AIC/BIC search is skipped).
+      - Priors are applied as: log_emiss += prior_weight * log(soft_counts).
+      - If min_confidence is not None, frames with max prior <= min_confidence are replaced by uniform priors.
     """
+    eps = 1e-12
+
     # ---- helpers ----
     def _fit_diag_gmm(emb_dict, C, reg, max_n, seed):
-        """Fit a diagonal GaussianMixture (sklearn) on a subset of embeddings and return (means, variances and weights for all fitted distributions)."""
-        Z = emb_dict.sample_windows_from_data(N_windows_tab=int(max_n/len(emb_dict)))[0]
-        gm = GaussianMixture(n_components=C, covariance_type="diag", reg_covar=reg,
-                             max_iter=200, tol=1e-3, random_state=seed, init_params="kmeans")
+        """Fit a diagonal GaussianMixture (sklearn) on a subset of embeddings."""
+        Z = emb_dict.sample_windows_from_data(N_windows_tab=int(max_n / len(emb_dict)))[0]
+        gm = GaussianMixture(
+            n_components=C,
+            covariance_type="diag",
+            reg_covar=reg,
+            max_iter=200,
+            tol=1e-3,
+            random_state=seed,
+            init_params="kmeans",
+        )
         gm.fit(Z)
         return gm.means_.astype(np.float32), gm.covariances_.astype(np.float32), gm.weights_.astype(np.float32)
 
@@ -208,22 +218,54 @@ def get_contrastive_soft_counts(
         """Compute posterior p(c_t | z_1:T) via forward–backward; returns [T, C] (rows sum to 1)."""
         T, C = log_emiss.shape
         alpha = np.empty((T, C), dtype=np.float64)
-        beta  = np.empty((T, C), dtype=np.float64)
+        beta = np.empty((T, C), dtype=np.float64)
+
         alpha[0] = log_pi0 + log_emiss[0]
         alpha[0] -= _logsumexp(alpha[0]).squeeze(0)
         for t in range(1, T):
-            trans = alpha[t-1][:, None] + log_A
+            trans = alpha[t - 1][:, None] + log_A
             alpha[t] = log_emiss[t] + _logsumexp(trans, axis=0).squeeze(0)
             alpha[t] -= _logsumexp(alpha[t]).squeeze(0)
+
         beta[-1] = 0.0
-        for t in range(T-2, -1, -1):
-            trans = log_A + (log_emiss[t+1] + beta[t+1])[None, :]
+        for t in range(T - 2, -1, -1):
+            trans = log_A + (log_emiss[t + 1] + beta[t + 1])[None, :]
             beta[t] = _logsumexp(trans, axis=1).squeeze(1)
             beta[t] -= _logsumexp(beta[t]).squeeze(0)
+
         log_gamma = alpha + beta
         log_gamma -= _logsumexp(log_gamma, axis=1)
         return np.exp(log_gamma).astype(np.float32, copy=False)
-    
+
+    def _get_prior(key: str, T: int, K: int) -> Optional[np.ndarray]:
+        """Fetch/align/normalize priors for a given key. Returns (T,K) or None."""
+        if soft_counts is None or key not in soft_counts:
+            return None
+
+        P = get_dt(soft_counts, key).astype(np.float32, copy=False)  # supports TableDict-like too
+        if P.ndim != 2:
+            raise ValueError(f"soft_counts[{key}] must be (T,K). Got {P.shape}.")
+        if P.shape[1] != K:
+            raise ValueError(f"K mismatch for {key}: soft_counts has {P.shape[1]}, expected {K}.")
+
+        # align length to embeddings
+        if P.shape[0] < T:
+            pad = np.full((T - P.shape[0], K), 1.0 / K, dtype=np.float32)
+            P = np.vstack([P, pad])
+        elif P.shape[0] > T:
+            P = P[:T]
+
+        # normalize + optional confidence gating
+        P = np.maximum(P, eps)
+        P /= P.sum(axis=1, keepdims=True)
+
+        if min_confidence is not None:
+            low = (np.max(P, axis=1) <= float(min_confidence))
+            if np.any(low):
+                P[low] = 1.0 / K
+
+        return P
+
     # ---- select K ----
     def _fit_params_for_K(K: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, random_state)
@@ -232,18 +274,19 @@ def get_contrastive_soft_counts(
         """caclulates the score for the given number of clusters (K)"""
         mu, var, pi = _fit_params_for_K(K)
         A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
-        log_A  = np.log(np.maximum(A, 1e-12))
+        log_A = np.log(np.maximum(A, 1e-12))
         log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
+
         logL = 0.0
-        T_total=0
+        T_total = 0
         for k in keys:
             cur_embedding = get_dt(embeddings, k)
             Z = cur_embedding.astype(np.float32, copy=False)
             log_emiss = _log_emissions_diag(Z, mu, var).astype(np.float64, copy=False)
             logL += _forward_loglik(log_emiss, log_A, log_pi)
-            # Only for not aic, but since mebeddings are loaded here anyways...
-            T_total+=cur_embedding.shape[0]
-        p = 2 * K * D + (K - 1)  # emissions (means+vars) + prior
+            T_total += Z.shape[0]
+
+        p = 2 * K * D + (K - 1)  # (means+vars) + mixture weights
         if criterion == "aic":
             score = 2 * p - 2 * logL
         elif criterion == "bic":
@@ -256,47 +299,67 @@ def get_contrastive_soft_counts(
     keys = list(embeddings.keys())
     if not keys:
         raise ValueError("Embeddings are empty.")
-    D = get_dt(embeddings,keys[0],only_metainfo=True)['shape'][1]
+    D = get_dt(embeddings, keys[0], only_metainfo=True)["shape"][1]
 
+    # ---- determine K (skip selection if priors provided) ----
     model_selection: List[Tuple[int, float, float]] = []
-    # Determine best number of clusters, if states is not given as int
-    if isinstance(states, int):
-        K_best = int(states)
-    else:
-        crit = str(states).lower()
-        Ks = list(range(max(2, min_states), max(min_states, max_states)+1))
-        best_score, K_best = None, None
-        for K in tqdm.tqdm(Ks, desc=f"{'Optimizing number of clusters':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step"):
 
-            score, logL = _score_K(K, criterion=crit)
-            model_selection.append((K, score, logL))
-            if (best_score is None) or (score < best_score):
-                best_score, K_best = score, K
+    if soft_counts is not None:
+        # infer K from priors (first overlapping key)
+        k0 = next((k for k in keys if k in soft_counts), None)
+        if k0 is None:
+            raise ValueError("soft_counts provided but no keys overlap with embeddings.")
+        K_prior = int(get_dt(soft_counts, k0, only_metainfo=True)["shape"][1])
+
+        if isinstance(states, int) and int(states) != K_prior:
+            raise ValueError(f"states={states} but soft_counts implies K={K_prior}. They must match.")
+        K_best = K_prior
+
+    else:
+        # existing behavior
+        if isinstance(states, int):
+            K_best = int(states)
+        else:
+            crit = str(states).lower()
+            Ks = list(range(max(2, min_states), max(min_states, max_states) + 1))
+            best_score, K_best = None, None
+            for K in tqdm.tqdm(Ks, desc=f"{'Optimizing number of clusters':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step"):
+                score, logL = _score_K(K, criterion=crit)
+                model_selection.append((K, score, logL))
+                if (best_score is None) or (score < best_score):
+                    best_score, K_best = score, K
 
     # ---- final decode with best K ----
     mu, var, pi = _fit_params_for_K(K_best)
     A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
-    log_A  = np.log(np.maximum(A, 1e-12))
+    log_A = np.log(np.maximum(A, 1e-12))
     log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
 
-    # Generate softcounts 
-    soft_counts = {}
+    # ---- generate softcounts ----
+    soft_counts_out = {}
     table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
     for key in tqdm.tqdm(keys, desc=f"{'Extracting soft counts':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
-        Z = get_dt(embeddings,key).astype(np.float32, copy=False)
+        Z = get_dt(embeddings, key).astype(np.float32, copy=False)
         log_emiss = _log_emissions_diag(Z, mu, var).astype(np.float64, copy=False)
+
+        P = _get_prior(key, T=Z.shape[0], K=K_best)
+        if P is not None:
+            log_emiss = log_emiss + float(prior_weight) * np.log(np.maximum(P.astype(np.float64), eps))
+
         cur_soft_counts = _forward_backward(log_emiss, log_A, log_pi)
+        soft_counts_out[key] = deepof.utils.save_dt(cur_soft_counts, table_path, coordinates._very_large_project)
 
-        soft_counts[key] = deepof.utils.save_dt(cur_soft_counts,table_path,coordinates._very_large_project)
-
-    # Create table dict
-    soft_counts = deepof.data.TableDict(
-        soft_counts, typ="unsupervised_counts", table_path=table_path, exp_conditions=coordinates.get_exp_conditions
+    soft_counts_out = deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
     )
 
     if isinstance(states, str):
-        return soft_counts, model_selection
-    return soft_counts
+        return soft_counts_out, model_selection
+    return soft_counts_out
     
 
 def recluster(
