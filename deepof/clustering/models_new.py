@@ -5975,10 +5975,10 @@ class VaDELossTFExact(nn.Module):
             # Pretrain: only loss_variational_1 proxy (no q log q), as in TF (they multiply entropy by (1 - pretrain))
             v_max = 2.0 * math.log(2.0) 
             z_var_eff = z_log_var32.clamp_max(v_max) 
-            loss_var1 = -0.5 * (z_var_eff + 1.0).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
+            loss_var1 = -1 * (z_var_eff + 1.0).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
             kl_vec = loss_var1
         else:
-            loss_var1 = -0.5 * (z_log_var32 + 1.0).sum(dim=-1)  # [B]
+            loss_var1 = -1 * (z_log_var32 + 1.0).sum(dim=-1)  # [B]
             if q32 is not None:
                 loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q
             else:
@@ -6869,6 +6869,17 @@ def embedding_model_fittingPT(
 
     return embedding_model_fitting(preprocessed_object, adjacency_matrix, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
 
+
+# Unified checkpoint paths per model/run
+def _ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
+    ckpt_dir = os.path.join(common_cfg.output_path, "models", model_name.lower(), f"run_{common_cfg.run}")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    best_val_path = os.path.join(ckpt_dir, "best_model_val.pth")
+    best_score_path = os.path.join(ckpt_dir, "best_model_score.pth")
+    teacher_init_path = os.path.join(ckpt_dir, "model_teacher_init.pth")
+    return ckpt_dir, best_val_path, best_score_path, teacher_init_path
+    
+
 def embedding_model_fitting(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
@@ -6923,294 +6934,357 @@ def embedding_model_fitting(
         print(f"TensorBoard logs -> {log_dir}")
 
 
-    # Unified checkpoint paths per model/run
-    def _ckpt_paths(model_name: str):
-        ckpt_dir = os.path.join(common_cfg.output_path, "models", model_name.lower(), f"run_{common_cfg.run}")
-        os.makedirs(ckpt_dir, exist_ok=True)
-        best_val_path = os.path.join(ckpt_dir, "best_model_val.pth")
-        best_score_path = os.path.join(ckpt_dir, "best_model_score.pth")
-        teacher_init_path = os.path.join(ckpt_dir, "model_teacher_init.pth")
-        return ckpt_dir, best_val_path, best_score_path, teacher_init_path
-
     # ----------------------------------------------------
     # Branch 1: VQVAE
     # ----------------------------------------------------
     if model_name == "vqvae":
-        model = VQVAEPT(
-            input_shape=train_dataset.x_shape,
-            edge_feature_shape=train_dataset.a_shape,
-            adjacency_matrix=adjacency_matrix,
-            latent_dim=common_cfg.latent_dim,
-            n_components=common_cfg.n_components,
-            encoder_type=common_cfg.encoder_type,
-            use_gnn=True,
-            interaction_regularization=common_cfg.interaction_regularization,
-            kmeans_loss=common_cfg.kmeans_loss,
-        ).to(device, non_blocking=True)
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-            model = nn.DataParallel(model)
-
-        teacher_cfg.include_latent_view=False
-        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
-            teacher_cfg=teacher_cfg,
-            train_dataset=train_dataset,
-            preprocessed_train=preprocessed_train,
-            data_path=data_path,
-            batch_size=common_cfg.batch_size,
-            device=device,
-            n_components=common_cfg.n_components,
-            latent_view=None,
+        return fit_VQVAE(
+            train_loader,
+            val_loader,
+            preprocessed_train,
+            adjacency_matrix,
+            common_cfg,
+            teacher_cfg,
+            writer,
         )
-        apply_distill = (tau_star is not None)
-        lambda_scheduler=None
-        if not apply_distill:
-            lambda_scheduler = Dynamic_weight_manager(
-                n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-                warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
-                cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
-            )
-
-        distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-        optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
-        scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
-
-        # unified best-val and best-score saving
-        _, best_path_val, best_path_score, _ = _ckpt_paths("vqvae")
-        best_val = float("inf")
-        best_score = -float("inf")
-
-        print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
-        for epoch in range(common_cfg.epochs):
-
-            ctx = SimpleNamespace(
-                tau_star=(tau_star.to(device) if tau_star is not None else None),
-                distill_head=distill_head,
-                lambda_scheduler=lambda_scheduler,
-                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
-                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
-                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
-                apply_distill=apply_distill,
-            )
-
-            train_logs, _, lam = train_one_epoch_indexed(
-                model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
-                device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-                grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
-            )
-            val_logs = validate_one_epoch_indexed(
-                model=model, dataloader=val_loader, step_fn=step_vqvae_distill,
-                device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-                ctx=SimpleNamespace(apply_distill=False), show_progress=True,
-            )
-
-            v_total = float(val_logs.get("total_loss", float("inf")))
-            score_value = -v_total  # placeholder score (keeps API uniform)
-
-            print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
-                  f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
-
-            if writer:
-                for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
-                for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
-                writer.add_scalar("Distill/lambda", lam, epoch)
-            
-            
-            _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
-
-            if v_total < best_val:
-                best_val = v_total
-                if common_cfg.save_weights:
-                    torch.save(unwrap_dp(model).state_dict(), best_path_val)
-                    save_model_info(
-                        best_path_val,
-                        stage="best_val",
-                        epoch=epoch,
-                        train_steps=(epoch + 1) * len(train_loader),
-                        val_total=v_total,
-                        score_value=None,
-                        common_cfg=common_cfg,
-                        teacher_cfg=teacher_cfg,
-                        vade_cfg=vade_cfg,
-                        contrastive_cfg=contrastive_cfg,
-                    )
-                    print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
-
-            if score_value > best_score:
-                best_score = score_value
-                if common_cfg.save_weights:
-                    torch.save(unwrap_dp(model).state_dict(), best_path_score)
-                    save_model_info(
-                        best_path_score,
-                        stage="best_score",
-                        epoch=epoch,
-                        train_steps=(epoch + 1) * len(train_loader),
-                        val_total=v_total,
-                        score_value=score_value,
-                        common_cfg=common_cfg,
-                        teacher_cfg=teacher_cfg,
-                        vade_cfg=vade_cfg,
-                        contrastive_cfg=contrastive_cfg,
-                    )
-                    print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
-            
-
-        model_score = deepcopy(model)
-        if common_cfg.save_weights and os.path.exists(best_path_val):
-            unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
-        if common_cfg.save_weights and os.path.exists(best_path_score):
-            unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
-
-        if writer:
-            writer.flush(); writer.close()
-
-        return unwrap_dp(model), unwrap_dp(model_score), None
 
     # ----------------------------------------------------
     # Branch 2: Contrastive
     # ----------------------------------------------------
-    if model_name == "contrastive":
-        model = deepof.clustering.models_new.ContrastivePT(
-            input_shape=train_dataset.x_shape,
-            edge_feature_shape=train_dataset.a_shape,
-            adjacency_matrix=adjacency_matrix,
-            latent_dim=common_cfg.latent_dim,
-            encoder_type=common_cfg.encoder_type,
-            use_gnn=True,
-            similarity_function=contrastive_cfg.contrastive_similarity_function,
-            loss_function=contrastive_cfg.contrastive_loss_function,
-            temperature=contrastive_cfg.temperature,
-            beta=contrastive_cfg.beta,
-            tau=contrastive_cfg.tau,
-        ).to(device, non_blocking=True)
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-            model = nn.DataParallel(model)
-
-        teacher_cfg.include_latent_view=False
-        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
-            teacher_cfg=teacher_cfg,
-            train_dataset=train_dataset,
-            preprocessed_train=preprocessed_train,
-            data_path=data_path,
-            batch_size=common_cfg.batch_size,
-            device=device,
-            n_components=common_cfg.n_components,
-            latent_view=None,
+    elif model_name == "contrastive":
+        return fit_contrastive(
+            train_loader,
+            val_loader,
+            preprocessed_train,
+            adjacency_matrix,
+            common_cfg,
+            teacher_cfg,
+            contrastive_cfg,
+            writer,
         )
-        apply_distill = (tau_star is not None)
-        lambda_scheduler=None
-        if not apply_distill:
-            lambda_scheduler = Dynamic_weight_manager(
-                n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-                warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
-                cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
-            )
-
-        distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-        optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
-        scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
-
-        # Unified best-val and best-score saving (no head saving)
-        _, best_path_val, best_path_score, _ = _ckpt_paths("contrastive")
-        best_val = float("inf")
-        best_score = -float("inf")
-
-
-
-        print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
-        for epoch in range(common_cfg.epochs):
-
-            ctx = SimpleNamespace(
-                tau_star=(tau_star.to(device) if tau_star is not None else None),
-                distill_head=distill_head,
-                lambda_scheduler=lambda_scheduler,
-                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
-                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
-                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
-                apply_distill=apply_distill,
-            )
-
-            train_logs, _, lam = train_one_epoch_indexed(
-                model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
-                device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-                grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
-            )
-            val_logs = validate_one_epoch_indexed(
-                model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
-                device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-                ctx=SimpleNamespace(apply_distill=False), show_progress=True,
-            )
-
-            v_total = float(val_logs.get("total_loss", float("inf")))
-            score_value = -v_total  # placeholder score (keeps API uniform)
-
-            print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
-                  f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
-
-            if writer:
-                for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
-                for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
-                writer.add_scalar("Distill/lambda", lam, epoch)
-
-            
-            _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
-
-            if v_total < best_val:
-                best_val = v_total
-                if common_cfg.save_weights:
-                    torch.save(unwrap_dp(model).state_dict(), best_path_val)
-                    save_model_info(
-                        best_path_val,
-                        stage="best_val",
-                        epoch=epoch,
-                        train_steps=(epoch + 1) * len(train_loader),
-                        val_total=v_total,
-                        score_value=None,
-                        common_cfg=common_cfg,
-                        teacher_cfg=teacher_cfg,
-                        vade_cfg=vade_cfg,
-                        contrastive_cfg=contrastive_cfg,
-                    )
-                    print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
-
-            if score_value > best_score:
-                best_score = score_value
-                if common_cfg.save_weights:
-                    torch.save(unwrap_dp(model).state_dict(), best_path_score)
-                    save_model_info(
-                        best_path_score,
-                        stage="best_score",
-                        epoch=epoch,
-                        train_steps=(epoch + 1) * len(train_loader),
-                        val_total=v_total,
-                        score_value=score_value,
-                        common_cfg=common_cfg,
-                        teacher_cfg=teacher_cfg,
-                        vade_cfg=vade_cfg,
-                        contrastive_cfg=contrastive_cfg,
-                    )
-                    print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
-
-
-        # Load both checkpoints and return uniformly
-        model_score = deepcopy(model)
-        if common_cfg.save_weights and os.path.exists(best_path_val):
-            unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
-        if common_cfg.save_weights and os.path.exists(best_path_score):
-            unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
-
-        if writer:
-            writer.flush(); writer.close()
-
-        return unwrap_dp(model), unwrap_dp(model_score), None
 
     # ----------------------------------------------------
     # Branch 3: VaDE
     # ----------------------------------------------------
+    elif model_name == "vade":
+        return fit_VADE(
+            train_loader,
+            val_loader,
+            preprocessed_train,
+            adjacency_matrix,
+            common_cfg,
+            teacher_cfg,
+            vade_cfg,
+            writer,
+        )
+    else:
+        raise ValueError(f"Unsupported model: {model_name}")
+
+
+
+def fit_VQVAE(
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    preprocessed_train: dict,
+    adjacency_matrix: np.ndarray,
+    common_cfg : CommonFitCfg,
+    teacher_cfg: TurtleTeacherCfg,
+    writer: SummaryWriter,
+):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data_path = os.path.join(common_cfg.output_path, "Datasets")
+    n_batches_per_epoch = len(train_loader)
+    model = VQVAEPT(
+        input_shape=train_loader.dataset.x_shape,
+        edge_feature_shape=train_loader.dataset.a_shape,
+        adjacency_matrix=adjacency_matrix,
+        latent_dim=common_cfg.latent_dim,
+        n_components=common_cfg.n_components,
+        encoder_type=common_cfg.encoder_type,
+        use_gnn=True,
+        interaction_regularization=common_cfg.interaction_regularization,
+        kmeans_loss=common_cfg.kmeans_loss,
+    ).to(device, non_blocking=True)
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+        model = nn.DataParallel(model)
+
+    teacher_cfg.include_latent_view=False
+    teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+        teacher_cfg=teacher_cfg,
+        train_dataset=train_loader.dataset,
+        preprocessed_train=preprocessed_train,
+        data_path=data_path,
+        batch_size=common_cfg.batch_size,
+        device=device,
+        n_components=common_cfg.n_components,
+        latent_view=None,
+    )
+    apply_distill = (tau_star is not None)
+    lambda_scheduler=None
+    if not apply_distill:
+        lambda_scheduler = Dynamic_weight_manager(
+            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+            warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
+            cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+        )
+
+    distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+    optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+    scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
+
+    # unified best-val and best-score saving
+    _, best_path_val, best_path_score, _ = _ckpt_paths("vqvae", common_cfg=common_cfg)
+    best_val = float("inf")
+    best_score = -float("inf")
+
+    print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
+    for epoch in range(common_cfg.epochs):
+
+        ctx = SimpleNamespace(
+            tau_star=(tau_star.to(device) if tau_star is not None else None),
+            distill_head=distill_head,
+            lambda_scheduler=lambda_scheduler,
+            distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+            distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+            distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+            apply_distill=apply_distill,
+        )
+
+        train_logs, _, lam = train_one_epoch_indexed(
+            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
+            device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+        )
+        val_logs = validate_one_epoch_indexed(
+            model=model, dataloader=val_loader, step_fn=step_vqvae_distill,
+            device=device, epoch=epoch, num_epochs=common_cfg.epochs,
+            ctx=SimpleNamespace(apply_distill=False), show_progress=True,
+        )
+
+        v_total = float(val_logs.get("total_loss", float("inf")))
+        score_value = -v_total  # placeholder score (keeps API uniform)
+
+        print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
+                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+
+        if writer:
+            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
+            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+            writer.add_scalar("Distill/lambda", lam, epoch)
+        
+        
+        _print_losses(model_name="vqvae", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+
+        if v_total < best_val:
+            best_val = v_total
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                save_model_info(
+                    best_path_val,
+                    stage="best_val",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=v_total,
+                    score_value=None,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                )
+                print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
+
+        if score_value > best_score:
+            best_score = score_value
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_score)
+                save_model_info(
+                    best_path_score,
+                    stage="best_score",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=v_total,
+                    score_value=score_value,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                )
+                print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
+        
+
+    model_score = deepcopy(model)
+    if common_cfg.save_weights and os.path.exists(best_path_val):
+        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+    if common_cfg.save_weights and os.path.exists(best_path_score):
+        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+
+    if writer:
+        writer.flush(); writer.close()
+
+    return unwrap_dp(model), unwrap_dp(model_score), None
+
+
+def fit_contrastive(
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    preprocessed_train: dict,
+    adjacency_matrix: np.ndarray,
+    common_cfg : CommonFitCfg,
+    teacher_cfg: TurtleTeacherCfg,
+    contrastive_cfg: ContrastiveCfg,
+    writer: SummaryWriter,
+):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data_path = os.path.join(common_cfg.output_path, "Datasets")
+    n_batches_per_epoch = len(train_loader)
+    model = deepof.clustering.models_new.ContrastivePT(
+        input_shape=train_loader.dataset.x_shape,
+        edge_feature_shape=train_loader.dataset.a_shape,
+        adjacency_matrix=adjacency_matrix,
+        latent_dim=common_cfg.latent_dim,
+        encoder_type=common_cfg.encoder_type,
+        use_gnn=True,
+        similarity_function=contrastive_cfg.contrastive_similarity_function,
+        loss_function=contrastive_cfg.contrastive_loss_function,
+        temperature=contrastive_cfg.temperature,
+        beta=contrastive_cfg.beta,
+        tau=contrastive_cfg.tau,
+    ).to(device, non_blocking=True)
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+        model = nn.DataParallel(model)
+
+    teacher_cfg.include_latent_view=False
+    teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+        teacher_cfg=teacher_cfg,
+        train_dataset=train_loader.dataset,
+        preprocessed_train=preprocessed_train,
+        data_path=data_path,
+        batch_size=common_cfg.batch_size,
+        device=device,
+        n_components=common_cfg.n_components,
+        latent_view=None,
+    )
+    apply_distill = (tau_star is not None)
+    lambda_scheduler=None
+    if not apply_distill:
+        lambda_scheduler = Dynamic_weight_manager(
+            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+            warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
+            cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+        )
+
+    distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+    optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+    scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
+
+    # Unified best-val and best-score saving (no head saving)
+    _, best_path_val, best_path_score, _ = _ckpt_paths("contrastive", common_cfg=common_cfg)
+    best_val = float("inf")
+    best_score = -float("inf")
+
+    print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
+    for epoch in range(common_cfg.epochs):
+
+        ctx = SimpleNamespace(
+            tau_star=(tau_star.to(device) if tau_star is not None else None),
+            distill_head=distill_head,
+            lambda_scheduler=lambda_scheduler,
+            distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+            distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+            distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+            apply_distill=apply_distill,
+        )
+
+        train_logs, _, lam = train_one_epoch_indexed(
+            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
+            device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+        )
+        val_logs = validate_one_epoch_indexed(
+            model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
+            device=device, epoch=epoch, num_epochs=common_cfg.epochs,
+            ctx=SimpleNamespace(apply_distill=False), show_progress=True,
+        )
+
+        v_total = float(val_logs.get("total_loss", float("inf")))
+        score_value = -v_total  # placeholder score (keeps API uniform)
+
+        print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
+                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+
+        if writer:
+            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
+            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+            writer.add_scalar("Distill/lambda", lam, epoch)
+
+        
+        _print_losses(model_name="Contrastive", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+
+        if v_total < best_val:
+            best_val = v_total
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                save_model_info(
+                    best_path_val,
+                    stage="best_val",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=v_total,
+                    score_value=None,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                    contrastive_cfg=contrastive_cfg,
+                )
+                print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
+
+        if score_value > best_score:
+            best_score = score_value
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_score)
+                save_model_info(
+                    best_path_score,
+                    stage="best_score",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=v_total,
+                    score_value=score_value,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                    contrastive_cfg=contrastive_cfg,
+                )
+                print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
+
+
+    # Load both checkpoints and return uniformly
+    model_score = deepcopy(model)
+    if common_cfg.save_weights and os.path.exists(best_path_val):
+        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+    if common_cfg.save_weights and os.path.exists(best_path_score):
+        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+
+    if writer:
+        writer.flush(); writer.close()
+
+    return unwrap_dp(model), unwrap_dp(model_score), None    
+
+
+def fit_VADE(
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    preprocessed_train: dict,
+    adjacency_matrix: np.ndarray,
+    common_cfg : CommonFitCfg,
+    teacher_cfg: TurtleTeacherCfg,
+    vade_cfg: VaDECfg,
+    writer: SummaryWriter,
+):
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data_path = os.path.join(common_cfg.output_path, "Datasets")
+    n_batches_per_epoch = len(train_loader)
     model, step_fn = build_model_and_step(
-        input_shape=train_dataset.x_shape,
-        edge_feature_shape=train_dataset.a_shape,
+        input_shape=train_loader.dataset.x_shape,
+        edge_feature_shape=train_loader.dataset.a_shape,
         adjacency_matrix=adjacency_matrix,
         latent_dim=common_cfg.latent_dim,
         n_components=common_cfg.n_components,
@@ -7308,7 +7382,7 @@ def embedding_model_fitting(
     optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
 
     # VaDE unified checkpoint paths
-    _, best_path_val, best_path_score, teacher_init_path = _ckpt_paths("vade")
+    _, best_path_val, best_path_score, teacher_init_path = _ckpt_paths("vade", common_cfg=common_cfg)
 
     tau_star = None
     teacher_init_model = None  # returned as 3rd output
@@ -7319,7 +7393,7 @@ def embedding_model_fitting(
     if teacher_cfg.use_turtle_teacher:
         print("\n--- Extracting latents for teacher ---")
         z_all = extract_latents(
-            unwrap_dp(model), train_dataset, device=device,
+            unwrap_dp(model), train_loader.dataset, device=device,
             batch_size=2048, num_workers=common_cfg.num_workers
         ).cpu()
 
@@ -7332,7 +7406,7 @@ def embedding_model_fitting(
         teacher_cfg.include_latent_view=True
         teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
             teacher_cfg=teacher_cfg,            
-            train_dataset=train_dataset,
+            train_dataset=train_loader.dataset,
             preprocessed_train=preprocessed_train,
             data_path=data_path,
             batch_size=common_cfg.batch_size,
@@ -7364,14 +7438,13 @@ def embedding_model_fitting(
                 common_cfg=common_cfg,
                 teacher_cfg=teacher_cfg,
                 vade_cfg=vade_cfg,
-                contrastive_cfg=contrastive_cfg,
             )
             print(f"  Saved teacher-init model -> {teacher_init_path}")
 
     else:
         print("\n--- Initializing GMM from embeddings (sklearn) ---")
-        init_loader = DataLoader(train_dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
-        unwrap_dp(model).initialize_gmm_from_data(init_loader)
+        #init_loader = DataLoader(train_loader.dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
+        unwrap_dp(model).initialize_gmm_from_data(train_loader)
 
     # Training (VaDE keeps your existing alignment-score logic)
     best_align = -float("inf")
@@ -7426,7 +7499,7 @@ def embedding_model_fitting(
             and (epoch) % teacher_cfg.teacher_refresh_every == 0 and (teacher_cfg.teacher_freeze_at is None or (epoch) <= teacher_cfg.teacher_freeze_at)
         ):
             print(f"\n--- Refresh TURTLE teacher at epoch {epoch+1} ---")
-            z_curr = extract_latents(base, train_dataset, device=device, batch_size=2048, num_workers=common_cfg.num_workers).cpu()
+            z_curr = extract_latents(base, train_loader.dataset, device=device, batch_size=2048, num_workers=common_cfg.num_workers).cpu()
 
             views_dict = {"z": z_curr.to(device)}
             if teacher_cfg.include_nodes_view and (pca_pos is not None) and (pca_spd is not None):
@@ -7491,7 +7564,7 @@ def embedding_model_fitting(
         )
         improved_val = (epoch > 5) and (val_total < best_val)
 
-        _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+        _print_losses(model_name="vade", epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
 
         if improved_score:
             best_align = train_logs["alignment_score"]
@@ -7508,7 +7581,6 @@ def embedding_model_fitting(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     vade_cfg=vade_cfg,
-                    contrastive_cfg=contrastive_cfg,
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
 
@@ -7526,12 +7598,9 @@ def embedding_model_fitting(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     vade_cfg=vade_cfg,
-                    contrastive_cfg=contrastive_cfg,
                 )
                 print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
         
-        #if not improved_score and not improved_val:
-        #    print("")
 
         else:
             epochs_no_improve += 1
@@ -7541,7 +7610,6 @@ def embedding_model_fitting(
             break
 
 
-
     # Load both best checkpoints and return uniformly
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
@@ -7549,18 +7617,7 @@ def embedding_model_fitting(
     if common_cfg.save_weights and os.path.exists(best_path_score):
         unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
 
-    #if vade_cfg.recluster:
-    #    print("\n--- Re-clustering with final embeddings ---")
-    #    init_loader = DataLoader(train_dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
-    #    unwrap_dp(model).initialize_gmm_from_data(init_loader)
-    #    if common_cfg.save_weights:
-    #        rc_path = os.path.join(os.path.dirname(best_path_val), "best_model_reclustered.pth")
-    #        torch.save(unwrap_dp(model).state_dict(), rc_path)
-    #        print(f"Saved re-clustered model -> {rc_path}")
-
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model
-
-
+    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model    

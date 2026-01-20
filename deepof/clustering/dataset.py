@@ -333,6 +333,7 @@ class BatchDictDataset:
 
         if iterable_for_h5:
             iterable = _H5BatchIterableDataset(
+                self,
                 x_path=self.X_path,
                 a_path=self.a_path,
                 ang_path=self.ang_path,
@@ -373,6 +374,7 @@ class BatchDictDataset:
 class _H5BatchIterableDataset(IterableDataset):
     def __init__(
         self,
+        base_dataset: BatchDictDataset,
         x_path: str,
         a_path: str,
         ang_path: str,
@@ -389,6 +391,7 @@ class _H5BatchIterableDataset(IterableDataset):
         return_angles: int = False,
     ):
         super().__init__()
+        self.base_dataset = base_dataset
         self.x_path = x_path
         self.a_path = a_path
         self.ang_path = ang_path
@@ -404,6 +407,12 @@ class _H5BatchIterableDataset(IterableDataset):
         self.permute_within_block = permute_within_block
         self.return_angles = return_angles
 
+
+    def __getattr__(self, name):
+        # Called only if attribute not found on self
+        return getattr(self.base_dataset, name)
+    
+    
     def __len__(self) -> int:
         if self.n_samples is None:
             with h5py.File(self.x_path, 'r') as f:
