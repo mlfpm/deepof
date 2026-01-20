@@ -9,9 +9,11 @@
 # encoding: utf-8
 # module deepof
 
-from typing import Any, NewType, Iterable, Tuple, Dict
+from typing import Any, NewType, Iterable, Tuple, Dict, Optional, Mapping, List, Callable
 
+import os
 import numpy as np
+import math
 import tcn
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -4653,3 +4655,2912 @@ class Contrastive(tf.keras.models.Model):
             for met in self.metrics
             if "val" in met.name
         }
+    
+
+#########################################################
+# Intermediary function stash for presentation
+#########################################################
+
+from dataclasses import dataclass
+from types import SimpleNamespace
+from deepof.clustering.dataset import BatchDictDataset
+from deepof.clustering.model_utils_new import select_contrastive_loss_pt, save_model_info, CommonFitCfg, TurtleTeacherCfg, VaDECfg, ContrastiveCfg 
+from sklearn.decomposition import IncrementalPCA
+from copy import deepcopy
+from torch.utils.data import DataLoader
+from torch.amp import GradScaler, autocast
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+
+def unwrap_dp(model: nn.Module) -> nn.Module:
+    return model.module if isinstance(model, nn.DataParallel) else model
+
+def move_to(x, device):
+    if isinstance(x, (list, tuple)):
+        return type(x)(move_to(xx, device) for xx in x)
+    if isinstance(x, Mapping):
+        return {k: move_to(v, device) for k, v in x.items()}
+    if torch.is_tensor(x):
+        return x.to(device, non_blocking=True)
+    return x
+
+@torch.no_grad()
+def _compute_diagnostics(
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: Optional[nn.Module],
+    device: torch.device,
+    max_batches: int = 4,
+) -> Dict[str, float]:
+    """
+    Fast diagnostics:
+      - mean entropy of q(c|z) over samples
+      - entropy of marginal q̄(c) across the inspected set
+      - GMM logvar min/max and prior entropy
+      - teacher τ*: marginal entropy, mean confidence, mean distillation weight
+    """
+    base = unwrap_dp(model)
+    base.eval()
+
+    # q(c|z) stats on a few validation batches
+    total_samples = 0
+    sum_ent = 0.0
+    sum_q = None
+    for i, batch in enumerate(dataloader):
+        if i >= max_batches:
+            break
+        x, a, *rest = move_to(batch, device)
+        outputs = base(x, a, return_gmm_params=True)
+        q = outputs[2].float().clamp_min(1e-8)  # (B,C)
+        ent = -(q * q.log()).sum(dim=-1)        # (B,)
+        sum_ent += float(ent.sum().item())
+        total_samples += q.size(0)
+        sum_q = q.sum(dim=0) if sum_q is None else (sum_q + q.sum(dim=0))
+
+    if total_samples > 0:
+        q_marginal = (sum_q / total_samples).clamp_min(1e-9)   # (C,) torch
+        mean_q_entropy = sum_ent / total_samples
+        q_marginal_entropy = float(-(q_marginal * q_marginal.log()).sum().item())
+    else:
+        q_marginal = None
+        mean_q_entropy = float("nan")
+        q_marginal_entropy = float("nan")
+
+    # GMM stats
+    gmm_log_vars = unwrap_dp(model).latent_space.gmm_log_vars.detach()
+    logvar_min = float(gmm_log_vars.min().item())
+    logvar_max = float(gmm_log_vars.max().item())
+
+    prior = unwrap_dp(model).latent_space.prior
+    prior = prior.detach() if torch.is_tensor(prior) else torch.as_tensor(prior)
+    prior = prior.clamp_min(1e-9)
+    prior_entropy = float(-(prior * prior.log()).sum().item())
+
+    # Teacher τ* stats
+    teacher_marginal_entropy, teacher_conf_mean, teacher_w_mean = float("nan"), float("nan"), float("nan")
+    kl_marg_q_to_tau = float("nan")  # NEW
+    if criterion is not None and getattr(criterion, "tau_star", None) is not None:
+        tau = criterion.tau_star.detach()
+        T = float(getattr(criterion, "distill_sharpen_T", 0.5))
+        tau_sharp = torch.softmax((tau.clamp_min(1e-8)).log() / T, dim=-1) if T > 0.0 else tau
+        conf = tau_sharp.max(dim=1).values
+        teacher_conf_mean = float(conf.mean().item())
+        if bool(getattr(criterion, "distill_conf_weight", False)):
+            thr = float(getattr(criterion, "distill_conf_thresh", 0.55))
+            w = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(min=0.0, max=1.0)
+            teacher_w_mean = float(w.mean().item())
+        else:
+            teacher_w_mean = 1.0
+
+        tau_marg = tau.mean(dim=0).clamp_min(1e-9)  # (C,) torch
+        teacher_marginal_entropy = float(-(tau_marg * tau_marg.log()).sum().item())
+
+        # NEW: KL(student marginal || teacher marginal)
+        if q_marginal is not None:
+            kl = (q_marginal * (q_marginal.log() - tau_marg.log())).sum().item()
+            kl_marg_q_to_tau = float(max(0.0, kl))
+
+    return {
+        "diag/q_mean_entropy": mean_q_entropy,
+        "diag/q_marginal_entropy": q_marginal_entropy,
+        "diag/gmm_logvar_min": logvar_min,
+        "diag/gmm_logvar_max": logvar_max,
+        "diag/prior_entropy": prior_entropy,
+        "diag/teacher_marginal_entropy": teacher_marginal_entropy,
+        "diag/teacher_conf_mean": teacher_conf_mean,
+        "diag/teacher_weight_mean": teacher_w_mean,
+        "diag/kl_marg_q_to_tau": kl_marg_q_to_tau, 
+    }
+
+################
+# Turtle teacher
+################
+
+
+def soft_cross_entropy_logits(logits, soft_targets, eps=1e-8, reduction="mean"):
+    log_probs = F.log_softmax(logits, dim=-1)
+    soft_targets = torch.clamp(soft_targets, min=eps, max=1.0)
+    loss = -(soft_targets * log_probs).sum(dim=-1)
+    if reduction == "mean":
+        return loss.mean()
+    elif reduction == "sum":
+        return loss.sum()
+    return loss
+
+class MLPHead(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int,
+                 hidden_dim: int = 32,
+                 dropout: float = 0.0):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, out_dim),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+    
+
+class TurtleHeads(nn.Module):
+    def __init__(self, feature_dims: List[int], n_components: int,
+                 inner_lr: float = 0.1, M: int = 100,
+                 weight_decay: float = 1e-4,
+                 normalize_feats: bool = True,
+                 temperature: float = 0.7,
+                 supervised_index: Optional[int] = None, 
+                 mlp_hidden: int = 32,                    
+                 mlp_dropout: float = 0.0                 
+                 ):
+        super().__init__()
+        self.M = M
+        self.normalize_feats = normalize_feats
+        self.temperature = temperature
+        self.supervised_index = supervised_index
+
+        self.heads = nn.ModuleList()
+        self._optims = []
+
+        n_views = len(feature_dims)
+
+        for i, d in enumerate(feature_dims):
+            if i != supervised_index:
+                head = MLPHead(d, n_components,
+                               hidden_dim=mlp_hidden,
+                               dropout=mlp_dropout)
+            else:
+                head = nn.Linear(d, n_components)
+            self.heads.append(head)
+            self._optims.append(
+                torch.optim.SGD(head.parameters(), lr=inner_lr, weight_decay=weight_decay)
+            )
+
+    @torch.no_grad()
+    def reset_parameters(self):
+        for h in self.heads:
+            h.reset_parameters()
+
+    def _maybe_normalize(self, feats_list):
+        if not self.normalize_feats:
+            return feats_list
+        out = []
+        for i, f in enumerate(feats_list):
+            if hasattr(self, "supervised_index") and (i == self.supervised_index):
+                out.append(f)  # don't normalize labels
+            else:
+                out.append(F.normalize(f, dim=-1))
+        return out
+
+    def inner_fit(self, feats_list, soft_targets):
+        feats_list = self._maybe_normalize([f.detach().float() for f in feats_list])
+        soft_targets = soft_targets.detach().float()
+        for _ in range(self.M):
+            for head, opt, feats in zip(self.heads, self._optims, feats_list):
+                logits = head(feats) / self.temperature
+                loss = soft_cross_entropy_logits(logits, soft_targets)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+
+    @torch.no_grad()
+    def logits_list(self, feats_list):
+        feats_list = self._maybe_normalize([f.detach().float() for f in feats_list])
+        return [(head(feats) / self.temperature).detach() for head, feats in zip(self.heads, feats_list)]
+
+class TaskEncoder(nn.Module):
+    def __init__(self, feature_dims: List[int], n_components: int, 
+                 temperature: float = 1.0,
+                 supervised_index: Optional[int] = None,  
+                 mlp_hidden: int = 32,                  
+                 mlp_dropout: float = 0.0                
+                 ):
+        super().__init__()
+        self.temperature = temperature
+        self.supervised_index=supervised_index
+
+        self.projs = nn.ModuleList()
+        for i, d in enumerate(feature_dims):
+            if i != supervised_index:
+                proj = MLPHead(d, n_components,
+                               hidden_dim=mlp_hidden,
+                               dropout=mlp_dropout)
+            else:
+                proj = nn.Linear(d, n_components)
+            self.projs.append(proj)
+
+    def forward(self, feats_list):
+        logits = None
+        for proj, feats in zip(self.projs, feats_list):
+            out = proj(feats.detach().float()) / self.temperature
+            logits = out if logits is None else (logits + out)
+        logits = logits / max(len(self.projs), 1)
+        return F.softmax(logits, dim=-1)
+    
+
+class TurtleTeacher:
+    def __init__(self, feature_dims: List[int], n_components: int,
+                 gamma: float = 10.0,
+                 alpha_sample_entropy: float = 0.1,
+                 inner_lr: float = 0.1,
+                 inner_steps: int = 100,
+                 head_wd: float = 1e-4,
+                 head_temp: float = 0.5,
+                 task_temp: float = 0.5,
+                 normalize_feats: bool = True,
+                 lr_theta: float = 5e-3,  #1e-3
+                 delta_death_barrier: float = 40.0,
+                 supervised_index: Optional[int] = None,  
+                 mlp_hidden: int = 32,                    
+                 mlp_dropout: float = 0.0                  
+                 ):
+        self.n_components = n_components
+        self.gamma = gamma
+        self.delta = delta_death_barrier
+        self.alpha = alpha_sample_entropy
+
+        self.heads = TurtleHeads(
+            feature_dims, n_components,
+            inner_lr=inner_lr, M=inner_steps,
+            weight_decay=head_wd,
+            normalize_feats=normalize_feats,
+            temperature=head_temp,
+            supervised_index=supervised_index,
+            mlp_hidden=mlp_hidden,
+            mlp_dropout=mlp_dropout, 
+        )
+        self.task_encoder = TaskEncoder(
+            feature_dims, n_components,
+            temperature=task_temp,
+            supervised_index=supervised_index,
+            mlp_hidden=mlp_hidden,
+            mlp_dropout=mlp_dropout,
+        )
+        self.opt_theta = torch.optim.Adam(self.task_encoder.parameters(), lr=lr_theta)
+        self.device = torch.device("cpu")
+
+    def to(self, device: torch.device):
+        self.device = device
+        self.heads.to(device)
+        self.task_encoder.to(device)
+        return self
+
+    @staticmethod
+    def _entropy(p: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
+        p = p.clamp_min(eps)
+        return -(p * p.log()).sum(dim=-1)
+
+    def fit(self, feats_dict: dict, outer_steps: int = 200,
+            temporal_edges: Optional[List[Tuple[int, int]]] = None, rho: float = 0.04, verbose: bool = True):
+        labels=feats_dict.get("supervised_labels", None)
+        feats_list = [f.to(self.device) for f in feats_dict.values() if f is not None]
+
+        for step in range(outer_steps):
+            tau = self.task_encoder(feats_list)  # [N, C]
+
+            # Inner: fit linear heads to current τ (stop-grad to τ)
+            self.heads.inner_fit(feats_list, tau)
+
+            # Outer components
+            logits_k = self.heads.logits_list(feats_list)
+            ce_term = 0.0
+            feats_weight=np.ones(len(logits_k))
+            feats_weight[-1]=1
+            for k,logits in enumerate(logits_k):
+                ce_term = ce_term + soft_cross_entropy_logits(logits, tau)*feats_weight[k]
+            ce_term = ce_term / max(len(logits_k), 1)
+
+            sample_entropy = self._entropy(tau).mean()  # E[H(τ(x))]
+            marginal = tau.mean(dim=0)
+            H_marginal = self._entropy(marginal.unsqueeze(0)).mean()  # H(marginal)
+            
+            # Target only a minimum marginal entropy; no force toward a fixed cap
+            logK = float(np.log(self.n_components))
+            H_target = torch.tensor(1 * logK, device=H_marginal.device) # try 0.55–0.65
+            marg_gap = torch.relu(H_target - H_marginal) # > 0 only if below target
+            gamma_t = float(self.gamma) * (1.0 - float(step) / float(max(1, outer_steps)))
+            dead_floor = max(1e-4, 0.1 / self.n_components) # was 0.20/K
+            #dead_pen = torch.relu(torch.as_tensor(dead_floor, device=marginal.device) - marginal).sum()
+
+            # K = number of components
+            K = int(marginal.numel())  # or self.n_components
+
+            # fraction of components to protect this step (decays over time)
+            frac = 0.5 - 0.3 * (step / max(1, outer_steps))         # in ~[0.2, 0.5] → clamp to [0,1]
+            frac = float(max(0.0, min(1.0, frac)))
+
+            # bottom-m components
+            #m = max(1, min(K, int(round(K * frac))))
+            #idx = torch.topk(marginal, k=m, largest=False).indices   # indices of smallest m marginals
+
+            # log-barrier only where below the floor
+            eps2 = torch.as_tensor(dead_floor, device=marginal.device)  # scalar tensor
+            #marg_idx = marginal[idx]
+            #mask_idx = (marg_idx < eps)
+
+            eps = 1e-8
+            tau_clamp = tau.clamp_min(eps)
+            gamma = 2.0
+            usage = (tau_clamp ** gamma).mean(dim=0)
+            dead_pen = torch.relu(dead_floor - usage).sum()/(dead_floor*self.n_components)                #-(torch.log((marg_idx.clamp_min(1e-12) / eps)))[mask_idx].sum()
+
+            # decay delta all the way to 0 by the end (not only to 0.5)
+            delta_t = self.delta * max(0.5, 0.6 + 0.4*(1.0 - step / (float(max(1, outer_steps)))))
+            # use delta_t in the loss: loss = ... + delta_t * dead_pen
+
+            # ----- Active-count regularizer: encourage ~70% of components to be truly "active" -----
+            M_target = max(1, int(round(K)))  # target ~70% active comps
+
+            # Soft activity: components with π well above the floor count ~1, near the floor count ~0
+            tau_act = 0.02  # temperature; smaller = sharper step around 'dead_floor'
+            active_soft = torch.sigmoid((marginal - eps2) / tau_act)   # (C,)
+            active_count = active_soft.sum()                          # scalar
+
+            # Decay weight over outer steps (strong early, lighter late)
+            act_w0 = 0.5  # start weight; adjust 0.3–1.0 as needed
+            act_w = act_w0 * max(0.0, 1.0 - step / float(max(1, outer_steps)))
+
+            # Penalize only if we have fewer than M_target active components
+            act_pen = (M_target - active_count).clamp_min(0.0)
+
+            #if dead_pen < 0.01:
+            #    self.gamma = 0.95*self.gamma
+            #elif dead_pen > 0.01:
+            #    self.gamma = 1.05*self.gamma
+
+            lambda_purity, H_y_weighted, beta, L_size = 0, 0, 0, 0
+            if labels is not None:
+
+
+                # labels is last view in feats_list: shape [N, B] multi-hot (0/1) behaviors
+                labels_bin = (labels > 0.05).to(torch.int64)     # ensure 0/1 ints
+
+                # Find unique behavior combinations and their frequencies
+                unique_rows, inverse_idx, counts = torch.unique(
+                    labels_bin, dim=0, return_inverse=True, return_counts=True
+                )
+                freqs = counts.float() / labels_bin.size(0)     # fraction of samples per combo
+                freqs_sorted, _ = torch.sort(freqs, descending=True)
+                K_keep=int(self.n_components/2)
+
+                # Keep only combos with freq >= dead_floor
+                keep = freqs > freqs_sorted[K_keep]                     # dead_floor is your min fraction
+                kept_codes = torch.nonzero(keep, as_tuple=False).squeeze(1)  # [K]
+                K_combos = kept_codes.numel()
+
+                # Map each kept combo to 0..K-1; spurious combos (extremely rare) get -1 and are ignored
+                mapping = -torch.ones_like(keep, dtype=torch.long)           # [n_combos]
+                mapping[kept_codes] = torch.arange(K_combos, device=labels.device)  # [n_combos]
+                cls_idx = mapping[inverse_idx]                               # [N], -1 = rare
+
+                # Build Y_one_hot over frequent combos only; spurious combos => all zeros row
+                Y_one_hot = torch.zeros(labels_bin.size(0), K_combos, device=labels.device)
+                mask = cls_idx >= 0
+                Y_one_hot[mask, cls_idx[mask]] = 1.0          # [N, K]
+
+
+                mass_c = tau_clamp.sum(dim=0) + eps       # [C]
+                p_c = mass_c / mass_c.sum()               # [C]
+
+                # How much tau per cluster 
+                counts = tau_clamp.t() @ Y_one_hot        # [C, K]
+                # Distribution of label mass on clusters
+                p_y_given_c = (counts + eps) / (mass_c.unsqueeze(1) + eps)  # [C, K]
+
+                # entropy of labels for each cluster
+                H_y_c = -(p_y_given_c * p_y_given_c.log()).sum(dim=1)  # [C]
+
+                alpha = 1.0
+                w = (p_c + eps).pow(-alpha) 
+                w = w / w.sum()   
+
+                H_y_weighted = (w * H_y_c).sum()
+
+                beta=0.5
+                purity = 1.0 - H_y_c / H_y_c.max().clamp_min(1e-8)  # 0..1
+                psi = 1.0 / (p_c + 1e-8)                            # more cost for small p_c
+                L_size = ((1.0 - purity) * psi).sum()
+
+                lambda_purity = 20.0
+
+            loss = (
+            ce_term
+            + self.alpha * sample_entropy
+            + gamma_t * marg_gap
+            + delta_t * dead_pen
+            #+ act_w * act_pen
+            + lambda_purity * H_y_weighted
+            + beta * L_size
+            )
+
+            #H_cap = torch.tensor(0.75*np.log(self.n_components)).to(H_marginal.device) #0.85
+            #dead_floor =  max(1e-4, 0.20/self.n_components) #
+            #dead_pen = torch.relu(dead_floor - marginal).sum()    # penalize only clusters below floor
+
+            #loss = ce_term + self.alpha * sample_entropy - self.gamma * torch.minimum(H_marginal, H_cap) + self.delta * dead_pen
+
+
+
+            # Optional temporal smoothing (vectorized)
+            if (step % 2) != 0 and rho > 0.0:
+                if isinstance(temporal_edges, int):
+                    # stride-s sequential smoothing (no Python loops)
+                    s = max(1, int(temporal_edges))
+                    if tau.size(0) > s:
+                        diff = tau[s:] - tau[:-s]                          # [N-s, C]
+                        smooth = (diff.abs().sum(dim=-1)).mean()           # L1 over classes, mean over time
+                        loss = loss + rho * smooth
+                elif isinstance(temporal_edges, torch.Tensor) and temporal_edges.dtype == torch.bool:
+                    # boolean mask over consecutive pairs (length N-1): True where smoothing is allowed
+                    if temporal_edges.numel() == (tau.size(0) - 1):
+                        diff = tau[1:] - tau[:-1]                          # [N-1, C]
+                        diff = diff[temporal_edges]                        # mask out cross-key boundaries
+                        if diff.numel() > 0:
+                            smooth = (diff.abs().sum(dim=-1)).mean()
+                            loss = loss + rho * smooth
+                elif isinstance(temporal_edges, list):
+                    # Fallback (not recommended for large N): list of (i, j) pairs
+                    diffs = [(tau[i] - tau[j]).abs().sum(dim=-1) for (i, j) in temporal_edges]
+                    if len(diffs) > 0:
+                        loss = loss + rho * torch.stack(diffs).mean()
+                # else: temporal_edges is None -> no temporal smoothing
+
+            self.opt_theta.zero_grad(set_to_none=True)
+            loss.backward()
+            self.opt_theta.step()
+
+            if verbose and (step % 20 == 0 or step == outer_steps - 1):
+                with torch.no_grad():
+                    mean_max_p = tau.max(dim=1).values.mean().item()
+                    print(f"[Teacher] step {step:03d} | loss {loss.item():.4f} | CE {ce_term.item():.4f} | "
+                          f"E[H(τ)] {sample_entropy.item():.4f} | H(marg) {H_marginal.item():.4f} | mean max_p {mean_max_p:.3f} | dead penality {dead_pen.item():.3f} | H(y|c) {lambda_purity *H_y_weighted:.3f} | impurity {beta * L_size}, | active≈{active_count.item():.2f}/{K}")
+
+        with torch.no_grad():
+            tau_star = self.task_encoder(feats_list)
+        return tau_star  # [N, C] 
+
+
+@torch.no_grad()
+def extract_latents(model: nn.Module, dataset: BatchDictDataset, device: torch.device,
+                    batch_size: int = 512, num_workers: int = 0) -> torch.Tensor:
+    loader = dataset.make_loader(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        iterable_for_h5=True,
+        pin_memory=(device.type == 'cuda'),
+        prefetch_factor=0,
+        persistent_workers=(num_workers > 0),
+        block_shuffle=False,
+        permute_within_block=False,
+    )
+    base = unwrap_dp(model)                                                      
+    base.eval()
+    zs = []
+    for batch in loader:
+        x, a, *rest = move_to(batch, device)
+        # Use encoder + posterior head to get z_mean in encoder space (latent_dim) 
+        enc = base.encoder(x, a)                                                 
+        z_mean, _ = base.latent_space._encode(enc)                             
+        zs.append(z_mean.detach().cpu())
+    z_all = torch.cat(zs, dim=0)
+    return z_all  # CPU
+
+
+def initialize_gmm_from_teacher(model: nn.Module,
+                                z_all: torch.Tensor,        # [N, D] z_mean for train set (CPU or device)
+                                tau_star: torch.Tensor,     # [N, C] teacher labels (on same device you ran teacher)
+                                min_var: float = 1e-4,
+                                min_mass: float = 1e-6) -> None:
+    """
+    Compute GMM parameters from teacher assignments:
+      μ_c = sum_i τ*_ic u_i / sum_i τ*_ic
+      σ^2_c = sum_i τ*_ic (u_i - μ_c)^2 / sum_i τ*_ic
+      π_c = sum_i τ*_ic / N
+
+    Where u_i = lens(z_i) if lens_enabled, else z_i.
+
+    Writes directly into model.latent_space.{gmm_means, gmm_log_vars, prior}.
+    """
+    base = unwrap_dp(model)
+    base.eval()
+
+    device = next(base.parameters()).device
+    z = z_all.to(device=device, dtype=base.latent_space.gmm_means.dtype)
+    tau = tau_star.to(device=device, dtype=z.dtype)
+
+    # Project to mixture space only if z is encoder/posterior-dim (not already lens-dim)
+    if getattr(base.latent_space, "lens_enabled", False):                                           
+        in_feats = getattr(base.latent_space.lens, "in_features", base.latent_space.latent_dim)     
+        if z.shape[1] == int(in_feats):                                                           
+            with torch.no_grad():                                                                   
+                z = base.latent_space.lens(z)                                                       
+        # else: z already in lens-space; skip projection  
+        
+    N, D_mix = z.shape
+    C = tau.shape[1]
+
+    # Cluster masses and priors
+    mass = tau.sum(dim=0) + min_mass
+    prior = (mass / mass.sum()).clamp(min=1e-8, max=1.0)
+
+    # Means: (C, D_mix)
+    means = (tau.T @ z) / mass.unsqueeze(1)
+
+    # Variances: weighted per-cluster diag variance (C, D_mix)
+    diffs = z.unsqueeze(1) - means.unsqueeze(0)                       # [N, C, D_mix]
+    vars_ = (tau.unsqueeze(-1) * (diffs ** 2)).sum(dim=0) / mass.unsqueeze(-1)  # [C, D_mix]
+    vars_ = vars_.clamp(min=min_var)
+    log_vars = vars_.log()
+
+    # Edge-case guard
+    tiny = (mass <= 1e-4)
+    if tiny.any():
+        global_mean = z.mean(dim=0)
+        global_var = z.var(dim=0, unbiased=False).clamp(min=min_var)
+        means[tiny] = global_mean
+        log_vars[tiny] = global_var.log()
+
+    # Write into model buffers/params
+    base.latent_space.gmm_means.data.copy_(means)
+    base.latent_space.gmm_log_vars.data.copy_(log_vars)
+    if hasattr(base.latent_space, "prior"):
+        if isinstance(base.latent_space.prior, torch.nn.Parameter):
+            base.latent_space.prior.data.copy_(prior)
+        else:
+            base.latent_space.prior.copy_(prior)
+
+    print("Initialized GMM from teacher τ*: "
+          f"mean |μ|={means.norm(dim=1).mean():.3f}, "
+          f"mean σ²={vars_.mean():.5f}, "
+          f"entropy(π)={-(prior*prior.clamp_min(1e-9).log()).sum().item():.3f}")
+    
+
+###########
+# PCA stuff
+###########
+
+@torch.no_grad()
+def fit_nodes_pca(
+    dataset: BatchDictDataset,
+    n_components_pos: int = 32,
+    n_components_spd: int = 32,
+    batch_size: int = 4096,
+    num_workers: int = 0,
+    max_samples: Optional[int] = None,
+):
+    """
+    Fits two IncrementalPCAs:
+      - one on positions (x,y) only
+      - one on speeds (the 3rd channel per node)
+
+    Assumes dataset returns x with shape [B, T, N, F] where F>=3 and
+    channel 0,1 are (x,y), channel 2 is speed.
+
+    Returns:
+      ipca_pos, feats_pos_all  # [N, n_components_pos]
+      ipca_spd, feats_spd_all  # [N, n_components_spd]
+    """
+    # ---- Pass 1: partial_fit ----
+    loader = dataset.make_loader(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        iterable_for_h5=True,
+        pin_memory=False,
+        prefetch_factor=0,
+        persistent_workers=(num_workers > 0),
+        block_shuffle=False,
+        permute_within_block=False,
+    )
+
+    ipca_pos = IncrementalPCA(n_components=n_components_pos)
+    ipca_spd = IncrementalPCA(n_components=n_components_spd)
+
+    seen = 0
+    for batch in loader:
+        x, a, *rest = batch
+        B, T, N, F = x.shape
+
+        if F < 3:
+            raise ValueError(f"Expected at least 3 channels (x,y,speed); got F={F}")
+
+        pos = x[..., :2]   # [B,T,N,2]
+        spd = x[..., 2:3]  # [B,T,N,1]
+
+        X_pos = pos.reshape(B, -1).float().numpy()  # (B, T*N*2)
+        X_spd = spd.view(B, -1).float().numpy()  # (B, T*N*1)
+
+        if (max_samples is not None) and (seen >= max_samples):
+            break
+        if (max_samples is not None) and (seen + B > max_samples):
+            cut = max(1, max_samples - seen)
+            X_pos = X_pos[:cut]
+            X_spd = X_spd[:cut]
+            B = cut
+
+        ipca_pos.partial_fit(X_pos)
+        ipca_spd.partial_fit(X_spd)
+        seen += B
+
+    # ---- Pass 2: transform all ----
+    loader = dataset.make_loader(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        iterable_for_h5=True,
+        pin_memory=False,
+        prefetch_factor=0,
+        persistent_workers=(num_workers > 0),
+        block_shuffle=False,
+        permute_within_block=False,
+    )
+
+    feats_pos, feats_spd = [], []
+    for batch in loader:
+        x, a, *rest = batch
+        B, T, N, F = x.shape
+
+        pos = x[..., :2]   # [B,T,N,2]
+        spd = x[..., 2:3]  # [B,T,N,1]
+
+        X_pos = pos.reshape(B, -1).float().numpy()
+        X_spd = spd.view(B, -1).float().numpy()
+
+        Z_pos = ipca_pos.transform(X_pos)  # (B, n_components_pos)
+        Z_spd = ipca_spd.transform(X_spd)  # (B, n_components_spd)
+
+        feats_pos.append(torch.from_numpy(Z_pos).float())
+        feats_spd.append(torch.from_numpy(Z_spd).float())
+
+    feats_pos_all = torch.cat(feats_pos, dim=0)  # [N, n_components_pos]
+    feats_spd_all = torch.cat(feats_spd, dim=0)  # [N, n_components_spd]
+    return ipca_pos, feats_pos_all, ipca_spd, feats_spd_all
+
+
+@torch.no_grad()
+def fit_angles_pca(
+    dataset_with_angles: BatchDictDataset,
+    n_components: int = 32,
+    batch_size: int = 8192,
+    num_workers: int = 0,
+) -> Tuple[IncrementalPCA, torch.Tensor]:
+    """
+    Fits IncrementalPCA on angle tensors and returns both the fitted ipca and features.
+    Mirrors fit_nodes_pca but for angle data.
+    """
+    assert getattr(dataset_with_angles, "return_angles", False), \
+        "fit_angles_pca expects a dataset created with return_angles=True."
+
+    # Pass 1: partial_fit
+    ipca = IncrementalPCA(n_components=n_components)
+    loader = dataset_with_angles.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False,
+        num_workers=num_workers, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        prefetch_factor=0 if num_workers == 0 else 2,
+        persistent_workers=(num_workers > 0),
+    )
+    for batch in loader:
+        # Expected: (x, a, ang, vid) when return_angles=True
+        if len(batch) >= 3:
+            ang = batch[2]  # angles tensor
+        else:
+            raise RuntimeError(f"Angles loader must yield at least 3 elements, got {len(batch)}")
+        # Flatten: (B, T, K) -> (B, T*K)
+        X = ang.view(ang.size(0), -1).float().cpu().numpy()
+        ipca.partial_fit(X)
+
+    # Pass 2: transform all
+    feats_all = []
+    loader = dataset_with_angles.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False,
+        num_workers=num_workers, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        prefetch_factor=0 if num_workers == 0 else 2,
+        persistent_workers=(num_workers > 0),
+    )
+    for batch in loader:
+        ang = batch[2]
+        X = ang.view(ang.size(0), -1).float().cpu().numpy()
+        Z = ipca.transform(X)
+        feats_all.append(torch.from_numpy(Z).float())
+
+    return ipca, torch.cat(feats_all, dim=0)
+
+
+@torch.no_grad()
+def extract_pca_angles_view(
+    dataset_with_angles: BatchDictDataset,
+    n_components: int = 32,
+    batch_size: int = 8192,
+    num_workers: int = 0,
+) -> torch.Tensor:
+    """
+    Builds an IncrementalPCA view from precomputed angles in the dataset.
+    Requires dataset_with_angles to be constructed with return_angles=True.
+    Returns [N_samples, n_components] in dataset order (shuffle=False).
+    """
+    assert getattr(dataset_with_angles, "return_angles", False), \
+        "extract_pca_angles_view expects a dataset created with return_angles=True."
+
+    # Pass 1: partial_fit
+    ipca = IncrementalPCA(n_components=n_components)
+    loader = dataset_with_angles.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False,
+        num_workers=num_workers, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        prefetch_factor=0 if num_workers == 0 else 2,
+        persistent_workers=(num_workers > 0),
+    )
+    for batch in loader:
+        # expected: x, a, ang, vid
+        if len(batch) == 4:
+            _, _, ang, _ = batch
+        else:
+            raise RuntimeError("Angles loader must yield (x, a, ang, vid)")
+        X = ang.view(ang.size(0), -1).cpu().numpy()  # flatten (T*K*1)
+        ipca.partial_fit(X)
+
+    # Pass 2: transform
+    feats_all = []
+    loader = dataset_with_angles.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False,
+        num_workers=num_workers, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        prefetch_factor=0 if num_workers == 0 else 2,
+        persistent_workers=(num_workers > 0),
+    )
+    for batch in loader:
+        _, _, ang, _ = batch
+        X = ang.view(ang.size(0), -1).cpu().numpy()
+        Z = ipca.transform(X)
+        feats_all.append(torch.from_numpy(Z).float())
+
+    return torch.cat(feats_all, dim=0)  # [N, n_components]
+
+@torch.no_grad()
+def extract_pca_edges_view(dataset: BatchDictDataset,
+                           n_components: int = 16,
+                           batch_size: int = 8192,
+                           num_workers: int = 0,
+                           max_samples: Optional[int] = None) -> torch.Tensor:
+    """
+    Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
+    in order (shuffle=False), using two passes: partial_fit, then transform.
+
+    Notes:
+    - This keeps the node PCA (Cell 3) as-is and adds a separate view for edges.
+    - If edges have very different scale across datasets, consider pre-standardizing.
+    """
+
+    # 1) Pass 1: fit IncrementalPCA on flattened edges
+    loader = dataset.make_loader(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        iterable_for_h5=True,
+        pin_memory=False,
+        prefetch_factor=0,
+        persistent_workers=(num_workers > 0),
+        block_shuffle=False,
+        permute_within_block=False,
+    )
+
+    ipca = IncrementalPCA(n_components=n_components)
+    seen = 0
+    for batch in loader:
+        x, a, *rest = batch  # keep on CPU for PCA
+        B, T, E, F_edge = a.shape
+        A = a.view(B, T * E * F_edge).float().numpy()  # (B, D_edges)
+        if (max_samples is not None) and (seen >= max_samples):
+            break
+        if (max_samples is not None) and (seen + B > max_samples):
+            A = A[:max(1, max_samples - seen), :]
+            B = A.shape[0]
+        ipca.partial_fit(A)
+        seen += B
+
+    # 2) Pass 2: transform all edges -> PCA
+    loader = dataset.make_loader(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+        iterable_for_h5=True,
+        pin_memory=False,
+        prefetch_factor=0,
+        persistent_workers=(num_workers > 0),
+        block_shuffle=False,
+        permute_within_block=False,
+    )
+    feats = []
+    for batch in loader:
+        x, a, *rest = batch
+        B, T, E, F_edge = a.shape
+        A = a.view(B, T * E * F_edge).float().numpy()
+        Z = ipca.transform(A)  # (B, n_components)
+        feats.append(torch.from_numpy(Z).float())
+    feats_all = torch.cat(feats, dim=0)  # CPU [N, n_components]
+    return feats_all
+
+@torch.no_grad()
+def extract_supervised_labels_view(
+    dataset: BatchDictDataset,
+    batch_size: int = 8192,
+    num_workers: int = 0,
+) -> torch.Tensor:
+    """
+    Extracts the supervised labels 'y' from the dataset for use as a teacher view.
+    Returns [N, n_behaviors] tensor.
+    """
+    if dataset.supervised_dict is None:
+        raise ValueError("Dataset does not contain supervised labels.")
+
+    loader = dataset.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False,
+        num_workers=num_workers, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        prefetch_factor=0 if num_workers == 0 else 2,
+        persistent_workers=(num_workers > 0),
+    )
+    
+    labels_all = []
+    # Loader yields (x, a, [ang], [y], vid). We need to find y.
+    # The structure depends on return_angles and supervised_dict.
+    
+    for batch in loader:
+        # Unpack based on known structure from BatchDictDataset.__getitem__
+        # Basic is (x, a). Optionals follow.
+        # We know y is the last optional before vid.
+        
+        # Easier approach: check tuple length
+        # (x, a, vid) -> 3
+        # (x, a, ang, vid) -> 4
+        # (x, a, y, vid) -> 4
+        # (x, a, ang, y, vid) -> 5
+        
+        has_y = dataset.supervised_dict is not None
+        has_angles = dataset.has_angles
+        
+        if not has_y:
+             raise ValueError("Loader did not yield labels.")
+             
+            # (x, a, ang, y, vid)
+        y_batch = batch[2]
+
+            
+        # y_batch shape might be (B, 1, F) or (B, F). Squeeze if needed.
+        if y_batch.ndim == 3 and y_batch.shape[1] == 1:
+            y_batch = y_batch.squeeze(1)
+        if y_batch.ndim == 1:
+            y_batch = y_batch[:, None]
+            
+        labels_all.append(y_batch.cpu())
+
+    return torch.cat(labels_all, dim=0)
+
+
+def run_turtle_teacher_on_views(views_dict: dict,
+                                n_components: int,
+                                gamma: float = 6.0,
+                                alpha_sample_entropy: float = 1.0,
+                                outer_steps: int = 200,
+                                inner_steps: int = 200,
+                                normalize_feats: bool = True,
+                                verbose: bool = True,
+                                device: Optional[torch.device] = None,
+                                head_temp: float = 0.3,
+                                task_temp: float = 0.3) -> torch.Tensor:
+    device = device or torch.device("cpu")
+    
+    active_items = [(k, v) for k, v in views_dict.items() if v is not None]
+    assert len(active_items) > 0, "run_turtle_teacher_on_views got no active views (all None)."
+    
+    views_list = [f.to(device) for f in views_dict.values() if f is not None]
+    key_to_idx = {k: i for i, (k, _) in enumerate(active_items)}
+    supervised_index = key_to_idx.get("supervised_labels", None)
+
+    teacher = TurtleTeacher(
+        feature_dims=[f.shape[1] for f in views_list],
+        n_components=n_components,
+        gamma=gamma,
+        alpha_sample_entropy=alpha_sample_entropy,
+        inner_lr=0.1,
+        inner_steps=inner_steps,
+        head_wd=1e-4,
+        head_temp=head_temp,
+        task_temp=task_temp,
+        normalize_feats=normalize_feats,
+        lr_theta=1e-3,
+        supervised_index=supervised_index,   # supervised view index, if present
+        mlp_hidden=32,
+        mlp_dropout=0.0,
+    ).to(device)
+    tau_star = teacher.fit(views_dict, outer_steps=outer_steps, temporal_edges=1, rho=0.04, verbose=verbose)  #rho=0.02
+    
+    return teacher, tau_star
+
+
+def cache_pca_angles(
+    dataset_with_angles: BatchDictDataset,
+    cache_path: str,
+    n_components: int = 32,
+    batch_size: int = 8192,
+    num_workers: int = 0,
+) -> torch.Tensor:
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    if os.path.exists(cache_path):
+        arr = np.load(cache_path, mmap_mode="r")
+        return torch.from_numpy(np.array(arr)).float()
+    Z = extract_pca_angles_view(dataset_with_angles, n_components, batch_size, num_workers)
+    np.save(cache_path, Z.numpy())
+    return Z
+
+
+class DiscriminativeHead(nn.Module):
+    """
+    Simple linear head on top of z (latent) to predict C clusters (logits).
+    """
+    def __init__(self, latent_dim: int, n_components: int):
+        super().__init__()
+        self.fc = nn.Linear(latent_dim, n_components)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.fc(z)  # logits
+    
+
+def maybe_build_turtle_teacher(  
+    *,
+    teacher_cfg: TurtleTeacherCfg,  
+    train_dataset: "BatchDictDataset",  
+    preprocessed_train: dict,  
+    data_path: str, 
+    batch_size: int,
+    device: torch.device,
+    n_components: int,
+    latent_view: Optional[torch.Tensor] = None, #get's calculated externally from the model
+
+) -> Tuple[Optional[Any], Optional[torch.Tensor], Dict[str, Any]]:
+    """
+    Returns:
+      teacher: the TURTLE teacher object (or None)
+      tau_star: [N,K] soft assignments (or None)
+      views: dict with computed views + PCA objects (for reuse/refresh/inference)
+    """
+
+    # Early return in case of no teacher being required
+    if not teacher_cfg.use_turtle_teacher:
+        return None, None, {}
+
+    views: Dict[str, Any] = {
+        "z": None,
+        "pca_pos": None,
+        "pca_spd": None,
+        "pca_edges": None,
+        "pca_angles": None,
+        "supervised_labels": None,
+    }
+
+    # --- Latent view (Mainly for VaDE): include only if explicitly requested ---
+    if teacher_cfg.include_latent_view:
+        if latent_view is None:
+            raise ValueError("include_latent_view=True but latent_view=None")
+        views["z"]=latent_view.to(device)
+
+    # --- Nodes view (PCA pos + PCA spd) ---
+    if teacher_cfg.include_nodes_view:
+        print("\n--- Building PCA views for teacher (nodes) ---")
+        _, pca_pos, _, pca_spd = fit_nodes_pca(
+            train_dataset,
+            n_components_pos=teacher_cfg.pca_nodes_dim,
+            n_components_spd=teacher_cfg.pca_nodes_dim,
+            batch_size=4096,
+            num_workers=0,
+        )
+        views["pca_pos"] = pca_pos
+        views["pca_spd"] = pca_spd
+
+    # --- Edges view (distances between nodes) ---
+    if teacher_cfg.include_edges_view:
+        print("\n--- Building PCA views for teacher (edges) ---")
+        pca_edges = extract_pca_edges_view(
+            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=8192, num_workers=0
+        )
+        views["pca_edges"] = pca_edges
+
+    # --- Angles view (standardized to fit_angles_pca everywhere) ---
+    if teacher_cfg.include_angles_view:
+        print("\n--- Building PCA views for teacher (angles) ---")
+        angles_train_dataset = BatchDictDataset(
+            preprocessed_train, data_path, "train_",
+            force_rebuild=False, h5_chunk_len=batch_size, return_angles=True
+        )
+        _, pca_angles_train = fit_angles_pca(
+            angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=8192, num_workers=0 
+        )
+        views["pca_angles"] = pca_angles_train
+
+    # --- Supervised view (raw, no thresholding) ---
+    if teacher_cfg.include_supervised_view:
+        print("\n--- Adding Supervised Labels view for teacher ---")
+        if train_dataset.supervised_dict is None:
+            raise ValueError("include_supervised_view=True but dataset has no supervised labels.")
+        supervised_labels = extract_supervised_labels_view(train_dataset, batch_size=8192, num_workers=0)
+        views["supervised_labels"] = supervised_labels
+
+    print("\n--- Running TURTLE teacher on views ---")
+    teacher, tau_star = run_turtle_teacher_on_views(
+        views_dict=views, n_components=n_components, gamma=teacher_cfg.teacher_gamma,
+        alpha_sample_entropy=teacher_cfg.teacher_alpha_sample_entropy, outer_steps=teacher_cfg.teacher_outer_steps,
+        inner_steps=teacher_cfg.teacher_inner_steps, normalize_feats=teacher_cfg.teacher_normalize_feats,
+        verbose=True, device=device, head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
+    )
+
+    return teacher, tau_star.detach(), views
+
+
+########
+# Losses
+########
+
+class Dynamic_weight_manager:
+    """handles KL and lambda weights over epochs"""
+    def __init__(
+        self,
+        n_batches_per_epoch: int,
+        mode: str = "sigmoid",
+        warmup_epochs: int = 15,
+        max_weight: float = 1.0,
+        at_max_epochs: int = 0,
+        cooldown_epochs: int = 15,
+        end_weight: float = 1.0,
+    ):
+        self.mode = mode
+        self.warmup_iters = max(1, warmup_epochs * n_batches_per_epoch)
+        self.at_max_iters = max(0, at_max_epochs * n_batches_per_epoch)
+        self.cooldown_iters = max(0, cooldown_epochs * n_batches_per_epoch)
+        self.total_iters = self.warmup_iters + self.at_max_iters + self.cooldown_iters
+        self.current_iteration = 0
+        self.max_weight = float(max_weight)
+        self.end_weight = float(end_weight)
+
+    def _shape(self, p: float) -> float:
+        p = float(max(0.0, min(1.0, p)))
+        if self.mode == "linear":
+            return p
+        elif self.mode == "sigmoid":
+            return 1.0 / (1.0 + math.exp(-12.0 * (p - 0.5)))
+        elif self.mode == "tf_sigmoid":
+            eps = 1e-2
+            denom = max(eps, p - p * p)
+            arg = (2.0 * p - 1.0) / denom
+            return 1.0 / (1.0 + math.exp(-arg))
+        else:
+            return p
+
+    def get_weight(self) -> float:
+        t = self.current_iteration
+
+        # If at or beyond max schedule, return end weight directly
+        if t >= self.total_iters:
+            return self.end_weight
+        
+        # If at max schedule, return max
+        if self.at_max_iters > 0 and t >= self.warmup_iters and t < self.warmup_iters + self.at_max_iters:
+            return self.max_weight
+
+        # Warmup: 0 -> max_weight
+        if t <= self.warmup_iters:
+            p = t / self.warmup_iters  # [0,1]
+            return self.max_weight * self._shape(p)
+
+        # Cooldown: max_weight -> end_weight
+        if self.cooldown_iters <= 0:
+            return self.max_weight
+
+        tc = t - (self.warmup_iters + self.at_max_iters)
+        pc = tc / self.cooldown_iters  # [0,1]
+        # Linear blend 
+        return (1.0 - pc) * self.max_weight + pc * self.end_weight
+
+    def step(self):
+        self.current_iteration += 1
+
+
+def cluster_frequencies_regularizer(soft_counts: torch.Tensor) -> torch.Tensor:
+    mean_freq = torch.mean(soft_counts, dim=0)
+    n_components = soft_counts.shape[1]
+    uniform_target = torch.ones(n_components, device=soft_counts.device) / n_components
+    kld_loss = nn.KLDivLoss(reduction="batchmean")
+    return kld_loss(torch.log(mean_freq + 1e-9), uniform_target)
+
+
+
+class VaDELossTFExact(nn.Module):
+    """
+    TF-exact VaDE loss:
+      - Reconstruction NLL
+      - KL surrogate (TF): -0.5 * sum(z_log_var + 1) + sum(q log q) [entropy off in pretrain], weighted by kl_weight
+      - Clustering agreement: -E[q * softmax(log p(z|c))] (no prior in target)
+      - Prior matching: -E[q log pi], pi uniform and fixed
+      - KMeans/Gram compactness: passed from model outputs
+      - Activity L1 on z_var (Dense 'cluster_variances' output in TF): l1_activity * mean_batch(|z_var|)
+    """
+    def __init__(self, n_components: int, latent_dim: int,
+                l1_activity_weight: float = 0.1,
+                kl_scheduler: Optional["Dynamic_weight_manager"] = None,
+                reg_cat_clusters=0.0,
+                kl_weight=1.0,
+                prior_loss_weight=0.0,
+                mc_kl_samples=100,          # kept for API, unused in TF-analytic mode #### CHANGES SECTION #####
+                kl_clamp_min=0.0,
+                lambda_distill: float = 0.0,
+                tau_star: Optional[torch.Tensor] = None,
+                distill_sharpen_T: float = 0.5,
+                distill_conf_weight: bool = False,
+                distill_conf_thresh: float = 0.55,
+                tf_cluster_weight: float = 0.0,             # weight for TF-style clustering term
+                reg_cluster_var_weight: float = 0.0,       # variance equalization weight
+                distill_use_class_reweight: bool = True,
+                distill_class_reweight_beta: float = 1.0,
+                distill_class_reweight_cap: Optional[float] = 3.0,
+                nonempty_weight: float = 2e-2,
+                nonempty_floor: float = 0.003,
+                nonempty_p: float = 2,
+                kmeans_loss_weight: float = 0.0
+                ):
+        super().__init__()
+        self.n_components = n_components
+        self.latent_dim = latent_dim
+        self.l1_activity_weight = float(l1_activity_weight)
+        self.kl_scheduler = kl_scheduler 
+        self.pretrain_mode = False
+        self.kmeans_loss_weight = kmeans_loss_weight
+
+        # Distillation
+        self.lambda_distill = float(lambda_distill)
+        self.tau_star = tau_star
+        self.distill_sharpen_T = float(distill_sharpen_T)
+        self.distill_conf_weight = bool(distill_conf_weight)
+        self.distill_conf_thresh = float(distill_conf_thresh)
+
+        # TF-style clustering and variance equalization
+        self.tf_cluster_weight = float(tf_cluster_weight)
+        self.reg_cat_clusters_weight = float(reg_cat_clusters)
+        self.reg_cluster_var_weight = float(reg_cluster_var_weight)
+
+        self.distill_use_class_reweight = bool(distill_use_class_reweight)
+        self.distill_class_reweight_beta = float(distill_class_reweight_beta)
+        self.distill_class_reweight_cap = (None if distill_class_reweight_cap is None
+                                           else float(distill_class_reweight_cap))
+        self.class_weight: Optional[torch.Tensor] = None  # set in set_teacher()
+        self.nonempty_weight = nonempty_weight
+        self.nonempty_floor = nonempty_floor
+        self.nonempty_p = nonempty_p
+
+        self.mc_kl_samples = 100
+        self.kl_clamp_min = 0.0
+        self.gmm_logvar_clamp = (-8.0, 8.0)
+
+
+    def set_teacher(self, tau_star: torch.Tensor, lambda_distill: float = 1.0):
+        self.tau_star = tau_star
+        self.lambda_distill = float(lambda_distill)
+
+        # NEW: compute inverse-marginal class weights from teacher τ*
+        self.class_weight = None
+        if self.distill_use_class_reweight and (tau_star is not None):
+            with torch.no_grad():
+                eps = 1e-8
+                pi = tau_star.mean(dim=0).clamp_min(eps)             # (C,)
+                w = pi.pow(-self.distill_class_reweight_beta)        # inverse-marginal
+                w = w / w.mean()                                     # normalize to mean 1
+                if self.distill_class_reweight_cap is not None:
+                    w = w.clamp_max(self.distill_class_reweight_cap) # cap to avoid extreme weights
+            self.class_weight = w  # move to device at use-time
+
+        if tau_star is not None:
+            with torch.no_grad():
+                eps = 1e-8
+                self.teacher_marginal = tau_star.mean(dim=0).clamp_min(eps)  # (C,)
+
+    @staticmethod
+    def _log_normal_diag(x, mean, log_var):
+        LOG_2PI = math.log(2.0 * math.pi)
+        return -0.5 * (torch.sum(LOG_2PI + log_var + (x - mean) ** 2 * torch.exp(-log_var), dim=-1))
+
+    def _log_mog(self, z, gmm_means, gmm_log_vars, prior, eps=1e-8):
+        S, B, D = z.shape
+        C = gmm_means.shape[0]
+        gmm_log_vars = torch.clamp(gmm_log_vars, min=self.gmm_logvar_clamp[0], max=self.gmm_logvar_clamp[1])
+        log_prior = torch.log(torch.clamp(prior, min=eps))
+        z_exp = z.unsqueeze(2)               # (S, B, 1, D)
+        means = gmm_means.view(1, 1, C, D)   # (1, 1, C, D)
+        log_vars = gmm_log_vars.view(1, 1, C, D)
+        log_p_z_given_c = self._log_normal_diag(z_exp, means, log_vars)  # (S,B,C)
+        log_mix = log_prior.view(1, 1, C)
+        log_pz = torch.logsumexp(log_mix + log_p_z_given_c, dim=-1)      # (S,B)
+        return log_pz
+
+    def _log_p_z_given_c(self, z: torch.Tensor, gmm_means: torch.Tensor, gmm_log_vars: torch.Tensor) -> torch.Tensor:
+        """
+        Compute log p(z|c) for each class c (diagonal Gaussian).
+        z: (B, D), means: (C, D), log_vars: (C, D) -> returns (B, C)
+        """
+        # clamp for stability
+        gmm_log_vars = torch.clamp(gmm_log_vars, min=self.gmm_logvar_clamp[0], max=self.gmm_logvar_clamp[1])
+        scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-3)
+        dist = Normal(gmm_means.unsqueeze(0), scale.unsqueeze(0))  # (1,C,D)
+        logp = dist.log_prob(z.unsqueeze(1)).sum(dim=-1)           # (B,C)
+        return logp
+
+    def _monte_carlo_kl(self, z_mean, z_log_var, gmm_means, gmm_log_vars, prior):
+        # kept for compatibility, no longer used in TF-analytic branch #### CHANGES SECTION #####
+        z_log_var = torch.clamp(z_log_var, min=-4.0, max=4.0)
+        B, D = z_mean.shape
+        S = self.mc_kl_samples
+        scale_q = torch.exp(0.5 * z_log_var)
+        eps = torch.randn(S, B, D, device=z_mean.device, dtype=z_mean.dtype)
+        z_samples = z_mean.unsqueeze(0) + eps * scale_q.unsqueeze(0)  # (S,B,D)
+        log_q = self._log_normal_diag(z_samples, z_mean.unsqueeze(0), z_log_var.unsqueeze(0))
+        log_p = self._log_mog(z_samples, gmm_means, gmm_log_vars, prior)
+        kl = (log_q - log_p).mean()
+        if self.kl_clamp_min is not None:
+            kl = torch.clamp(kl, min=self.kl_clamp_min)
+        return kl
+
+    def forward(self, model_outputs, x_original, batch_indices: Optional[torch.Tensor] = None):
+        (recon_dist, latent_z, q, kmeans_loss, z_mean, z_log_var, gmm_params) = model_outputs
+        device = z_mean.device
+        B, T, N, F = x_original.shape
+        x_flat = x_original.view(B, T, N * F)
+
+        # Reconstruction NLL
+        with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
+            rec_nll = -(recon_dist.log_prob(x_flat.float())).mean()
+
+        # Ensure q is normalized
+        if q is not None:
+            eps = 1e-8
+            q = q.clamp_min(eps)
+            q = q / q.sum(dim=-1, keepdim=True)
+
+
+        # Activity regularizer: average over batch (matches TF effective scaling)
+        activity_l1 = self.l1_activity_weight * torch.sum(torch.abs(z_log_var), dim=-1).mean()  #### CHANGES SECTION #####
+        # (TF regularizes the 'cluster_variances' Dense output; here we use z_log_var as proxy.)
+
+        # KL weight from scheduler (TF-style)
+        klw = 0.0
+        if getattr(self, "kl_scheduler", None) is not None:
+            klw = float(self.kl_scheduler.get_weight())
+
+        # ---- TF-analytic KL surrogate ---- #### CHANGES SECTION #####
+        # loss_variational_1 = -0.5 * sum(z_log_var + 1)
+        # loss_variational_2 = sum(q log q)    (entropy term; gated by pretrain in TF via (1 - pretrain))
+        z_log_var32 = z_log_var.float()
+        if q is not None:
+            q32 = q.float()
+        else:
+            # If q is None, we cannot include the entropy term; fall back to loss_variational_1 only.
+            q32 = None
+
+        if self.pretrain_mode:
+            # Pretrain: only loss_variational_1 proxy (no q log q), as in TF (they multiply entropy by (1 - pretrain))
+            v_max = 2.0 * math.log(2.0) 
+            z_var_eff = z_log_var32.clamp_max(v_max) 
+            loss_var1 = -0.5 * (z_var_eff + 1.0).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
+            kl_vec = loss_var1
+        else:
+            loss_var1 = -0.5 * (z_log_var32 + 1.0).sum(dim=-1)  # [B]
+            if q32 is not None:
+                loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q
+            else:
+                loss_var2 = torch.zeros_like(loss_var1)
+            kl_vec = loss_var1 + loss_var2  # [B]
+
+        kl_batch = klw * kl_vec.mean()  # this can be negative, as in TF
+
+        # ----------------------------------------------------------------
+
+        # Init other losses
+        tf_cluster = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
+        prior_loss = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
+        cat_cluster_loss = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
+        scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+        repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+        distill_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+        temporal_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+        nonempty_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+
+        if not self.pretrain_mode and q is not None:
+            z_for = latent_z
+            logp = self._log_p_z_given_c(
+                z_for.float(),
+                gmm_params["means"].float(),
+                gmm_params["log_vars"].float(),
+            )
+            post_like = torch.softmax(logp, dim=-1)
+            tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
+
+            # Prior match (uniform)
+            C = self.n_components
+            log_pi = math.log(1.0 / max(1, C))
+            prior_loss = -(q * log_pi).sum(dim=-1).mean()
+
+            # Cat balance (optional)
+            if self.reg_cat_clusters_weight > 0 and q is not None:
+                cat_cluster_loss = self.reg_cat_clusters_weight * cluster_frequencies_regularizer(q)
+
+            # Temporal cohesion on q(c|z)
+            rho = float(getattr(self, "temporal_cohesion_weight", 0.0))
+            if (rho > 0.0) and (q is not None) and (q.size(0) > 1):
+                diffs = (q[1:] - q[:-1]).abs().sum(dim=-1).mean()
+                temporal_loss = (rho * diffs).to(rec_nll.dtype)
+
+            # Non-empty floor on batch marginal q̄(c)
+            nonempty_w = float(getattr(self, "nonempty_weight", 0.0))
+            if (nonempty_w > 0.0) and (q is not None):
+                p = int(getattr(self, "nonempty_p", 2))
+                q_marg = q.mean(dim=0)  # (C,)
+
+                base_floor = float(getattr(self, "nonempty_floor", max(1e-4, 0.05 / max(1, self.n_components))))
+                if getattr(self, "teacher_marginal", None) is not None:
+                    pi_t = self.teacher_marginal.to(q_marg.device)  # (C,)
+                    alpha = 0.9
+                    floor_c = torch.max(base_floor * torch.ones_like(pi_t),
+                                        alpha * pi_t)
+                else:
+                    floor_c = base_floor * torch.ones_like(q_marg)
+
+                underuse = (floor_c - q_marg).clamp_min(0.0)
+                pen = underuse.pow(p).sum()
+                nonempty_loss = (nonempty_w * pen).to(rec_nll.dtype)
+
+            eta = float(getattr(self, "reg_scatter_weight", 3e-2))
+            beta = float(getattr(self, "reg_scatter_beta", 1.0))
+            if eta > 0.0 and (q is not None):
+                qf = q.float()                        # (B,C)
+                z = z_mean.float()                    # (B,D)
+                pi_b = qf.sum(dim=0).clamp_min(1e-8)  # (C,)
+                mu = (qf.t() @ z) / pi_b.unsqueeze(1) # (C,D)
+                diff = z.unsqueeze(1) - mu.unsqueeze(0)              # (B,C,D)
+                scat_c = (qf.unsqueeze(-1) * diff.pow(2)).sum(dim=0) / pi_b.unsqueeze(1)  # (C,D)
+                w = ((pi_b / pi_b.mean()).pow(-beta)).unsqueeze(1)   # (C,1)
+                scatter_loss = eta * (w * scat_c).mean()
+            else:
+                scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+
+            # Center repulsion between GMM means
+            repel_weight = float(getattr(self, "repel_weight", 8e-2))
+            repel_length_scale = float(getattr(self, "repel_length_scale", 1.0))
+            if repel_weight > 0.0 and gmm_params["means"].requires_grad:
+                with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
+                    means = gmm_params["means"].float()  # (C,D)
+                    C = means.size(0)
+                    diffs = means.unsqueeze(1) - means.unsqueeze(0)      # (C,C,D)
+                    D2 = (diffs * diffs).sum(dim=-1)                     # (C,C)
+                    Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
+                    Kmat = Kmat - torch.diag(torch.diag(Kmat))
+                    denom = float(max(1, C * C - C))
+                    repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
+            else:
+                repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+
+        # Distillation (unchanged)
+        if (self.lambda_distill > 0.0) and (self.tau_star is not None) and (batch_indices is not None):
+            eps = 1e-8
+            tau_batch = self.tau_star[batch_indices]  # (B,C)
+
+            if self.distill_sharpen_T is not None and self.distill_sharpen_T > 0.0:
+                logits_t = (tau_batch.clamp_min(eps)).log() / float(self.distill_sharpen_T)
+                tau_batch = torch.softmax(logits_t, dim=-1)
+
+            per_sample_ce = -(tau_batch * (q.clamp_min(eps).log())).sum(dim=-1)  # (B,)
+
+            if self.distill_conf_weight:
+                conf = tau_batch.max(dim=1).values
+                thr = float(self.distill_conf_thresh)
+                w_conf = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(min=0.0, max=1.0).detach()
+            else:
+                w_conf = None
+
+            w_total = None
+            if self.distill_use_class_reweight and (self.class_weight is not None):
+                w_class = torch.matmul(tau_batch, self.class_weight.to(tau_batch.device))  # (B,)
+                w_class = (w_class / w_class.mean().clamp_min(1e-8)).detach()
+                w_total = w_class if w_conf is None else (w_class * w_conf)
+            else:
+                w_total = w_conf
+
+            if w_total is not None:
+                distill_loss = (w_total * per_sample_ce).mean()
+            else:
+                distill_loss = per_sample_ce.mean()
+
+            distill_loss = (self.lambda_distill * distill_loss).to(rec_nll.dtype)
+        else:
+            distill_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+
+        # KMeans loss
+        if not torch.is_tensor(kmeans_loss):
+            kmeans_loss = torch.as_tensor(kmeans_loss, device=device, dtype=rec_nll.dtype)
+        if not self.pretrain_mode and q is not None:
+            kmeans_loss = (self.kmeans_loss_weight * kmeans_loss).to(rec_nll.dtype)
+        elif self.pretrain_mode and q is not None:
+            kmeans_loss = (1.0 * kmeans_loss).to(rec_nll.dtype)
+
+        # Total loss
+        total = (
+            rec_nll
+            + kl_batch
+            + cat_cluster_loss
+            + temporal_loss
+            + nonempty_loss
+            + tf_cluster
+            + prior_loss
+            + kmeans_loss
+            + activity_l1
+            + scatter_loss
+            + repel_loss
+            + distill_loss
+        )
+
+        return {
+            "total_loss": total,
+            "reconstruction_loss": rec_nll,
+            "kl_surrogate": kl_batch,                               #### CHANGES SECTION #####
+            "kl_divergence": kl_vec.mean(),                         #### CHANGES SECTION #####
+            "kl_weight": torch.tensor(klw, device=device, dtype=rec_nll.dtype),
+            "tf_cluster_loss": tf_cluster,
+            "prior_loss": prior_loss,
+            "kmeans_loss": kmeans_loss,
+            "activity_l1": activity_l1,
+            "cat_cluster_loss": cat_cluster_loss,
+            "reg_cluster_var_loss": None,
+            "distill_loss": distill_loss,
+            "nonempty_loss": nonempty_loss,
+            "temporal_loss": temporal_loss,
+            "scatter_loss": scatter_loss,
+            "repel_loss": repel_loss,
+            "student_clustering_loss": None,
+        }
+    
+
+def _print_losses(model_name:str, epoch: int, n_epochs: int, train_logs: dict, val_logs: dict, klw: int = 0, lambda_d: int = 0,):
+    
+    if model_name == "vade":
+        print(f"Epoch {epoch+1}/{n_epochs} | KLw={klw:.3f}   | λ_distill={lambda_d:.3f}")
+        print(f"  Train: total={train_logs.get('total_loss', np.nan):.4f}   | rec={train_logs.get('reconstruction_loss', np.nan):.4f}    | "
+                f"kl={train_logs.get('kl_divergence', np.nan):.4f}      | cat={train_logs.get('cat_cluster_loss', np.nan):.4f}    | "
+                f"kmeans={train_logs.get('kmeans_loss', np.nan):.4f}      | distill={train_logs.get('distill_loss', np.nan):.4f} |\n"
+                f"         temporal={train_logs.get('temporal_loss', np.nan):.4f} | scatter={train_logs.get('scatter_loss', np.nan):.4f} |"
+                f" nonempty={train_logs.get('nonempty_loss', np.nan):.4f} | repel={train_logs.get('repel_loss', np.nan):.4f}  |"
+                f" clustering={train_logs.get('tf_cluster_loss', np.nan):.4f}")
+        print(f"  Val  : total={val_logs.get('total_loss', np.nan):.4f}   | rec={val_logs.get('reconstruction_loss', np.nan):.4f}    | "
+                f"kl={val_logs.get('kl_divergence', np.nan):.4f}      | cat={val_logs.get('cat_cluster_loss', np.nan):.4f}    | "
+                f"kmeans={val_logs.get('kmeans_loss', np.nan):.4f}      | distill={val_logs.get('distill_loss', np.nan):.4f} |\n"
+                f"         temporal={val_logs.get('temporal_loss', np.nan):.4f} | scatter={val_logs.get('scatter_loss', np.nan):.4f} |"
+                f" nonempty={val_logs.get('nonempty_loss', np.nan):.4f} | repel={val_logs.get('repel_loss', np.nan):.4f}  |"
+                f" clustering={val_logs.get('tf_cluster_loss', np.nan):.4f}")
+        print(f"  Align: conf={train_logs.get('conf_norm',np.nan):.3f} | bal={train_logs.get('bal_norm',np.nan):.3f} | score={train_logs.get('alignment_score'):.3f}")
+    elif model_name == "Contrastive":
+        print(f"Epoch {epoch+1}/{n_epochs}")
+        print(f"  Train: total={train_logs.get('total_loss', np.nan):.4f} | rec={train_logs.get('reconstruction_loss', np.nan):.4f} | "
+                f"kl={train_logs.get('kl_divergence', np.nan):.4f} | cat={train_logs.get('cat_cluster_loss', np.nan):.4f} | "
+                f"kmeans={train_logs.get('kmeans_loss', np.nan):.4f} | distill={train_logs.get('distill_loss', np.nan):.4f} |\n"
+                f"         temporal={train_logs.get('temporal_loss', np.nan):.4f} | scatter={train_logs.get('scatter_loss', np.nan):.4f} |"
+                f" nonempty={train_logs.get('nonempty_loss', np.nan):.4f} | repel={train_logs.get('repel_loss', np.nan):.4f}  |"
+                f" clustering={train_logs.get('tf_cluster_loss', np.nan):.4f}")
+        print(f"  Val  : total={val_logs.get('total_loss', np.nan):.4f} | rec={val_logs.get('reconstruction_loss', np.nan):.4f} | "
+                f"kl={val_logs.get('kl_divergence', np.nan):.4f} | cat={val_logs.get('cat_cluster_loss', np.nan):.4f} | "
+                f"kmeans={val_logs.get('kmeans_loss', np.nan):.4f} | distill={val_logs.get('distill_loss', np.nan):.4f} |\n"
+                f"         temporal={val_logs.get('temporal_loss', np.nan):.4f} | scatter={val_logs.get('scatter_loss', np.nan):.4f} |"
+                f" nonempty={val_logs.get('nonempty_loss', np.nan):.4f} | repel={val_logs.get('repel_loss', np.nan):.4f}  |"
+                f" clustering={val_logs.get('tf_cluster_loss', np.nan):.4f}")
+        print(f"  Align: conf={train_logs.get('conf_norm',np.nan):.3f} | bal={train_logs.get('bal_norm',np.nan):.3f} | score={train_logs.get('alignment_score'):.3f}")
+    else:
+        print("")
+
+
+##############
+# Optimization
+##############
+
+def build_optimizer_generic(
+    model: nn.Module,
+    distill_head: Optional[nn.Module] = None,
+    base_lr: float = 3e-4,
+    weight_decay: float = 1e-4,
+) -> torch.optim.Optimizer:
+    params = list(unwrap_dp(model).parameters())
+    if distill_head is not None:
+        params += list(distill_head.parameters())
+    return torch.optim.Adam(params, lr=base_lr, weight_decay=weight_decay)
+
+
+def build_optimizer(
+    model: nn.Module,
+    base_lr: float = 3e-4,
+    gmm_lr: float = 1e-4,    #3e-4 * 0.33       
+) -> torch.optim.Optimizer:
+    m = unwrap_dp(model)
+    gmm_params = [m.latent_space.gmm_means, m.latent_space.gmm_log_vars]
+    if hasattr(m.latent_space, "prior") and isinstance(m.latent_space.prior, torch.nn.Parameter):
+        gmm_params.append(m.latent_space.prior)
+    gmm_ids = {id(p) for p in gmm_params}
+    base_params = [p for p in m.parameters() if id(p) not in gmm_ids]
+    return torch.optim.Adam(
+        [
+            {"params": base_params, "lr": base_lr},
+            {"params": gmm_params, "lr": gmm_lr},
+        ]
+    )
+
+
+##########
+# Training
+##########
+
+@dataclass
+class StepResult:
+    loss: torch.Tensor
+    logs: Dict[str, float]
+
+def move_to(x, device):
+    if isinstance(x, (list, tuple)):
+        return type(x)(move_to(xx, device) for xx in x)
+    if isinstance(x, Mapping):
+        return {k: move_to(v, device) for k, v in x.items()}
+    if torch.is_tensor(x):
+        return x.to(device, non_blocking=True)
+    return x
+
+def average_logs(logs_list: Iterable[Dict[str, float]]) -> Dict[str, float]:
+    out: Dict[str, Tuple[float, int]] = {}
+    for logs in logs_list:
+        for k, v in logs.items():
+            s, n = out.get(k, (0.0, 0))
+            out[k] = (s + float(v), n + 1)
+    return {k: s / max(n, 1) for k, (s, n) in out.items()}
+
+def _progress_wrap(dataloader, show: bool, desc: str, leave=False):
+    return tqdm(dataloader, desc=desc, mininterval=0.5, leave=leave) if show else dataloader
+
+def _format_postfix(logs: Dict[str, float], max_items: int = 4) -> Dict[str, str]:
+    priority = [
+        "total_loss",
+        "reconstruction_loss", "enc_rec_loss",
+        "kl_divergence",
+        "vq_loss", "kmeans_loss",
+        "pos_similarity", "neg_similarity",
+    ]
+    out: Dict[str, str] = {}
+    for k in priority:
+        if k in logs:
+            out[k] = f"{logs[k]:.4f}"
+            if len(out) >= max_items:
+                return out
+    for k, v in logs.items():
+        if k not in out:
+            out[k] = f"{v:.4f}"
+            if len(out) >= max_items:
+                break
+    return out
+
+
+def apply_decoder_schedule(model: nn.Module, epoch: int):
+    base = unwrap_dp(model)
+    dec = getattr(base, "decoder", None)
+    if dec is None:
+        return
+    if hasattr(dec, "teacher_forcing_mode"):
+        if epoch < 3:
+            dec.teacher_forcing_mode = "zeros"
+            if hasattr(dec, "input_dropout_p"):
+                dec.input_dropout_p = 0.0
+        else:
+            dec.teacher_forcing_mode = "dropout"
+            if hasattr(dec, "input_dropout_p"):
+                dec.input_dropout_p = 0.5
+
+
+def train_one_epoch_indexed(
+    model: nn.Module,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    step_fn: Callable[[nn.Module, Any, SimpleNamespace], StepResult],
+    device: torch.device,
+    epoch: int,
+    num_epochs: int,
+    scaler: Optional[GradScaler] = None,
+    use_amp: bool = True,
+    grad_clip_value: Optional[float] = 0.75,
+    ctx: Optional[SimpleNamespace] = None,
+    show_progress: bool = True,
+    leave: bool=False,
+) -> Dict[str, float]:
+    model.train()
+    if ctx and getattr(ctx, "criterion", None) is not None:
+        ctx.criterion.train()
+
+    logs_accum = []
+    iterator = _progress_wrap(dataloader, show_progress, desc=f"Train {epoch+1}/{num_epochs}", leave=leave)
+
+    seen = 0
+    mean_kl_weight = 0.0
+    mean_lambda_weight = 0.0
+    for step, batch in enumerate(iterator):
+        batch = move_to(batch, device)
+        x, a, _, _ = batch  # assume dataset returns (x, a)
+        B = x.size(0)
+        idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
+        seen += B
+
+        batch_idx = (x, a, idx)
+
+        if scaler is not None and use_amp and device.type == "cuda":
+            with autocast(device_type=device.type, dtype=torch.float16):
+                res = step_fn(model, batch_idx, SimpleNamespace(
+                    train=True, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
+                ))
+            scaler.scale(res.loss).backward()
+            print(scaler.get_scale())
+            
+            if grad_clip_value is not None:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
+            scaler.step(optimizer)
+            if torch.isnan(model.encoder.node_recurrent_block.conv1d.weight).any():
+                print("z issues!")
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+        else:
+            res = step_fn(model, batch_idx, SimpleNamespace(
+                train=True, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
+            ))
+            optimizer.zero_grad(set_to_none=True)
+            res.loss.backward()
+            if grad_clip_value is not None:
+                torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
+            optimizer.step()
+
+        if ctx is not None:
+            if hasattr(ctx, "kl_scheduler") and ctx.kl_scheduler is not None:
+                ctx.kl_scheduler.step()
+                if(step==int(len(iterator)/2)):
+                    mean_kl_weight=ctx.kl_scheduler.get_weight()
+            if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+                ctx.lambda_scheduler.step()
+                if(step==int(len(iterator)/2)):
+                    mean_lambda_weight=ctx.lambda_scheduler.get_weight()
+
+        logs_accum.append(res.logs)
+        if show_progress and hasattr(iterator, "set_postfix"):
+            iterator.set_postfix(_format_postfix(res.logs), refresh=False)        
+
+    return average_logs(logs_accum), mean_kl_weight, mean_lambda_weight
+
+
+@torch.no_grad()
+def validate_one_epoch_indexed(
+    model: nn.Module,
+    dataloader: DataLoader,
+    step_fn: Callable[[nn.Module, Any, SimpleNamespace], StepResult],
+    device: torch.device,
+    epoch: int,
+    num_epochs: int,
+    ctx: Optional[SimpleNamespace] = None,
+    show_progress: bool = True,
+    leave: bool=False,
+) -> Dict[str, float]:
+    model.eval()
+    if ctx and getattr(ctx, "criterion", None) is not None:
+        ctx.criterion.eval()
+
+    logs_accum = []
+    iterator = _progress_wrap(dataloader, show_progress, desc=f"Val {epoch+1}/{num_epochs}", leave=leave)
+
+    seen = 0
+    for batch in iterator:
+        batch = move_to(batch, device)
+        x, a, _, _ = batch
+        B = x.size(0)
+        idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
+        seen += B
+
+        res = step_fn(model, (x, a, idx), SimpleNamespace(
+            train=False, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
+        ))
+        logs_accum.append(res.logs)
+
+        if show_progress and hasattr(iterator, "set_postfix"):
+            iterator.set_postfix(_format_postfix(res.logs), refresh=False)
+
+    return average_logs(logs_accum)
+
+
+def build_model_and_step(
+    input_shape: Tuple[int, int, int],
+    edge_feature_shape: Tuple[int, int, int],
+    adjacency_matrix: np.ndarray,
+    latent_dim: int,
+    n_components: int,
+    encoder_type: str,
+    use_gnn: bool,
+    interaction_regularization: float,
+    kmeans_loss: float,
+    device: torch.device,
+) -> Tuple[nn.Module, Callable]:
+    model = deepof.clustering.models_new.VaDEPT(
+        input_shape=input_shape,
+        edge_feature_shape=edge_feature_shape,
+        adjacency_matrix=adjacency_matrix,
+        latent_dim=latent_dim,
+        n_components=n_components,
+        encoder_type=encoder_type,
+        use_gnn=use_gnn,
+        kmeans_loss=kmeans_loss,
+        interaction_regularization=interaction_regularization,
+    ).to(device, non_blocking=True)
+    return model, step_vade
+
+
+def step_vade(
+    model: nn.Module,
+    batch: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],  # (x, a, idx or None)
+    ctx: SimpleNamespace,
+) -> StepResult:
+    x, a, idx = batch
+
+
+    base_m = unwrap_dp(model)
+    T_high = float(getattr(ctx, "resp_temp_start", 1.8))
+    T_low  = 1.0
+    T_resp = T_high
+    if hasattr(ctx, "kl_scheduler") and (ctx.kl_scheduler is not None):
+        w = float(ctx.kl_scheduler.get_weight())
+        w_max = float(getattr(ctx.kl_scheduler, "max_weight", 1.0))
+        prog = 0.0 if w_max <= 0 else min(1.0, max(0.0, w / w_max))
+        T_resp = T_low + (T_high - T_low) * (1.0 - prog)
+    # Clamp and set
+    T_resp = float(max(1.0, min(T_high, T_resp)))
+    if hasattr(base_m, "latent_space"):
+        setattr(base_m.latent_space, "responsibility_temp", T_resp)
+
+
+    outputs = model(x, a, return_gmm_params=True)
+
+    if hasattr(ctx, "criterion") and ctx.criterion is not None:
+        apply_distill = getattr(ctx, "apply_distill", True)
+        batch_indices = idx if apply_distill else None
+
+        if hasattr(ctx, "kl_scheduler") and ctx.kl_scheduler is not None:
+            ctx.criterion.kl_weight = float(ctx.kl_scheduler.get_weight())
+        elif hasattr(ctx, "kl_weight"):
+            ctx.criterion.kl_weight = float(ctx.kl_weight)
+        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+            ctx.criterion.lambda_distill = float(ctx.lambda_scheduler.get_weight())
+
+        loss_dict = ctx.criterion(outputs, x, batch_indices=batch_indices)
+        total = loss_dict["total_loss"]
+        
+
+        # EMA update of π from current batch responsibilities 
+        with torch.no_grad():
+            beta = float(getattr(ctx, "pi_ema_beta", 0.0))
+            if beta > 0.0 and outputs[2] is not None:
+                q_batch = outputs[2].detach()                 # (B,C)
+                m = q_batch.mean(dim=0)                       # (C,)
+                base = unwrap_dp(model)
+                if hasattr(base.latent_space, "prior"):
+                    pi = base.latent_space.prior
+                    if isinstance(pi, torch.nn.Parameter):
+                        pi_data = pi.data
+                        pi_data.mul_(1.0 - beta).add_(beta * m)
+                        pi_data.clamp_(min=1e-6)
+                        pi_data.div_(pi_data.sum())
+                    else:
+                        pi.mul_(1.0 - beta).add_(beta * m)
+                        pi.clamp_(min=1e-6)
+                        pi.div_(pi.sum())
+
+        logs = {
+            "total_loss": float(total.detach().item()),
+            "reconstruction_loss": float(loss_dict["reconstruction_loss"].detach().item()),
+            "kl_divergence": float(loss_dict["kl_divergence"].detach().item()),
+            "cat_cluster_loss": float(loss_dict["cat_cluster_loss"].detach().item()),
+            "kmeans_loss": float(loss_dict["kmeans_loss"].detach().item()) if torch.is_tensor(loss_dict["kmeans_loss"]) else float(loss_dict["kmeans_loss"]),
+            "prior_loss": float(loss_dict["prior_loss"].detach().item()),
+            "distill_loss": float(loss_dict["distill_loss"].detach().item()),
+            "student_clustering_loss": 0.0, #float(loss_dict["student_clustering_loss"].detach().item()),
+            "tf_cluster_loss" : float(loss_dict["tf_cluster_loss"].detach().item()),
+            "nonempty_loss": float(loss_dict["nonempty_loss"].detach().item()),
+            "temporal_loss": float(loss_dict["temporal_loss"].detach().item()),
+            "scatter_loss": float(loss_dict["scatter_loss"].detach().item()),
+            "repel_loss": float(loss_dict["repel_loss"].detach().item()),
+        }
+        return StepResult(loss=total, logs=logs)
+    else:
+        raise RuntimeError("VaDE step requires ctx.criterion (VaDELoss) to be provided.")
+
+
+def step_vqvae_distill(
+    model: nn.Module,  # VQVAEPT or DataParallel(VQVAEPT)
+    batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],  # (x, a, idx)
+    ctx: SimpleNamespace,
+) -> StepResult:
+    x, a, idx = batch
+    device = x.device
+    apply_distill = getattr(ctx, "apply_distill", True)
+
+    # Forward (ask for all to get z_e)
+    encoding_recon, recon, quant, soft_counts, encoder_output, vq_losses = model(
+        x, a, return_losses=True, return_all_outputs=True
+    )
+
+    # Flatten targets to match decoder distribution event shape
+    B, T, N, F = x.shape
+    x_flat = x.view(B, T, N * F)
+
+    with torch.amp.autocast(device_type=device.type, enabled=False):
+        enc_rec_loss = -(encoding_recon.log_prob(x_flat.float())).mean()
+        rec_loss     = -(recon.log_prob(x_flat.float())).mean()
+
+    vq_loss     = float(vq_losses.get("vq_loss", 0.0))
+    kmeans_loss = float(vq_losses.get("kmeans_loss", 0.0))
+    vq_total_t  = torch.as_tensor(vq_loss + kmeans_loss, device=device, dtype=enc_rec_loss.dtype)
+
+    base_total = enc_rec_loss + rec_loss + vq_total_t
+    distill_loss = torch.tensor(0.0, device=device, dtype=enc_rec_loss.dtype)
+
+    # Distillation on z_e
+    if apply_distill and hasattr(ctx, "distill_head") and (getattr(ctx, "lambda_distill", 0.0) > 0.0):
+        z_e = encoder_output  # pre-quantization latent
+        logits = ctx.distill_head(z_e)  # [B, C]
+
+        tau_b = ctx.tau_star[idx]  # (B, C)
+        eps = 1e-8
+        T = float(getattr(ctx, "distill_sharpen_T", 0.5))
+        if T > 0.0:
+            logits_t = (tau_b.clamp_min(eps)).log() / T
+            tau_b = torch.softmax(logits_t, dim=-1)
+
+        if getattr(ctx, "distill_conf_weight", False):
+            conf = tau_b.max(dim=1).values
+            thr = float(getattr(ctx, "distill_conf_thresh", 0.6))
+            w = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(0.0, 1.0).detach()
+            per_sample = _soft_ce_logits(logits, tau_b, reduction="none")
+            distill_loss = (w * per_sample).mean()
+        else:
+            distill_loss = _soft_ce_logits(logits, tau_b, reduction="mean")
+        lambda_distill = 0.0
+        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+            lambda_distill = float(ctx.lambda_scheduler.get_weight())
+        
+        distill_loss = lambda_distill * distill_loss
+        total = base_total + distill_loss
+    else:
+        total = base_total
+
+    # Populated clusters (codes used)
+    try:
+        populated = soft_counts.argmax(dim=-1).unique().numel()
+        populated_f = float(populated)
+    except Exception:
+        populated_f = float("nan")
+
+    logs = {
+        "total_loss": float(total.detach().item()),
+        "enc_rec_loss": float(enc_rec_loss.detach().item()),
+        "reconstruction_loss": float(rec_loss.detach().item()),
+        "vq_loss": vq_loss,
+        "kmeans_loss": kmeans_loss,
+        "number_of_populated_clusters": populated_f,
+        "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
+    }
+    return StepResult(loss=total, logs=logs)
+
+
+def _soft_ce_logits(logits: torch.Tensor, soft_targets: torch.Tensor, eps: float = 1e-8, reduction: str = "mean"):
+    log_probs = F.log_softmax(logits, dim=-1)
+    soft_targets = torch.clamp(soft_targets, min=eps, max=1.0)
+    per_sample = -(soft_targets * log_probs).sum(dim=-1)
+    if reduction == "mean":
+        return per_sample.mean()
+    elif reduction == "sum":
+        return per_sample.sum()
+    return per_sample
+
+
+def step_contrastive_distill(
+    model: nn.Module,  # ContrastivePT or DataParallel(ContrastivePT)
+    batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],  # (x, a, idx)
+    ctx: SimpleNamespace,
+) -> StepResult:
+    x, a, idx = batch
+    base = unwrap_dp(model)
+    device = x.device
+    win = base.window_size
+    apply_distill = getattr(ctx, "apply_distill", True)
+
+    def ts_samples(mb, w):
+        pos = mb[:, 1:w + 1]
+        neg = mb[:, -w:]
+        return pos, neg
+
+    pos_x, neg_x = ts_samples(x, win)
+    pos_a, neg_a = ts_samples(a, win)
+
+    # Encode via forward for DP compatibility
+    z_pos = model(pos_x, pos_a)
+    z_neg = model(neg_x, neg_a)
+
+    # Normalize row-wise
+    z_pos = torch.nn.functional.normalize(z_pos, dim=1)
+    z_neg = torch.nn.functional.normalize(z_neg, dim=1)
+
+    # Base contrastive loss
+    loss, pos_mean, neg_mean = select_contrastive_loss_pt(
+        z_pos, z_neg,
+        similarity=base.similarity_function,
+        loss_fn=base.loss_function,
+        temperature=base.temperature,
+        tau=base.tau,
+        beta=base.beta,
+        elimination_topk=0.1,
+    )
+
+    distill_loss = torch.tensor(0.0, device=device, dtype=loss.dtype)
+
+    # Distillation on the main window embedding
+    if apply_distill and hasattr(ctx, "distill_head") and (getattr(ctx, "lambda_distill", 0.0) > 0.0):
+        z_main = model(x, a)  # [B, D]
+        logits = ctx.distill_head(z_main)  # [B, C]
+
+        tau_b = ctx.tau_star[idx]  # (B, C)
+        eps = 1e-8
+        T = float(getattr(ctx, "distill_sharpen_T", 0.5))
+        if T > 0.0:
+            logits_t = (tau_b.clamp_min(eps)).log() / T
+            tau_b = torch.softmax(logits_t, dim=-1)
+
+        if getattr(ctx, "distill_conf_weight", False):
+            conf = tau_b.max(dim=1).values
+            thr = float(getattr(ctx, "distill_conf_thresh", 0.6))
+            w = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(0.0, 1.0).detach()
+            per_sample = _soft_ce_logits(logits, tau_b, reduction="none")
+            distill_loss = (w * per_sample).mean()
+        else:
+            distill_loss = _soft_ce_logits(logits, tau_b, reduction="mean")
+        lambda_distill = 0.0
+        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+            lambda_distill = float(ctx.lambda_scheduler.get_weight())
+
+        distill_loss = lambda_distill * distill_loss
+        total = loss + distill_loss
+    else:
+        total = loss
+
+    logs = {
+        "total_loss": float(total.detach().item()),
+        "pos_similarity": float(pos_mean),
+        "neg_similarity": float(neg_mean),
+        "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
+    }
+    return StepResult(loss=total, logs=logs)
+
+
+###########
+# Main call
+###########
+
+
+def embedding_model_fittingPT(
+    preprocessed_object: Tuple[dict, dict],
+    adjacency_matrix: np.ndarray,
+    encoder_type: str,
+    batch_size: int,
+    latent_dim: int,
+    epochs: int,
+    n_components: int,
+    # Logging/IO
+    output_path: str,
+    log_history: bool = True,
+    data_path: str = ".",
+    pretrained: Optional[str] = None,
+    save_weights: bool = True,
+    run: int = 0,
+    # VaDE-specific
+    kl_annealing_mode: str = "sigmoid",
+    reg_cat_clusters: float = 0.0,
+    recluster: bool = False,
+    freeze_gmm_epochs: int = 0,
+    freeze_decoder_epochs: int = 0,
+    prior_loss_weight: float = 0.0,
+    # Regularization knobs
+    interaction_regularization: float = 0.0,
+    kmeans_loss: float = 0.0,
+    # System
+    num_workers: int = 0,
+    prefetch_factor: int = 0,
+    use_amp: bool = False,
+    # TURTLE teacher + distillation (VaDE)
+    use_turtle_teacher: bool = True,
+    teacher_gamma: float = 8.0,
+    teacher_outer_steps: int = 500,
+    teacher_inner_steps: int = 100,
+    teacher_normalize_feats: bool = True,
+    lambda_distill: float = 4.0,
+    lambda_decay_start: int = 10,
+    lambda_end_weight: float = 0.2,
+    lambda_cooldown: int = 10,
+    teacher_refresh_every: Optional[int] = False,
+    teacher_freeze_at: Optional[int] = 10,
+    teacher_head_temp: float = 0.5,
+    teacher_task_temp: float = 0.5,
+    teacher_alpha_sample_entropy: float = 2.0,
+    # KL cap
+    kl_max_weight: float = 1,
+    kl_warmup: int = 5,
+    kl_end_weight: float = 0.2,
+    kl_cooldown: int = 5,
+    reg_scatter_weight: float = 0,
+    temporal_cohesion_weight: float = 0,
+    reg_scatter_beta: float = 1.0,
+    repel_weight: float = 0,
+    repel_length_scale: float = 1.0,
+    # TF-style cluster term
+    tf_cluster_weight: float = 0.0,
+    nonempty_weight: float = 2e-2,
+    # Distillation weighting (VaDE)
+    distill_conf_weight: bool = False,
+    distill_conf_thresh: float = 0.3,
+    distill_sharpen_T: float = 0.5,
+    # Views for teacher
+    include_edges_view: bool = False,
+    include_nodes_view: bool = True,
+    pca_nodes_dim: int = 32,
+    pca_edges_dim: int = 32,
+    include_angles_view: bool = True,
+    pca_angles_dim: int = 32,
+    include_supervised_view: bool = True,
+    reinit_gmm_on_refresh: bool = False,
+    # Diagnostics
+    diag_max_batches: int = 4,
+    # Model type
+    model_name: str = "VaDE",   # "VaDE" (default), "VQVAE", "Contrastive"
+    # Distill head (for VQVAE/Contrastive)
+    generic_lambda_distill: float = 2.0,
+    generic_distill_sharpen_T: float = 0.5,
+    generic_distill_conf_weight: bool = True,
+    generic_distill_conf_thresh: float = 0.6,
+    generic_distill_warmup_epochs: int = 1,
+    distill_class_reweight_beta: float = 1,
+    distill_class_reweight_cap: float = 3,
+    # Contrastive opts
+    temperature: float = 0.1,
+    contrastive_similarity_function: str = "cosine",
+    contrastive_loss_function: str = "nce",
+    beta: float = 0.1,
+    tau: float = 0.1,
+) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
+    
+    # Verify if various model inputs have valid values (TO DO)
+    #_check_model_inputs()
+
+    # Create configs for different models to avoid gigantic function signaturs
+    common_cfg = CommonFitCfg(
+        model_name=model_name.lower(),
+        encoder_type=encoder_type,
+        batch_size=batch_size,
+        latent_dim=latent_dim,
+        epochs=epochs,
+        n_components=n_components,
+        output_path=output_path,
+        data_path=data_path,
+        log_history=log_history,
+        pretrained=pretrained,
+        save_weights=save_weights,
+        run=run,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        use_amp=use_amp,
+        interaction_regularization=interaction_regularization,
+        kmeans_loss=kmeans_loss,
+        diag_max_batches=diag_max_batches,
+        kl_annealing_mode=kl_annealing_mode,
+        kl_max_weight=kl_max_weight,
+        kl_warmup=kl_warmup,
+        kl_end_weight=kl_end_weight,
+        kl_cooldown=kl_cooldown,
+    )
+
+    teacher_cfg = TurtleTeacherCfg(
+        use_turtle_teacher=use_turtle_teacher,
+        teacher_gamma=teacher_gamma,
+        teacher_outer_steps=teacher_outer_steps,
+        teacher_inner_steps=teacher_inner_steps,
+        teacher_normalize_feats=teacher_normalize_feats,
+        teacher_head_temp=teacher_head_temp,
+        teacher_task_temp=teacher_task_temp,
+        teacher_alpha_sample_entropy=teacher_alpha_sample_entropy,
+
+        lambda_distill=lambda_distill,
+        lambda_decay_start=lambda_decay_start,
+        lambda_end_weight=lambda_end_weight,
+        lambda_cooldown=lambda_cooldown,
+        distill_sharpen_T=distill_sharpen_T,
+        distill_conf_weight=distill_conf_weight,
+        distill_conf_thresh=distill_conf_thresh,
+
+        generic_lambda_distill=generic_lambda_distill,
+        generic_distill_sharpen_T=generic_distill_sharpen_T,
+        generic_distill_conf_weight=generic_distill_conf_weight,
+        generic_distill_conf_thresh=generic_distill_conf_thresh,
+        generic_distill_warmup_epochs=generic_distill_warmup_epochs,
+        distill_class_reweight_beta=distill_class_reweight_beta,
+        distill_class_reweight_cap=distill_class_reweight_cap,
+
+        include_edges_view=include_edges_view,
+        include_nodes_view=include_nodes_view,
+        include_angles_view=include_angles_view,
+        include_supervised_view=include_supervised_view,
+        pca_nodes_dim=pca_nodes_dim,
+        pca_edges_dim=pca_edges_dim,
+        pca_angles_dim=pca_angles_dim,
+
+        # normalize "False" -> None 
+        teacher_refresh_every=(None if teacher_refresh_every is False else teacher_refresh_every),
+        teacher_freeze_at=teacher_freeze_at,
+        reinit_gmm_on_refresh=reinit_gmm_on_refresh,
+    )
+
+    vade_cfg = VaDECfg(
+        reg_cat_clusters=reg_cat_clusters,
+        recluster=recluster,
+        freeze_gmm_epochs=freeze_gmm_epochs,
+        freeze_decoder_epochs=freeze_decoder_epochs,
+        prior_loss_weight=prior_loss_weight,
+
+        reg_scatter_weight=reg_scatter_weight,
+        temporal_cohesion_weight=temporal_cohesion_weight,
+        reg_scatter_beta=reg_scatter_beta,
+        repel_weight=repel_weight,
+        repel_length_scale=repel_length_scale,
+
+        tf_cluster_weight=tf_cluster_weight,
+        nonempty_weight=nonempty_weight,
+    )
+
+    contrastive_cfg = ContrastiveCfg(
+        temperature=temperature,
+        contrastive_similarity_function=contrastive_similarity_function,
+        contrastive_loss_function=contrastive_loss_function,
+        beta=beta,
+        tau=tau,
+    )
+
+    return embedding_model_fitting(preprocessed_object, adjacency_matrix, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
+
+def embedding_model_fitting(
+    preprocessed_object: Tuple[dict, dict],
+    adjacency_matrix: np.ndarray,
+    common_cfg : CommonFitCfg,
+    teacher_cfg: TurtleTeacherCfg,
+    vade_cfg: VaDECfg,
+    contrastive_cfg: ContrastiveCfg,
+) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
+
+    # Name defaults to "vade"
+    model_name = common_cfg.model_name
+
+    # ---------------------------
+    # Prepare device and data
+    # ---------------------------
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        try:
+            torch.set_float32_matmul_precision("high")
+        except Exception:
+            pass
+
+    data_path = os.path.join(common_cfg.output_path, "Datasets")
+    preprocessed_train, preprocessed_val, supervised_train, supervised_val = preprocessed_object
+    train_dataset = BatchDictDataset(
+        preprocessed_train, data_path, "train_", force_rebuild=False,
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=supervised_train
+    )
+    val_dataset = BatchDictDataset(
+        preprocessed_val, data_path, "val_", force_rebuild=False,
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=supervised_val
+    )
+
+    train_loader = train_dataset.make_loader(
+        batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
+        iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,
+    )
+    val_loader = val_dataset.make_loader(
+        batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
+        iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,
+    )
+
+    writer = None
+    if common_cfg.log_history:
+        log_dir = os.path.join(common_cfg.output_path, "logs", f"{model_name}_run_{common_cfg.run}")
+        os.makedirs(log_dir, exist_ok=True)
+        writer = SummaryWriter(log_dir=log_dir)
+        print(f"TensorBoard logs -> {log_dir}")
+
+
+    # Unified checkpoint paths per model/run
+    def _ckpt_paths(model_name: str):
+        ckpt_dir = os.path.join(common_cfg.output_path, "models", model_name.lower(), f"run_{common_cfg.run}")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        best_val_path = os.path.join(ckpt_dir, "best_model_val.pth")
+        best_score_path = os.path.join(ckpt_dir, "best_model_score.pth")
+        teacher_init_path = os.path.join(ckpt_dir, "model_teacher_init.pth")
+        return ckpt_dir, best_val_path, best_score_path, teacher_init_path
+
+    # ----------------------------------------------------
+    # Branch 1: VQVAE
+    # ----------------------------------------------------
+    if model_name == "vqvae":
+        model = VQVAEPT(
+            input_shape=train_dataset.x_shape,
+            edge_feature_shape=train_dataset.a_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=common_cfg.latent_dim,
+            n_components=common_cfg.n_components,
+            encoder_type=common_cfg.encoder_type,
+            use_gnn=True,
+            interaction_regularization=common_cfg.interaction_regularization,
+            kmeans_loss=common_cfg.kmeans_loss,
+        ).to(device, non_blocking=True)
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+            model = nn.DataParallel(model)
+
+        teacher_cfg.include_latent_view=False
+        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+            teacher_cfg=teacher_cfg,
+            train_dataset=train_dataset,
+            preprocessed_train=preprocessed_train,
+            data_path=data_path,
+            batch_size=common_cfg.batch_size,
+            device=device,
+            n_components=common_cfg.n_components,
+            latent_view=None,
+        )
+        apply_distill = (tau_star is not None)
+        lambda_scheduler=None
+        if not apply_distill:
+            lambda_scheduler = Dynamic_weight_manager(
+                n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+                warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
+                cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+            )
+
+        distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+        optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+        scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
+
+        # unified best-val and best-score saving
+        _, best_path_val, best_path_score, _ = _ckpt_paths("vqvae")
+        best_val = float("inf")
+        best_score = -float("inf")
+
+        print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
+        for epoch in range(common_cfg.epochs):
+
+            ctx = SimpleNamespace(
+                tau_star=(tau_star.to(device) if tau_star is not None else None),
+                distill_head=distill_head,
+                lambda_scheduler=lambda_scheduler,
+                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+                apply_distill=apply_distill,
+            )
+
+            train_logs, _, lam = train_one_epoch_indexed(
+                model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
+                device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+                grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+            )
+            val_logs = validate_one_epoch_indexed(
+                model=model, dataloader=val_loader, step_fn=step_vqvae_distill,
+                device=device, epoch=epoch, num_epochs=common_cfg.epochs,
+                ctx=SimpleNamespace(apply_distill=False), show_progress=True,
+            )
+
+            v_total = float(val_logs.get("total_loss", float("inf")))
+            score_value = -v_total  # placeholder score (keeps API uniform)
+
+            print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
+                  f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+
+            if writer:
+                for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
+                for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+                writer.add_scalar("Distill/lambda", lam, epoch)
+            
+            
+            _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+
+            if v_total < best_val:
+                best_val = v_total
+                if common_cfg.save_weights:
+                    torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                    save_model_info(
+                        best_path_val,
+                        stage="best_val",
+                        epoch=epoch,
+                        train_steps=(epoch + 1) * len(train_loader),
+                        val_total=v_total,
+                        score_value=None,
+                        common_cfg=common_cfg,
+                        teacher_cfg=teacher_cfg,
+                        vade_cfg=vade_cfg,
+                        contrastive_cfg=contrastive_cfg,
+                    )
+                    print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
+
+            if score_value > best_score:
+                best_score = score_value
+                if common_cfg.save_weights:
+                    torch.save(unwrap_dp(model).state_dict(), best_path_score)
+                    save_model_info(
+                        best_path_score,
+                        stage="best_score",
+                        epoch=epoch,
+                        train_steps=(epoch + 1) * len(train_loader),
+                        val_total=v_total,
+                        score_value=score_value,
+                        common_cfg=common_cfg,
+                        teacher_cfg=teacher_cfg,
+                        vade_cfg=vade_cfg,
+                        contrastive_cfg=contrastive_cfg,
+                    )
+                    print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
+            
+
+        model_score = deepcopy(model)
+        if common_cfg.save_weights and os.path.exists(best_path_val):
+            unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+        if common_cfg.save_weights and os.path.exists(best_path_score):
+            unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+
+        if writer:
+            writer.flush(); writer.close()
+
+        return unwrap_dp(model), unwrap_dp(model_score), None
+
+    # ----------------------------------------------------
+    # Branch 2: Contrastive
+    # ----------------------------------------------------
+    if model_name == "contrastive":
+        model = deepof.clustering.models_new.ContrastivePT(
+            input_shape=train_dataset.x_shape,
+            edge_feature_shape=train_dataset.a_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=common_cfg.latent_dim,
+            encoder_type=common_cfg.encoder_type,
+            use_gnn=True,
+            similarity_function=contrastive_cfg.contrastive_similarity_function,
+            loss_function=contrastive_cfg.contrastive_loss_function,
+            temperature=contrastive_cfg.temperature,
+            beta=contrastive_cfg.beta,
+            tau=contrastive_cfg.tau,
+        ).to(device, non_blocking=True)
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+            model = nn.DataParallel(model)
+
+        teacher_cfg.include_latent_view=False
+        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+            teacher_cfg=teacher_cfg,
+            train_dataset=train_dataset,
+            preprocessed_train=preprocessed_train,
+            data_path=data_path,
+            batch_size=common_cfg.batch_size,
+            device=device,
+            n_components=common_cfg.n_components,
+            latent_view=None,
+        )
+        apply_distill = (tau_star is not None)
+        lambda_scheduler=None
+        if not apply_distill:
+            lambda_scheduler = Dynamic_weight_manager(
+                n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+                warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
+                cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+            )
+
+        distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+        optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+        scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
+
+        # Unified best-val and best-score saving (no head saving)
+        _, best_path_val, best_path_score, _ = _ckpt_paths("contrastive")
+        best_val = float("inf")
+        best_score = -float("inf")
+
+
+
+        print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
+        for epoch in range(common_cfg.epochs):
+
+            ctx = SimpleNamespace(
+                tau_star=(tau_star.to(device) if tau_star is not None else None),
+                distill_head=distill_head,
+                lambda_scheduler=lambda_scheduler,
+                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+                apply_distill=apply_distill,
+            )
+
+            train_logs, _, lam = train_one_epoch_indexed(
+                model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
+                device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+                grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+            )
+            val_logs = validate_one_epoch_indexed(
+                model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
+                device=device, epoch=epoch, num_epochs=common_cfg.epochs,
+                ctx=SimpleNamespace(apply_distill=False), show_progress=True,
+            )
+
+            v_total = float(val_logs.get("total_loss", float("inf")))
+            score_value = -v_total  # placeholder score (keeps API uniform)
+
+            print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
+                  f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+
+            if writer:
+                for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
+                for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+                writer.add_scalar("Distill/lambda", lam, epoch)
+
+            
+            _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+
+            if v_total < best_val:
+                best_val = v_total
+                if common_cfg.save_weights:
+                    torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                    save_model_info(
+                        best_path_val,
+                        stage="best_val",
+                        epoch=epoch,
+                        train_steps=(epoch + 1) * len(train_loader),
+                        val_total=v_total,
+                        score_value=None,
+                        common_cfg=common_cfg,
+                        teacher_cfg=teacher_cfg,
+                        vade_cfg=vade_cfg,
+                        contrastive_cfg=contrastive_cfg,
+                    )
+                    print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
+
+            if score_value > best_score:
+                best_score = score_value
+                if common_cfg.save_weights:
+                    torch.save(unwrap_dp(model).state_dict(), best_path_score)
+                    save_model_info(
+                        best_path_score,
+                        stage="best_score",
+                        epoch=epoch,
+                        train_steps=(epoch + 1) * len(train_loader),
+                        val_total=v_total,
+                        score_value=score_value,
+                        common_cfg=common_cfg,
+                        teacher_cfg=teacher_cfg,
+                        vade_cfg=vade_cfg,
+                        contrastive_cfg=contrastive_cfg,
+                    )
+                    print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
+
+
+        # Load both checkpoints and return uniformly
+        model_score = deepcopy(model)
+        if common_cfg.save_weights and os.path.exists(best_path_val):
+            unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+        if common_cfg.save_weights and os.path.exists(best_path_score):
+            unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+
+        if writer:
+            writer.flush(); writer.close()
+
+        return unwrap_dp(model), unwrap_dp(model_score), None
+
+    # ----------------------------------------------------
+    # Branch 3: VaDE
+    # ----------------------------------------------------
+    model, step_fn = build_model_and_step(
+        input_shape=train_dataset.x_shape,
+        edge_feature_shape=train_dataset.a_shape,
+        adjacency_matrix=adjacency_matrix,
+        latent_dim=common_cfg.latent_dim,
+        n_components=common_cfg.n_components,
+        encoder_type=common_cfg.encoder_type,
+        use_gnn=True,
+        interaction_regularization=common_cfg.interaction_regularization,
+        kmeans_loss=1.0,
+        device=device,
+    )
+
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+        model = nn.DataParallel(model)
+
+    optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
+    scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
+
+    n_batches_per_epoch = len(train_loader)
+    kl_scheduler = Dynamic_weight_manager(
+        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+        warmup_epochs=15, max_weight=1.0, cooldown_epochs=1, end_weight=1.0
+    )
+
+    if common_cfg.pretrained:
+        print(f"Loading pretrained weights from {common_cfg.pretrained}")
+        unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device))
+        if writer:
+            writer.flush(); writer.close()
+        return unwrap_dp(model), unwrap_dp(model), None
+
+    criterion = VaDELossTFExact(
+        n_components=common_cfg.n_components,
+        latent_dim=common_cfg.latent_dim,
+        reg_cat_clusters=vade_cfg.reg_cat_clusters,
+        kl_scheduler=kl_scheduler,
+        prior_loss_weight=vade_cfg.prior_loss_weight,
+        mc_kl_samples=32,
+        kl_clamp_min=0.0,
+        lambda_distill=0.0,
+        distill_sharpen_T=teacher_cfg.distill_sharpen_T,
+        distill_conf_weight=teacher_cfg.distill_conf_weight,
+        distill_conf_thresh=teacher_cfg.distill_conf_thresh,
+        tf_cluster_weight=vade_cfg.tf_cluster_weight,
+        reg_cluster_var_weight=0.001,
+        distill_use_class_reweight=True,
+        distill_class_reweight_beta=teacher_cfg.distill_class_reweight_beta,
+        distill_class_reweight_cap=teacher_cfg.distill_class_reweight_cap,
+        kmeans_loss_weight=common_cfg.kmeans_loss,
+        nonempty_weight=vade_cfg.nonempty_weight,
+    ).to(device)
+
+    if hasattr(criterion, "gmm_logvar_clamp"):
+        criterion.gmm_logvar_clamp = (-8.0, 8.0)
+
+    criterion.temporal_cohesion_weight = vade_cfg.temporal_cohesion_weight
+    criterion.reg_scatter_weight = vade_cfg.reg_scatter_weight
+    criterion.reg_scatter_beta = vade_cfg.reg_scatter_beta
+    criterion.repel_weight = vade_cfg.repel_weight
+    criterion.repel_length_scale = vade_cfg.repel_length_scale
+    criterion.nonempty_floor = max(1e-4, 0.05 / common_cfg.n_components)
+    criterion.nonempty_p = 1
+
+    # Pretraining
+    print("\n--- Pretraining (reconstruction and setting up the latent space) ---")
+    unwrap_dp(model).set_pretrain_mode(True)
+    criterion.pretrain_mode = True
+    pre_epochs = min(10, max(1, common_cfg.epochs))
+    ctx = SimpleNamespace(kl_scheduler=kl_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
+
+    leave = False
+    for ep in range(pre_epochs):
+        
+        if ep == len(range(pre_epochs))-1:
+            leave=True
+        apply_decoder_schedule(model, ep)
+        pre_logs, _, _ = train_one_epoch_indexed(
+            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
+            device=device, epoch=ep, num_epochs=pre_epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=leave
+        )
+        if writer:
+            writer.add_scalar("Pretrain/total_loss", pre_logs["total_loss"], ep)
+
+    unwrap_dp(model).set_pretrain_mode(False)
+    criterion.pretrain_mode = False
+    criterion.kl_scheduler.current_iteration = 0
+
+    kl_scheduler = Dynamic_weight_manager(
+        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+        warmup_epochs=common_cfg.kl_warmup, max_weight=common_cfg.kl_max_weight,
+        cooldown_epochs=common_cfg.kl_cooldown, end_weight=common_cfg.kl_end_weight
+    )
+    lambda_scheduler = None
+    
+    optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
+
+    # VaDE unified checkpoint paths
+    _, best_path_val, best_path_score, teacher_init_path = _ckpt_paths("vade")
+
+    tau_star = None
+    teacher_init_model = None  # returned as 3rd output
+
+    # cached views for refresh
+    pca_pos = pca_spd = pca_edges = pca_angles_train = supervised_labels = None
+
+    if teacher_cfg.use_turtle_teacher:
+        print("\n--- Extracting latents for teacher ---")
+        z_all = extract_latents(
+            unwrap_dp(model), train_dataset, device=device,
+            batch_size=2048, num_workers=common_cfg.num_workers
+        ).cpu()
+
+        lambda_scheduler = Dynamic_weight_manager(
+            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+            warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
+            cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+        )
+
+        teacher_cfg.include_latent_view=True
+        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+            teacher_cfg=teacher_cfg,            
+            train_dataset=train_dataset,
+            preprocessed_train=preprocessed_train,
+            data_path=data_path,
+            batch_size=common_cfg.batch_size,
+            device=device,
+            n_components=common_cfg.n_components,
+            latent_view=z_all.to(device),
+        )
+
+        pca_pos = teacher_views.get("pca_pos", None)
+        pca_spd = teacher_views.get("pca_spd", None)
+        pca_edges = teacher_views.get("pca_edges", None)
+        pca_angles_train = teacher_views.get("pca_angles", None)
+        supervised_labels = teacher_views.get("supervised_labels", None)
+
+        print("\n--- Initializing GMM from teacher τ* ---")
+        initialize_gmm_from_teacher(model, z_all, tau_star, min_var=0.01)
+        criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill)
+
+        # Save teacher-init checkpoint + info (VaDE only)
+        teacher_init_model = deepcopy(unwrap_dp(model))
+        if common_cfg.save_weights:
+            torch.save(teacher_init_model.state_dict(), teacher_init_path)
+            save_model_info(
+                teacher_init_path,
+                stage="teacher_init",
+                epoch=pre_epochs - 1,
+                train_steps=pre_epochs * len(train_loader),
+                extra={"note": "after pretrain + teacher + GMM init, before main training"},
+                common_cfg=common_cfg,
+                teacher_cfg=teacher_cfg,
+                vade_cfg=vade_cfg,
+                contrastive_cfg=contrastive_cfg,
+            )
+            print(f"  Saved teacher-init model -> {teacher_init_path}")
+
+    else:
+        print("\n--- Initializing GMM from embeddings (sklearn) ---")
+        init_loader = DataLoader(train_dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
+        unwrap_dp(model).initialize_gmm_from_data(init_loader)
+
+    # Training (VaDE keeps your existing alignment-score logic)
+    best_align = -float("inf")
+    best_val = float("inf")
+    epochs_no_improve = 0
+    early_stop_patience = 50
+    early_stop_min_delta = 0.0
+    early_stop_warmup = max(5, vade_cfg.freeze_gmm_epochs)
+
+    # Epoch dependent weights
+    lambda_d = 0.0
+    klw = 0.0
+
+    print(f"\n--- Training for {common_cfg.epochs} epochs ---")
+    print("NOTE: some losses are intentionally defined negative and function as rewards.")
+    for epoch in range(common_cfg.epochs):
+        
+        
+        
+        apply_decoder_schedule(model, epoch)
+        base = unwrap_dp(model)
+
+        # freezing/unfreezing logic
+        if epoch == 0 and vade_cfg.freeze_gmm_epochs > 0:
+            print(f"Freezing GMM for {vade_cfg.freeze_gmm_epochs} epoch(s)")
+            base.latent_space.gmm_means.requires_grad = False
+            base.latent_space.gmm_log_vars.requires_grad = False
+        if epoch == vade_cfg.freeze_gmm_epochs:
+            new_base_lr = 5e-4
+            new_gmm_lr = 2e-4
+            for i, group in enumerate(optimizer.param_groups):
+                if i == 0: group["lr"] = new_base_lr
+                elif i == 1: group["lr"] = new_gmm_lr
+            print("Unfreezing GMM")
+            base.latent_space.gmm_means.requires_grad = True
+            base.latent_space.gmm_log_vars.requires_grad = True
+            #base.latent_space.freeze_lens(False)
+
+        if hasattr(base, "decoder") and (base.decoder is not None):
+            if epoch == 0 and vade_cfg.freeze_decoder_epochs > 0:
+                print(f"Freezing decoder for {vade_cfg.freeze_decoder_epochs} epoch(s)")
+                for p in base.decoder.parameters():
+                    p.requires_grad = False
+            if epoch == vade_cfg.freeze_decoder_epochs:
+                print("Unfreezing decoder")
+                for p in base.decoder.parameters():
+                    p.requires_grad = True
+
+        # refresh block unchanged (kept)
+        if (
+            epoch > 0 and teacher_cfg.use_turtle_teacher and (teacher_cfg.teacher_refresh_every is not None) and (teacher_cfg.teacher_refresh_every > 0)
+            and (epoch) % teacher_cfg.teacher_refresh_every == 0 and (teacher_cfg.teacher_freeze_at is None or (epoch) <= teacher_cfg.teacher_freeze_at)
+        ):
+            print(f"\n--- Refresh TURTLE teacher at epoch {epoch+1} ---")
+            z_curr = extract_latents(base, train_dataset, device=device, batch_size=2048, num_workers=common_cfg.num_workers).cpu()
+
+            views_dict = {"z": z_curr.to(device)}
+            if teacher_cfg.include_nodes_view and (pca_pos is not None) and (pca_spd is not None):
+                views_dict["pca_pos"] = pca_pos.to(device)
+                views_dict["pca_spd"] = pca_spd.to(device)
+            if teacher_cfg.include_edges_view and (pca_edges is not None):
+                views_dict["pca_edges"] = pca_edges.to(device)
+            if teacher_cfg.include_angles_view and (pca_angles_train is not None):
+                views_dict["pca_angles"] = pca_angles_train.to(device)
+            if teacher_cfg.include_supervised_view and (supervised_labels is not None):
+                views_dict["supervised_labels"] = supervised_labels.to(device)
+
+            teacher, tau_star = run_turtle_teacher_on_views(
+                views_dict=views_dict, n_components=common_cfg.n_components, gamma=teacher_cfg.teacher_gamma,
+                alpha_sample_entropy=teacher_cfg.teacher_alpha_sample_entropy,
+                outer_steps=max(200, teacher_cfg.teacher_outer_steps), inner_steps=teacher_cfg.teacher_inner_steps,
+                normalize_feats=teacher_cfg.teacher_normalize_feats, verbose=True, device=device,
+                head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
+            )
+            tau_star = tau_star.detach()
+
+            criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill)
+            if teacher_cfg.reinit_gmm_on_refresh:
+                initialize_gmm_from_teacher(model, z_curr, tau_star, min_var=1e-4)
+                print("  Reinitialized GMM from refreshed τ*.")
+
+        ctx = SimpleNamespace(kl_scheduler=kl_scheduler, lambda_scheduler=lambda_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
+        # klw is updated in every training step, getting the weight for printing at the middle of the epochs
+        train_logs, klw, lambda_d = train_one_epoch_indexed(
+            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
+            device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True,
+        )
+        val_logs = validate_one_epoch_indexed(
+            model=model, dataloader=val_loader, step_fn=step_fn, device=device,
+            epoch=epoch, num_epochs=common_cfg.epochs, ctx=SimpleNamespace(criterion=criterion, apply_distill=False),
+            show_progress=True,
+        )
+
+        # your diagnostics + alignment score calculation (unchanged)
+        diag = _compute_diagnostics(model, val_loader, criterion, device, max_batches=common_cfg.diag_max_batches)
+
+        logK = math.log(common_cfg.n_components)
+        qH = float(diag.get("diag/q_mean_entropy", float("nan")))
+        mKL = float(diag.get("diag/kl_marg_q_to_tau", float("nan")))
+        train_logs["conf_norm"] = max(0.0, min(1.0, 1.0 - qH / max(1e-9, logK)))
+        train_logs["bal_norm"]  = max(0.0, min(1.0, 1.0 - mKL / max(1e-9, logK)))
+        if not math.isfinite(mKL):
+            mH = float(diag.get("diag/q_marginal_entropy", float("nan")))
+            train_logs["bal_norm"] = max(0.0, min(1.0, mH / max(1e-9, logK)))
+        train_logs["alignment_score"] = train_logs["conf_norm"] * train_logs["bal_norm"]
+
+        val_total = float(val_logs.get("total_loss", float("inf")))
+
+        if writer:
+            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
+            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+            writer.add_scalar("Align/score", train_logs["alignment_score"], epoch)
+
+        improved_score = (train_logs["alignment_score"] > best_align + 1e-6) or (
+            abs(train_logs["alignment_score"] - best_align) <= 1e-6 and val_total < (best_val - early_stop_min_delta)
+        )
+        improved_val = (epoch > 5) and (val_total < best_val)
+
+        _print_losses(model_name=model_name, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+
+        if improved_score:
+            best_align = train_logs["alignment_score"]
+            epochs_no_improve = 0
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_score)
+                save_model_info(
+                    best_path_score,
+                    stage="best_score",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=val_total,
+                    score_value=train_logs["alignment_score"],
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                    vade_cfg=vade_cfg,
+                    contrastive_cfg=contrastive_cfg,
+                )
+                print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
+
+        if improved_val:
+            best_val = val_total
+            epochs_no_improve = 0
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                save_model_info(
+                    best_path_val,
+                    stage="best_val",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=val_total,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                    vade_cfg=vade_cfg,
+                    contrastive_cfg=contrastive_cfg,
+                )
+                print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
+        
+        #if not improved_score and not improved_val:
+        #    print("")
+
+        else:
+            epochs_no_improve += 1
+
+        if epoch >= early_stop_warmup and epochs_no_improve >= early_stop_patience:
+            print(f"[EarlyStopping] No val improvement for {early_stop_patience} epoch(s). Stop.")
+            break
+
+
+
+    # Load both best checkpoints and return uniformly
+    model_score = deepcopy(model)
+    if common_cfg.save_weights and os.path.exists(best_path_val):
+        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+    if common_cfg.save_weights and os.path.exists(best_path_score):
+        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+
+    #if vade_cfg.recluster:
+    #    print("\n--- Re-clustering with final embeddings ---")
+    #    init_loader = DataLoader(train_dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
+    #    unwrap_dp(model).initialize_gmm_from_data(init_loader)
+    #    if common_cfg.save_weights:
+    #        rc_path = os.path.join(os.path.dirname(best_path_val), "best_model_reclustered.pth")
+    #        torch.save(unwrap_dp(model).state_dict(), rc_path)
+    #        print(f"Saved re-clustered model -> {rc_path}")
+
+    if writer:
+        writer.flush(); writer.close()
+
+    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model
+
+
