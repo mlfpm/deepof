@@ -777,6 +777,7 @@ def gantt_plotter(
     """
   
     #only add "white" as base color if there are frames with no behaviors
+    gantt_matrix[np.isnan(gantt_matrix)] = 0
     if (gantt_matrix==0).any():
         colors=colors=['#FFFFFF'] + colors
     
@@ -796,6 +797,7 @@ def gantt_plotter(
         N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
     #N_colors=len(col_indices)
+    
     sns.heatmap(
         data=gantt_matrix,
         cbar=False,
@@ -815,9 +817,9 @@ def gantt_plotter(
             )
             # mirror on x axis as it get's mirrored again during plotting
             standard_signal=-(standard_signal-1)
-            sns.lineplot(
-                x=signal_overlay.index[0 : len(bin_indices)],
-                y=standard_signal[bin_indices] + rows,
+            plt.plot(
+                signal_overlay.index[0 : len(bin_indices)],
+                standard_signal[bin_indices] + rows,
                 color="black",
             )
 
