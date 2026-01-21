@@ -4667,7 +4667,7 @@ from deepof.clustering.dataset import BatchDictDataset
 from deepof.clustering.model_utils_new import select_contrastive_loss_pt, save_model_info, CommonFitCfg, TurtleTeacherCfg, VaDECfg, ContrastiveCfg 
 from sklearn.decomposition import IncrementalPCA
 from copy import deepcopy
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torch.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -4823,8 +4823,6 @@ class TurtleHeads(nn.Module):
         self.heads = nn.ModuleList()
         self._optims = []
 
-        n_views = len(feature_dims)
-
         for i, d in enumerate(feature_dims):
             if i != supervised_index:
                 head = MLPHead(d, n_components,
@@ -4840,7 +4838,13 @@ class TurtleHeads(nn.Module):
     @torch.no_grad()
     def reset_parameters(self):
         for h in self.heads:
-            h.reset_parameters()
+            # Check if module has reset_parameters (Linear/MLP)
+            if hasattr(h, 'reset_parameters'):
+                h.reset_parameters()
+            elif hasattr(h, 'net'):
+                for m in h.net:
+                    if hasattr(m, 'reset_parameters'):
+                        m.reset_parameters()
 
     def _maybe_normalize(self, feats_list):
         if not self.normalize_feats:
@@ -4856,6 +4860,7 @@ class TurtleHeads(nn.Module):
     def inner_fit(self, feats_list, soft_targets):
         feats_list = self._maybe_normalize([f.detach().float() for f in feats_list])
         soft_targets = soft_targets.detach().float()
+        
         for _ in range(self.M):
             for head, opt, feats in zip(self.heads, self._optims, feats_list):
                 logits = head(feats) / self.temperature
@@ -4878,7 +4883,7 @@ class TaskEncoder(nn.Module):
                  ):
         super().__init__()
         self.temperature = temperature
-        self.supervised_index=supervised_index
+        self.supervised_index = supervised_index
 
         self.projs = nn.ModuleList()
         for i, d in enumerate(feature_dims):
@@ -4893,13 +4898,16 @@ class TaskEncoder(nn.Module):
     def forward(self, feats_list):
         logits = None
         for proj, feats in zip(self.projs, feats_list):
-            out = proj(feats.detach().float()) / self.temperature
+            # Ensure float for stability, detaching is handled by optimizer zero_grad mostly
+            # but usually we want gradients through this.
+            out = proj(feats.float()) / self.temperature
             logits = out if logits is None else (logits + out)
+        
         logits = logits / max(len(self.projs), 1)
         return F.softmax(logits, dim=-1)
     
 
-class TurtleTeacher:
+class TurtleTeacher(nn.Module):
     def __init__(self, feature_dims: List[int], n_components: int,
                  gamma: float = 10.0,
                  alpha_sample_entropy: float = 0.1,
@@ -4909,16 +4917,18 @@ class TurtleTeacher:
                  head_temp: float = 0.5,
                  task_temp: float = 0.5,
                  normalize_feats: bool = True,
-                 lr_theta: float = 5e-3,  #1e-3
+                 lr_theta: float = 5e-3,
                  delta_death_barrier: float = 40.0,
                  supervised_index: Optional[int] = None,  
                  mlp_hidden: int = 32,                    
                  mlp_dropout: float = 0.0                  
                  ):
+        super().__init__()
         self.n_components = n_components
         self.gamma = gamma
         self.delta = delta_death_barrier
         self.alpha = alpha_sample_entropy
+        self.supervised_index = supervised_index
 
         self.heads = TurtleHeads(
             feature_dims, n_components,
@@ -4951,181 +4961,158 @@ class TurtleTeacher:
         p = p.clamp_min(eps)
         return -(p * p.log()).sum(dim=-1)
 
-    def fit(self, feats_dict: dict, outer_steps: int = 200,
-            temporal_edges: Optional[List[Tuple[int, int]]] = None, rho: float = 0.04, verbose: bool = True):
-        labels=feats_dict.get("supervised_labels", None)
-        feats_list = [f.to(self.device) for f in feats_dict.values() if f is not None]
+    # --- NEW: Helper for full dataset prediction (Sequential) ---
+    @torch.no_grad()
+    def predict(self, loader) -> torch.Tensor:
+        """
+        Runs a sequential pass over the data to compute assignments for the whole dataset.
+        Used to generate the final tau_star without loading everything into GPU RAM at once.
+        """
+        self.task_encoder.eval()
+        all_taus = []
+        for batch_views in loader:
+            # Move batch to GPU
+            batch_views = [b.to(self.device) for b in batch_views]
+            tau = self.task_encoder(batch_views)
+            all_taus.append(tau.cpu())
+        self.task_encoder.train()
+        return torch.cat(all_taus, dim=0)
 
+    # Fits on batches from a DataLoader ---
+    def fit(self, loader, outer_steps: int = 200,
+            rho: float = 0.04, verbose: bool = True):
+        
+        # Create an infinite iterator over the loader
+        iterator = iter(loader)
+        
         for step in range(outer_steps):
-            tau = self.task_encoder(feats_list)  # [N, C]
+            # Fetch next batch
+            try:
+                feats_list = next(iterator)
+            except StopIteration:
+                iterator = iter(loader)
+                feats_list = next(iterator)
+            
+            # Move batch to GPU (non_blocking helps if pin_memory=True)
+            feats_list = [f.to(self.device, non_blocking=True) for f in feats_list]
 
-            # Inner: fit linear heads to current τ (stop-grad to τ)
+            # Extract labels if present in the batch
+            labels = None
+            if self.supervised_index is not None and 0 <= self.supervised_index < len(feats_list):
+                labels = feats_list[self.supervised_index]
+
+            # --- Forward Pass ---
+            tau = self.task_encoder(feats_list)  # [Batch, K]
+
+            # --- Inner Loop: Update Heads ---
+            # Fit linear heads to current batch assignments
             self.heads.inner_fit(feats_list, tau)
 
-            # Outer components
+            # --- Compute Loss Components ---
             logits_k = self.heads.logits_list(feats_list)
             ce_term = 0.0
-            feats_weight=np.ones(len(logits_k))
-            feats_weight[-1]=1
-            for k,logits in enumerate(logits_k):
-                ce_term = ce_term + soft_cross_entropy_logits(logits, tau)*feats_weight[k]
+            feats_weight = np.ones(len(logits_k))
+            
+            for k, logits in enumerate(logits_k):
+                ce_term = ce_term + soft_cross_entropy_logits(logits, tau) * feats_weight[k]
             ce_term = ce_term / max(len(logits_k), 1)
 
-            sample_entropy = self._entropy(tau).mean()  # E[H(τ(x))]
-            marginal = tau.mean(dim=0)
-            H_marginal = self._entropy(marginal.unsqueeze(0)).mean()  # H(marginal)
+            sample_entropy = self._entropy(tau).mean()
             
-            # Target only a minimum marginal entropy; no force toward a fixed cap
+            # Estimate Marginal Entropy (Batch Approximation)
+            marginal = tau.mean(dim=0)
+            H_marginal = self._entropy(marginal.unsqueeze(0)).mean()
+
             logK = float(np.log(self.n_components))
-            H_target = torch.tensor(1 * logK, device=H_marginal.device) # try 0.55–0.65
-            marg_gap = torch.relu(H_target - H_marginal) # > 0 only if below target
+            H_target = torch.tensor(1 * logK, device=H_marginal.device)
+            marg_gap = torch.relu(H_target - H_marginal)
+            
             gamma_t = float(self.gamma) * (1.0 - float(step) / float(max(1, outer_steps)))
-            dead_floor = max(1e-4, 0.1 / self.n_components) # was 0.20/K
-            #dead_pen = torch.relu(torch.as_tensor(dead_floor, device=marginal.device) - marginal).sum()
+            dead_floor = max(1e-4, 0.1 / self.n_components)
 
-            # K = number of components
-            K = int(marginal.numel())  # or self.n_components
+            # Dead penalty
+            tau_clamp = tau.clamp_min(1e-8)
+            gamma_pow = 2.0
+            usage = (tau_clamp ** gamma_pow).mean(dim=0)
+            dead_pen = torch.relu(dead_floor - usage).sum() / (dead_floor * self.n_components)
 
-            # fraction of components to protect this step (decays over time)
-            frac = 0.5 - 0.3 * (step / max(1, outer_steps))         # in ~[0.2, 0.5] → clamp to [0,1]
-            frac = float(max(0.0, min(1.0, frac)))
-
-            # bottom-m components
-            #m = max(1, min(K, int(round(K * frac))))
-            #idx = torch.topk(marginal, k=m, largest=False).indices   # indices of smallest m marginals
-
-            # log-barrier only where below the floor
-            eps2 = torch.as_tensor(dead_floor, device=marginal.device)  # scalar tensor
-            #marg_idx = marginal[idx]
-            #mask_idx = (marg_idx < eps)
-
-            eps = 1e-8
-            tau_clamp = tau.clamp_min(eps)
-            gamma = 2.0
-            usage = (tau_clamp ** gamma).mean(dim=0)
-            dead_pen = torch.relu(dead_floor - usage).sum()/(dead_floor*self.n_components)                #-(torch.log((marg_idx.clamp_min(1e-12) / eps)))[mask_idx].sum()
-
-            # decay delta all the way to 0 by the end (not only to 0.5)
-            delta_t = self.delta * max(0.5, 0.6 + 0.4*(1.0 - step / (float(max(1, outer_steps)))))
-            # use delta_t in the loss: loss = ... + delta_t * dead_pen
-
-            # ----- Active-count regularizer: encourage ~70% of components to be truly "active" -----
-            M_target = max(1, int(round(K)))  # target ~70% active comps
-
-            # Soft activity: components with π well above the floor count ~1, near the floor count ~0
-            tau_act = 0.02  # temperature; smaller = sharper step around 'dead_floor'
-            active_soft = torch.sigmoid((marginal - eps2) / tau_act)   # (C,)
-            active_count = active_soft.sum()                          # scalar
-
-            # Decay weight over outer steps (strong early, lighter late)
-            act_w0 = 0.5  # start weight; adjust 0.3–1.0 as needed
-            act_w = act_w0 * max(0.0, 1.0 - step / float(max(1, outer_steps)))
-
-            # Penalize only if we have fewer than M_target active components
-            act_pen = (M_target - active_count).clamp_min(0.0)
-
-            #if dead_pen < 0.01:
-            #    self.gamma = 0.95*self.gamma
-            #elif dead_pen > 0.01:
-            #    self.gamma = 1.05*self.gamma
+            delta_t = self.delta * max(0.5, 0.6 + 0.4 * (1.0 - step / (float(max(1, outer_steps)))))
+            
+            # Active count metric (for logging)
+            K_dim = int(marginal.numel())
+            tau_act = 0.02
+            active_soft = torch.sigmoid((marginal - dead_floor) / tau_act)
+            active_count = active_soft.sum()
 
             lambda_purity, H_y_weighted, beta, L_size = 0, 0, 0, 0
+            
+            # Supervised Regularization (Batch Approximation)
             if labels is not None:
-
-
-                # labels is last view in feats_list: shape [N, B] multi-hot (0/1) behaviors
-                labels_bin = (labels > 0.05).to(torch.int64)     # ensure 0/1 ints
-
-                # Find unique behavior combinations and their frequencies
+                labels_bin = (labels > 0.05).to(torch.int64)
+                
+                # Count unique labels in this batch
                 unique_rows, inverse_idx, counts = torch.unique(
                     labels_bin, dim=0, return_inverse=True, return_counts=True
                 )
-                freqs = counts.float() / labels_bin.size(0)     # fraction of samples per combo
+                freqs = counts.float() / labels_bin.size(0)
                 freqs_sorted, _ = torch.sort(freqs, descending=True)
-                K_keep=int(self.n_components/2)
+                
+                K_keep = min(len(freqs_sorted)-1, int(self.n_components/2))
+                
+                if K_keep < len(freqs_sorted):
+                    thresh = freqs_sorted[K_keep]
+                    keep = freqs > thresh
+                else:
+                    keep = torch.ones_like(freqs, dtype=torch.bool)
 
-                # Keep only combos with freq >= dead_floor
-                keep = freqs > freqs_sorted[K_keep]                     # dead_floor is your min fraction
-                kept_codes = torch.nonzero(keep, as_tuple=False).squeeze(1)  # [K]
+                kept_codes = torch.nonzero(keep, as_tuple=False).squeeze(1)
                 K_combos = kept_codes.numel()
 
-                # Map each kept combo to 0..K-1; spurious combos (extremely rare) get -1 and are ignored
-                mapping = -torch.ones_like(keep, dtype=torch.long)           # [n_combos]
-                mapping[kept_codes] = torch.arange(K_combos, device=labels.device)  # [n_combos]
-                cls_idx = mapping[inverse_idx]                               # [N], -1 = rare
+                if K_combos > 0:
+                    mapping = -torch.ones(len(unique_rows), dtype=torch.long, device=labels.device)
+                    mapping[kept_codes] = torch.arange(K_combos, device=labels.device)
+                    cls_idx = mapping[inverse_idx]
 
-                # Build Y_one_hot over frequent combos only; spurious combos => all zeros row
-                Y_one_hot = torch.zeros(labels_bin.size(0), K_combos, device=labels.device)
-                mask = cls_idx >= 0
-                Y_one_hot[mask, cls_idx[mask]] = 1.0          # [N, K]
+                    Y_one_hot = torch.zeros(labels_bin.size(0), K_combos, device=labels.device)
+                    mask = cls_idx >= 0
+                    Y_one_hot[mask, cls_idx[mask]] = 1.0
 
+                    mass_c = tau_clamp.sum(dim=0) + 1e-8
+                    p_c = mass_c / mass_c.sum()
+                    counts_c = tau_clamp.t() @ Y_one_hot
+                    p_y_given_c = (counts_c + 1e-8) / (mass_c.unsqueeze(1) + 1e-8)
+                    H_y_c = -(p_y_given_c * p_y_given_c.log()).sum(dim=1)
 
-                mass_c = tau_clamp.sum(dim=0) + eps       # [C]
-                p_c = mass_c / mass_c.sum()               # [C]
+                    alpha_w = 1.0
+                    w = (p_c + 1e-8).pow(-alpha_w)
+                    w = w / w.sum()
+                    H_y_weighted = (w * H_y_c).sum()
 
-                # How much tau per cluster 
-                counts = tau_clamp.t() @ Y_one_hot        # [C, K]
-                # Distribution of label mass on clusters
-                p_y_given_c = (counts + eps) / (mass_c.unsqueeze(1) + eps)  # [C, K]
-
-                # entropy of labels for each cluster
-                H_y_c = -(p_y_given_c * p_y_given_c.log()).sum(dim=1)  # [C]
-
-                alpha = 1.0
-                w = (p_c + eps).pow(-alpha) 
-                w = w / w.sum()   
-
-                H_y_weighted = (w * H_y_c).sum()
-
-                beta=0.5
-                purity = 1.0 - H_y_c / H_y_c.max().clamp_min(1e-8)  # 0..1
-                psi = 1.0 / (p_c + 1e-8)                            # more cost for small p_c
-                L_size = ((1.0 - purity) * psi).sum()
-
-                lambda_purity = 20.0
+                    beta = 0.5
+                    purity = 1.0 - H_y_c / H_y_c.max().clamp_min(1e-8)
+                    psi = 1.0 / (p_c + 1e-8)
+                    L_size = ((1.0 - purity) * psi).sum()
+                    lambda_purity = 20.0
 
             loss = (
-            ce_term
-            + self.alpha * sample_entropy
-            + gamma_t * marg_gap
-            + delta_t * dead_pen
-            #+ act_w * act_pen
-            + lambda_purity * H_y_weighted
-            + beta * L_size
+                ce_term
+                + self.alpha * sample_entropy
+                + gamma_t * marg_gap
+                + delta_t * dead_pen
+                + lambda_purity * H_y_weighted
+                + beta * L_size
             )
 
-            #H_cap = torch.tensor(0.75*np.log(self.n_components)).to(H_marginal.device) #0.85
-            #dead_floor =  max(1e-4, 0.20/self.n_components) #
-            #dead_pen = torch.relu(dead_floor - marginal).sum()    # penalize only clusters below floor
-
-            #loss = ce_term + self.alpha * sample_entropy - self.gamma * torch.minimum(H_marginal, H_cap) + self.delta * dead_pen
-
-
-
-            # Optional temporal smoothing (vectorized)
+            # Temporal Smoothing (Batch-local)
             if (step % 2) != 0 and rho > 0.0:
-                if isinstance(temporal_edges, int):
-                    # stride-s sequential smoothing (no Python loops)
-                    s = max(1, int(temporal_edges))
-                    if tau.size(0) > s:
-                        diff = tau[s:] - tau[:-s]                          # [N-s, C]
-                        smooth = (diff.abs().sum(dim=-1)).mean()           # L1 over classes, mean over time
-                        loss = loss + rho * smooth
-                elif isinstance(temporal_edges, torch.Tensor) and temporal_edges.dtype == torch.bool:
-                    # boolean mask over consecutive pairs (length N-1): True where smoothing is allowed
-                    if temporal_edges.numel() == (tau.size(0) - 1):
-                        diff = tau[1:] - tau[:-1]                          # [N-1, C]
-                        diff = diff[temporal_edges]                        # mask out cross-key boundaries
-                        if diff.numel() > 0:
-                            smooth = (diff.abs().sum(dim=-1)).mean()
-                            loss = loss + rho * smooth
-                elif isinstance(temporal_edges, list):
-                    # Fallback (not recommended for large N): list of (i, j) pairs
-                    diffs = [(tau[i] - tau[j]).abs().sum(dim=-1) for (i, j) in temporal_edges]
-                    if len(diffs) > 0:
-                        loss = loss + rho * torch.stack(diffs).mean()
-                # else: temporal_edges is None -> no temporal smoothing
+                # Calculates smoothness between consecutive samples in the batch.
+                # Note: if batch is shuffled, this regularization is noisy/weak, 
+                # but prevents collapse during training.
+                diff = tau[1:] - tau[:-1]
+                smooth = (diff.abs().sum(dim=-1)).mean()
+                loss = loss + rho * smooth
 
+            # --- Optimization ---
             self.opt_theta.zero_grad(set_to_none=True)
             loss.backward()
             self.opt_theta.step()
@@ -5134,11 +5121,13 @@ class TurtleTeacher:
                 with torch.no_grad():
                     mean_max_p = tau.max(dim=1).values.mean().item()
                     print(f"[Teacher] step {step:03d} | loss {loss.item():.4f} | CE {ce_term.item():.4f} | "
-                          f"E[H(τ)] {sample_entropy.item():.4f} | H(marg) {H_marginal.item():.4f} | mean max_p {mean_max_p:.3f} | dead penality {dead_pen.item():.3f} | H(y|c) {lambda_purity *H_y_weighted:.3f} | impurity {beta * L_size}, | active≈{active_count.item():.2f}/{K}")
+                          f"E[H(τ)] {sample_entropy.item():.4f} | H(marg) {H_marginal.item():.4f} | "
+                          f"mean max_p {mean_max_p:.3f} | dead_pen {dead_pen.item():.3f} | "
+                          f"H(y|c) {lambda_purity * H_y_weighted:.3f} | "
+                          f"active≈{active_count.item():.2f}/{K_dim}")
 
-        with torch.no_grad():
-            tau_star = self.task_encoder(feats_list)
-        return tau_star  # [N, C] 
+
+
 
 
 @torch.no_grad()
@@ -5576,18 +5565,39 @@ def run_turtle_teacher_on_views(views_dict: dict,
                                 verbose: bool = True,
                                 device: Optional[torch.device] = None,
                                 head_temp: float = 0.3,
-                                task_temp: float = 0.3) -> torch.Tensor:
+                                task_temp: float = 0.3,
+                                batch_size: int = 2048) -> Tuple[Any, torch.Tensor]: # Added batch_size
+    
     device = device or torch.device("cpu")
     
-    active_items = [(k, v) for k, v in views_dict.items() if v is not None]
-    assert len(active_items) > 0, "run_turtle_teacher_on_views got no active views (all None)."
+    # 1. Filter active views and keep them on CPU
+    # active_items = [(k, v) for k, v in views_dict.items() if v is not None]
+    # We need to maintain the order carefully to identify the supervised index
+    keys = []
+    tensors = []
+    for k, v in views_dict.items():
+        if v is not None:
+            keys.append(k)
+            tensors.append(v.cpu()) # Ensure CPU
+            
+    assert len(tensors) > 0, "No active views found."
     
-    views_list = [f.to(device) for f in views_dict.values() if f is not None]
-    key_to_idx = {k: i for i, (k, _) in enumerate(active_items)}
-    supervised_index = key_to_idx.get("supervised_labels", None)
+    # 2. Determine supervised index based on the list order
+    try:
+        supervised_index = keys.index("supervised_labels")
+    except ValueError:
+        supervised_index = None
 
+    # 3. Create DataLoader (Shuffling is generally good for the teacher)
+    dataset = TensorDataset(*tensors)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, 
+                        num_workers=0, pin_memory=(device.type == 'cuda'), drop_last=True)
+
+    # 4. Initialize Teacher
+    feature_dims = [t.shape[1] for t in tensors]
+    
     teacher = TurtleTeacher(
-        feature_dims=[f.shape[1] for f in views_list],
+        feature_dims=feature_dims,
         n_components=n_components,
         gamma=gamma,
         alpha_sample_entropy=alpha_sample_entropy,
@@ -5598,11 +5608,20 @@ def run_turtle_teacher_on_views(views_dict: dict,
         task_temp=task_temp,
         normalize_feats=normalize_feats,
         lr_theta=1e-3,
-        supervised_index=supervised_index,   # supervised view index, if present
+        supervised_index=supervised_index,
         mlp_hidden=32,
         mlp_dropout=0.0,
     ).to(device)
-    tau_star = teacher.fit(views_dict, outer_steps=outer_steps, temporal_edges=1, rho=0.04, verbose=verbose)  #rho=0.02
+
+    # 5. Fit (Batch-wise)
+    print(f"--- Fitting TurtleTeacher (batch_size={batch_size}) ---")
+    teacher.fit(loader, outer_steps=outer_steps, rho=0.04, verbose=verbose)
+    
+    # 6. Predict full tau_star (Sequential pass)
+    # We use a sequential loader to ensure output matches dataset order
+    print("--- Computing final τ* assignments ---")
+    seq_loader = DataLoader(dataset, batch_size=batch_size * 2, shuffle=False, num_workers=0)
+    tau_star = teacher.predict(seq_loader)
     
     return teacher, tau_star
 
@@ -6889,12 +6908,11 @@ def embedding_model_fitting(
     contrastive_cfg: ContrastiveCfg,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
-    # Name defaults to "vade"
-    model_name = common_cfg.model_name
 
-    # ---------------------------
+    # ----------------------------------------------------
     # Prepare device and data
-    # ---------------------------
+    # ----------------------------------------------------
+    model_name = common_cfg.model_name # Name defaults to "vade"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     if device.type == "cuda":
@@ -6992,9 +7010,12 @@ def fit_VQVAE(
     writer: SummaryWriter,
 ):
     
+    # Some setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
+
+    # Create model
     model = VQVAEPT(
         input_shape=train_loader.dataset.x_shape,
         edge_feature_shape=train_loader.dataset.a_shape,
@@ -7010,6 +7031,7 @@ def fit_VQVAE(
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
 
+    # Create teacher
     teacher_cfg.include_latent_view=False
     teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
@@ -7021,6 +7043,8 @@ def fit_VQVAE(
         n_components=common_cfg.n_components,
         latent_view=None,
     )
+
+    # Set distillation weights
     apply_distill = (tau_star is not None)
     lambda_scheduler=None
     if not apply_distill:
@@ -7034,14 +7058,16 @@ def fit_VQVAE(
     optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
-    # unified best-val and best-score saving
+    # Set up best-val and best-score saving
     _, best_path_val, best_path_score, _ = _ckpt_paths("vqvae", common_cfg=common_cfg)
     best_val = float("inf")
     best_score = -float("inf")
+    score_value = 0
 
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
 
+        # Summarize some variables into namespace
         ctx = SimpleNamespace(
             tau_star=(tau_star.to(device) if tau_star is not None else None),
             distill_head=distill_head,
@@ -7052,6 +7078,7 @@ def fit_VQVAE(
             apply_distill=apply_distill,
         )
 
+        # Train and validate
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
@@ -7062,21 +7089,21 @@ def fit_VQVAE(
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
             ctx=SimpleNamespace(apply_distill=False), show_progress=True,
         )
-
         v_total = float(val_logs.get("total_loss", float("inf")))
-        score_value = -v_total  # placeholder score (keeps API uniform)
+        # To do: calculate score
 
+        # Print training progress
         print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
-                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")              
+        _print_losses(model_name="vqvae", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
+        # Write training progress
         if writer:
             for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
             for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
             writer.add_scalar("Distill/lambda", lam, epoch)
-        
-        
-        _print_losses(model_name="vqvae", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
+        # Save best model based on total validation loss
         if v_total < best_val:
             best_val = v_total
             if common_cfg.save_weights:
@@ -7093,6 +7120,7 @@ def fit_VQVAE(
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
+        # Save best model based on model balance and certainty score
         if score_value > best_score:
             best_score = score_value
             if common_cfg.save_weights:
@@ -7110,6 +7138,7 @@ def fit_VQVAE(
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
         
 
+    # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
         unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
@@ -7133,9 +7162,12 @@ def fit_contrastive(
     writer: SummaryWriter,
 ):
     
+    # Some setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
+
+    # Create model
     model = deepof.clustering.models_new.ContrastivePT(
         input_shape=train_loader.dataset.x_shape,
         edge_feature_shape=train_loader.dataset.a_shape,
@@ -7153,6 +7185,7 @@ def fit_contrastive(
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
 
+    # Create teacher
     teacher_cfg.include_latent_view=False
     teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
@@ -7164,6 +7197,8 @@ def fit_contrastive(
         n_components=common_cfg.n_components,
         latent_view=None,
     )
+
+    # Set distillation weights
     apply_distill = (tau_star is not None)
     lambda_scheduler=None
     if not apply_distill:
@@ -7177,14 +7212,16 @@ def fit_contrastive(
     optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
-    # Unified best-val and best-score saving (no head saving)
+    # Set up best-val and best-score saving
     _, best_path_val, best_path_score, _ = _ckpt_paths("contrastive", common_cfg=common_cfg)
     best_val = float("inf")
     best_score = -float("inf")
+    score_value = 0
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
 
+        # Summarize some variables into namespace
         ctx = SimpleNamespace(
             tau_star=(tau_star.to(device) if tau_star is not None else None),
             distill_head=distill_head,
@@ -7195,6 +7232,7 @@ def fit_contrastive(
             apply_distill=apply_distill,
         )
 
+        # Train and validate
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
@@ -7205,21 +7243,21 @@ def fit_contrastive(
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
             ctx=SimpleNamespace(apply_distill=False), show_progress=True,
         )
-
         v_total = float(val_logs.get("total_loss", float("inf")))
-        score_value = -v_total  # placeholder score (keeps API uniform)
+        # To do: calculate score
 
+        # Print training progress
         print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
                 f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
+        _print_losses(model_name="Contrastive", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
+        # Write training progress
         if writer:
             for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
             for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
             writer.add_scalar("Distill/lambda", lam, epoch)
-
-        
-        _print_losses(model_name="Contrastive", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
-
+   
+        # Save best model based on total validation loss
         if v_total < best_val:
             best_val = v_total
             if common_cfg.save_weights:
@@ -7237,6 +7275,7 @@ def fit_contrastive(
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
+        # Save best model based on model balance and certainty score
         if score_value > best_score:
             best_score = score_value
             if common_cfg.save_weights:
@@ -7255,7 +7294,7 @@ def fit_contrastive(
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
 
 
-    # Load both checkpoints and return uniformly
+    # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
         unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
@@ -7279,9 +7318,12 @@ def fit_VADE(
     writer: SummaryWriter,
 ):
     
+    # Some setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
+
+    # Create model and step function
     model, step_fn = build_model_and_step(
         input_shape=train_loader.dataset.x_shape,
         edge_feature_shape=train_loader.dataset.a_shape,
@@ -7294,20 +7336,21 @@ def fit_VADE(
         kmeans_loss=1.0,
         device=device,
     )
-
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
 
+    # More setup
     optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
-
     n_batches_per_epoch = len(train_loader)
+    # Set up fixed KL weight schedule (determines KL weight for each epoch)
     kl_scheduler = Dynamic_weight_manager(
         n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
         warmup_epochs=15, max_weight=1.0, cooldown_epochs=1, end_weight=1.0
     )
 
+    # Load pretrained model if available
     if common_cfg.pretrained:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
         unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device))
@@ -7315,6 +7358,7 @@ def fit_VADE(
             writer.flush(); writer.close()
         return unwrap_dp(model), unwrap_dp(model), None
 
+    # Set up loss function
     criterion = VaDELossTFExact(
         n_components=common_cfg.n_components,
         latent_dim=common_cfg.latent_dim,
@@ -7335,10 +7379,8 @@ def fit_VADE(
         kmeans_loss_weight=common_cfg.kmeans_loss,
         nonempty_weight=vade_cfg.nonempty_weight,
     ).to(device)
-
     if hasattr(criterion, "gmm_logvar_clamp"):
         criterion.gmm_logvar_clamp = (-8.0, 8.0)
-
     criterion.temporal_cohesion_weight = vade_cfg.temporal_cohesion_weight
     criterion.reg_scatter_weight = vade_cfg.reg_scatter_weight
     criterion.reg_scatter_beta = vade_cfg.reg_scatter_beta
@@ -7354,9 +7396,10 @@ def fit_VADE(
     pre_epochs = min(10, max(1, common_cfg.epochs))
     ctx = SimpleNamespace(kl_scheduler=kl_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
 
-    leave = False
+    leave = False 
     for ep in range(pre_epochs):
         
+        # Leave loading bar in last step (for optics)
         if ep == len(range(pre_epochs))-1:
             leave=True
         apply_decoder_schedule(model, ep)
@@ -7368,10 +7411,12 @@ def fit_VADE(
         if writer:
             writer.add_scalar("Pretrain/total_loss", pre_logs["total_loss"], ep)
 
+    # Finish pretraining, reset KL schedule
     unwrap_dp(model).set_pretrain_mode(False)
     criterion.pretrain_mode = False
     criterion.kl_scheduler.current_iteration = 0
 
+    # New user determiend KL schedule
     kl_scheduler = Dynamic_weight_manager(
         n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
         warmup_epochs=common_cfg.kl_warmup, max_weight=common_cfg.kl_max_weight,
@@ -7386,7 +7431,6 @@ def fit_VADE(
 
     tau_star = None
     teacher_init_model = None  # returned as 3rd output
-
     # cached views for refresh
     pca_pos = pca_spd = pca_edges = pca_angles_train = supervised_labels = None
 
@@ -7397,13 +7441,15 @@ def fit_VADE(
             batch_size=2048, num_workers=common_cfg.num_workers
         ).cpu()
 
+        # Set up lambda schedule (distillation weight)
         lambda_scheduler = Dynamic_weight_manager(
             n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
             warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
             cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
         )
 
-        teacher_cfg.include_latent_view=True
+        # Build teacher for VADE
+        teacher_cfg.include_latent_view=True # Vade has a free and useful latent view due to pretraining
         teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
             teacher_cfg=teacher_cfg,            
             train_dataset=train_loader.dataset,
@@ -7415,6 +7461,7 @@ def fit_VADE(
             latent_view=z_all.to(device),
         )
 
+        # Get views for teacher
         pca_pos = teacher_views.get("pca_pos", None)
         pca_spd = teacher_views.get("pca_spd", None)
         pca_edges = teacher_views.get("pca_edges", None)
@@ -7442,11 +7489,11 @@ def fit_VADE(
             print(f"  Saved teacher-init model -> {teacher_init_path}")
 
     else:
+        # If there is no teacher, init GMM directly with train_loader
         print("\n--- Initializing GMM from embeddings (sklearn) ---")
-        #init_loader = DataLoader(train_loader.dataset, batch_size=1024, shuffle=False, num_workers=common_cfg.num_workers)
         unwrap_dp(model).initialize_gmm_from_data(train_loader)
 
-    # Training (VaDE keeps your existing alignment-score logic)
+    # Inits for training
     best_align = -float("inf")
     best_val = float("inf")
     epochs_no_improve = 0
@@ -7461,13 +7508,11 @@ def fit_VADE(
     print(f"\n--- Training for {common_cfg.epochs} epochs ---")
     print("NOTE: some losses are intentionally defined negative and function as rewards.")
     for epoch in range(common_cfg.epochs):
-        
-        
-        
+               
         apply_decoder_schedule(model, epoch)
         base = unwrap_dp(model)
 
-        # freezing/unfreezing logic
+        # Freezing/unfreezing of model parts based on user inputs
         if epoch == 0 and vade_cfg.freeze_gmm_epochs > 0:
             print(f"Freezing GMM for {vade_cfg.freeze_gmm_epochs} epoch(s)")
             base.latent_space.gmm_means.requires_grad = False
@@ -7482,18 +7527,16 @@ def fit_VADE(
             base.latent_space.gmm_means.requires_grad = True
             base.latent_space.gmm_log_vars.requires_grad = True
             #base.latent_space.freeze_lens(False)
+        if epoch == 0 and vade_cfg.freeze_decoder_epochs > 0:
+            print(f"Freezing decoder for {vade_cfg.freeze_decoder_epochs} epoch(s)")
+            for p in base.decoder.parameters():
+                p.requires_grad = False
+        if epoch == vade_cfg.freeze_decoder_epochs:
+            print("Unfreezing decoder")
+            for p in base.decoder.parameters():
+                p.requires_grad = True
 
-        if hasattr(base, "decoder") and (base.decoder is not None):
-            if epoch == 0 and vade_cfg.freeze_decoder_epochs > 0:
-                print(f"Freezing decoder for {vade_cfg.freeze_decoder_epochs} epoch(s)")
-                for p in base.decoder.parameters():
-                    p.requires_grad = False
-            if epoch == vade_cfg.freeze_decoder_epochs:
-                print("Unfreezing decoder")
-                for p in base.decoder.parameters():
-                    p.requires_grad = True
-
-        # refresh block unchanged (kept)
+        # Refresh Turtle teacher (i.e. retrain on current model and potentially also reinit GMM)
         if (
             epoch > 0 and teacher_cfg.use_turtle_teacher and (teacher_cfg.teacher_refresh_every is not None) and (teacher_cfg.teacher_refresh_every > 0)
             and (epoch) % teacher_cfg.teacher_refresh_every == 0 and (teacher_cfg.teacher_freeze_at is None or (epoch) <= teacher_cfg.teacher_freeze_at)
@@ -7501,6 +7544,7 @@ def fit_VADE(
             print(f"\n--- Refresh TURTLE teacher at epoch {epoch+1} ---")
             z_curr = extract_latents(base, train_loader.dataset, device=device, batch_size=2048, num_workers=common_cfg.num_workers).cpu()
 
+            # Get current views
             views_dict = {"z": z_curr.to(device)}
             if teacher_cfg.include_nodes_view and (pca_pos is not None) and (pca_spd is not None):
                 views_dict["pca_pos"] = pca_pos.to(device)
@@ -7512,6 +7556,7 @@ def fit_VADE(
             if teacher_cfg.include_supervised_view and (supervised_labels is not None):
                 views_dict["supervised_labels"] = supervised_labels.to(device)
 
+            # Rerun teacher
             teacher, tau_star = run_turtle_teacher_on_views(
                 views_dict=views_dict, n_components=common_cfg.n_components, gamma=teacher_cfg.teacher_gamma,
                 alpha_sample_entropy=teacher_cfg.teacher_alpha_sample_entropy,
@@ -7520,12 +7565,14 @@ def fit_VADE(
                 head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
             )
             tau_star = tau_star.detach()
-
             criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill)
+
+            # Optionally reinit GMM
             if teacher_cfg.reinit_gmm_on_refresh:
                 initialize_gmm_from_teacher(model, z_curr, tau_star, min_var=1e-4)
                 print("  Reinitialized GMM from refreshed τ*.")
 
+        # Actual training of the main model
         ctx = SimpleNamespace(kl_scheduler=kl_scheduler, lambda_scheduler=lambda_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
         # klw is updated in every training step, getting the weight for printing at the middle of the epochs
         train_logs, klw, lambda_d = train_one_epoch_indexed(
@@ -7539,7 +7586,7 @@ def fit_VADE(
             show_progress=True,
         )
 
-        # your diagnostics + alignment score calculation (unchanged)
+        # A ton of diagnostics for printing training progress
         diag = _compute_diagnostics(model, val_loader, criterion, device, max_batches=common_cfg.diag_max_batches)
 
         logK = math.log(common_cfg.n_components)
@@ -7551,21 +7598,43 @@ def fit_VADE(
             mH = float(diag.get("diag/q_marginal_entropy", float("nan")))
             train_logs["bal_norm"] = max(0.0, min(1.0, mH / max(1e-9, logK)))
         train_logs["alignment_score"] = train_logs["conf_norm"] * train_logs["bal_norm"]
-
         val_total = float(val_logs.get("total_loss", float("inf")))
 
+        _print_losses(model_name="vade", epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+
+        # Write training progress
         if writer:
             for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
             for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
             writer.add_scalar("Align/score", train_logs["alignment_score"], epoch)
 
+        # Deterimine if validation loss and / or balance + certainty score has improved
         improved_score = (train_logs["alignment_score"] > best_align + 1e-6) or (
             abs(train_logs["alignment_score"] - best_align) <= 1e-6 and val_total < (best_val - early_stop_min_delta)
         )
         improved_val = (epoch > 5) and (val_total < best_val)
 
-        _print_losses(model_name="vade", epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+        # Save best model based on total validation loss
+        if improved_val:
+            best_val = val_total
+            epochs_no_improve = 0
+            if common_cfg.save_weights:
+                torch.save(unwrap_dp(model).state_dict(), best_path_val)
+                save_model_info(
+                    best_path_val,
+                    stage="best_val",
+                    epoch=epoch,
+                    train_steps=(epoch + 1) * len(train_loader),
+                    val_total=val_total,
+                    common_cfg=common_cfg,
+                    teacher_cfg=teacher_cfg,
+                    vade_cfg=vade_cfg,
+                )
+                print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
+        #else:
+        #    epochs_no_improve += 1
 
+        # Save best model based on model balance and certainty score
         if improved_score:
             best_align = train_logs["alignment_score"]
             epochs_no_improve = 0
@@ -7583,34 +7652,15 @@ def fit_VADE(
                     vade_cfg=vade_cfg,
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
-
-        if improved_val:
-            best_val = val_total
-            epochs_no_improve = 0
-            if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_val)
-                save_model_info(
-                    best_path_val,
-                    stage="best_val",
-                    epoch=epoch,
-                    train_steps=(epoch + 1) * len(train_loader),
-                    val_total=val_total,
-                    common_cfg=common_cfg,
-                    teacher_cfg=teacher_cfg,
-                    vade_cfg=vade_cfg,
-                )
-                print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
         
 
-        else:
-            epochs_no_improve += 1
 
-        if epoch >= early_stop_warmup and epochs_no_improve >= early_stop_patience:
-            print(f"[EarlyStopping] No val improvement for {early_stop_patience} epoch(s). Stop.")
-            break
+        #if epoch >= early_stop_warmup and epochs_no_improve >= early_stop_patience:
+        #    print(f"[EarlyStopping] No val improvement for {early_stop_patience} epoch(s). Stop.")
+        #    break
 
 
-    # Load both best checkpoints and return uniformly
+    # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
         unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
