@@ -562,7 +562,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
                 st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
             ),
             test_videos=1,
-            verbose=2,
             filter_low_variance=1e-3,
             interpolate_normalized=5,
             shuffle=sampler.draw(st.booleans()),
