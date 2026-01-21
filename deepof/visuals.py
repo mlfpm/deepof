@@ -35,7 +35,7 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS, CONTINUOUS_BEHAVIORS
+from deepof.config import ROI_COLORS, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
@@ -4746,27 +4746,21 @@ def create_supervised_summary(
             supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, roi_mode)
 
         supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
-        supervised_speed = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["speed"])
-        supervised_distance = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["distance"])
-        supervised_cum_distance = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,["cum_distance"])
-
-
 
         # behaviors in seconds
         frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])/frame_rate).to_frame().T.add_suffix(' [s]')
+        df_row=[frame_row_info, frame_row_behavior_1]
 
-        # averages of continuous behaviors
-        frame_row_behavior_2_1=(supervised_binned[supervised_speed].mean()).to_frame().T.add_suffix('_mean [m/s]')
-        frame_row_behavior_2_2=(supervised_binned[supervised_distance].mean()).to_frame().T.add_suffix('_mean [m]')
-        frame_row_behavior_2_3=(supervised_binned[supervised_cum_distance].mean()).to_frame().T.add_suffix('_mean [m]')
+        for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
+            supervised_behavior = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior])
 
-        frame_row_behavior_2_4=(supervised_binned[supervised_speed].std()).to_frame().T.add_suffix('_std [m/s]')
-        frame_row_behavior_2_5=(supervised_binned[supervised_distance].std()).to_frame().T.add_suffix('_std [m]')
-        frame_row_behavior_2_6=(supervised_binned[supervised_cum_distance].std()).to_frame().T.add_suffix('_std [m]')
+            continuous_mean=(supervised_binned[supervised_behavior].mean()).to_frame().T.add_suffix('_mean ' + unit)
+            continuous_std=(supervised_binned[supervised_behavior].std()).to_frame().T.add_suffix('_std ' + unit)
+            df_row=df_row+[continuous_mean, continuous_std]
 
 
-        df_row = pd.concat([frame_row_info, frame_row_behavior_1,frame_row_behavior_2_1,frame_row_behavior_2_2,frame_row_behavior_2_3,
-                frame_row_behavior_2_4,frame_row_behavior_2_5,frame_row_behavior_2_6], axis=1)
+
+        df_row = pd.concat(df_row, axis=1)
 
         if i == 0:
             df = df_row
