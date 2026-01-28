@@ -96,7 +96,12 @@ def get_arenas(
     propagate_rois=[]
     arena_dist = None
     
-
+    image_export_path=os.path.join(
+        coordinates.project_path,
+        coordinates.project_name,
+        "Arena_detection",
+    )
+    os.makedirs(image_export_path, exist_ok=True)
 
     def get_first_length(arena_corners):
         return math.dist(arena_corners[0], arena_corners[1])
@@ -133,9 +138,13 @@ def get_arenas(
                     vid_idx,
                     videos,
                     list_of_rois=list_of_rois,
+                    roi_dicts=roi_dicts,
+                    arena_dict=arena_params,
+                    key_current=key,
                     get_arena=get_arena,
                     arena_dims=arena_dims,
                     norm_dist=arena_dist,
+                    image_export_path=image_export_path,
                     test=test,
                 )
 
@@ -247,9 +256,12 @@ def get_arenas(
                     vid_idx,
                     videos,
                     list_of_rois=[],
+                    roi_dicts=None,
+                    arena_dict={'pseudodict':arena_reference} if arena_reference is not None else None,
                     get_arena=get_arena,
                     arena_dims=arena_dims,
                     norm_dist=None,
+                    image_export_path=image_export_path,
                     test=test,
                 )
                 get_arena=False
@@ -261,7 +273,7 @@ def get_arenas(
             for key in videos.keys():    
                 
                 arena_parameters_raw, h, w = automatically_recognize_arena(
-                    coordinates=coordinates,
+                    image_export_path=image_export_path,
                     videos=videos,
                     vid_key=key,
                     path=video_path,
@@ -273,7 +285,7 @@ def get_arenas(
 
                 if "polygonal" in arena:
 
-                    arena_parameters=arena_parameters_raw
+                    arena_parameters=arena_parameters_raw.astype(int)
 
                     closest_side_points = closest_side(
                         simplify_polygon(arena_parameters), arena_reference[:2]
@@ -289,7 +301,7 @@ def get_arenas(
 
                     arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
 
-                    arena_parameters = extract_corners_from_arena(arena_parameters_raw)
+                    arena_parameters = extract_corners_from_arena(arena_parameters_raw).astype(int)
 
                 scales[key]=[
                         *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
@@ -311,10 +323,13 @@ def get_arenas(
                         vid_idx,
                         videos,
                         list_of_rois=list_of_rois,
+                        roi_dicts=roi_dicts,
+                        arena_dict=arena_params,
+                        key_current=key,
                         get_arena=False,
                         arena_dims=arena_dims,
                         norm_dist=arena_dists[key],
-                        arena_params=arena_params[key],
+                        image_export_path=image_export_path,
                         test=test,
                     )
 
@@ -354,6 +369,17 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
     """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
+        if isinstance(arena_params[key], np.ndarray): # polygonal
+            arena_params[key]=np.array(arena_params[key])*scaling_ratio
+        elif isinstance(arena_params[key], Tuple): # circular
+            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+    return arena_params
+
+
+def _scale_arenas_to_pixel(arena_params, scales, arena):
+    """Scales arenas from pixel to mm"""
+    for key in arena_params.keys():
+        scaling_ratio = scales[key][2]/scales[key][3]
         if isinstance(arena_params[key], np.ndarray): # polygonal
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
@@ -427,7 +453,7 @@ def closest_side(polygon: list, reference_side: list):
 
 
 def automatically_recognize_arena(
-    coordinates: coordinates,
+    image_export_path: str,
     videos: dict,
     vid_key: str,
     path: str = ".",
@@ -515,36 +541,58 @@ def automatically_recognize_arena(
     else:
         arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
 
-    if debug:
+    #if debug:
+    #    arena_ref=None
+    #    if arena_reference is not None:
+    #        arena_ref=arena_reference[:2]
+    #    save_arena_image(numpy_im, arena, image_export_path, videos[vid_key][:-4]+"_arena", arena_ref)
 
-        # Save frame with mask and arena detected
-        frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
+    return arena, h, w
 
-        if isinstance(arena, Tuple): # Circular (legacy) "circular" in arena_type:
-            cv2.ellipse(
-                img=frame_with_arena,
-                center=arena[0],
-                axes=arena[1],
-                angle=arena[2],
-                startAngle=0.0,
-                endAngle=360.0,
-                color=(40, 86, 236),
-                thickness=3,
-            )
+def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=None, color=None):
+    """Saves one video frame of the arena with annotations (detected arena or chosen rois)"""
+    
+    # Save frame with mask and arena detected
+    frame_with_arena = np.ascontiguousarray(numpy_im.copy(), dtype=np.uint8)
+    add_overlay=True
+    # No specific color for arena visualization-style
+    if color is None:
+        color=(40, 86, 236)
+        add_overlay=False
 
-        elif isinstance(arena, np.ndarray): # Polygonal "polygonal" in arena_type:
+    if isinstance(roi, Tuple): # Circular (legacy) "circular" in arena_type:
+        cv2.ellipse(
+            img=frame_with_arena,
+            center=roi[0],
+            axes=roi[1],
+            angle=roi[2],
+            startAngle=0.0,
+            endAngle=360.0,
+            color=color,
+            thickness=3,
+        )
 
-            cv2.polylines(
-                img=frame_with_arena,
-                pts=[arena],
-                isClosed=True,
-                color=(40, 86, 236),
-                thickness=3,
-            )
+    elif isinstance(roi, np.ndarray): # Polygonal "polygonal" in arena_type:
 
+        roi=roi.astype(int)
+        cv2.polylines(
+            img=frame_with_arena,
+            pts=[roi],
+            isClosed=True,
+            color=color,
+            thickness=3,
+        )
+        if add_overlay:
+            overlay = frame_with_arena.copy()
+            pts = np.array(roi, dtype=np.int32).reshape((-1, 1, 2))
+            cv2.fillPoly(overlay, [pts], color)           
+            # Blend overlay with original frame
+            cv2.addWeighted(overlay, 0.3, frame_with_arena, 1 - 0.3, 0, frame_with_arena)
+
+        if arena_reference is not None:
             # Plot scale references
             closest_side_points = closest_side(
-                simplify_polygon(arena), arena_reference[:2]
+                simplify_polygon(roi), arena_reference
             )
 
             for point in closest_side_points:
@@ -556,17 +604,14 @@ def automatically_recognize_arena(
                     thickness=2,
                 )
 
-        cv2.imwrite(
-            os.path.join(
-                coordinates.project_path,
-                coordinates.project_name,
-                "Arena_detection",
-                f"{videos[vid_key][:-4]}_arena_detection.png",
-            ),
-            frame_with_arena,
-        )
+    cv2.imwrite(
+        os.path.join(
+            image_export_path,
+            f"{name}_detection.png",
+        ),
+        frame_with_arena,
+    )
 
-    return arena, h, w
 
 
 def display_message(message: List[str]): # pragma: no cover
@@ -628,10 +673,13 @@ def extract_polygonal_arena_coordinates(
     video_index: int, 
     videos: list, 
     list_of_rois: list = 0, 
+    roi_dicts: dict = None,
+    arena_dict: dict = None,
+    key_current: str = None,
     get_arena: bool = True, 
     arena_dims: float = 1.0, 
     norm_dist: float = None,
-    arena_params: np.ndarray = None,
+    image_export_path: str = None,
     test: bool = False, 
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
@@ -666,6 +714,10 @@ def extract_polygonal_arena_coordinates(
 
     roi_corners = None
     norm_dist_new = None
+    arena_reference=None
+    arena_corners=None
+    propagate_arena=False
+
 
     # open gui and let user pick corners
     if get_arena:
@@ -679,37 +731,70 @@ def extract_polygonal_arena_coordinates(
             norm_dist=None,
             test=test,
         )
-    elif arena_params is not None:
-        arena_corners = extract_corners_from_arena(arena_params)
-    else:
-        arena_corners = None
+    # If the user selects no arena, load from dict via key or load last arena in dict
+    if arena_corners is None:
+        propagate_arena=True
+        arena_propagate=arena_dict.get(key_current,list(arena_dict.values())[-1])
+        arena_corners = extract_corners_from_arena(arena_propagate).astype(int)
+
     if norm_dist_new is None:
         norm_dist_new = norm_dist
 
+    if arena_type.startswith('polygonal'):
+        arena_reference=arena_corners[:2]
+       
+    # Export current image with current arena
+    if image_export_path is not None and arena_corners is not None and get_arena:
+        save_arena_image(numpy_im, arena_corners, image_export_path, list(videos)[video_index]+"_arena", arena_reference=arena_reference)
+    # Export current image with last arena (for propagate)
+    elif image_export_path is not None and arena_dict is not None:
+        # get arena for active key or last available arena
+        arena_propagate=arena_dict.get(key_current,list(arena_dict.values())[-1])
+        save_arena_image(numpy_im, arena_propagate, image_export_path, list(videos)[video_index]+"_arena", arena_reference=arena_reference)
+
     #let user pick corners for rois
-    if len(list_of_rois) > 0:
+    
 
-        roi_corners= {}
+    roi_corners= {}
 
-        for k in list_of_rois:
-            cur_roi_corners, _ = retrieve_corners_from_image(
-                numpy_im,
-                "polygonal-manual",
-                video_index,
-                videos,
-                current_roi=k,
-                arena_dims=arena_dims,
-                norm_dist=norm_dist_new,
-                arena_corners=arena_corners,
-                test=test,
-            )
-            # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer)
-            if cur_roi_corners is not None:
-                cur_roi_corners=simplify_polygon(cur_roi_corners,0.001,True)
-            
-            # Collect corners
-            roi_corners[k] =cur_roi_corners
+    for k in list_of_rois:
+        cur_roi_corners, _ = retrieve_corners_from_image(
+            numpy_im,
+            "polygonal-manual",
+            video_index,
+            videos,
+            current_roi=k,
+            arena_dims=arena_dims,
+            norm_dist=norm_dist_new,
+            arena_corners=arena_corners,
+            test=test,
+        )
+        # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer)
+        if cur_roi_corners is not None:
+            cur_roi_corners=simplify_polygon(cur_roi_corners,0.001,True)
+            roi=np.array(cur_roi_corners).astype(int)
+        else:
+            roi=np.array(roi_dicts[list(roi_dicts.keys())[-1]][k]).astype(int)
 
+        # Export current image with current roi
+        if image_export_path is not None:
+            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k), color=ROI_COLORS[k-1])
+
+
+        # Collect corners
+        roi_corners[k] =cur_roi_corners 
+
+    if image_export_path is not None and roi_dicts is not None and len(roi_dicts)>0:
+        rois_to_propagate=set(roi_dicts[list(roi_dicts.keys())[-1]].keys()) - set(list_of_rois)
+        for k in rois_to_propagate:
+            # Export current image with last roi (for propagate)
+            roi=np.array(roi_dicts[list(roi_dicts.keys())[-1]][k]).astype(int)
+            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k), color=ROI_COLORS[k-1])
+        
+
+    # return no arena corners if the old arena got propagated
+    if propagate_arena:
+        arena_corners=None
     return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1]
 
 
