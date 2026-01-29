@@ -273,14 +273,12 @@ def get_arenas(
             for key in videos.keys():    
                 
                 arena_parameters_raw, h, w = automatically_recognize_arena(
-                    image_export_path=image_export_path,
                     videos=videos,
                     vid_key=key,
                     path=video_path,
                     arena_type=arena,
                     arena_reference=arena_reference,
                     segmentation_model=segmentation_model,
-                    debug=debug,
                 )
 
                 if "polygonal" in arena:
@@ -453,7 +451,6 @@ def closest_side(polygon: list, reference_side: list):
 
 
 def automatically_recognize_arena(
-    image_export_path: str,
     videos: dict,
     vid_key: str,
     path: str = ".",
@@ -461,7 +458,6 @@ def automatically_recognize_arena(
     arena_reference: list = None,
     segmentation_model: torch.nn.Module = None,
     num_sample_frames: int = 100,
-    debug: bool = False,
 ) -> Tuple[np.array, int, int]:
     """Return numpy.ndarray with information about the arena recognised from the first frames of the video.
 
@@ -732,10 +728,13 @@ def extract_polygonal_arena_coordinates(
             test=test,
         )
     # If the user selects no arena, load from dict via key or load last arena in dict
-    if arena_corners is None:
+    if arena_corners is None and arena_dict is not None:
         propagate_arena=True
         arena_propagate=arena_dict.get(key_current,list(arena_dict.values())[-1])
         arena_corners = extract_corners_from_arena(arena_propagate).astype(int)
+    # If neither arena detection nor propagation is desired, end function and return 
+    else:
+        return arena_corners, roi_corners, norm_dist, numpy_im.shape[0], numpy_im.shape[1]
 
     if norm_dist_new is None:
         norm_dist_new = norm_dist

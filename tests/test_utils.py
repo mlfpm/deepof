@@ -657,7 +657,6 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
     #actually detect arenas 
     arena_parameters, h, w = deepof.arena_utils.automatically_recognize_arena(
-        coordinates=prun,
         videos=coords.get_videos(),
         vid_key=video_key,
         path=path,
