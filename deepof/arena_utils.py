@@ -8,6 +8,7 @@ import math
 import os
 from copy import deepcopy
 from math import atan2, dist
+from enum import Enum
 from typing import Any, List, NewType, Tuple, Union
 from dataclasses import dataclass
 
@@ -34,6 +35,14 @@ table_dict = NewType("deepof_table_dict", Any)
 
 
 # CONNECTIVITY AND GRAPH REPRESENTATIONS
+
+
+class Arena_GUI_exit_flag(Enum):
+    UNKNOWN = 1 
+    PREVIOUS = 2
+    NEXT = 3
+    PROPAGATE = 4
+    UNOPENED = 5
 
 
 def get_arenas(
@@ -127,12 +136,15 @@ def get_arenas(
     if arena in ["polygonal-manual", "circular-manual"]:  # pragma: no cover
 
         display_message(multi_line_message)
-                
+
+        vid_idx=0        
         with tqdm(total=len(videos), desc=f"{'Detecting arenas':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="arena") as pbar:
-            for vid_idx, key in enumerate(videos.keys()):
+            while(vid_idx < len(videos.keys())):
+
+                key=list(videos.keys())[vid_idx]
                   
                 # let user draw arena
-                arena_corners, roi_corners, arena_dist, h, w = extract_polygonal_arena_coordinates(
+                arena_corners, roi_corners, arena_dist, h, w, exit_flag_arena, exit_flag_rois = extract_polygonal_arena_coordinates(
                     os.path.join(video_path, videos[key]),
                     arena,
                     vid_idx,
@@ -147,9 +159,18 @@ def get_arenas(
                     image_export_path=image_export_path,
                     test=test,
                 )
+                if exit_flag_arena == Arena_GUI_exit_flag.PREVIOUS or exit_flag_rois == Arena_GUI_exit_flag.PREVIOUS:
+                    vid_idx=vid_idx-1
+                    key=list(videos.keys())[vid_idx]
+                    pbar.update(-1)
+                    get_arena = True
+                    # Reset list of rois
+                    list_of_rois=list(range(1,number_of_rois+1))
+                    propagate_rois=[]
+                    continue
 
                 # if no new arena was detected, skip future detections and set all new dictionary values to the previous entry
-                if arena_corners is None:
+                if exit_flag_arena == Arena_GUI_exit_flag.PROPAGATE:
                     get_arena = False
                     cur_arena_params = arena_params[list(arena_params.keys())[-1]]
                     cur_scales = scales[list(scales.keys())[-1]]
@@ -184,10 +205,12 @@ def get_arenas(
                         cur_roi_corners[roi]=roi_corners[roi]                           
 
                 scales[key] = cur_scales
-                arena_params[key]=cur_arena_params
+                arena_params[key]=arena_corners #cur_arena_params
                 roi_dicts[key]=cur_roi_corners
                 video_resolution[key]=(h, w)
-                pbar.update()
+                pbar.update(1)
+                vid_idx=vid_idx+1
+
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
 
@@ -250,7 +273,7 @@ def get_arenas(
             vid_idx = 0
             key = list(videos.keys())[0]
             if not test:
-                arena_corners, _, arena_dist, _ , _ = extract_polygonal_arena_coordinates(
+                arena_corners, _, arena_dist, _ , _, exit_flag_arena, _ = extract_polygonal_arena_coordinates(
                     os.path.join(video_path, videos[key]),
                     arena,
                     vid_idx,
@@ -266,7 +289,7 @@ def get_arenas(
                 )
                 get_arena=False
 
-                if arena_corners is not None:
+                if exit_flag_arena == Arena_GUI_exit_flag.NEXT:
                     arena_reference = arena_corners
 
             arena_dists={}
@@ -312,10 +335,13 @@ def get_arenas(
                 video_resolution[key]=(h, w)
                 pbar.update()
 
-            for vid_idx, key in enumerate(videos.keys()):
+            vid_idx=0        
+            while(vid_idx < len(videos.keys())):
+
+                key=list(videos.keys())[vid_idx]
                 
                 if not test:
-                    arena_corners, roi_corners, _, _ , _ = extract_polygonal_arena_coordinates(
+                    arena_corners, roi_corners, _, _ , _, exit_flag_arena, exit_flag_rois = extract_polygonal_arena_coordinates(
                         os.path.join(video_path, videos[key]),
                         arena,
                         vid_idx,
@@ -330,6 +356,13 @@ def get_arenas(
                         image_export_path=image_export_path,
                         test=test,
                     )
+                    if exit_flag_arena == Arena_GUI_exit_flag.PREVIOUS or exit_flag_rois == Arena_GUI_exit_flag.PREVIOUS:
+                        vid_idx=vid_idx-1
+                        key=list(videos.keys())[vid_idx]
+                        # Reset list of rois
+                        list_of_rois=list(range(1,number_of_rois+1))
+                        propagate_rois=[]
+                        continue
 
                     for roi in copy.copy(list_of_rois):
                         if roi_corners[roi] is None:
@@ -345,8 +378,9 @@ def get_arenas(
                         
                     roi_dicts[key]=cur_roi_corners
 
-                    if arena_corners is not None:
+                    if exit_flag_arena == Arena_GUI_exit_flag.NEXT:
                         arena_reference = arena_corners
+                    vid_idx=vid_idx+1
 
     elif not arena:
         return None, None, None, None
@@ -367,7 +401,7 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
     """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
-        if isinstance(arena_params[key], np.ndarray): # polygonal
+        if isinstance(arena_params[key], np.ndarray) or isinstance(arena_params[key], list): # polygonal
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
@@ -411,9 +445,7 @@ def simplify_polygon(polygon: list, relative_tolerance: float = 0.05, preserve_t
 
     simplified_poly = poly.simplify(tolerance, preserve_topology=preserve_topology)
 
-    return list(simplified_poly.exterior.coords)[
-        :-1
-    ]  # Exclude last point (same as first)
+    return list(np.array(simplified_poly.exterior.coords)[:-1].astype(int))      # Exclude last point (same as first)
 
 
 def closest_side(polygon: list, reference_side: list):
@@ -568,8 +600,9 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
             thickness=3,
         )
 
-    elif isinstance(roi, np.ndarray): # Polygonal "polygonal" in arena_type:
+    elif isinstance(roi, np.ndarray) or isinstance(roi, list): # Polygonal "polygonal" in arena_type:
 
+        roi=np.array(roi)
         roi=roi.astype(int)
         cv2.polylines(
             img=frame_with_arena,
@@ -669,8 +702,8 @@ def extract_polygonal_arena_coordinates(
     video_index: int, 
     videos: list, 
     list_of_rois: list = 0, 
-    roi_dicts: dict = None,
-    arena_dict: dict = None,
+    roi_dicts: dict = {},
+    arena_dict: dict = {},
     key_current: str = None,
     get_arena: bool = True, 
     arena_dims: float = 1.0, 
@@ -712,12 +745,12 @@ def extract_polygonal_arena_coordinates(
     norm_dist_new = None
     arena_reference=None
     arena_corners=None
-    propagate_arena=False
-
+    exit_flag_arena = Arena_GUI_exit_flag.UNKNOWN
+    exit_flag_rois = Arena_GUI_exit_flag.UNKNOWN
 
     # open gui and let user pick corners
     if get_arena:
-        arena_corners, norm_dist_new = retrieve_corners_from_image(
+        arena_corners, norm_dist_new, exit_flag_arena = retrieve_corners_from_image(
             numpy_im,
             arena_type,
             video_index,
@@ -725,16 +758,17 @@ def extract_polygonal_arena_coordinates(
             current_roi=0,
             arena_dims=arena_dims,
             norm_dist=None,
+            corners=arena_dict.get(key_current,[]),
             test=test,
         )
+
     # If the user selects no arena, load from dict via key or load last arena in dict
-    if arena_corners is None and arena_dict is not None:
-        propagate_arena=True
+    if (not get_arena or exit_flag_arena == Arena_GUI_exit_flag.PROPAGATE) and arena_dict is not None:
         arena_propagate=arena_dict.get(key_current,list(arena_dict.values())[-1])
-        arena_corners = extract_corners_from_arena(arena_propagate).astype(int)
+        arena_corners = list(extract_corners_from_arena(arena_propagate).astype(int)) # reconvert to list to keep types uniform (lists of ints)
     # If neither arena detection nor propagation is desired, end function and return 
-    else:
-        return arena_corners, roi_corners, norm_dist, numpy_im.shape[0], numpy_im.shape[1]
+    elif exit_flag_arena == Arena_GUI_exit_flag.PREVIOUS or arena_corners is None:
+        return arena_corners, roi_corners, norm_dist, numpy_im.shape[0], numpy_im.shape[1], exit_flag_arena, exit_flag_rois
 
     if norm_dist_new is None:
         norm_dist_new = norm_dist
@@ -752,12 +786,13 @@ def extract_polygonal_arena_coordinates(
         save_arena_image(numpy_im, arena_propagate, image_export_path, list(videos)[video_index]+"_arena", arena_reference=arena_reference)
 
     #let user pick corners for rois
-    
-
     roi_corners= {}
 
     for k in list_of_rois:
-        cur_roi_corners, _ = retrieve_corners_from_image(
+        cur_corners=roi_dicts.get(key_current,[])
+        if len(cur_corners)>0:
+            cur_corners=cur_corners[k]
+        cur_roi_corners, _, exit_flag_rois = retrieve_corners_from_image(
             numpy_im,
             "polygonal-manual",
             video_index,
@@ -766,14 +801,22 @@ def extract_polygonal_arena_coordinates(
             arena_dims=arena_dims,
             norm_dist=norm_dist_new,
             arena_corners=arena_corners,
+            corners=cur_corners,
             test=test,
         )
-        # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer)
-        if cur_roi_corners is not None:
+        # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer) and go to next roi     
+        if exit_flag_rois == Arena_GUI_exit_flag.NEXT:
             cur_roi_corners=simplify_polygon(cur_roi_corners,0.001,True)
-            roi=np.array(cur_roi_corners).astype(int)
+            roi=list(np.array(cur_roi_corners).astype(int))
+        # Take roi k from the previous video and propagate 
+        elif exit_flag_rois == Arena_GUI_exit_flag.PROPAGATE:
+            roi=list(np.array(roi_dicts[list(roi_dicts.keys())[-1]][k]).astype(int))
+        # Stop current video roi detection and go to previous one
+        elif exit_flag_rois == Arena_GUI_exit_flag.PREVIOUS:
+            return arena_corners, roi_corners, norm_dist, numpy_im.shape[0], numpy_im.shape[1], exit_flag_arena, exit_flag_rois
         else:
-            roi=np.array(roi_dicts[list(roi_dicts.keys())[-1]][k]).astype(int)
+            raise(NotImplementedError('ROI detection finished with bad exit flag!'))
+
 
         # Export current image with current roi
         if image_export_path is not None:
@@ -791,10 +834,7 @@ def extract_polygonal_arena_coordinates(
             save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k), color=ROI_COLORS[k-1])
         
 
-    # return no arena corners if the old arena got propagated
-    if propagate_arena:
-        arena_corners=None
-    return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1]
+    return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1], exit_flag_arena, exit_flag_rois
 
 
 def fit_ellipse_to_polygon(polygon: list, return_ellipse=True):  # pragma: no cover
@@ -993,7 +1033,7 @@ def create_inner_polygon(outer_vertices, target_area_ratio=0.7, tolerance=0.01, 
 
 
 def extract_corners_from_arena(
-    arena_params: Union[tuple, np.ndarray], 
+    arena_params: Union[list, tuple, np.ndarray], 
     num_points: int = 100
 ):
     """
@@ -1014,6 +1054,10 @@ def extract_corners_from_arena(
     Raises:
         TypeError: If the input `params` is not a recognized type or format.
     """
+    # Case 0: Input is a list
+    if isinstance(arena_params, list):
+        arena_params=np.array(arena_params)
+    
     # Case 1: Input is already a polygon array
     if isinstance(arena_params, np.ndarray):
         if len(arena_params.shape) == 2 and arena_params.shape[1] == 2:
@@ -1201,7 +1245,7 @@ class DropdownUI:
     
 
 def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, test: bool = False
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, corners: list=[], test: bool = False
 ):  # pragma: no cover
     """Open a window and waits for the user to click on all corners of the polygonal arena.
 
@@ -1222,31 +1266,30 @@ def retrieve_corners_from_image(
         corners (np.ndarray): nx2 array containing the x-y coordinates of all n corners.
 
     """
-    corners = []
-
     roi_colors=ROI_COLORS
 
     #early return of set of square corners
     if test:
         return [(111, 49), (541, 31), (553, 438), (126, 452)]
-    
-    if current_roi == 0:
-        display_text="deepof - Select polygonal arena corners - (q: exit / d: delete{}) - {}/{} processed".format(
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
-                cur_vid,
-                len(videos),
-            )
-        color = (40, 86, 236)
 
-    # current roi > 0
-    elif current_roi<21:
-        display_text="deepof - Select polygonal region of interest corners for roi {} - (q: exit / d: delete{}) - {}/{} processed".format(
-                current_roi,
-                (" / p: propagate last to all remaining videos" if cur_vid > 0 else ""),
+    help_commands = [
+        "h: toggle help overlay",
+        "m: toggle mesh grid overlay", 
+        "d: delete last point",
+        "q: go to next arena/roi",
+        "b: go to previous video and reset propagate",
+        "p: propagate last arena/roi to all remaining",
+        "   videos"
+    ]
+
+    if current_roi < 21:
+        display_text="deepof - Select {} corners - (h: show help) - {}/{} processed".format(
+                ("arena" if current_roi == 0 else "roi"),
                 cur_vid,
                 len(videos),
             )
-        color = roi_colors[current_roi-1]
+        color = (40, 86, 236) if current_roi == 0 else roi_colors[current_roi-1]
+
     else:
         raise ValueError(
             "only up to 20 ROIs are allowed (what do you even need so many ROIs for?)"
@@ -1316,6 +1359,20 @@ def retrieve_corners_from_image(
         arena_corners = np.array(arena_corners)  
         arena_corners = np.transpose(np.array([arena_corners[:,0]/w_ratio,arena_corners[:,1]/h_ratio]))
 
+    # Create grid overlay
+    if norm_dist is not None and arena_dims is not None:
+        grid_spacing_mm=10 
+        grid_spacing_px=grid_spacing_mm*(norm_dist/arena_dims)
+        h, w = frame.shape[:2]
+        grid_overlay = frame.copy()
+        grid_overlay[:] = (0, 0, 0)  # Make it all black
+
+        # Draw vertical lines
+        for x in np.arange(grid_spacing_px, w, grid_spacing_px):  # Every grid_width_px pixels
+            cv2.line(grid_overlay, (int(np.round(x)), 0), (int(np.round(x)), h), (255, 255, 255), 1, cv2.LINE_AA)
+
+        for y in np.arange(grid_spacing_px, h, grid_spacing_px):  # Every grid_width_px pixels  
+            cv2.line(grid_overlay, (0, int(np.round(y))), (w, int(np.round(y))), (255, 255, 255), 1, cv2.LINE_AA)
 
     # Create dropdown
     dropdown = DropdownUI(display_text, options, window_width=frame.shape[1], hidden=not arena_available)
@@ -1323,6 +1380,9 @@ def retrieve_corners_from_image(
     # Create a window and display the image
     cv2.startWindowThread()
 
+    exit_flag=Arena_GUI_exit_flag.UNKNOWN
+    show_help = False
+    show_grid= False
     alpha=0.3
     while True:
         try:
@@ -1413,23 +1473,70 @@ def retrieve_corners_from_image(
                 # Blend overlay with original frame
                 cv2.addWeighted(overlay, alpha, frame_copy, 1 - alpha, 0, frame_copy)
 
+            if show_help:
+                h, w = frame_copy.shape[:2]
+                box_height = len(help_commands) * 22 + 20  # Height for all commands + padding
+                box_width = 450  # Fixed width to fit longest command
+                box_x = 10
+                box_y = 10
+                
+                # Black background rectangle
+                cv2.rectangle(frame_copy, 
+                            (box_x, box_y), 
+                            (box_x + box_width, box_y + box_height), 
+                            (0, 0, 0), -1)
+                
+                # White border (optional, makes it pop more)
+                cv2.rectangle(frame_copy, 
+                            (box_x, box_y), 
+                            (box_x + box_width, box_y + box_height), 
+                            (255, 255, 255), 1)
+                
+                # Draw each command as a separate line
+                for i, command in enumerate(help_commands):
+                    text_y = box_y + 25 + (i * 22)
+                    cv2.putText(frame_copy, command, 
+                            (box_x + 10, text_y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
+                            cv2.LINE_AA)
+                    
+            if show_grid:
+                frame_copy = cv2.addWeighted(frame_copy, 0.7, grid_overlay, 0.3, 0)
+
+            
             cv2.imshow(
                 display_text,
                 frame_copy,
             )
 
             key = cv2.waitKey(1) & 0xFF
+
+            # Toggle help overlay
+            if key == ord("h"):
+                show_help = not show_help
+
+            # Toggle grid overlay
+            if key == ord("m"):
+                show_grid = not show_grid
+            
             # Remove last added coordinate if user presses 'd'
             if key == ord("d"):
                 corners = corners[:-1]
 
-            # Exit is user presses 'q'
+            # Exit is user presses 'q' and go to next
             if len(corners) > 2:
                 if key == ord("q"):
+                    exit_flag=Arena_GUI_exit_flag.NEXT
                     break
 
-            # Exit and copy all coordinates if user presses 'c'
+            # Exit is user presses 'b' and go to previous
+            if cur_vid > 0 and key == ord("b"):
+                exit_flag=Arena_GUI_exit_flag.PREVIOUS
+                break
+
+            # Exit and copy all coordinates if user presses 'p'
             if cur_vid > 0 and key == ord("p"):
+                exit_flag=Arena_GUI_exit_flag.PROPAGATE
                 corners = None
                 break
 
@@ -1453,14 +1560,16 @@ def retrieve_corners_from_image(
         norm_dist=np.mean([cur_arena_params[1][0]*w_ratio, cur_arena_params[1][1]*h_ratio])* 2
 
     # Fit ellipse and extract corner points from fitted ellipse (for smoothing)
-    if "circular" in arena_type and corners is not None:
+    if "circular" in arena_type and corners is not None and len(corners) > 5:
         arena_ellipse = fit_ellipse_to_polygon(corners)
         corners = extract_corners_from_arena(arena_ellipse)
     
     # Rescale to original pixel widths
-    if corners is not None:
+    if corners is not None and len(corners) > 2:
         corners = np.array(corners)
-        corners = np.transpose(np.array([corners[:,0]*w_ratio,corners[:,1]*h_ratio]))
+        corners = list(np.transpose(np.array([corners[:,0]*w_ratio,corners[:,1]*h_ratio])).astype(int))
+
+
 
     # Return the corners
-    return corners, norm_dist
+    return corners, norm_dist, exit_flag
