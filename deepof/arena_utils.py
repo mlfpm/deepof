@@ -387,7 +387,7 @@ def get_arenas(
 
                     if exit_flag_arena == Arena_GUI_exit_flag.NEXT:
                         arena_reference = arena_corners
-                    vid_idx=vid_idx+1
+                vid_idx=vid_idx+1
 
     elif not arena:
         return None, None, None, None
