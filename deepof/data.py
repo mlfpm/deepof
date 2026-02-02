@@ -552,14 +552,12 @@ class Project:
 
         return deepof.arena_utils.get_arenas(
             self,
-            tables,
             self.arena,
             self.arena_dims,
             self.number_of_rois,
             self.segmentation_path,
             self.video_path,
             self.videos,
-            debug,
             test,
         )
 
@@ -2222,7 +2220,6 @@ class Coordinates:
 
         edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
             coordinates=self,
-            tables=self._tables,
             arena=arena_type,
             arena_dims=self._arena_dims,
             number_of_rois=self._number_of_rois,

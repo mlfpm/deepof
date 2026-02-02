@@ -4602,6 +4602,9 @@ def plot_behavior_trends(
         plt.show()
 
 
+def plot_mouse_roi_distance():
+    pass
+
 def get_roi_data(
     coordinates: coordinates,
     table_dict: table_dict,

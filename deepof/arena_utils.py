@@ -46,15 +46,13 @@ class Arena_GUI_exit_flag(Enum):
 
 
 def get_arenas(
-    coordinates: coordinates,
-    tables: table_dict,
+    coordinates: Union[project, coordinates],
     arena: str,
     arena_dims: int,
     number_of_rois: int,
     segmentation_model_path: str,
     video_path: str,
     videos: list = None,
-    debug: bool = False,
     test: bool = False,
 ):
     """Extract arena parameters from a project or coordinates object.
@@ -105,9 +103,18 @@ def get_arenas(
     propagate_rois=[]
     arena_dist = None
     
+    #as this function can be called with a coordinates object during arena editing, 
+    # we need to adjust for slightly different variable names
+    if isinstance(coordinates, deepof.data.Project):
+        project_path=coordinates.project_path
+        project_name=coordinates.project_name
+    else:
+        project_path=coordinates._project_path
+        project_name=coordinates._project_name
+
     image_export_path=os.path.join(
-        coordinates.project_path,
-        coordinates.project_name,
+        project_path, 
+        project_name,
         "Arena_detection",
     )
     os.makedirs(image_export_path, exist_ok=True)
@@ -758,7 +765,7 @@ def extract_polygonal_arena_coordinates(
             current_roi=0,
             arena_dims=arena_dims,
             norm_dist=None,
-            corners=arena_dict.get(key_current,[]),
+            corners=arena_dict.get(key_current,[]) if arena_dict is not None else [],
             test=test,
         )
 
@@ -1360,19 +1367,22 @@ def retrieve_corners_from_image(
         arena_corners = np.transpose(np.array([arena_corners[:,0]/w_ratio,arena_corners[:,1]/h_ratio]))
 
     # Create grid overlay
+    mesh_grid_initialized=False
     if norm_dist is not None and arena_dims is not None:
         grid_spacing_mm=10 
         grid_spacing_px=grid_spacing_mm*(norm_dist/arena_dims)
         h, w = frame.shape[:2]
         grid_overlay = frame.copy()
-        grid_overlay[:] = (0, 0, 0)  # Make it all black
+        grid_overlay[:] = (0, 0, 0) 
 
-        # Draw vertical lines
+        # Draw lines
         for x in np.arange(grid_spacing_px, w, grid_spacing_px):  # Every grid_width_px pixels
             cv2.line(grid_overlay, (int(np.round(x)), 0), (int(np.round(x)), h), (255, 255, 255), 1, cv2.LINE_AA)
 
         for y in np.arange(grid_spacing_px, h, grid_spacing_px):  # Every grid_width_px pixels  
             cv2.line(grid_overlay, (0, int(np.round(y))), (w, int(np.round(y))), (255, 255, 255), 1, cv2.LINE_AA)
+
+        mesh_grid_initialized=True
 
     # Create dropdown
     dropdown = DropdownUI(display_text, options, window_width=frame.shape[1], hidden=not arena_available)
@@ -1500,7 +1510,7 @@ def retrieve_corners_from_image(
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
                             cv2.LINE_AA)
                     
-            if show_grid:
+            if show_grid and mesh_grid_initialized:
                 frame_copy = cv2.addWeighted(frame_copy, 0.7, grid_overlay, 0.3, 0)
 
             

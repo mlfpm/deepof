@@ -1320,6 +1320,22 @@ def _is_point_inside_numba(
     return inside
 
 
+def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray:
+    """Calculates array of distances between 2D points and a polygon (roi)"""
+
+    assert points.size > 0 and points.ndim == 2
+    
+    if not isinstance(polygon, Polygon):
+        polygon = Polygon(polygon)
+        
+    # Shapely repeats the start point at the end, so a triangle has 4 coords
+    assert not polygon.is_empty and len(polygon.exterior.coords) >= 4
+
+    distances = np.array([polygon.distance(Point(p)) for p in points])
+    
+    return distances
+
+
 def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 

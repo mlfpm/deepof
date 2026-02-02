@@ -22,6 +22,7 @@ from IPython.display import clear_output
 from matplotlib.patches import Ellipse
 from natsort import os_sorted
 
+
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
