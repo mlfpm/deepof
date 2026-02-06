@@ -2041,16 +2041,16 @@ def _preprocess_mouse_roi_distance(
 
             min_distances = np.nanmin(all_distances,axis=1)
             min_distances[min_distances == 0] = np.nan
-            distance_dict[key][exp_id] = min_distances
+            distance_dict[key][exp_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
         
         # Average over distances  
         for k, exp_id in enumerate(distance_dict[key].keys()):
             distance_arrays_dict[key][:,k]=distance_dict[key][exp_id]
         if distance_arrays_dict[key].shape[1] > 1:
-            mean_dist[key]=np.nanmean(distance_arrays_dict[key], axis=1)*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
-            std_dist[key]=np.nanstd(distance_arrays_dict[key], axis=1)*Distance_Unit[unit].value
+            mean_dist[key]=np.nanmean(distance_arrays_dict[key], axis=1) 
+            std_dist[key]=np.nanstd(distance_arrays_dict[key], axis=1)
         else: 
-            mean_dist[key]=np.squeeze(distance_arrays_dict[key]*Distance_Unit[unit].value) 
+            mean_dist[key]=np.squeeze(distance_arrays_dict[key])
             std_dist[key]=np.zeros(len(distance_arrays_dict[key]))
         
         #Smoothing

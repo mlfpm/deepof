@@ -4602,6 +4602,7 @@ def plot_behavior_trends(
     if show:
         plt.show()
 
+
 def return_mouse_roi_distance(
     coordinates: coordinates,
     bodyparts: list,        
@@ -4665,8 +4666,6 @@ def return_mouse_roi_distance(
         dict_to_df(mean_dist, "smoothed mean"),
         dict_to_df(std_dist, "smoothed std"),
     ], axis=1)
-
-
 
 
 def plot_mouse_roi_distance(
