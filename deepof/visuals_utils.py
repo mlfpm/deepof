@@ -21,6 +21,7 @@ import seaborn as sns
 from IPython.display import clear_output
 from matplotlib.patches import Ellipse
 from natsort import os_sorted
+from enum import Enum
 
 
 import deepof.post_hoc
@@ -38,6 +39,8 @@ from deepof.config import (
     SYMMETRIC_BEHAVIORS,
     ASYMMETRIC_BEHAVIORS,
     CONTINUOUS_BEHAVIORS,
+    ARENA_COLOR,
+    ROI_COLORS,
 )
 
 
@@ -46,7 +49,22 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
- 
+
+# ENUMS # 
+
+# DeepOF saves all distances internally in mm, correspondingly thsi enum contains appropriate conversion factors
+class Distance_Unit(Enum):
+    mm = 1 
+    cm = 0.1
+    m = 0.001
+
+# Native time unit in DeepOF is 
+class Speed_Unit(Enum):
+    mm_s = 1 
+    m_s = 0.001
+    m_h = 3.6
+
+
 def time_to_seconds(time_string: str) -> float:
     """Compute seconds as float based on a time string.
 
@@ -1273,7 +1291,8 @@ def _validate_parameter(
     valid_options: List[Any],
     is_list: bool = False,
     custom_error_if_empty: Optional[str] = None,
-    only_one_of_many: Optional[bool] = True
+    only_one_of_many: Optional[bool] = True,
+    can_be_dict: Optional[bool] = False,
 ): # pragma: no cover
     """
     A generic helper to validate a single parameter against a list of valid options.
@@ -1297,8 +1316,15 @@ def _validate_parameter(
 
     valid_set = set(valid_options)
     is_valid = False
+
+    if isinstance(param_value, dict) and can_be_dict:
+        value_set = set(
+            [x for lst in param_value.values() for x in lst]          
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
     
-    if is_list:
+    elif not isinstance(param_value, dict) and is_list:
         # Ensure param_value is a list-like object for set operations
         value_set = set(
             [param_value] if isinstance(param_value, str) else param_value
@@ -1331,7 +1357,7 @@ def _check_enum_inputs(
     supervised_annotations: Optional[table_dict] = None,
     soft_counts: Optional[table_dict] = None,
     origin: Optional[str] = None,
-    experiment_ids: Optional[List[str]] = None,
+    experiment_ids: Optional[Union[List[str],dict[List[str]]]] = None,
     exp_condition: Optional[str] = None,
     exp_condition_order: Optional[List[str]] = None,
     condition_values: Optional[List[str]] = None,
@@ -1347,6 +1373,7 @@ def _check_enum_inputs(
     roi_number: Optional[int] = None,
     animals_in_roi: Optional[List[str]] = None,
     roi_mode: str = "mousewise",
+    distance_unit: str = None,
 ):  # pragma: no cover
     """
     Checks and validates enum-like input parameters for various plot functions.
@@ -1375,6 +1402,7 @@ def _check_enum_inputs(
         roi_number (Optional[int]): ROI number to use for filtering.
         animals_in_roi (Optional[List[str]]): Animals that must be inside the ROI.
         roi_mode (str): Mode for ROI filtering ('mousewise' or 'behaviorwise').
+        distance_unit (str): Unit for measuring distance
     """
     # Activate warnings for immediate user feedback
     # warnings.simplefilter("always", UserWarning)
@@ -1457,26 +1485,27 @@ def _check_enum_inputs(
     # Format: (param_name, param_value, valid_options, is_list, custom_error)
     # =========================================================================
     validation_checks = [
-        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True),
-        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True),
-        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False),
-        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True),
-        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True),
-        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False),
-        ("bodyparts", bodyparts, bodypart_opts, True, None, False),
-        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False),
-        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True),
-        ("animal_id", animal_id, animal_id_opts, False, None, True),
-        ("center", center, center_opts, False, None, True),
-        ("visualization", visualization, vis_opts, False, None, True),
-        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True),
-        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False),
-        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True),
-        ("roi_mode", roi_mode, roi_mode_opts, False, None, True),
+        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True, True),
+        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True, False),
+        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False, False),
+        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True, False),
+        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True, False),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False, False),
+        ("bodyparts", bodyparts, bodypart_opts, True, None, False, False),
+        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False, False),
+        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True, False),
+        ("animal_id", animal_id, animal_id_opts, False, None, True, False),
+        ("center", center, center_opts, False, None, True, False),
+        ("visualization", visualization, vis_opts, False, None, True, False),
+        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True, False),
+        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False, False),
+        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True, False),
+        ("roi_mode", roi_mode, roi_mode_opts, False, None, True, False),
+        ("distance_unit", distance_unit, Distance_Unit._member_names_, False, None, False, False)
     ]
 
-    for name, value, options, is_list, error_msg, only_one_of_many in validation_checks:
-        _validate_parameter(name, value, options, is_list, error_msg, only_one_of_many)
+    for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
+        _validate_parameter(name, value, options, is_list, error_msg, only_one_of_many, can_be_dict)
 
     # =========================================================================
     # 4. HANDLE SPECIAL CASES AND WARNINGS
@@ -1861,3 +1890,172 @@ def _preprocess_transitions(
     )
 
     return grouped_transitions, columns, combined_columns, exp_conditions, normalize
+
+
+# Thrown for slice averageing if only one value is present
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Mean of empty slice",
+        "Degrees of freedom <= 0 for slice."
+    ]
+)
+def _preprocess_mouse_roi_distance(
+    coordinates: coordinates,
+    bodyparts: list,        
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: str = None,
+    smoothing_factor: float = 0,
+    unit: str = "m",
+):
+    def _smooth_signal(signal, smoothing_factor):
+        
+        assert smoothing_factor >= 0 and smoothing_factor <= 1, "Smoothing factor has to be in range 0<=x<=1!"
+
+        l_s = len(signal)
+        lag=int(l_s*smoothing_factor)
+
+        # Early exit 
+        if lag == 0:
+            return signal
+    
+        signal_padded=np.zeros([2*lag+l_s])
+        signal_padded[0:lag]=signal[lag-1::-1]
+        signal_padded[lag:l_s+lag]=signal
+        signal_padded[l_s+lag:]=signal[l_s-lag:]
+
+        signal_padded=deepof.utils.moving_average(signal_padded,lag, ignore_nans=True)
+        return(signal_padded[lag:l_s+lag])
+    
+    if roi_number==0:
+        roi_number=None
+    # Checks and init preprocessing
+    _check_enum_inputs(
+        coordinates,
+        roi_number=roi_number,
+        bodyparts=bodyparts,
+        experiment_ids=experiment_ids,
+        exp_condition=exp_condition,
+        condition_values=condition_values,
+        distance_unit = unit,
+    )
+    if isinstance(bodyparts, str):
+        bodyparts=[bodyparts]  
+    exp_ids_given=True
+    if experiment_ids is None:
+        exp_ids_given=False
+        experiment_ids={'all':list(coordinates._tables.keys())}
+    elif isinstance(experiment_ids, str):
+        experiment_ids={'selection':[experiment_ids]}
+    if isinstance(condition_values, str):
+        condition_values=[condition_values]
+    if exp_condition is not None and condition_values is None:
+        condition_values=coordinates.get_condition_values(exp_condition)
+
+    # Select experiment ids by conditions
+    if exp_condition is not None and condition_values is not None:
+        experiment_ids={}
+        for condition_value in condition_values:
+            experiment_ids[condition_value]=[
+                    k
+                    for k, v in coordinates.get_exp_conditions.items()
+                    if v[exp_condition].values.astype(str) == condition_value
+                ]
+        if exp_ids_given:
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! Since a valid exp_condition / condition_value combination was selected, the experiment_ids will be ignored!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+
+        
+
+    # Preprocess information given for time binning
+    bin_info_time = _preprocess_time_bins(
+        coordinates, bin_size, bin_index, precomputed_bins, 
+        samples_max=samples_max,
+    )
+    # get common indices between all selected experiments
+    bin_indices=bin_info_time[list(bin_info_time.keys())[0]]
+    max_index=np.max(bin_indices)
+    for key in experiment_ids:
+        for exp_id in experiment_ids[key]:
+            if max_index > np.max(bin_info_time[exp_id]):
+                max_index=np.max(bin_info_time[exp_id])
+                bin_indices=bin_info_time[exp_id][bin_info_time[exp_id]<max_index]
+
+    # Prepare dict of rois (one per video) to measure distance from
+    roi_dict = {}
+    # if no roi number is given, take the arena as default "roi"
+    if roi_number is None:
+        for key in experiment_ids:
+            roi_dict[key]={}
+            for exp_id in experiment_ids[key]:
+            
+                params = coordinates._arena_params[exp_id]
+                # Legacy, transform cicular arenas to polygons 
+                if isinstance(params,tuple):
+                    polygon = deepof.arena_utils.extract_corners_from_arena(params)
+                else:
+                    polygon = params
+                roi_dict[key][exp_id] = polygon
+    else:
+        for key in experiment_ids:
+            roi_dict[key]={}
+            for exp_id in experiment_ids[key]:
+        
+                rois= coordinates._roi_dicts[exp_id]
+                polygon = rois[roi_number]
+                roi_dict[key][exp_id] = polygon
+
+    # Collect minimum distances from given bodyparts to ROI or arena for all sets of experiments
+    distance_dict = {}
+    distance_arrays_dict = {}
+    mean_dist = {}
+    std_dist = {}
+    for key, cur_dict in roi_dict.items():
+        distance_dict[key]= {}
+        distance_arrays_dict[key]=np.zeros([len(bin_indices), len(cur_dict.keys())])
+        for exp_id, polygon in cur_dict.items():
+        
+            bps=coordinates.get_coords_at_key(key=exp_id, scale=coordinates._scales[exp_id])[bodyparts].iloc[bin_indices]
+
+            all_distances=np.zeros([bps.shape[0], len(bodyparts)])
+            for k, bp in enumerate(bodyparts):
+                # Exlcude case where teh mouse is already isnide of teh ROI
+                mask=deepof.utils.point_in_polygon(bps[bp].to_numpy(), roi_dict[key][exp_id])
+                # invert if distance is to arena as mouse is always in arena
+                if roi_number is not None:
+                    mask=~mask
+                distances=deepof.utils.get_point_polygon_distance(bps[bp].to_numpy(), roi_dict[key][exp_id])
+                all_distances[mask,k]=distances[mask]
+
+            min_distances = np.nanmin(all_distances,axis=1)
+            min_distances[min_distances == 0] = np.nan
+            distance_dict[key][exp_id] = min_distances
+        
+        # Average over distances  
+        for k, exp_id in enumerate(distance_dict[key].keys()):
+            distance_arrays_dict[key][:,k]=distance_dict[key][exp_id]
+        if distance_arrays_dict[key].shape[1] > 1:
+            mean_dist[key]=np.nanmean(distance_arrays_dict[key], axis=1)*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
+            std_dist[key]=np.nanstd(distance_arrays_dict[key], axis=1)*Distance_Unit[unit].value
+        else: 
+            mean_dist[key]=np.squeeze(distance_arrays_dict[key]*Distance_Unit[unit].value) 
+            std_dist[key]=np.zeros(len(distance_arrays_dict[key]))
+        
+        #Smoothing
+        if smoothing_factor > 0:
+            mean_dist[key]=_smooth_signal(mean_dist[key],smoothing_factor)
+            std_dist[key]=_smooth_signal(std_dist[key],smoothing_factor)
+
+    return bin_indices, mean_dist, std_dist, distance_dict, roi_dict

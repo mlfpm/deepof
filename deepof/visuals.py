@@ -35,13 +35,14 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
+from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
     output_videos_per_cluster, 
 )
 from deepof.visuals_utils import (
+    Distance_Unit,
     _check_enum_inputs,
     plot_arena,
     heatmap,
@@ -4601,9 +4602,225 @@ def plot_behavior_trends(
     if show:
         plt.show()
 
+def return_mouse_roi_distance(
+    coordinates: coordinates,
+    bodyparts: list,        
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: str = None,
+    smoothing_factor: float = 0,
+    unit: str = "m",
+):
 
-def plot_mouse_roi_distance():
-    pass
+    bin_indices, mean_dist, std_dist, distance_dict, roi_dict = deepof.visuals_utils._preprocess_mouse_roi_distance(
+        coordinates=coordinates,
+        bodyparts=bodyparts,
+        bin_size = bin_size,
+        bin_index = bin_index,
+        precomputed_bins = precomputed_bins,
+        samples_max = samples_max,
+        # ROI functionality
+        roi_number = roi_number,
+        # Visualization parameters
+        experiment_ids = experiment_ids,  
+        exp_condition = exp_condition, 
+        condition_values = condition_values,
+        smoothing_factor = smoothing_factor,
+        unit = unit,
+    )
+
+    def dict_to_df(data, top_label=None):
+        """Convert a (nested) dict to a DataFrame with MultiIndex columns."""
+        records = {}
+        
+        if top_label is None:
+            # Nested dict: {outer_key: {inner_key: arr}}
+            for outer_key, inner_dict in data.items():
+                for inner_key, arr in inner_dict.items():
+                    records[(outer_key, inner_key)] = np.asarray(arr)
+        else:
+            # Flat dict with potential duplicate keys
+            key_counts = {}
+            for key, arr in data.items():
+                key_counts[key] = key_counts.get(key, 0) + 1
+                suffix = f"__{key_counts[key]}" if key_counts[key] > 1 else ""
+                records[(top_label, f"{key}{suffix}")] = np.asarray(arr)
+
+        df = pd.DataFrame(records, index=bin_indices)
+        df.columns = pd.MultiIndex.from_tuples(
+            df.columns, names=["Group", "exp_id"]
+        )
+        return df
+
+    return pd.concat([
+        dict_to_df(distance_dict),
+        dict_to_df(mean_dist, "smoothed mean"),
+        dict_to_df(std_dist, "smoothed std"),
+    ], axis=1)
+
+
+
+
+def plot_mouse_roi_distance(
+    coordinates: coordinates,
+    bodyparts: list,        
+    # Time selection parameters
+    bin_size: Union[int, str] = None,
+    bin_index: Union[int, str] = None,
+    precomputed_bins: np.ndarray = None,
+    samples_max: int=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: str = None,
+    smoothing_factor: float = 0,
+    unit: str = "m",
+    ax: Any = None,      
+):
+
+    bin_indices, mean_dist, std_dist, distance_dict, roi_dict = deepof.visuals_utils._preprocess_mouse_roi_distance(
+        coordinates=coordinates,
+        bodyparts=bodyparts,
+        bin_size = bin_size,
+        bin_index = bin_index,
+        precomputed_bins = precomputed_bins,
+        samples_max = samples_max,
+        # ROI functionality
+        roi_number = roi_number,
+        # Visualization parameters
+        experiment_ids = experiment_ids,  
+        exp_condition = exp_condition, 
+        condition_values = condition_values,
+        smoothing_factor = smoothing_factor,
+        unit = unit,
+    )
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 4))  
+
+    # plot distances over time
+    marker_handles=[None]*len(roi_dict.keys())
+    # Only used for 4+ conditions
+    color_map = plt.get_cmap('tab10', lut=len(roi_dict.keys()))
+    for k, key in enumerate(roi_dict.keys()):
+
+        lower=mean_dist[key]-std_dist[key]
+        lower[lower<0]=0.0
+        upper=mean_dist[key]+std_dist[key]
+        
+  
+        # Nicer colors for not too many different conditions
+        if len(roi_dict.keys())<4:    
+            base_color = ARENA_COLOR
+            if roi_number is not None:
+                base_color = ROI_COLORS[roi_number-1]
+            if k == 1:
+                base_color = (np.array(base_color)*0.6).astype(int)
+            elif k==2:
+                base_color = (np.array(base_color)*0.2).astype(int)
+        # Otherwise standard color palette
+        else:
+            base_color=(color_map.colors[k][0:3]*255).astype(int)
+
+        color = BGR_to_hex(base_color)
+
+        marker_handles[k]=ax.plot(
+            bin_indices,
+            mean_dist[key],
+            linestyle="-",
+            color=color,
+            alpha=1,
+            linewidth=3,
+        )[0]
+
+        ax.plot(
+            bin_indices,
+            upper,
+            linestyle="--",
+            color=color,
+            alpha=0.8,
+            linewidth=1,
+        )
+        ax.plot(
+            bin_indices,
+            lower,
+            linestyle="--",
+            color=color,
+            alpha=0.8,
+            linewidth=1,
+        )
+
+        # Shaded error band
+        ax.fill_between(
+            bin_indices,
+            lower,
+            upper,
+            color=color,
+            alpha=0.15,
+        )
+
+    # set x-ticks
+    plt.xticks([])
+    if coordinates._frame_rate is not None:
+        N_x_ticks = int(plt.gcf().get_size_inches()[1] * 1.25)
+        if ax:
+            bbox = ax.get_window_extent().transformed(
+                plt.gcf().dpi_scale_trans.inverted()
+            )
+            N_x_ticks = int(bbox.width * 1.25)
+        plt.xticks(
+            np.linspace(np.min(bin_indices), np.max(bin_indices), N_x_ticks),
+            [
+                seconds_to_time(t)
+                for t in np.round(
+                    np.linspace(
+                        np.min(bin_indices) / coordinates._frame_rate,
+                        np.max(bin_indices) / coordinates._frame_rate,
+                        N_x_ticks,
+                    )
+                )
+            ],
+            rotation=0,
+        )
+        if np.max(np.diff(bin_indices))>1:
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! Since the provided time bins contain gaps, the time range below may be incorrectly displayed!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+            
+    ax.set_xlabel("time", fontsize=12)
+    ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), Distance_Unit[unit].name), fontsize=12)
+    
+    experiments_in_title="all experiments"
+    if (len(experiment_ids)==1):
+        pass #experiments_in_title=experiment_ids[0]
+    elif (len(experiment_ids)!=len(coordinates._tables.keys())):
+        experiments_in_title = "selected experiments"
+    
+    experiments_in_title + str(bodyparts)     
+    ax.set_title(f"DeepOF - {experiments_in_title}", fontsize=18) #, y=1.15)
+
+    if len(roi_dict.keys()) > 1:
+        legend = ax.legend(
+            handles=marker_handles,
+            labels=list(roi_dict.keys()),
+            fontsize=12,
+            loc="upper right",
+        )
+
+        ax.add_artist(legend)
 
 def get_roi_data(
     coordinates: coordinates,

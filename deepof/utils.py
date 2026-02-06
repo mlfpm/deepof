@@ -1331,7 +1331,8 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
     # Shapely repeats the start point at the end, so a triangle has 4 coords
     assert not polygon.is_empty and len(polygon.exterior.coords) >= 4
 
-    distances = np.array([polygon.distance(Point(p)) for p in points])
+    boundary = polygon.boundary
+    distances = np.array([boundary.distance(Point(p)) for p in points])
     
     return distances
 
@@ -2125,7 +2126,7 @@ def smooth_mult_trajectory(
     return smoothed_series
 
 
-def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
+def moving_average(time_series: pd.Series, lag: int = 5, ignore_nans = False) -> pd.Series:
     """Fast implementation of a moving average function.
 
     Args:
@@ -2136,7 +2137,24 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
         moving_avg (pd.Series): Uni-variate moving average over time_series.
 
     """
-    moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
+    if not ignore_nans:
+        moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
+    else:
+        n = len(time_series)
+        half = lag // 2
+        moving_avg = np.full(n, np.nan, dtype=float)
+
+        for i in range(n):
+            start = max(0, i - half)
+            end = min(n, i + half + 1)
+            window = time_series[start:end]
+            valid = ~np.isnan(window)
+            if valid.any():
+                moving_avg[i] = window[valid].mean()
+            else:
+                moving_avg[i] = np.nan
+            if np.isnan(time_series[i]):
+                moving_avg[i] = np.nan
 
     return moving_avg
 

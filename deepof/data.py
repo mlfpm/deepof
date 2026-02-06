@@ -2161,6 +2161,14 @@ class Coordinates:
         """Return the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
 
+    def get_condition_values(self, exp_cond):
+        conditions=[]
+        for key in self._exp_conditions.keys():
+            if exp_cond in self._exp_conditions[key].columns:
+                conditions.append(self._exp_conditions[key][exp_cond][0]) 
+        assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
+        return list(np.unique(conditions))
+
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
 

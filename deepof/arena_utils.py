@@ -20,7 +20,7 @@ from scipy.spatial.distance import cdist
 from shapely.geometry import Point, Polygon
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, IMG_H_MAX, IMG_W_MAX
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, ARENA_COLOR, IMG_H_MAX, IMG_W_MAX
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.data
 import deepof.utils
@@ -592,7 +592,7 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
     add_overlay=True
     # No specific color for arena visualization-style
     if color is None:
-        color=(40, 86, 236)
+        color=ARENA_COLOR
         add_overlay=False
 
     if isinstance(roi, Tuple): # Circular (legacy) "circular" in arena_type:
@@ -636,7 +636,7 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
                     frame_with_arena,
                     list(map(int, point)),
                     radius=10,
-                    color=(40, 86, 236),
+                    color=ARENA_COLOR,
                     thickness=2,
                 )
 
@@ -1295,7 +1295,7 @@ def retrieve_corners_from_image(
                 cur_vid,
                 len(videos),
             )
-        color = (40, 86, 236) if current_roi == 0 else roi_colors[current_roi-1]
+        color = ARENA_COLOR if current_roi == 0 else roi_colors[current_roi-1]
 
     else:
         raise ValueError(
