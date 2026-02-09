@@ -4603,9 +4603,10 @@ def plot_behavior_trends(
         plt.show()
 
 
-def return_mouse_roi_distance(
+def return_mouse_roi_interaction(
     coordinates: coordinates,
-    bodyparts: list,        
+    bodyparts: list = None,  
+    animal_id: str = None,         
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
@@ -4618,12 +4619,14 @@ def return_mouse_roi_distance(
     exp_condition: str = None, 
     condition_values: str = None,
     smoothing_factor: float = 0,
+    mode: str = "distance",
     unit: str = "m",
 ):
 
-    bin_indices, mean_dist, std_dist, distance_dict, roi_dict = deepof.visuals_utils._preprocess_mouse_roi_distance(
+    bin_indices, mean_dist, std_dist, distance_dict, roi_dict, experiment_ids = deepof.visuals_utils._preprocess_mouse_roi_interaction(
         coordinates=coordinates,
         bodyparts=bodyparts,
+        animal_id=animal_id,
         bin_size = bin_size,
         bin_index = bin_index,
         precomputed_bins = precomputed_bins,
@@ -4635,6 +4638,7 @@ def return_mouse_roi_distance(
         exp_condition = exp_condition, 
         condition_values = condition_values,
         smoothing_factor = smoothing_factor,
+        mode=mode,
         unit = unit,
     )
 
@@ -4668,9 +4672,10 @@ def return_mouse_roi_distance(
     ], axis=1)
 
 
-def plot_mouse_roi_distance(
+def plot_mouse_roi_interaction(
     coordinates: coordinates,
-    bodyparts: list,        
+    bodyparts: list = None,  
+    animal_id: str = None,      
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
@@ -4683,13 +4688,16 @@ def plot_mouse_roi_distance(
     exp_condition: str = None, 
     condition_values: str = None,
     smoothing_factor: float = 0,
+    mode: str = "distance",
     unit: str = "m",
     ax: Any = None,      
 ):
-
-    bin_indices, mean_dist, std_dist, distance_dict, roi_dict = deepof.visuals_utils._preprocess_mouse_roi_distance(
+    if roi_number == 0:
+        roi_number=None
+    bin_indices, mean_dist, std_dist, distance_dict, roi_dict, experiment_ids = deepof.visuals_utils._preprocess_mouse_roi_interaction(
         coordinates=coordinates,
         bodyparts=bodyparts,
+        animal_id=animal_id,
         bin_size = bin_size,
         bin_index = bin_index,
         precomputed_bins = precomputed_bins,
@@ -4701,6 +4709,7 @@ def plot_mouse_roi_distance(
         exp_condition = exp_condition, 
         condition_values = condition_values,
         smoothing_factor = smoothing_factor,
+        mode = mode,
         unit = unit,
     )
 
@@ -4714,9 +4723,11 @@ def plot_mouse_roi_distance(
     for k, key in enumerate(roi_dict.keys()):
 
         lower=mean_dist[key]-std_dist[key]
-        lower[lower<0]=0.0
         upper=mean_dist[key]+std_dist[key]
-        
+
+        lower[lower<0]=0.0
+        if mode == "fov":
+            upper[upper>1]=1.0   
   
         # Nicer colors for not too many different conditions
         if len(roi_dict.keys())<4:    
@@ -4800,7 +4811,11 @@ def plot_mouse_roi_distance(
             warnings.warn(warning_message)
             
     ax.set_xlabel("time", fontsize=12)
-    ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), Distance_Unit[unit].name), fontsize=12)
+    if mode == "distance":
+        ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), Distance_Unit[unit].name), fontsize=12)
+    elif mode == "fov":
+        ax.set_ylabel(f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mice", fontsize=12)
+        ax.set_ylim([0,1])
     
     experiments_in_title="all experiments"
     if (len(experiment_ids)==1):
@@ -4816,7 +4831,7 @@ def plot_mouse_roi_distance(
             handles=marker_handles,
             labels=list(roi_dict.keys()),
             fontsize=12,
-            loc="upper right",
+            loc="best",
         )
 
         ax.add_artist(legend)

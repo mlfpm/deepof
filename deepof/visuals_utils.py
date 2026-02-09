@@ -24,6 +24,7 @@ from natsort import os_sorted
 from enum import Enum
 
 
+import deepof.annotation_utils
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
@@ -1899,9 +1900,10 @@ def _preprocess_transitions(
         "Degrees of freedom <= 0 for slice."
     ]
 )
-def _preprocess_mouse_roi_distance(
+def _preprocess_mouse_roi_interaction(
     coordinates: coordinates,
-    bodyparts: list,        
+    bodyparts: list,  
+    animal_id: str,      
     # Time selection parameters
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
@@ -1914,6 +1916,7 @@ def _preprocess_mouse_roi_distance(
     exp_condition: str = None, 
     condition_values: str = None,
     smoothing_factor: float = 0,
+    mode: str = "distance",
     unit: str = "m",
 ):
     def _smooth_signal(signal, smoothing_factor):
@@ -1934,7 +1937,7 @@ def _preprocess_mouse_roi_distance(
 
         signal_padded=deepof.utils.moving_average(signal_padded,lag, ignore_nans=True)
         return(signal_padded[lag:l_s+lag])
-    
+
     if roi_number==0:
         roi_number=None
     # Checks and init preprocessing
@@ -1946,9 +1949,19 @@ def _preprocess_mouse_roi_distance(
         exp_condition=exp_condition,
         condition_values=condition_values,
         distance_unit = unit,
+        animal_id=animal_id,
     )
-    if isinstance(bodyparts, str):
-        bodyparts=[bodyparts]  
+    # Check if correct inputs for modes are present
+    if mode == "fov" and animal_id is not None:
+        bodyparts=["Left_ear","Nose","Right_ear"]
+        if animal_id is not None and animal_id !="":
+            bodyparts=[animal_id + "_" + bp for bp in bodyparts]
+    elif mode == "distance" and bodyparts is not None:
+        if isinstance(bodyparts, str):
+            bodyparts=[bodyparts]  
+    else:
+        raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")
+   
     exp_ids_given=True
     if experiment_ids is None:
         exp_ids_given=False
@@ -2036,12 +2049,22 @@ def _preprocess_mouse_roi_distance(
                 # invert if distance is to arena as mouse is always in arena
                 if roi_number is not None:
                     mask=~mask
-                distances=deepof.utils.get_point_polygon_distance(bps[bp].to_numpy(), roi_dict[key][exp_id])
-                all_distances[mask,k]=distances[mask]
-
-            min_distances = np.nanmin(all_distances,axis=1)
-            min_distances[min_distances == 0] = np.nan
-            distance_dict[key][exp_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
+                if mode == "distance":
+                    distances=deepof.utils.get_point_polygon_distance(bps[bp].to_numpy(), roi_dict[key][exp_id])
+                    all_distances[mask,k]=distances[mask]
+                elif mode == "fov":
+                    pass
+                else:
+                    raise NotImplementedError("The only currently available modes are \"distance\" and \"fov\" (field of view)")
+                        
+                
+            if mode == "fov":
+                fov=deepof.utils.in_field_of_view(bps.to_numpy().reshape(-1, 3, 2), 90, roi_dict[key][exp_id], False)
+                distance_dict[key][exp_id]=fov
+            elif mode == "distance":
+                min_distances = np.nanmin(all_distances,axis=1)
+                min_distances[min_distances == 0] = np.nan
+                distance_dict[key][exp_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
         
         # Average over distances  
         for k, exp_id in enumerate(distance_dict[key].keys()):
@@ -2058,4 +2081,4 @@ def _preprocess_mouse_roi_distance(
             mean_dist[key]=_smooth_signal(mean_dist[key],smoothing_factor)
             std_dist[key]=_smooth_signal(std_dist[key],smoothing_factor)
 
-    return bin_indices, mean_dist, std_dist, distance_dict, roi_dict
+    return bin_indices, mean_dist, std_dist, distance_dict, roi_dict, experiment_ids

@@ -1336,6 +1336,130 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
     
     return distances
 
+from matplotlib import pyplot as plt
+def in_field_of_view(mouse_pts: np.ndarray,
+                     fov_angle_deg: float,
+                     roi: Polygon,
+                     plot: bool = True,
+                     eps: float = 1e-10) -> np.ndarray:
+    """
+    mouse_pts: (N, 3, 2) or (3, 2), order [left_ear, nose, right_ear]
+    Returns float array of shape (N,):
+        1.0  -> ROI intersects FOV
+        0.0  -> ROI does not intersect FOV
+        np.nan -> cannot be calculated (invalid/degenerate geometry or non-finite points)
+    Apex of FOV triangle is midpoint between ears.
+    """
+    mouse_pts = np.asarray(mouse_pts, dtype=float)
+    if mouse_pts.ndim == 2:
+        mouse_pts = mouse_pts[None, ...]
+    assert mouse_pts.ndim == 3 and mouse_pts.shape[1:] == (3, 2)
+
+    if not isinstance(roi, Polygon):
+        roi = Polygon(roi)
+    assert not roi.is_empty
+
+    fov_angle_deg = float(fov_angle_deg)
+    if not (0.0 < fov_angle_deg < 180.0):
+        raise ValueError("fov_angle_deg must be in (0, 180).")
+    if fov_angle_deg < 1e-6:
+        return np.full((mouse_pts.shape[0],), np.nan, dtype=float)
+
+    half = np.deg2rad(fov_angle_deg) / 2.0
+    out = np.full((mouse_pts.shape[0],), np.nan, dtype=float)
+
+    # radius large enough to cover ROI (use bounds corners)
+    minx, miny, maxx, maxy = roi.bounds
+    roi_corners = np.array([[minx, miny], [minx, maxy], [maxx, miny], [maxx, maxy]], dtype=float)
+
+    sectors = []
+    for i, (L, N, R) in enumerate(mouse_pts):
+        # invalid detection -> nan
+        if not (np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all()):
+            sectors.append(None)
+            continue
+
+        apex = 0.5 * (L + R)
+        ear_vec = R - L
+        if np.linalg.norm(ear_vec) < eps:
+            sectors.append(None)
+            continue
+
+        # forward is perpendicular to ear line; choose sign that points toward the nose
+        perp = np.array([-ear_vec[1], ear_vec[0]], dtype=float)
+        if np.dot(perp, N - apex) < 0:
+            perp = -perp
+
+        nrm = np.linalg.norm(perp)
+        if nrm < eps:
+            sectors.append(None)
+            continue
+
+        fwd = perp / nrm
+        d1 = rotate(fwd, +half, origin=np.array([0.0, 0.0]))
+        d2 = rotate(fwd, -half, origin=np.array([0.0, 0.0]))
+
+        # degenerate if rays almost identical
+        cross = d1[0] * d2[1] - d1[1] * d2[0]
+        if abs(cross) < 1e-12:
+            sectors.append(None)
+            continue
+
+        r = 1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6
+        if not np.isfinite(r) or r <= 0:
+            sectors.append(None)
+            continue
+
+        p0, p1, p2 = apex, apex + r * d1, apex + r * d2
+        if not (np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all()):
+            sectors.append(None)
+            continue
+
+        sector = Polygon([tuple(p0), tuple(p1), tuple(p2)])
+        if sector.is_empty or (not sector.is_valid) or sector.area < 1e-12:
+            sectors.append(None)
+            continue
+
+        sectors.append(sector)
+        out[i] = 1.0 if sector.intersects(roi) else 0.0
+
+    if plot:
+        idx = -1
+        L, N, R = mouse_pts[idx]
+        apex = 0.5 * (L + R)
+        sector = sectors[idx]
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        # ROI
+        x, y = roi.exterior.xy
+        ax.plot(x, y, "k-", lw=2, label="ROI")
+        ax.fill(x, y, color="k", alpha=0.08)
+
+        # FOV
+        if sector is not None:
+            sx, sy = sector.exterior.xy
+            ax.plot(sx, sy, "C0-", lw=2, label="FOV")
+            ax.fill(sx, sy, color="C0", alpha=0.15)
+
+        # Mouse points + ear line + apex
+        ax.plot([L[0], R[0]], [L[1], R[1]], "C1--", lw=1)
+        ax.scatter([L[0], apex[0], N[0], R[0]],
+                   [L[1], apex[1], N[1], R[1]],
+                   c=["C1", "C3", "C2", "C1"], s=60)
+        ax.text(L[0], L[1], "L")
+        ax.text(apex[0], apex[1], "Apex")
+        ax.text(N[0], N[1], "N")
+        ax.text(R[0], R[1], "R")
+
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_title(f"ROI in FOV (last frame): {out[idx]}")
+        ax.legend(loc="best")
+        ax.grid(True, alpha=0.2)
+        plt.show()
+
+    return out
+
 
 def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
