@@ -1461,7 +1461,7 @@ def in_field_of_view(mouse_pts: np.ndarray,
     return out
 
 
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
+def mouse_in_roi_old(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1505,6 +1505,36 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
             mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon(np.array(all_points[bodypart]),roi_polygon)
 
     return mouse_in_polygon
+
+
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
+    
+    
+    if isinstance(in_roi_criterion, str):
+        in_roi_criterion = [in_roi_criterion]
+
+    if aid:
+        if "all" in in_roi_criterion:
+            bodyparts = [c for c in tab.columns.get_level_values(0).unique() if c.startswith(aid)]
+        else:
+            bodyparts = [f"{aid}_{bp}" for bp in in_roi_criterion]
+    else:
+        bodyparts = tab.columns.get_level_values(0).unique() if "all" in in_roi_criterion else in_roi_criterion
+
+    roi_polygon = np.asarray(roi_polygon)
+
+    mask = np.ones(len(tab), dtype=bool)
+    for bp in bodyparts:
+        # select only x,y for that bodypart and immediately go to numpy
+        pts = tab.loc[:, pd.IndexSlice[bp, ["x", "y"]]].to_numpy(copy=False)
+        pts = np.ascontiguousarray(pts)  # good for numba
+
+        if run_numba:
+            mask &= deepof.utils.point_in_polygon_numba(pts, roi_polygon)
+        else:
+            mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
+
+    return mask
 
 
 # noinspection PyArgumentList
