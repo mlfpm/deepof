@@ -3845,126 +3845,48 @@ def plot_behavior_trends(
         warnings.warn(warning_message)
 
     # Init plot type based on inputs
-    if (
-        any([embeddings is None, soft_counts is None])
-        and supervised_annotations is not None
-    ):
+    if supervised_annotations is not None:
+        table_dicts = supervised_annotations
         plot_type = "supervised"
-        L_shortest = min(
-            get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
-        )
-    elif (
-        embeddings is not None
-        and soft_counts is not None
-        and supervised_annotations is None
-    ):
-        plot_type = "unsupervised"
-        L_shortest = min(
-            get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
-        )
+    elif soft_counts is not None:
+        table_dicts = soft_counts 
+        plot_type = "unsupervised"  
     else:
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
+    L_shortest = min(
+        get_dt(table_dicts,key,only_metainfo=True)['num_rows'] for key in table_dicts.keys()
+    )
+
     #####
     # Get ROI bin info
     ##### 
 
-    #create full time bins covering entire signal
-    if supervised_annotations is not None:
+    # preprocess time bin info
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    n_time_bins=len(custom_time_bins)
+    bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, None, None, None, samples_max=samples_max,
-        tab_dict_for_binning=supervised_annotations,
-        )
-    else:            
-        bin_info_time = _preprocess_time_bins(
-            coordinates, None, None, None, samples_max=samples_max, 
-            tab_dict_for_binning=soft_counts,
-        )
-    # Create ROI bins
-    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
-
-    # Init bin ranges if not given
-    if not custom_time_bins:
-        custom_time_bins = deepof.visuals_utils.create_bin_pairs(
-            L_shortest, N_time_bins
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        tab_dict_for_binning=table_dicts, given_in_frames=True,
         )
 
-    # Init hidden bins if not given
-    if not hide_time_bins:
-        hide_time_bins = np.array([False] * len(custom_time_bins))
-    elif not len(hide_time_bins) == len(custom_time_bins):
-        raise ValueError(
-            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
-        )
-    else:
-       hide_time_bins= np.array(hide_time_bins)
-
-    # Set behavior ids
-    if plot_type == "unsupervised":
-        keys=list(soft_counts.keys())
-        num_clusters=get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
-        behavior_ids = [f"Cluster {str(k)}" for k in range(0, num_clusters)]
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+ 
         
-    elif plot_type == "supervised":
-        keys=list(supervised_annotations.keys())
-        behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
+        multi_bin_info[j]=roi_bin_info
 
-    #####
-    # Some validity checks and more formatting
-    #####
+    keys=list(table_dicts.keys())
 
-
-    # Check custom_time_bin validity
-    if len(
-        custom_time_bins
-    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
-        isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
-    ):  # List has shape Nx2
-
-        # Convert time string elements to integers
-        custom_time_bins = [
-            [
-                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
-                if type(sublist[k]) == str
-                else sublist[k]
-                for k in range(len(sublist))
-            ]
-            for sublist in custom_time_bins
-        ]
-
-        # Further checks
-        if not all(
-            all(isinstance(x, int) and x >= 0 for x in sublist)
-            for sublist in custom_time_bins
-        ) or not all(  # Lists consist of positive integers
-            sublist[0] <= sublist[1] for sublist in custom_time_bins
-        ):  # List elements increase
-            raise ValueError(
-                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
-                "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
-            )
-        elif np.max(custom_time_bins) >= L_shortest:
-            raise ValueError(
-                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
-            )
-        # Warn in case of overlapping elements
-        elif not (
-            list(chain(*custom_time_bins)) == sorted(list(chain(*custom_time_bins)))
-        ):
-            warning_message = (
-                "\033[38;5;208m\n"
-                'Warning! Your "custom_time_bins" list contains overlapping elements!\n'
-                f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
-    else:
-        raise ValueError(
-            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
-        )
-    
 
     #####
     # Collect data for plotting
@@ -3981,7 +3903,7 @@ def plot_behavior_trends(
             x_scale = 12
             y_scale = 4
 
-        heatmaps, axes = plt.subplots(
+        _, axes = plt.subplots(
             n_rows, 
             n_cols,
             sharex=True,
@@ -3993,13 +3915,18 @@ def plot_behavior_trends(
     else:
         axes = np.array(ax)
 
-    # Iterate over all experiments via keys
+    # iterate over all behaviors (1 plot per behavior)
     z_run=0
     for ax, behavior_to_plot in zip(axes.ravel(), behaviors_to_plot):
 
         # Initialize table
         columns = ["time_bin", "exp_condition", behavior_to_plot]
         df = pd.DataFrame(columns=columns)
+
+
+        # Precompute unsupervised cluster index once per behavior
+        if plot_type == "unsupervised":
+            cluster_idx = int(re.search(r"\d+", behavior_to_plot).group())
 
         for i, key in enumerate(keys):
 
@@ -4008,35 +3935,28 @@ def plot_behavior_trends(
             if cond not in condition_values:
                 continue
 
-            if plot_type == "unsupervised":
-                data_set=get_dt(soft_counts,key,load_range=roi_bin_info[key]['time'])
-                if roi_number is not None:
-                    data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
-                index_dict_fn = lambda x: x[
-                    :, int(re.search(r"\d+", behavior_to_plot).group())
-                ]
-            elif plot_type == "supervised":
-                data_set=get_dt(supervised_annotations,key,load_range=roi_bin_info[key]['time'])
-                if roi_number is not None:
-                    data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
-                index_dict_fn = lambda x: x[
-                    behavior_to_plot
-                ]  # Specialized index functions to handle differing data_snippet formatting
-
-            # time vector aligned with loaded data_set
-            t = np.asarray(roi_bin_info[key]["time"])
+            # load entire dataset for current key once
+            data_set=get_dt(table_dicts,key)
 
             # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
-            for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+            for j, bin_info in enumerate(multi_bin_info.values()):
 
-                # Inclusive end to mimic the original semantics
-                in_bin = (t >= bin_start) & (t <= bin_end)
+                local_bin_info = bin_info[key]
 
-                if not np.any(in_bin):
+                if len(local_bin_info["time"])==0:
                     behavior_timebin = np.nan
                 else:
-                    data_snippet = data_set[in_bin]
-                    vals = index_dict_fn(data_snippet)
+                    data_snippet=data_set.iloc[local_bin_info["time"]]
+                    if plot_type == "unsupervised":
+                        if roi_number is not None:
+                            data_snippet=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi)
+                        vals = data_snippet[:, cluster_idx]  
+
+                    elif plot_type == "supervised":
+                        if roi_number is not None:
+                            data_snippet=get_supervised_behaviors_in_roi(cur_supervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi, roi_mode=roi_mode)    
+                        vals = data_snippet[behavior_to_plot]
+
                     vals = np.asarray(vals)
                     val_mask = ~np.isnan(vals)
 
@@ -4083,32 +4003,7 @@ def plot_behavior_trends(
 
         get_unsupervised_behaviors_in_roi._warning_issued = False
 
-        #Remove missing values (less than 20% of values remaining per group) 
-        min_frac = 0.05 #20
-        num_bins = len(custom_time_bins)
-
-        # Create table denoting the nan percentage for each group and bin
-        coverage = df.pivot_table(
-            index="time_bin", columns="exp_condition", values=behavior_to_plot,
-            aggfunc=lambda s: s.notna().mean()
-        ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
-
-        enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
-        hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
-        if not all(enough_data_per_bin):
-            warning_message = (
-                "\033[38;5;208m\n"
-                f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
-                f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
-                "\033[0m"
-            )
-            print(warning_message)    
-
-        # exclude time bins that are always NaN (which will also exclude them from statistics)
-        mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
-        df = df[mask].copy()
-
-        assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
+        df = deepof.visuals_utils.postprocess_df_bins(df, n_time_bins, condition_values, behavior_to_plot, hide_time_bins)  
 
         # Calculate mean values and errors accross samples
         time_bin_means = (
@@ -4131,7 +4026,7 @@ def plot_behavior_trends(
         hourly_effect_sizes_df = pd.DataFrame(
             columns=["time_bin", "Absolute_Cohens_d", "Effect_Size_Category"]
         )
-        for k in range(0, len(custom_time_bins)):
+        for k in range(0, n_time_bins):
             # Extract arrays for both exp conditions and time bins
             array_a = df.loc[
                 (df["exp_condition"] == condition_values[0]) & (df["time_bin"] == k),
@@ -4248,11 +4143,9 @@ def plot_behavior_trends(
         #####
 
         sns.set_style("whitegrid")
-        num_bins = len(custom_time_bins)
-
+        multi_bin_info
         # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-        lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
-        cumsum_lengths = np.cumsum([0] + lengths)
+        cumsum_lengths = np.cumsum([0] + bin_lengths)
         angles = cumsum_lengths[:-1] / cumsum_lengths[-1] * 2 * np.pi
         rotation = angles[0]
         # Ensure that no angle exceeds 2 pi
@@ -4407,7 +4300,7 @@ def plot_behavior_trends(
         ax.set_yticks(y_ticks)
 
         # Set custom xticklabels
-        xticklabels = [str(i) for i in range(1, num_bins + 1)]
+        xticklabels = [str(i) for i in range(1, n_time_bins + 1)]
 
         # Special modifications for the polar plot
         if polar_depiction:
@@ -4471,9 +4364,9 @@ def plot_behavior_trends(
         # Some inits
         ax.grid(True)
         values = hourly_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
-        num_bins = len(values)
+        n_time_bins = len(values)
         # Calculate widths of histogram bars
-        widths = lengths / np.sum(lengths) * (2 * np.pi)
+        widths = bin_lengths / np.sum(bin_lengths) * (2 * np.pi)
 
         # Set colors
         cmap = [
@@ -4603,6 +4496,7 @@ def plot_behavior_trends(
         plt.show()
 
 
+
 def return_mouse_roi_interaction(
     coordinates: coordinates,
     bodyparts: list = None,  
@@ -4688,6 +4582,7 @@ def plot_mouse_roi_interaction(
     exp_condition: str = None, 
     condition_values: str = None,
     smoothing_factor: float = 0,
+    N_stat_bins: int = 10,
     mode: str = "distance",
     unit: str = "m",
     ax: Any = None,      

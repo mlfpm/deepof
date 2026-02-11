@@ -609,6 +609,108 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
+def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None):
+
+    # Init bin ranges if not given
+    if not custom_time_bins:
+        custom_time_bins = create_bin_pairs(
+            L_shortest, N_time_bins
+        )
+    
+    # Init hidden bins if not given
+    if not hide_time_bins:
+        hide_time_bins = np.array([False] * len(custom_time_bins))
+    elif not len(hide_time_bins) == len(custom_time_bins):
+        raise ValueError(
+            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
+        )
+    else:
+       hide_time_bins= np.array(hide_time_bins)
+
+    # Check custom_time_bin validity
+    if len(
+        custom_time_bins
+    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+        isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
+    ):  # List has shape Nx2
+
+        # Convert time string elements to integers
+        custom_time_bins = [
+            [
+                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                if type(sublist[k]) == str
+                else sublist[k]
+                for k in range(len(sublist))
+            ]
+            for sublist in custom_time_bins
+        ]
+
+        # Further checks
+        if not all(
+            all(isinstance(x, int) and x >= 0 for x in sublist)
+            for sublist in custom_time_bins
+        ) or not all(  # Lists consist of positive integers
+            sublist[0] <= sublist[1] for sublist in custom_time_bins
+        ):  # List elements increase
+            raise ValueError(
+                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
+                "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
+            )
+        elif np.max(custom_time_bins) >= L_shortest:
+            raise ValueError(
+                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
+            )
+        # Warn in case of overlapping elements
+        elif not (
+            list(itertools.chain(*custom_time_bins)) == sorted(list(itertools.chain(*custom_time_bins)))
+        ):
+            warning_message = (
+                "\033[38;5;208m\n"
+                'Warning! Your "custom_time_bins" list contains overlapping elements!\n'
+                f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+    else:
+        raise ValueError(
+            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
+        )
+    
+    return custom_time_bins, hide_time_bins
+
+
+def postprocess_df_bins(df: pd.DataFrame, num_bins, condition_values, behavior_to_plot, hide_time_bins):
+
+    #Remove missing values (less than 20% of values remaining per group) 
+    min_frac = 0.05 #20
+
+    # Create table denoting the nan percentage for each group and bin
+    coverage = df.pivot_table(
+        index="time_bin", columns="exp_condition", values=behavior_to_plot,
+        aggfunc=lambda s: s.notna().mean()
+    ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
+
+    enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
+    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
+    if not all(enough_data_per_bin):
+        warning_message = (
+            "\033[38;5;208m\n"
+            f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
+            f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
+            "\033[0m"
+        )
+        print(warning_message)    
+
+    # exclude time bins that are always NaN (which will also exclude them from statistics)
+    mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
+    df = df[mask].copy()
+
+    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!" 
+
+    return df
+
+
+
 def cohend(array_a: np.array, array_b: np.array):
     """
     calculate Cohen's d effect size. Does not assume equal population standard deviations, and can still be used for unequal sample sizes
@@ -708,6 +810,34 @@ def _get_bins_from_precomputed(
             end_too_late[key] = True
 
     return _BinningResult(bin_info, {}, end_too_late, {})
+
+
+def _get_bins_from_frames(
+    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+) -> _BinningResult:
+    """Strategy for when bin size/index are given as integers."""
+    bin_size_frames = bin_size
+    if bin_size_frames <= 0:
+        raise ValueError("bin_size must result in a frame count greater than 0.")
+
+    bin_info = {}
+    start_too_late = {key: False for key in table_lengths}
+    end_too_late = {key: False for key in table_lengths}
+
+    for key, length in table_lengths.items():
+        start_frame = bin_index
+        end_frame = start_frame + bin_size_frames
+
+        if start_frame >= length:
+            start_too_late[key] = True
+        if end_frame > length:
+            end_too_late[key] = True
+
+        bin_start = min(length, start_frame)
+        bin_end = min(length, end_frame)
+        bin_info[key] = np.arange(bin_start, bin_end)
+
+    return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
 
 
 def _get_bins_from_integers(
@@ -870,6 +1000,7 @@ def _preprocess_time_bins(
     experiment_id: Optional[str] = None,
     samples_max: int = 20000,
     down_sample: bool = True,
+    given_in_frames=False,
 ):
     """
     Preprocesses various time-bin formats into a consistent dictionary of indices.
@@ -893,6 +1024,7 @@ def _preprocess_time_bins(
                      downsampled or cut if the selection is larger.
         down_sample: If True, use uniform downsampling. If False, cut the data
                      at `samples_max`.
+        given_in_frames: bin_index and size are directly given in frames with no conversions being necessary
 
     Returns:
         A dictionary mapping each experiment ID to a numpy array of frame indices.
@@ -930,6 +1062,11 @@ def _preprocess_time_bins(
 
     if precomputed_bins is not None:
         result = _get_bins_from_precomputed(precomputed_bins, table_lengths)
+    
+    elif isinstance(bin_size, int) and isinstance(bin_index, int) and given_in_frames:
+        result = _get_bins_from_frames(
+            bin_size, bin_index, table_lengths, coordinates._frame_rate
+        )
 
     elif isinstance(bin_size, int) and isinstance(bin_index, int):
         result = _get_bins_from_integers(
