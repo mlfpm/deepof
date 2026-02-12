@@ -2165,7 +2165,7 @@ class Coordinates:
         conditions=[]
         for key in self._exp_conditions.keys():
             if exp_cond in self._exp_conditions[key].columns:
-                conditions.append(self._exp_conditions[key][exp_cond][0]) 
+                conditions.append(self._exp_conditions[key][exp_cond].iloc[0]) 
         assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
         return list(np.unique(conditions))
 

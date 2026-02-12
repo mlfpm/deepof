@@ -22,6 +22,7 @@ from IPython.display import clear_output
 from matplotlib.patches import Ellipse
 from natsort import os_sorted
 from enum import Enum
+from scipy.interpolate import interp1d
 
 
 import deepof.annotation_utils
@@ -679,11 +680,18 @@ def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_
     return custom_time_bins, hide_time_bins
 
 
-def postprocess_df_bins(df: pd.DataFrame, num_bins, condition_values, behavior_to_plot, hide_time_bins):
+def postprocess_df_bins(df: pd.DataFrame, bin_lengths, hide_time_bins):
 
     #Remove missing values (less than 20% of values remaining per group) 
     min_frac = 0.05 #20
+    num_bins = len(bin_lengths)
+    condition_values = sorted(df["exp_condition"].astype(str).unique().tolist())
+    behavior_to_plot = df.columns[2]
 
+    # Add bin length column
+    time_bin_idx = df.columns.get_loc('time_bin')
+    df.insert(time_bin_idx + 1, 'bin_length', np.array(bin_lengths)[df['time_bin'].astype(int)])
+    
     # Create table denoting the nan percentage for each group and bin
     coverage = df.pivot_table(
         index="time_bin", columns="exp_condition", values=behavior_to_plot,
@@ -2042,18 +2050,20 @@ def _preprocess_mouse_roi_interaction(
     bodyparts: list,  
     animal_id: str,      
     # Time selection parameters
-    bin_size: Union[int, str] = None,
-    bin_index: Union[int, str] = None,
-    precomputed_bins: np.ndarray = None,
-    samples_max: int=20000,
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
     # ROI functionality
     roi_number: int = None,
     # Visualization parameters
+    hide_time_bins: list[bool] = None,
     experiment_ids: list = None,  
     exp_condition: str = None, 
     condition_values: str = None,
     smoothing_factor: float = 0,
     mode: str = "distance",
+    add_stats: str = "Mann-Whitney",
+    error_bars: str = "sem",
     unit: str = "m",
 ):
     def _smooth_signal(signal, smoothing_factor):
@@ -2127,29 +2137,34 @@ def _preprocess_mouse_roi_interaction(
             )
             warnings.warn(warning_message)
 
-        
-
-    # Preprocess information given for time binning
-    bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, 
-        samples_max=samples_max,
+    L_shortest = min(
+        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows'] for key in coordinates._tables.keys()
     )
-    # get common indices between all selected experiments
-    bin_indices=bin_info_time[list(bin_info_time.keys())[0]]
-    max_index=np.max(bin_indices)
-    for key in experiment_ids:
-        for exp_id in experiment_ids[key]:
-            if max_index > np.max(bin_info_time[exp_id]):
-                max_index=np.max(bin_info_time[exp_id])
-                bin_indices=bin_info_time[exp_id][bin_info_time[exp_id]<max_index]
+
+    # preprocess time bin info
+    custom_time_bins, hide_time_bins = validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
+        bin_info_time = _preprocess_time_bins(
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        given_in_frames=True,
+        )
+        
+        multi_bin_info[j]=bin_info_time
+
 
     # Prepare dict of rois (one per video) to measure distance from
     roi_dict = {}
     # if no roi number is given, take the arena as default "roi"
     if roi_number is None:
-        for key in experiment_ids:
-            roi_dict[key]={}
-            for exp_id in experiment_ids[key]:
+        for exp_cond in experiment_ids:
+            roi_dict[exp_cond]={}
+            for exp_id in experiment_ids[exp_cond]:
             
                 params = coordinates._arena_params[exp_id]
                 # Legacy, transform cicular arenas to polygons 
@@ -2157,65 +2172,317 @@ def _preprocess_mouse_roi_interaction(
                     polygon = deepof.arena_utils.extract_corners_from_arena(params)
                 else:
                     polygon = params
-                roi_dict[key][exp_id] = polygon
+                roi_dict[exp_cond][exp_id] = polygon
     else:
-        for key in experiment_ids:
-            roi_dict[key]={}
-            for exp_id in experiment_ids[key]:
+        for exp_cond in experiment_ids:
+            roi_dict[exp_cond]={}
+            for exp_id in experiment_ids[exp_cond]:
         
                 rois= coordinates._roi_dicts[exp_id]
                 polygon = rois[roi_number]
-                roi_dict[key][exp_id] = polygon
+                roi_dict[exp_cond][exp_id] = polygon
 
-    # Collect minimum distances from given bodyparts to ROI or arena for all sets of experiments
-    distance_dict = {}
-    distance_arrays_dict = {}
-    mean_dist = {}
-    std_dist = {}
-    for key, cur_dict in roi_dict.items():
-        distance_dict[key]= {}
-        distance_arrays_dict[key]=np.zeros([len(bin_indices), len(cur_dict.keys())])
+    # Collect minimum interaction measure for all sets of experiments and all bins
+    interaction_dict = {}
+    for exp_cond, cur_dict in roi_dict.items():
+        interaction_dict[exp_cond]= {}
         for exp_id, polygon in cur_dict.items():
         
-            bps=coordinates.get_coords_at_key(key=exp_id, scale=coordinates._scales[exp_id])[bodyparts].iloc[bin_indices]
+            bps=coordinates.get_coords_at_key(key=exp_id, scale=coordinates._scales[exp_id])[bodyparts]
+            interaction_dict[exp_cond][exp_id]= {}
 
-            all_distances=np.zeros([bps.shape[0], len(bodyparts)])
-            for k, bp in enumerate(bodyparts):
-                # Exlcude case where teh mouse is already isnide of teh ROI
-                mask=deepof.utils.point_in_polygon(bps[bp].to_numpy(), roi_dict[key][exp_id])
-                # invert if distance is to arena as mouse is always in arena
-                if roi_number is not None:
-                    mask=~mask
-                if mode == "distance":
-                    distances=deepof.utils.get_point_polygon_distance(bps[bp].to_numpy(), roi_dict[key][exp_id])
-                    all_distances[mask,k]=distances[mask]
-                elif mode == "fov":
-                    pass
+            for bin_id in multi_bin_info.keys():
+
+                bin_info=multi_bin_info[bin_id]
+                bps_slice=bps.iloc[bin_info[exp_id]]
+
+                all_distances=np.zeros([bps_slice.shape[0], len(bodyparts)])
+                for k, bp in enumerate(bodyparts):
+                    # Exlcude case where teh mouse is already isnide of teh ROI
+                    mask=deepof.utils.point_in_polygon(bps_slice[bp].to_numpy(), roi_dict[exp_cond][exp_id])
+                    # invert if distance is to arena as mouse is always in arena
+                    if roi_number is not None:
+                        mask=~mask
+                    if mode == "distance":
+                        distances=deepof.utils.get_point_polygon_distance(bps_slice[bp].to_numpy(), roi_dict[exp_cond][exp_id])
+                        all_distances[mask,k]=distances[mask]
+                    elif mode == "fov":
+                        pass
+                    else:
+                        raise NotImplementedError("The only currently available modes are \"distance\" and \"fov\" (field of view)")
+                            
+                    
+                if mode == "fov":
+                    fov=deepof.utils.in_field_of_view(bps_slice.to_numpy().reshape(-1, 3, 2), 90, roi_dict[exp_cond][exp_id], False)
+                    interaction_dict[exp_cond][exp_id][bin_id]=fov
+                elif mode == "distance":
+                    min_distances = np.nanmin(all_distances,axis=1)
+                    min_distances[min_distances == 0] = np.nan
+                    interaction_dict[exp_cond][exp_id][bin_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
+
+    # create processed dataframes
+    cols = ['time_bin', 'exp_condition', mode]
+
+    df = pd.DataFrame(columns=cols)
+    for exp_cond, cur_dict in roi_dict.items():   
+        for k, exp_id in enumerate(cur_dict.keys()):
+            for bin_id in multi_bin_info.keys(): 
+            
+                value=np.nanmean(interaction_dict[exp_cond][exp_id][bin_id])
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "time_bin": bin_id,
+                            "exp_condition": str(exp_cond),
+                            mode: value,
+                        }
+                    ]
+                )
+                df = pd.concat([df, new_row], ignore_index=True)
+  
+    df = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+
+    mean_values, error_values, binned_effect_sizes_df = process_df(df, error_bars=error_bars)
+
+    return mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins
+
+
+def process_df(df: pd.DataFrame, error_bars: str = "sem"):
+    """
+    Process binned behavioral DF independent of number of exp conditions.
+
+    Returns
+    -------
+    mean_values : dict[str, np.ndarray]
+        Mapping condition -> array of mean values per time_bin (sorted by time_bin).
+    error_values : dict[str, np.ndarray]
+        Mapping condition -> array of error values per time_bin (sorted by time_bin).
+    binned_effect_sizes_df : pd.DataFrame
+        Pairwise effect sizes (Cohen's d) for all condition pairs per time_bin.
+        Columns: ["time_bin","cond_a","cond_b","Absolute_Cohens_d","Effect_Size_Category"]
+        Empty if <2 conditions.
+    time_bins : np.ndarray
+        Sorted unique time_bin values used for the arrays.
+    conditions : list[str]
+        Sorted unique exp_condition values (keys of the dicts).
+    """
+    if df.shape[1] < 4:
+        raise ValueError("df is expected to have at least 3 columns: time_bin, exp_condition, <value>")
+
+    value_col = df.columns[3]
+
+    # Stable, explicit ordering (important if bins are missing / not contiguous)
+    time_bins = np.sort(df["time_bin"].unique())
+    conditions = sorted(df["exp_condition"].astype(str).unique().tolist())
+
+    # Group once
+    g = df.groupby(["time_bin", "exp_condition"])[value_col]
+
+    means = (
+        g.mean()
+        .unstack("exp_condition")
+        .reindex(index=time_bins, columns=conditions)
+    )
+
+    if error_bars == "sem":
+        errs = (
+            g.sem()
+            .unstack("exp_condition")
+            .reindex(index=time_bins, columns=conditions)
+        )
+    elif error_bars == "std":
+        errs = (
+            g.std()
+            .unstack("exp_condition")
+            .reindex(index=time_bins, columns=conditions)
+        )
+    else:
+        raise NotImplementedError(
+            'error_bars currently only supports standard deviation ("std") '
+            'and standard error of the mean ("sem")!'
+        )
+
+    # Return as dicts keyed by condition (more robust than positional lists)
+    mean_values = {cond: means[cond].to_numpy() for cond in conditions}
+    error_values = {cond: errs[cond].to_numpy() for cond in conditions}
+
+    # Pairwise Cohen's d for all condition pairs per bin
+    effect_rows = []
+    if len(conditions) >= 2:
+        for tb in time_bins:
+            for cond_a, cond_b in itertools.combinations(conditions, 2):
+                array_a = df.loc[
+                    (df["exp_condition"].astype(str) == cond_a) & (df["time_bin"] == tb),
+                    value_col
+                ].to_numpy()
+                array_b = df.loc[
+                    (df["exp_condition"].astype(str) == cond_b) & (df["time_bin"] == tb),
+                    value_col
+                ].to_numpy()
+
+                array_a = array_a[~np.isnan(array_a)]
+                array_b = array_b[~np.isnan(array_b)]
+
+                if array_a.size == 0 or array_b.size == 0:
+                    d = np.nan
+                    d_effect_size = np.nan
                 else:
-                    raise NotImplementedError("The only currently available modes are \"distance\" and \"fov\" (field of view)")
-                        
-                
-            if mode == "fov":
-                fov=deepof.utils.in_field_of_view(bps.to_numpy().reshape(-1, 3, 2), 90, roi_dict[key][exp_id], False)
-                distance_dict[key][exp_id]=fov
-            elif mode == "distance":
-                min_distances = np.nanmin(all_distances,axis=1)
-                min_distances[min_distances == 0] = np.nan
-                distance_dict[key][exp_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
-        
-        # Average over distances  
-        for k, exp_id in enumerate(distance_dict[key].keys()):
-            distance_arrays_dict[key][:,k]=distance_dict[key][exp_id]
-        if distance_arrays_dict[key].shape[1] > 1:
-            mean_dist[key]=np.nanmean(distance_arrays_dict[key], axis=1) 
-            std_dist[key]=np.nanstd(distance_arrays_dict[key], axis=1)
-        else: 
-            mean_dist[key]=np.squeeze(distance_arrays_dict[key])
-            std_dist[key]=np.zeros(len(distance_arrays_dict[key]))
-        
-        #Smoothing
-        if smoothing_factor > 0:
-            mean_dist[key]=_smooth_signal(mean_dist[key],smoothing_factor)
-            std_dist[key]=_smooth_signal(std_dist[key],smoothing_factor)
+                    d = abs(deepof.visuals_utils.cohend(array_a, array_b))
+                    d_effect_size = deepof.visuals_utils.cohend_effect_size(d)
 
-    return bin_indices, mean_dist, std_dist, distance_dict, roi_dict, experiment_ids
+                effect_rows.append(
+                    {
+                        "time_bin": tb,
+                        "cond_a": cond_a,
+                        "cond_b": cond_b,
+                        "Absolute_Cohens_d": d,
+                        "Effect_Size_Category": d_effect_size,
+                    }
+                )
+
+    binned_effect_sizes_df = pd.DataFrame(
+        effect_rows,
+        columns=["time_bin", "cond_a", "cond_b", "Absolute_Cohens_d", "Effect_Size_Category"],
+    )
+
+    return mean_values, error_values, binned_effect_sizes_df
+
+
+
+def plot_binned_line(
+    ax,
+    x,
+    y,
+    yerr=None,
+    hide_time_bins=None,
+    color="C0",
+    label=None,
+    smooth_points_per_interval: int = 10,
+    mean_linewidth: float = 3.0,
+    mean_alpha: float = 0.8,
+    err_linewidth: float = 1.0,
+    err_alpha: float = 0.15,
+    marker: str = "o",
+):
+    """
+    Plot a binned mean line with interpolation + markers + error band, leaving gaps
+    for hidden bins and NaNs.
+
+    Parameters
+    ----------
+    ax : matplotlib axis
+    x : array-like, shape (n_bins,)
+        X positions (must be strictly increasing).
+    y : array-like, shape (n_bins,)
+        Mean values per bin.
+    yerr : array-like or None, shape (n_bins,)
+        Error values per bin (sem/std). If None, no error band is drawn.
+    hide_time_bins : array-like of bool or None, shape (n_bins,)
+        True bins will be hidden (gaps in line, no marker/error there).
+    color : str
+    label : str
+    smooth_points_per_interval : int
+        Number of points per bin-to-bin interval for mean interpolation (>=2).
+    """
+
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    if yerr is not None:
+        yerr = np.asarray(yerr, dtype=float).ravel()
+
+    n = len(x)
+    if len(y) != n:
+        raise ValueError("x and y must have the same length")
+    if yerr is not None and len(yerr) != n:
+        raise ValueError("yerr must have the same length as x and y")
+    if hide_time_bins is None:
+        hide = np.zeros(n, dtype=bool)
+    else:
+        hide = np.asarray(hide_time_bins, dtype=bool).ravel()
+        if len(hide) != n:
+            raise ValueError("hide_time_bins must have the same length as x and y")
+
+    if smooth_points_per_interval < 2:
+        raise ValueError("smooth_points_per_interval must be >= 2")
+
+    # Visible points for means/markers (hidden bins and NaNs are excluded)
+    visible_mean = (~hide) & (~np.isnan(y)) & (~np.isnan(x))
+
+    # --- 1) Interpolated mean lines per contiguous visible segment
+    first_segment = True
+    for sl in contiguous_segments(visible_mean):
+        x_seg = x[sl]
+        y_seg = y[sl]
+        m = len(x_seg)
+
+        # Can't interpolate a single point; marker will handle it.
+        if m < 2:
+            continue
+
+        kind = "cubic" if m >= 4 else "linear"
+        f = interp1d(x_seg, y_seg, kind=kind, assume_sorted=True)
+
+        # smooth grid within segment (no duplicates between intervals)
+        n_smooth = (m - 1) * (smooth_points_per_interval - 1) + 1
+        x_smooth = np.linspace(x_seg[0], x_seg[-1], n_smooth)
+        y_smooth = f(x_smooth)
+
+        ax.plot(
+            x_smooth,
+            y_smooth,
+            color=color,
+            alpha=mean_alpha,
+            linewidth=mean_linewidth,
+            linestyle="-",
+            label=label if first_segment else None,  # avoid duplicate legend entries
+        )
+        first_segment = False
+
+    # --- 2) Markers at original bin centers (hidden bins + NaNs masked)
+    point_mask = hide | np.isnan(y) | np.isnan(x)
+    marker_handle = ax.plot(
+        np.ma.masked_array(x, point_mask),
+        np.ma.masked_array(y, point_mask),
+        marker=marker,
+        linestyle="",
+        color=color,
+        linewidth=2,
+    )[0]
+
+    # --- 3) Errors on original grid (optional), with gaps
+    if yerr is not None:
+        err_mask = point_mask | np.isnan(yerr)
+        x_err = np.ma.masked_array(x, err_mask)
+        upper = np.ma.masked_array(y + yerr, err_mask)
+        lower = np.ma.masked_array(y - yerr, err_mask)
+
+        ax.plot(x_err, upper, linestyle="--", color=color, alpha=mean_alpha, linewidth=err_linewidth)
+        ax.plot(x_err, lower, linestyle="--", color=color, alpha=mean_alpha, linewidth=err_linewidth)
+        ax.fill_between(x_err, lower, upper, color=color, alpha=err_alpha)
+
+    return marker_handle
+
+
+
+def get_bin_centers(bin_lengths, as_radians: bool = False):
+    """Compute centers of consecutive bins given their lengths.
+
+    Args:
+        bin_lengths : array-like of positive numbers
+        as_radians : bool, default False, if True return result as fractions of 2 pi
+    """
+    L = np.asarray(bin_lengths, float).ravel()
+    if L.size == 0:
+        return L, L
+    tot = L.sum()
+    if tot <= 0:
+        raise ValueError("sum(bin_lengths) must be > 0")
+
+    starts = np.r_[0.0, np.cumsum(L)[:-1]] / tot
+    centers = starts + 0.5 * (L / tot)
+
+    if as_radians:
+        s = 2 * np.pi
+        return centers * s, starts * s
+    return centers, starts
+
