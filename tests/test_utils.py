@@ -372,7 +372,7 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
     # (there cannot be more transitions than events) excluding aggregate, as then 
     # keys no longer match (new group bound keys that summarize multiple tables into one)
     elif normalize and supervised and not aggregate:
-        assert all([(transitions_dict[key].sum(axis=0)<tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
+        assert all([(transitions_dict[key].sum(axis=0)<=tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
 
 
     # Diagonal behavior counting
