@@ -4515,7 +4515,7 @@ def plot_mouse_roi_interaction(
     if mode == "distance":
         ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), Distance_Unit[unit].name), fontsize=12)
     elif mode == "fov":
-        ax.set_ylabel(f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mice", fontsize=12)
+        ax.set_ylabel(f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mouse {animal_id}", fontsize=12)
         ax.set_ylim([0,1])
 
     if len(condition_values) > 1:

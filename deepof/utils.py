@@ -1035,7 +1035,7 @@ def count_transitions(
         else:
             columns = tab.columns
         
-        # Drop non-binary columns (speed column in supervised)
+        # Drop non-binary columns (e.g. speed column in supervised)
         for col in columns:
             if col.endswith(tuple(CONTINUOUS_BEHAVIORS)):
                 tab=tab.drop(columns=[col])
@@ -1320,6 +1320,7 @@ def _is_point_inside_numba(
     return inside
 
 
+
 def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray:
     """Calculates array of distances between 2D points and a polygon (roi)"""
 
@@ -1335,6 +1336,55 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
     distances = np.array([boundary.distance(Point(p)) for p in points])
     
     return distances
+
+
+@nb.njit(cache=True)
+def _seg_dist2(px, py, ax, ay, bx, by):
+    vx, vy = bx - ax, by - ay
+    wx, wy = px - ax, py - ay
+    c1 = wx * vx + wy * vy
+    if c1 <= 0.0:
+        dx, dy = px - ax, py - ay
+        return dx*dx + dy*dy
+    c2 = vx*vx + vy*vy
+    if c2 <= 0.0:
+        dx, dy = px - ax, py - ay
+        return dx*dx + dy*dy
+    t = c1 / c2
+    if t >= 1.0:
+        dx, dy = px - bx, py - by
+        return dx*dx + dy*dy
+    qx, qy = ax + t * vx, ay + t * vy
+    dx, dy = px - qx, py - qy
+    return dx*dx + dy*dy
+
+@nb.njit(parallel=True, cache=True)
+def get_point_polygon_distance_numba(points, poly_xy):
+    pts = points
+    M = poly_xy.shape[0]
+    # drop closing vertex if repeated
+    if M >= 2 and poly_xy[0,0] == poly_xy[M-1,0] and poly_xy[0,1] == poly_xy[M-1,1]:
+        M -= 1
+
+    out = np.empty(pts.shape[0], np.float64)
+    out[:] = np.nan
+
+    for i in nb.prange(pts.shape[0]):
+        px, py = pts[i, 0], pts[i, 1]
+        if not (np.isfinite(px) and np.isfinite(py)):
+            continue
+
+        best2 = 1e308
+        for k in range(M):
+            j = 0 if (k + 1 == M) else (k + 1)
+            ax, ay = poly_xy[k, 0], poly_xy[k, 1]
+            bx, by = poly_xy[j, 0], poly_xy[j, 1]
+            d2 = _seg_dist2(px, py, ax, ay, bx, by)
+            if d2 < best2:
+                best2 = d2
+        out[i] = np.sqrt(best2)
+
+    return out
 
 from matplotlib import pyplot as plt
 def in_field_of_view(mouse_pts: np.ndarray,
@@ -1457,6 +1507,214 @@ def in_field_of_view(mouse_pts: np.ndarray,
         ax.legend(loc="best")
         ax.grid(True, alpha=0.2)
         plt.show()
+
+    return out
+
+@nb.njit(cache=True)
+def _orient(ax, ay, bx, by, cx, cy):
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+
+@nb.njit(cache=True)
+def _on_segment(ax, ay, bx, by, px, py, eps):
+    # p collinear with segment a-b and within bounding box
+    if abs(_orient(ax, ay, bx, by, px, py)) > eps:
+        return False
+    if px < min(ax, bx) - eps or px > max(ax, bx) + eps:
+        return False
+    if py < min(ay, by) - eps or py > max(ay, by) + eps:
+        return False
+    return True
+
+
+@nb.njit(cache=True)
+def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps):
+    o1 = _orient(ax, ay, bx, by, cx, cy)
+    o2 = _orient(ax, ay, bx, by, dx, dy)
+    o3 = _orient(cx, cy, dx, dy, ax, ay)
+    o4 = _orient(cx, cy, dx, dy, bx, by)
+
+    # proper intersection
+    if ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and \
+       ((o3 > eps and o4 < -eps) or (o3 < -eps and o4 > eps)):
+        return True
+
+    # collinear/touching
+    if abs(o1) <= eps and _on_segment(ax, ay, bx, by, cx, cy, eps): return True
+    if abs(o2) <= eps and _on_segment(ax, ay, bx, by, dx, dy, eps): return True
+    if abs(o3) <= eps and _on_segment(cx, cy, dx, dy, ax, ay, eps): return True
+    if abs(o4) <= eps and _on_segment(cx, cy, dx, dy, bx, by, eps): return True
+
+    return False
+
+
+@nb.njit(cache=True)
+def _point_in_poly(px, py, poly, eps):
+    """Ray casting + boundary included."""
+    m = poly.shape[0]
+    inside = False
+
+    xj, yj = poly[m - 1, 0], poly[m - 1, 1]
+    for i in range(m):
+        xi, yi = poly[i, 0], poly[i, 1]
+
+        if _on_segment(xj, yj, xi, yi, px, py, eps):
+            return True
+
+        # crossing test
+        if (yi > py) != (yj > py):
+            xint = (xj - xi) * (py - yi) / (yj - yi + 0.0) + xi
+            if px < xint:
+                inside = not inside
+
+        xj, yj = xi, yi
+
+    return inside
+
+
+@nb.njit(cache=True)
+def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+    """Same-side test; boundary included."""
+    abp = _orient(ax, ay, bx, by, px, py)
+    bcp = _orient(bx, by, cx, cy, px, py)
+    cap = _orient(cx, cy, ax, ay, px, py)
+
+    has_neg = (abp < -eps) or (bcp < -eps) or (cap < -eps)
+    has_pos = (abp > eps) or (bcp > eps) or (cap > eps)
+    return not (has_neg and has_pos)
+
+
+@nb.njit(cache=True)
+def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps):
+    # 1) triangle vertex in polygon
+    if _point_in_poly(ax, ay, poly, eps): return True
+    if _point_in_poly(bx, by, poly, eps): return True
+    if _point_in_poly(cx, cy, poly, eps): return True
+
+    # 2) polygon vertex in triangle
+    m = poly.shape[0]
+    for i in range(m):
+        px, py = poly[i, 0], poly[i, 1]
+        if _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+            return True
+
+    # 3) any edge intersection
+    for i in range(m):
+        j = (i + 1) % m
+        p1x, p1y = poly[i, 0], poly[i, 1]
+        p2x, p2y = poly[j, 0], poly[j, 1]
+
+        if _segments_intersect(ax, ay, bx, by, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect(bx, by, cx, cy, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect(cx, cy, ax, ay, p1x, p1y, p2x, p2y, eps): return True
+
+    return False
+
+
+@nb.njit(cache=True)
+def _rotate_vec(vx, vy, ang):
+    ca = np.cos(ang)
+    sa = np.sin(ang)
+    return ca * vx - sa * vy, sa * vx + ca * vy
+
+
+@nb.njit(parallel=True, cache=True)
+def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10):
+    """
+    Numba version of in_field_of_view (no plotting, no shapely).
+
+    mouse_pts: (N,3,2) float64
+    roi_poly:  (M,2) float64 (not closed)
+    returns:   (N,) float64 in {1.0, 0.0, nan}
+    """
+    n = mouse_pts.shape[0]
+    out = np.empty(n, dtype=np.float64)
+    out[:] = np.nan
+
+    # validate angle (numba-friendly: just produce all-nan for invalid)
+    if not (fov_angle_deg > 0.0 and fov_angle_deg < 180.0):
+        return out
+    if fov_angle_deg < 1e-6:
+        return out
+
+    half = (fov_angle_deg * np.pi / 180.0) * 0.5
+
+    # ROI bbox corners (constant across frames)
+    minx = roi_poly[0, 0]; maxx = roi_poly[0, 0]
+    miny = roi_poly[0, 1]; maxy = roi_poly[0, 1]
+    for i in range(1, roi_poly.shape[0]):
+        x = roi_poly[i, 0]; y = roi_poly[i, 1]
+        if x < minx: minx = x
+        if x > maxx: maxx = x
+        if y < miny: miny = y
+        if y > maxy: maxy = y
+
+    c0x, c0y = minx, miny
+    c1x, c1y = minx, maxy
+    c2x, c2y = maxx, miny
+    c3x, c3y = maxx, maxy
+
+    for t in nb.prange(n):
+        Lx, Ly = mouse_pts[t, 0, 0], mouse_pts[t, 0, 1]
+        Nx, Ny = mouse_pts[t, 1, 0], mouse_pts[t, 1, 1]
+        Rx, Ry = mouse_pts[t, 2, 0], mouse_pts[t, 2, 1]
+
+        if not (np.isfinite(Lx) and np.isfinite(Ly) and np.isfinite(Nx) and np.isfinite(Ny) and np.isfinite(Rx) and np.isfinite(Ry)):
+            continue
+
+        apex_x = 0.5 * (Lx + Rx)
+        apex_y = 0.5 * (Ly + Ry)
+
+        ear_x = Rx - Lx
+        ear_y = Ry - Ly
+        if ear_x * ear_x + ear_y * ear_y < eps * eps:
+            continue
+
+        # perpendicular vector
+        perp_x = -ear_y
+        perp_y = ear_x
+
+        # flip toward nose
+        if perp_x * (Nx - apex_x) + perp_y * (Ny - apex_y) < 0.0:
+            perp_x = -perp_x
+            perp_y = -perp_y
+
+        perp_norm2 = perp_x * perp_x + perp_y * perp_y
+        if perp_norm2 < eps * eps:
+            continue
+
+        invn = 1.0 / np.sqrt(perp_norm2)
+        fwd_x = perp_x * invn
+        fwd_y = perp_y * invn
+
+        d1x, d1y = _rotate_vec(fwd_x, fwd_y, +half)
+        d2x, d2y = _rotate_vec(fwd_x, fwd_y, -half)
+
+        # degenerate rays
+        cross = d1x * d2y - d1y * d2x
+        if abs(cross) < 1e-12:
+            continue
+
+        # radius to cover ROI bbox corners (same spirit as shapely version)
+        maxd2 = 0.0
+        dx = c0x - apex_x; dy = c0y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c1x - apex_x; dy = c1y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c2x - apex_x; dy = c2y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c3x - apex_x; dy = c3y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+
+        r = 1.05 * np.sqrt(maxd2) + 1e-6
+        if not np.isfinite(r) or r <= 0.0:
+            continue
+
+        ax, ay = apex_x, apex_y
+        bx, by = apex_x + r * d1x, apex_y + r * d1y
+        cx, cy = apex_x + r * d2x, apex_y + r * d2y
+
+        # triangle area check
+        if abs(_orient(ax, ay, bx, by, cx, cy)) < 1e-12:
+            continue
+
+        out[t] = 1.0 if _tri_poly_intersects(roi_poly, ax, ay, bx, by, cx, cy, eps) else 0.0
 
     return out
 

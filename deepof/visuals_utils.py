@@ -2042,7 +2042,8 @@ def _preprocess_transitions(
 @deepof.data_loading._suppress_warning(
     warn_messages=[
         "Mean of empty slice",
-        "Degrees of freedom <= 0 for slice."
+        "Degrees of freedom <= 0 for slice.",
+        "All-NaN slice encountered",
     ]
 )
 def _preprocess_mouse_roi_interaction(
@@ -2184,61 +2185,72 @@ def _preprocess_mouse_roi_interaction(
 
     # Collect minimum interaction measure for all sets of experiments and all bins
     interaction_dict = {}
-    for exp_cond, cur_dict in roi_dict.items():
-        interaction_dict[exp_cond]= {}
-        for exp_id, polygon in cur_dict.items():
-        
-            bps=coordinates.get_coords_at_key(key=exp_id, scale=coordinates._scales[exp_id])[bodyparts]
-            interaction_dict[exp_cond][exp_id]= {}
+    unit_scale = Distance_Unit[unit].value
+    rows = []  # accumulate for final df
 
-            for bin_id in multi_bin_info.keys():
+    for exp_cond, exp_polys in roi_dict.items():
+        for exp_id, polygon in exp_polys.items():
 
-                bin_info=multi_bin_info[bin_id]
-                bps_slice=bps.iloc[bin_info[exp_id]]
+            bps = coordinates.get_coords_at_key(
+                key=exp_id, scale=coordinates._scales[exp_id]
+            )[bodyparts]
 
-                all_distances=np.zeros([bps_slice.shape[0], len(bodyparts)])
+            # ---------------------------------------------------------------------
+            # Compute per-frame interaction signal ONCE for the whole experiment
+            # ---------------------------------------------------------------------
+            polygon = np.asarray(polygon, dtype=np.float64)
+            # Remove possible double points at beginning / end
+            if polygon.shape[0] >= 2 and np.allclose(polygon[0], polygon[-1]):
+                polygon = polygon[:-1]
+            if mode == "fov":
+                # bps: (T, 3*2) -> (T, 3, 2)
+                pts = bps.to_numpy().reshape(-1, 3, 2)
+                polygon = np.asarray(polygon, dtype=np.float64)
+                # Remove possible double points at beginning / end
+                if polygon.shape[0] >= 2 and np.allclose(polygon[0], polygon[-1]):
+                    polygon = polygon[:-1]
+                interaction_full = deepof.utils.in_field_of_view_numba(
+                    np.asarray(pts, dtype=np.float64), float(90), polygon
+                )  # shape (T,)
+
+            elif mode == "distance":
+                T = bps.shape[0]
+                B = len(bodyparts)
+
+                inside = np.empty((T, B), dtype=bool)
+                dists  = np.empty((T, B), dtype=float)
+
                 for k, bp in enumerate(bodyparts):
-                    # Exlcude case where teh mouse is already isnide of teh ROI
-                    mask=deepof.utils.point_in_polygon(bps_slice[bp].to_numpy(), roi_dict[exp_cond][exp_id])
-                    # invert if distance is to arena as mouse is always in arena
-                    if roi_number is not None:
-                        mask=~mask
-                    if mode == "distance":
-                        distances=deepof.utils.get_point_polygon_distance(bps_slice[bp].to_numpy(), roi_dict[exp_cond][exp_id])
-                        all_distances[mask,k]=distances[mask]
-                    elif mode == "fov":
-                        pass
-                    else:
-                        raise NotImplementedError("The only currently available modes are \"distance\" and \"fov\" (field of view)")
-                            
-                    
-                if mode == "fov":
-                    fov=deepof.utils.in_field_of_view(bps_slice.to_numpy().reshape(-1, 3, 2), 90, roi_dict[exp_cond][exp_id], False)
-                    interaction_dict[exp_cond][exp_id][bin_id]=fov
-                elif mode == "distance":
-                    min_distances = np.nanmin(all_distances,axis=1)
-                    min_distances[min_distances == 0] = np.nan
-                    interaction_dict[exp_cond][exp_id][bin_id] = min_distances*Distance_Unit[unit].value # Will throw warning if out of two columns one has nans which is caught above
+                    pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
+                    inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
+                    dists[:, k]  = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
 
-    # create processed dataframes
-    cols = ['time_bin', 'exp_condition', mode]
+                # Match old semantics:
+                # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
+                # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI
+                valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)
 
-    df = pd.DataFrame(columns=cols)
-    for exp_cond, cur_dict in roi_dict.items():   
-        for k, exp_id in enumerate(cur_dict.keys()):
-            for bin_id in multi_bin_info.keys(): 
-            
-                value=np.nanmean(interaction_dict[exp_cond][exp_id][bin_id])
-                new_row = pd.DataFrame(
-                    [
-                        {
-                            "time_bin": bin_id,
-                            "exp_condition": str(exp_cond),
-                            mode: value,
-                        }
-                    ]
+                min_dist = np.nanmin(dists, axis=1)
+                min_dist[~valid] = np.nan
+                min_dist[min_dist == 0] = np.nan  # keep your original behavior
+
+                interaction_full = min_dist * unit_scale  # shape (T,)
+
+            else:
+                raise NotImplementedError(
+                    'The only currently available modes are "distance" and "fov" (field of view)'
                 )
-                df = pd.concat([df, new_row], ignore_index=True)
+
+            # ---------------------------------------------------------------------
+            # Bin by slicing precomputed per-frame result
+            # ---------------------------------------------------------------------
+            for bin_id, bin_info in multi_bin_info.items():
+                frames = bin_info[exp_id]              # frame indices for this exp_id and bin
+                value = np.nanmean(interaction_full[frames])
+                rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value})
+
+    df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
+
   
     df = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
 
