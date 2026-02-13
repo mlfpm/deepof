@@ -41,7 +41,8 @@ from deepof.export_video import (
     output_videos_per_cluster, 
 )
 from deepof.visuals_utils import (
-    Distance_Unit,
+    DistanceUnit,
+    TimeUnit,
     _check_enum_inputs,
     plot_arena,
     heatmap,
@@ -968,6 +969,8 @@ def plot_enrichment(
     exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
+    unit_time: str = "s",
+    unit_distance: str = "m",
     ax: Any = None,
     save: bool = False,
 ):
@@ -993,6 +996,8 @@ def plot_enrichment(
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in
+        unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -1061,7 +1066,7 @@ def plot_enrichment(
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
-    # Get cluster enrichment across conditions for the desired settings
+    # Get cluster enrichment across conditions for the desired settings (still in default unit)
     enrichment = deepof.post_hoc.enrichment_across_conditions(
         soft_counts = soft_counts,
         supervised_annotations = supervised_annotations,
@@ -1093,17 +1098,32 @@ def plot_enrichment(
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed [m/s]"
+        y_axis_label = f"average speed [{unit_distance}/{unit_time}]"
+        # speed is saved as mm/s, to apply Enums first convert to mm/frames
+        enrichment["time on cluster"] = enrichment["time on cluster"]/coordinates._frame_rate
+
+        mm_to_pix = enrichment["exp_id"].map(
+            lambda exp_id: coordinates._scales[exp_id][2] / coordinates._scales[exp_id][3]
+        ).to_numpy()
+
+        fps = coordinates._frame_rate
+        tu = TimeUnit.parse(unit_time)
+        du = DistanceUnit.parse(unit_distance)
+
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"].to_numpy()
+            / tu.factor(fps)                 # mm/frame -> mm/<time unit>
+            * du.factor(mm_to_pix)           # mm -> chosen distance unit (scalar or per-row for px)
+        )
+
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100
-    elif coordinates._frame_rate is not None:
-        y_axis_label = "time on cluster [s]"
-        enrichment["time on cluster"] = (
-            enrichment["time on cluster"] / coordinates._frame_rate
-        )
     else:
-        y_axis_label = "time on cluster in frames"
+        y_axis_label = f"time on cluster [{unit_time}]"
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"]*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
+        )
 
     
     # More inits
@@ -3756,6 +3776,7 @@ def plot_behavior_trends(
     normalize: bool = False,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
+    unit_time: str = "s",
     ax: Any = None,
     save: bool = False,
 ):
@@ -3782,6 +3803,7 @@ def plot_behavior_trends(
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
     error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in 
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
     save (bool): If True, saves the plot to a file. Defaults to False.
     """
@@ -3985,7 +4007,7 @@ def plot_behavior_trends(
                         )
                     else: #don't normalize
                         behavior_timebin = (
-                            np.nansum(vals[val_mask])/coordinates._frame_rate
+                            np.nansum(vals[val_mask])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
                             if np.any(val_mask)
                             else np.nan
                         )
@@ -4329,7 +4351,7 @@ def return_mouse_roi_interaction(
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
-    unit: str = "m",
+    unit_distance: str = "m",
 ):
 
     mean_dist, std_dist, binned_group_df, binned_effect_sizes_df, hide_time_bins = deepof.visuals_utils._preprocess_mouse_roi_interaction(
@@ -4350,7 +4372,7 @@ def return_mouse_roi_interaction(
         add_stats=add_stats,
         error_bars=error_bars,
         mode = mode,
-        unit = unit,
+        unit_distance = unit_distance,
     )
 
 
@@ -4387,7 +4409,7 @@ def plot_mouse_roi_interaction(
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
-    unit: str = "m",
+    unit_distance: str = "m",
     ax: Any = None,      
 ):
     if roi_number == 0:
@@ -4410,7 +4432,7 @@ def plot_mouse_roi_interaction(
         add_stats=add_stats,
         error_bars=error_bars,
         mode = mode,
-        unit = unit,
+        unit_distance = unit_distance,
     )
     condition_values = sorted(binned_group_df["exp_condition"].astype(str).unique().tolist())
 
@@ -4516,7 +4538,7 @@ def plot_mouse_roi_interaction(
     ax.set_xlabel("Time Bins", fontsize=12)
 
     if mode == "distance":
-        ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), Distance_Unit[unit].name), fontsize=12)
+        ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), DistanceUnit[unit_distance].name), fontsize=12)
     elif mode == "fov":
         ax.set_ylabel(f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mouse {animal_id}", fontsize=12)
         ax.set_ylim([0,1])

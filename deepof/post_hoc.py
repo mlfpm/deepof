@@ -954,8 +954,14 @@ def enrichment_across_conditions(
 
     counter_df["exp condition"] = counter_df.index.map(exp_conditions).astype(str)
 
-    enrichment = counter_df.melt(
-        id_vars=["exp condition"], var_name="cluster", value_name="time on cluster"
+    enrichment = (
+        counter_df
+        .reset_index(names="exp_id")
+        .melt(
+            id_vars=["exp_id", "exp condition"],
+            var_name="cluster",
+            value_name="time on cluster",
+        )
     )
     enrichment["cluster"] = enrichment["cluster"].astype(str)
 

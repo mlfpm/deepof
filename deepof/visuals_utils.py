@@ -55,10 +55,57 @@ table_dict = NewType("deepof_table_dict", Any)
 # ENUMS # 
 
 # DeepOF saves all distances internally in mm, correspondingly thsi enum contains appropriate conversion factors
-class Distance_Unit(Enum):
-    mm = 1 
-    cm = 0.1
-    m = 0.001
+class DistanceUnit(Enum):
+    pixel = 0.0 
+    px = 0.0
+    mm = 1.0 # identity, measures are saved in mm per default
+    millimeter = 1.0
+    cm = 10
+    centimeter = 10
+    m = 1000
+    meter = 1000
+    km = 1000000
+    kilometer = 1000000
+
+    def factor(self, mm_to_pix):
+        """Multiplier to convert mm -> this unit. mm_to_pix can be scalar or array-like."""
+        if self in (DistanceUnit.px, DistanceUnit.pixel):
+            return np.asarray(mm_to_pix, dtype=float)
+        return 1.0 / self.value
+
+    @classmethod
+    def parse(cls, unit: str) -> "DistanceUnit":
+        try:
+            return cls[unit]
+        except KeyError as e:
+            opts = ", ".join(cls.__members__.keys())
+            raise ValueError(f'Unknown distance unit "{unit}". Valid options are: {opts}') from e
+
+# DeepOF saves all distances internally in frames, correspondingly this enum calculates appropriate conversion factors
+class TimeUnit(Enum):
+    fr = 0.0 # identity (frames -> frames)
+    frames = 0.0   
+    s     = 1.0   # seconds per unit
+    seconds = 1.0
+    min   = 60.0
+    minutes = 60.0
+    h     = 3600.0
+    hours = 3600.0
+
+    def factor(self, fps: float) -> float:
+        """Multiplier to convert frames -> this unit."""
+        if self is TimeUnit.frames or fps is None:
+            return 1.0
+        return 1.0 / (fps * self.value)
+    
+    @classmethod
+    def parse(cls, unit: str) -> "TimeUnit":
+        try:
+            return cls[unit]
+        except KeyError as e:
+            opts = ", ".join(cls.__members__.keys())
+            raise ValueError(f'Unknown time unit "{unit}". Valid options are: {opts}') from e
+
 
 # Native time unit in DeepOF is 
 class Speed_Unit(Enum):
@@ -1647,7 +1694,7 @@ def _check_enum_inputs(
         ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False, False),
         ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True, False),
         ("roi_mode", roi_mode, roi_mode_opts, False, None, True, False),
-        ("distance_unit", distance_unit, Distance_Unit._member_names_, False, None, False, False)
+        ("distance_unit", distance_unit, DistanceUnit._member_names_, False, None, False, False)
     ]
 
     for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
@@ -2058,7 +2105,7 @@ def _preprocess_mouse_roi_interaction(
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
-    unit: str = "m",
+    unit_distance: str = "m",
 ):
     def _smooth_signal(signal, smoothing_factor):
         
@@ -2089,7 +2136,7 @@ def _preprocess_mouse_roi_interaction(
         experiment_ids=experiment_ids,
         exp_condition=exp_condition,
         condition_values=condition_values,
-        distance_unit = unit,
+        distance_unit = unit_distance,
         animal_id=animal_id,
     )
     # Check if correct inputs for modes are present
@@ -2178,7 +2225,6 @@ def _preprocess_mouse_roi_interaction(
 
     # Collect minimum interaction measure for all sets of experiments and all bins
     interaction_dict = {}
-    unit_scale = Distance_Unit[unit].value
     rows = []  # accumulate for final df
 
     for exp_cond, exp_polys in roi_dict.items():
@@ -2227,7 +2273,7 @@ def _preprocess_mouse_roi_interaction(
                 min_dist[~valid] = np.nan
                 min_dist[min_dist == 0] = np.nan  # keep your original behavior
 
-                interaction_full = min_dist * unit_scale  # shape (T,)
+                interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
 
             else:
                 raise NotImplementedError(
