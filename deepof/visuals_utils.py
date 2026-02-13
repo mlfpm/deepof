@@ -1755,6 +1755,7 @@ def heatmap(
     ylim: tuple = None,
     title: str = None,
     mask: np.ndarray = None,
+    extrapolate_heatmap: bool = True,
     save: str = False,
     dpi: int = 200,
     ax: Any = None,
@@ -1771,6 +1772,7 @@ def heatmap(
         ylim (float): limits of the y-axis.
         title (str): title of the figure.
         mask (np.ndarray): mask to apply to the heatmap across time.
+        extrapolate_heatmap (bool): Show full heatmap including extrapolated parts (default = True)
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -1827,13 +1829,16 @@ def heatmap(
     for x, bpart in zip(ax.ravel(),bodyparts):
         heatmap = dframe[bpart].loc[mask].dropna()
 
+        cut=0
+        if extrapolate_heatmap:
+            cut=3
         if len(bodyparts) > 1:
             sns.kdeplot(
                 x=heatmap.x,
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
-                cut=0,
+                cut=cut,
                 #bw_adjust=0.5,
                 alpha=1,
                 ax=x,
@@ -1845,7 +1850,7 @@ def heatmap(
                 y=heatmap.y,
                 cmap="magma",
                 fill=True,
-                cut=0,
+                cut=cut,
                 #bw_adjust=0.5,
                 alpha=1,
                 ax=x,
