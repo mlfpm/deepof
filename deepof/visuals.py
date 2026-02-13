@@ -98,6 +98,7 @@ def plot_heatmaps(
     display_arena: bool = True,
     xlim: float = None,
     ylim: float = None,
+    extrapolate_heatmap: bool = True,
     save: bool = False,
     dpi: int = 100,
     ax: Any = None,
@@ -125,6 +126,7 @@ def plot_heatmaps(
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
+        extrapolate_heatmap (bool): show full heatmap including extrapolated parts (default=True)
         save (str):  if provided, the figure is saved to the specified path.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
@@ -212,6 +214,7 @@ def plot_heatmaps(
         xlim=xlim,
         ylim=ylim,
         title=title_suffix,
+        extrapolate_heatmap=extrapolate_heatmap,
         save=save,
         dpi=dpi,
         ax=ax,
