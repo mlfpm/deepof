@@ -1832,30 +1832,18 @@ def heatmap(
         cut=0
         if extrapolate_heatmap:
             cut=3
-        if len(bodyparts) > 1:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                cut=cut,
-                #bw_adjust=0.5,
-                alpha=1,
-                ax=x,
-                **kwargs,
-            )
-        else:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                cut=cut,
-                #bw_adjust=0.5,
-                alpha=1,
-                ax=x,
-                **kwargs,
-            )
+        sns.kdeplot(
+            x=heatmap.x,
+            y=heatmap.y,
+            cmap="magma",
+            fill=True,
+            cut=cut,
+            #bw_adjust=0.5,
+            alpha=1,
+            ax=x,
+            **kwargs,
+        )
+        if len(bodyparts) <= 1:
             ax = np.array([ax])
 
     for x, bp in zip(ax.ravel(), bodyparts):
