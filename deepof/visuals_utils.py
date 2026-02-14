@@ -657,7 +657,7 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
-def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None):
+def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -678,7 +678,7 @@ def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_
     # Check custom_time_bin validity
     if len(
         custom_time_bins
-    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+    ) >= min_bins_required and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
         isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
     ):  # List has shape Nx2
 
@@ -721,7 +721,7 @@ def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_
             warnings.warn(warning_message)
     else:
         raise ValueError(
-            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
+            f'At least {min_bins_required} bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
         )
     
     return custom_time_bins, hide_time_bins
@@ -1473,6 +1473,66 @@ def contiguous_segments(mask: np.ndarray):
     return [slice(s, e) for s, e in edges]
 
 
+def scale_units(coordinates, key, data, unit: str, target_distance: str = None, target_time: str = None):
+    """
+    Scale `data` from `unit` to requested target units and return (scaled, new_unit).
+    `unit` can be "<u>" or "<u_num>/<u_den>", where each u is in TimeUnit or DistanceUnit.
+    """
+    if unit is None:
+        return data, None
+
+    fps = float(coordinates._frame_rate)
+    mm_to_px = coordinates._scales[key][2] / coordinates._scales[key][3]  # px per mm (per exp_id)
+
+    def sec_per(u: str) -> float:
+        tu = TimeUnit.parse(u)
+        return (1.0 / fps) if tu.name == "frames" or tu.name == "fr" else float(tu.value)
+
+    def dist_factor(u_from: str, u_to: str) -> float:
+        return DistanceUnit.parse(u_to).factor(mm_to_px) / DistanceUnit.parse(u_from).factor(mm_to_px)
+
+    def time_factor(u_from: str, u_to: str) -> float:
+        return sec_per(u_from) / sec_per(u_to)
+
+    def convert_component(u: str, invert: bool):
+        # distance?
+        try:
+            DistanceUnit.parse(u)
+            u2 = u if target_distance is None else target_distance
+            f = 1.0 if u2 == u else dist_factor(u, u2)
+            if invert: f = 1.0 / f
+            return f, u2
+        except ValueError:
+            pass
+
+        # time?
+        try:
+            TimeUnit.parse(u)
+            u2 = u if target_time is None else target_time
+            f = 1.0 if u2 == u else time_factor(u, u2)
+            if invert: f = 1.0 / f
+            return f, u2
+        except ValueError as e:
+            raise ValueError(f'Invalid unit component "{u}". Must be in TimeUnit or DistanceUnit.') from e
+
+    # remove white space and brackets
+    u = unit.strip().strip("[]")
+    parts = u.split("/", 1)
+    num = parts[0]
+    den = parts[1] if len(parts) == 2 else None
+
+    f_num, num_out = convert_component(num, invert=False)
+    factor = f_num
+    unit_out = num_out
+
+    if den is not None:
+        f_den, den_out = convert_component(den, invert=True)
+        factor *= f_den
+        unit_out = f"{num_out}/{den_out}"
+
+    return data * factor, unit_out
+
+
 ######
 #Functions not included in property based testing for not having a clean return
 ######
@@ -2136,7 +2196,6 @@ def _preprocess_mouse_roi_interaction(
         experiment_ids=experiment_ids,
         exp_condition=exp_condition,
         condition_values=condition_values,
-        distance_unit = unit_distance,
         animal_id=animal_id,
     )
     # Check if correct inputs for modes are present

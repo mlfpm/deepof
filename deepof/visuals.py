@@ -996,8 +996,8 @@ def plot_enrichment(
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
-        unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in
-        unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in
+        unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
+        unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -4744,7 +4744,7 @@ def get_roi_data(
 
 
 
-def create_supervised_summary(
+def return_supervised_summary(
     coordinates: coordinates,
     supervised_annotations: table_dict,
     # ROI functionality
@@ -4753,12 +4753,24 @@ def create_supervised_summary(
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
     # Time selection parameters
-    bin_index: Union[int, str] = None,
-    bin_size: Union[int, str] = None,
-    precomputed_bins: np.ndarray = None,
-    samples_max: int =100000,
+    N_time_bins: int = 10,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    hide_time_bins: List[bool] = None,
+    samples_max=20000,
+    unit_time: str = "s",
+    unit_distance: str = "m",
+
     save_table = True,
-    ):   
+    ): 
+    """ 
+    Returns summary of supervised information
+
+    Args: 
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
+    unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
+    """
 
     _check_enum_inputs(
         coordinates,
@@ -4767,57 +4779,89 @@ def create_supervised_summary(
         roi_mode=roi_mode,
         in_roi_bodyparts=in_roi_criterion,
     )
-    
-    # Prepare bin info
-    bin_info_time = deepof.visuals_utils._preprocess_time_bins(
-    coordinates, 
-    bin_size, 
-    bin_index, 
-    precomputed_bins=precomputed_bins, 
-    tab_dict_for_binning=supervised_annotations, 
-    samples_max=samples_max,
+    L_shortest = min(
+        get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
     )
-    bin_info = deepof.visuals_utils._apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+
+    # Prepare bin info
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
+        bin_info_time = _preprocess_time_bins(
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        tab_dict_for_binning=supervised_annotations, given_in_frames=True,
+        )
+
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+ 
+        
+        multi_bin_info[j]=roi_bin_info
+
     animal_ids = coordinates._animal_ids
     frame_rate=coordinates._frame_rate
 
     experiment_ids=list(supervised_annotations.keys())
 
-    for i, experiment_id in enumerate(experiment_ids):
+    for i, exp_id in enumerate(experiment_ids):
+   
+        supervised_exp=get_dt(supervised_annotations,exp_id)
+        for bin in multi_bin_info.keys():
 
-        bin_indices=bin_info[experiment_id]["time"]
+            conditions=coordinates.get_exp_conditions[exp_id].copy()
+            frame_row_info=conditions.reset_index(drop=True)
+            frame_row_info.insert(0, 'experiment_id', exp_id)
+            if len(multi_bin_info) > 1:
+                frame_row_info.insert(0, 'bin_number', bin)
 
-        conditions=coordinates.get_exp_conditions[experiment_id].copy()
-        frame_row_info=conditions.reset_index(drop=True)
-        frame_row_info.insert(0, 'experiment_id', experiment_id)
+            supervised_binned=supervised_exp.iloc[multi_bin_info[bin][exp_id]['time']]
+
+            if roi_number is not None:
+                supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode)
+
+            supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
+
+            # behaviors in seconds
+            frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
+            df_row=[frame_row_info, frame_row_behavior_1]
+
+            for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
+                supervised_behavior = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior])
+
+                continuous_mean, converted_unit=deepof.visuals_utils.scale_units(
+                    coordinates, 
+                    exp_id, 
+                    supervised_binned[supervised_behavior].mean(), 
+                    unit, 
+                    unit_distance, 
+                    unit_time
+                    )
+                continuous_mean=continuous_mean.to_frame().T.add_suffix('_mean ' + f'[{converted_unit}]')
+                
+                continuous_std, converted_unit=deepof.visuals_utils.scale_units(
+                    coordinates, 
+                    exp_id, 
+                    supervised_binned[supervised_behavior].std(), 
+                    unit, 
+                    unit_distance, 
+                    unit_time
+                    )
+                continuous_std=continuous_std.to_frame().T.add_suffix('_std ' + f'[{converted_unit}]')
+
+                df_row=df_row+[continuous_mean, continuous_std]
 
 
-        supervised_binned=get_dt(supervised_annotations,experiment_id)
 
-        if roi_number is not None:
-            supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, bin_info[experiment_id], animals_in_roi, roi_mode)
+            df_row = pd.concat(df_row, axis=1)
 
-        supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
-
-        # behaviors in seconds
-        frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])/frame_rate).to_frame().T.add_suffix(' [s]')
-        df_row=[frame_row_info, frame_row_behavior_1]
-
-        for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
-            supervised_behavior = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior])
-
-            continuous_mean=(supervised_binned[supervised_behavior].mean()).to_frame().T.add_suffix('_mean ' + unit)
-            continuous_std=(supervised_binned[supervised_behavior].std()).to_frame().T.add_suffix('_std ' + unit)
-            df_row=df_row+[continuous_mean, continuous_std]
-
-
-
-        df_row = pd.concat(df_row, axis=1)
-
-        if i == 0:
-            df = df_row
-        else:   
-            df = pd.concat([df, df_row], ignore_index=True)
+            if bin == 0 and i==0:
+                df = df_row
+            else:   
+                df = pd.concat([df, df_row], ignore_index=True)
 
     if save_table:
         out_path = os.path.join(coordinates._project_path, coordinates._project_name, "./Out_tables")
