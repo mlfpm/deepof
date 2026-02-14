@@ -2226,6 +2226,13 @@ class Coordinates:
                 "Editing {} arena{}".format(len(video_keys), "s" if len(video_keys) > 1 else "")
             )
 
+        roi_dicts_to_edit, arena_params_to_edit, scales_to_edit = {}, {}, {}
+        for key in video_keys:
+            roi_dicts_to_edit[key] = self._roi_dicts[key]
+            arena_params_to_edit[key] = self._arena_params[key]
+            scales_to_edit[key] = self._scales[key]
+
+
         edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
             coordinates=self,
             arena=arena_type,
@@ -2234,13 +2241,17 @@ class Coordinates:
             segmentation_model_path=None,
             video_path=self._video_path,
             videos=videos_to_update,
+            roi_dicts = roi_dicts_to_edit,
+            arena_params = arena_params_to_edit,
+            scales = scales_to_edit,            
         )
 
         # update the scales and arena parameters
         for key in video_keys:
-            self._scales[key] = edited_scales[key]
-            self._arena_params[key] = edited_arena_params[key]
             self._roi_dicts[key] = edited_roi_dicts[key]
+            self._arena_params[key] = edited_arena_params[key]
+            self._scales[key] = edited_scales[key]
+
 
         self.save(timestamp=False)
 

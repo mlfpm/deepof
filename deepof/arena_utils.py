@@ -54,6 +54,9 @@ def get_arenas(
     video_path: str,
     videos: list = None,
     test: bool = False,
+    roi_dicts: dict = None,
+    arena_params: dict = None,
+    scales: dict = None,
 ):
     """Extract arena parameters from a project or coordinates object.
 
@@ -93,9 +96,15 @@ def get_arenas(
         
 
     """
-    scales = {}
-    arena_params = {}
-    roi_dicts = {}
+    # if valid rois, arena parameters AND scales are given, these can be used for editing, otehrwise start anew
+    if arena_params is not None and roi_dicts is not None and scales is not None:
+        # Scale back to pixel for corect display
+        arena_params = _scale_arenas_to_pixel(arena_params, scales, arena)
+        roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)        
+    else:
+        scales = {}
+        arena_params = {}
+        roi_dicts = {}
     video_resolution = {}
     list_of_rois=list(range(1,number_of_rois+1))
 
@@ -420,9 +429,11 @@ def _scale_arenas_to_pixel(arena_params, scales, arena):
     for key in arena_params.keys():
         scaling_ratio = scales[key][2]/scales[key][3]
         if isinstance(arena_params[key], np.ndarray): # polygonal
-            arena_params[key]=np.array(arena_params[key])*scaling_ratio
+            arena_params[key]=(np.array(arena_params[key])*scaling_ratio).astype(int)
+        # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
         elif isinstance(arena_params[key], Tuple): # circular
-            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+            arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
+            arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
     return arena_params
 
 
@@ -432,6 +443,15 @@ def _scale_rois_to_mm(roi_dicts, scales):
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][3]/scales[key][2]
             roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    return roi_dicts
+
+
+def _scale_rois_to_pixel(roi_dicts, scales):
+    """Scales ROIS from pixel to mm"""
+    for key in roi_dicts.keys():
+        for k, roi in roi_dicts[key].items():
+            scaling_ratio = scales[key][2]/scales[key][3]
+            roi_dicts[key][k] = (np.array(roi)*scaling_ratio).astype(int)
     return roi_dicts
 
 
