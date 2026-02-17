@@ -295,7 +295,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     assert isinstance(enrichment, pd.DataFrame)
     assert enrichment.shape[0] > 0
-    assert enrichment.shape[1] == 3
+    assert enrichment.shape[1] == 4
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
