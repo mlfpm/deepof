@@ -2512,7 +2512,7 @@ def extract_windows(
 
 
 def smooth_mult_trajectory(
-    series: np.array, alpha: int = 0, w_length: int = 11
+    series: np.array, alpha: int = 0, w_length: int = 15
 ) -> np.ndarray:
     """Return a smoothed a trajectory using a Savitzky-Golay 1D filter.
 
