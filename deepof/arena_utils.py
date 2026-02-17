@@ -323,10 +323,9 @@ def get_arenas(
                 if "polygonal" in arena:
 
                     arena_parameters=arena_parameters_raw.astype(int)
+                    arena_parameters = simplify_polygon(arena_parameters, n_points=len(arena_reference))
 
-                    closest_side_points = closest_side(
-                        simplify_polygon(arena_parameters), arena_reference[:2]
-                    )
+                    closest_side_points = closest_side(arena_parameters, arena_reference[:2])
 
                     arena_dist=dist(*closest_side_points)
 
@@ -455,24 +454,94 @@ def _scale_rois_to_pixel(roi_dicts, scales):
     return roi_dicts
 
 
-def simplify_polygon(polygon: list, relative_tolerance: float = 0.05, preserve_topology=False):
-    """Simplify a polygon using the Ramer-Douglas-Peucker algorithm.
-
-    Args:
-        polygon (list): List of polygon coordinates.
-        relative_tolerance (float): Relative tolerance for simplification. Defaults to 0.05.
-
-    Returns:
-        simplified_poly (list): List of simplified polygon coordinates.
-
+def simplify_polygon(
+    polygon: list,
+    n_points: int = None,
+    relative_tolerance: float = 0.05,
+    preserve_topology: bool = False,
+):
     """
+    Simplify a polygon using shapely's RDP simplify, and if n_points is given,
+    return exactly n_points *denoised* vertices whose sides are aligned with the
+    dominant sides of the (noisy) input polygon.
+
+    Strategy for n_points:
+      1) Pick exactly n_points "corners" (fixed-number Douglas–Peucker style).
+      2) For each side between corners, fit a best-fit line (TLS/PCA) to its points.
+      3) Export vertex points for best line segment fits.
+    """
+    if n_points is not None and n_points < 3:
+        raise ValueError("n_points must be >= 3")
+
     poly = Polygon(polygon)
-    perimeter = poly.length
-    tolerance = perimeter * relative_tolerance
+    if not poly.is_valid:
+        poly = poly.buffer(0)
 
-    simplified_poly = poly.simplify(tolerance, preserve_topology=preserve_topology)
+    tol = poly.length * relative_tolerance
+    if n_points is None:
+        poly_s = poly.simplify(tol, preserve_topology=preserve_topology)
+    else:
+        poly_s = poly
+    
+    if poly_s.is_empty or not hasattr(poly_s, "exterior"):
+        poly_s = poly
 
-    return list(np.array(simplified_poly.exterior.coords)[:-1].astype(int))      # Exclude last point (same as first)
+    if getattr(poly_s, "geom_type", None) == "MultiPolygon":
+        poly_s = max(poly_s.geoms, key=lambda g: g.area)
+
+    poly_array = np.asarray(poly_s.exterior.coords, dtype=float)[:-1]  # open ring (M,2)
+
+    # stable start (top-left-ish)
+    poly_array = np.roll(poly_array, -np.argmin(poly_array[:, 0] + poly_array[:, 1]), axis=0)
+
+    # Early return for standard simplifiation (no user-clicked reference point number n_points)
+    if n_points is None or n_points >= len(poly_array):
+        return list(poly_array.astype(int))
+
+    M = len(poly_array)
+    ring = np.vstack([poly_array, poly_array[0]])  # close for segment computations
+
+    def max_dev_split(i, j):
+        """For segment i->j (indices on ring, j>i), return (max_dist2, k) for best split k."""
+        if j <= i + 1:
+            return 0.0, None
+        A, B = ring[i], ring[j]
+        P = ring[i + 1 : j]
+        AB = B - A
+        denom = float(AB @ AB)
+        if denom < 1e-12:
+            d2 = np.sum((P - A) ** 2, axis=1)
+        else:
+            t = ((P - A) @ AB) / denom
+            t = np.clip(t, 0.0, 1.0)
+            proj = A + t[:, None] * AB
+            d2 = np.sum((P - proj) ** 2, axis=1)
+
+        rel = int(np.argmax(d2))
+        return float(d2[rel]), (i + 1 + rel)
+
+    # --- 1) fixed-number corner selection ---
+    segments = [(0, M)]                          # list of (i,j), j>i
+    errors, splits = [max_dev_split(0, M)[0]], [max_dev_split(0, M)[1]]
+
+    while len(segments) < n_points:
+        # choose segment with largest deviation
+        imax = int(np.argmax(errors))
+        i, j = segments[imax]
+        k = splits[imax]
+        if k is None:
+            break  # should only happen if not enough points to split further
+
+        # split it into (i,k) and (k,j)
+        d2a, ka = max_dev_split(i, k)
+        d2b, kb = max_dev_split(k, j)
+
+        segments[imax:imax + 1] = [(i, k), (k, j)]
+        errors[imax:imax + 1] = [d2a, d2b]
+        splits[imax:imax + 1] = [ka, kb]
+
+    corner_idx = np.array([s[0] for s in segments], dtype=int)  # length ~ n_points
+    return list(poly_array[corner_idx].astype(int))
 
 
 def closest_side(polygon: list, reference_side: list):
@@ -833,7 +902,7 @@ def extract_polygonal_arena_coordinates(
         )
         # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer) and go to next roi     
         if exit_flag_rois == Arena_GUI_exit_flag.NEXT:
-            cur_roi_corners=simplify_polygon(cur_roi_corners,0.001,True)
+            cur_roi_corners=simplify_polygon(cur_roi_corners,None,0.001,True)
             roi=list(np.array(cur_roi_corners).astype(int))
         # Take roi k from the previous video and propagate 
         elif exit_flag_rois == Arena_GUI_exit_flag.PROPAGATE:
