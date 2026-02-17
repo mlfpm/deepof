@@ -3438,6 +3438,8 @@ def export_annotated_video(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         experiment_ids=experiment_id,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
@@ -3760,7 +3762,7 @@ def plot_behavior_trends(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
-    samples_max=20000,
+    samples_max=2000000,
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
@@ -3889,7 +3891,7 @@ def plot_behavior_trends(
     ##### 
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
     n_time_bins=len(custom_time_bins)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
@@ -3916,27 +3918,32 @@ def plot_behavior_trends(
     # Collect data for plotting
     #####
 
+    # Collect data for plotting
+    created_figure = (ax is None)
+
     if ax is None:
-            
-        n_rows,n_cols=deepof.visuals_utils.get_square_shape_for_gridlike_plot(len(behaviors_to_plot))
+        n_rows, n_cols = deepof.visuals_utils.get_square_shape_for_gridlike_plot(len(behaviors_to_plot))
 
         if polar_depiction:
-            x_scale = 8
-            y_scale = 8
+            x_scale, y_scale = 8, 8
+            subplot_kw = {"projection": "polar"}
+            sharex = False
         else:
-            x_scale = 12
-            y_scale = 4
+            x_scale, y_scale = 12, 4
+            subplot_kw = None
+            sharex = True
 
-        _, axes = plt.subplots(
-            n_rows, 
+        fig, axes = plt.subplots(
+            n_rows,
             n_cols,
-            sharex=True,
+            sharex=sharex,
             sharey=False,
-            #dpi=dpi,
             figsize=(x_scale * n_cols, y_scale * n_rows),
+            subplot_kw=subplot_kw,
         )
         axes = np.array(axes)
     else:
+        fig = np.array(ax).ravel()[0].figure
         axes = np.array(ax)
 
     # iterate over all behaviors (1 plot per behavior)
@@ -4027,7 +4034,7 @@ def plot_behavior_trends(
 
         get_unsupervised_behaviors_in_roi._warning_issued = False
 
-        df = deepof.visuals_utils.postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+        df, hide_time_bins = deepof.visuals_utils.postprocess_df_bins(df, bin_lengths, hide_time_bins)  
 
         mean_values, error_values, binned_effect_sizes_df = deepof.visuals_utils.process_df(df, error_bars=error_bars) 
 
@@ -4035,47 +4042,20 @@ def plot_behavior_trends(
         # Handle present or absent axes of different types
         #####
 
-        show = False
-        # Update active axes, if axes are given
-        if ax and polar_depiction:
-            # Switch out the input axes object with a polar axis
-            fig = ax.figure
-            position = ax.get_position()
-            fig.delaxes(ax)
-            new_ax = fig.add_axes(position, projection="polar")
-            # Update the original ax reference to point to the new axis
-            ax.__dict__.clear()
-            ax.__dict__.update(new_ax.__dict__)
-            ax.__class__ = new_ax.__class__
-            # Replace the new_ax with ax in the figure's axes list
-            fig.axes[fig.axes.index(new_ax)] = ax
-            del new_ax
+        _, ax, _ = deepof.visuals_utils.ensure_axis(
+            ax=ax,
+            polar_depiction=polar_depiction,
+            figsize=(8, 8) if polar_depiction else (12, 4),
+        )
 
-        elif ax and not polar_depiction:
-            plt.sca(ax)
-
-        elif polar_depiction:
-            fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(8, 8))
-            show = True
-
-        else:
-            fig, ax = plt.subplots(figsize=(12, 4))
-            show = True
-
-        #####
-        # Stats
-        #####
-
-        # Get stats annotations if required
+        # --- stats (your existing logic; unchanged) ---
+        test_dict = {}
         if add_stats:
-
-            # Initialize a set to keep track of seen pairs
             pairs = df.groupby("time_bin").apply(
                 lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
             )
-            # Exclude hidden bins and convert to list
             pairs = pairs[np.invert(hide_time_bins)].tolist()
-            # Do actual testing with annotator package
+
             annotator = Annotator(
                 ax,
                 pairs=pairs,
@@ -4092,219 +4072,83 @@ def plot_behavior_trends(
                 comparisons_correction="fdr_bh",
                 verbose=False,
             )
-            # Automatic annotiation to plots does not work with polar plots
-            # Hence test results get extracted manually and collected in a dict
-            test_dict = {}
             anni = annotator.apply_test()
             for annotation in anni.annotations:
                 test_dict[annotation.structs[0]["group"][0]] = annotation.text
 
-        #####
-        # Line plot
-        #####
+        # --- geometry in radians (use df's bin_length so it's consistent after postprocess) ---
+        bin_lengths_plot = df.groupby("time_bin")["bin_length"].first().values
+        geom = deepof.visuals_utils.get_binned_geometry(bin_lengths_plot)
 
-        sns.set_style("whitegrid")
-        # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-        mid_angles, angles=deepof.visuals_utils.get_bin_centers(bin_lengths, as_radians=True)
+        # --- line plot ---
+        colors = ["#1f77b4", "#ff7f0e"]
+        marker_handles, max_value = deepof.visuals_utils.plot_binned_groups(
+            ax=ax,
+            x_radians=geom["centers"],
+            mean_values=mean_values,
+            error_values=error_values,
+            condition_values=condition_values,
+            hide_time_bins=hide_time_bins,
+            colors=colors,
+            plot_binned_line_func=deepof.visuals_utils.plot_binned_line,
+        )
 
-        # Init boolean mask to hide data segments based on hide_time_bins input
+        # --- axis labels ---
+        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+            candidates = [s for s in CONTINUOUS_BEHAVIORS if behavior_to_plot.endswith(s)]
+            closest_suffix = max(candidates, key=len)
+            ylabel = f"{behavior_to_plot} [avg. {closest_suffix}]"
+        elif normalize:
+            ylabel = f"{behavior_to_plot} [%]"
+        else:
+            ylabel = f"{behavior_to_plot} [s]"
 
+        hist_bottom = deepof.visuals_utils.format_time_binned_axis(
+            ax=ax,
+            geom=geom,
+            polar_depiction=polar_depiction,
+            max_value=max_value,
+            title=f"DeepOF - {behavior_to_plot}",
+            xlabel=None if polar_depiction else "Time Bins",
+            ylabel=None if polar_depiction else ylabel,
+        )
 
-        # --- Plot means, markers and errors for each group ---------------------------------
-        colors = ["#1f77b4", "#ff7f0e"] # Define colors for each group
-        marker_handles = [None, None]
+        # --- histogram ---
+        effect_handles, stat_text_col = deepof.visuals_utils.plot_effectsize_histogram(
+            ax=ax,
+            geom=geom,
+            effect_size_categories=binned_effect_sizes_df["Effect_Size_Category"].astype(int).values,
+            hide_time_bins=hide_time_bins,
+            max_value=max_value,
+            bottom=hist_bottom,
+            show_histogram=show_histogram,
+        )
 
-        for i, exp_cond in enumerate(condition_values):
-            marker_handles [i] = deepof.visuals_utils.plot_binned_line(
+        if polar_depiction:
+            deepof.visuals_utils.add_polar_bin_labels(ax, geom)
+
+        # --- stats text ---
+        if add_stats and test_dict:
+            deepof.visuals_utils.annotate_binwise_stats(
                 ax=ax,
-                x=mid_angles,
-                y=mean_values[exp_cond],
-                yerr=error_values[exp_cond],
-                hide_time_bins=hide_time_bins,
-                color=colors[i],
-                label=str(exp_cond),
+                test_dict=test_dict,
+                geom=geom,
+                polar_depiction=polar_depiction,
+                text_color=stat_text_col,
             )
 
-        # Set custom ticks and labels for the y axes
-        if polar_depiction:
-            ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=14, pad=35)
-        else:
-            ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18) #, y=1.15)
-        max_value = max(max(v) for v in mean_values.values())
-        y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
-        ax.set_yticks(y_ticks)
+        # --- unified legends (only on first subplot) ---
+        deepof.visuals_utils.add_binned_legends(
+            ax=ax,
+            condition_handles=marker_handles,
+            condition_labels=condition_values,
+            effect_handles=effect_handles,
+            polar_depiction=polar_depiction,
+            show_histogram=show_histogram,
+            first_plot=(z_run == 0),
+        )
 
-        # Set custom xticklabels
-        xticklabels = [str(i) for i in range(1, n_time_bins + 1)]
-
-        # Special modifications for the polar plot
-        if polar_depiction:
-
-            # Set xticks to angles and hide labels
-            ax.set_xticks(angles)
-            ax.set_xticklabels([])
-            # Set the direction of angle 0 and labels to the top
-            ax.set_theta_zero_location("N")
-            ax.set_rlabel_position(0)
-            # Set the direction to clockwise
-            ax.set_theta_direction(-1)
-            # Start position of histograms on y axis
-            top = max_value * 1.5  # change inside circle size
-
-            # Add legend of first part of plot
-            if z_run == 0:
-                legend_1 = ax.legend(
-                    handles=[marker_handles[0], marker_handles[1]],
-                    labels=[condition_values[0], condition_values[1]],
-                    fontsize=12,
-                    loc="upper right",
-                    bbox_to_anchor=(1.0, 1.1),
-                )
-                ax.add_artist(legend_1)
-        else:
-            # Set xticks to mid_angles and display labels
-            ax.set_xticks(mid_angles)
-            ax.set_xticklabels(xticklabels)
-            # Start position of histograms on y axis
-            top = ax.get_ylim()[0]
-
-            # Add axis labels
-            ax.set_xlabel("Time Bins", fontsize=12)
-
-            if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
-                candidates = [s for s in CONTINUOUS_BEHAVIORS if behavior_to_plot.endswith(s)]
-                closest_suffix = max(candidates, key=len)
-                ax.set_ylabel(f"{behavior_to_plot} [avg. " + closest_suffix +"]", fontsize=12)    
-            elif normalize:
-                ax.set_ylabel(f"{behavior_to_plot} [%]", fontsize=12)
-            else:
-                ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
-
-            # Add legend
-            if z_run == 0:
-
-                legend_1 = ax.legend(
-                    handles=[marker_handles[0], marker_handles[1]],
-                    labels=[condition_values[0], condition_values[1]],
-                    fontsize=12,
-                    loc="upper right",
-                )
-
-                ax.add_artist(legend_1)
-
-        #####
-        # Histogram
-        #####
-
-        # Some inits
-        ax.grid(True)
-        values = binned_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
-        n_time_bins = len(values)
-        # Calculate widths of histogram bars
-        widths = bin_lengths / np.sum(bin_lengths) * (2 * np.pi)
-
-        # Set colors
-        cmap = [
-            "#9370DB",
-            "#6A5ACD",
-            "#4B0082",
-        ]  # 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
-        colors = [
-            cmap[val]
-            for val in binned_effect_sizes_df["Effect_Size_Category"].astype(int).values - 1
-        ]
-        for k in range(0, len(colors)):
-            if hide_time_bins[k]:
-                colors[k] = "#C0C0C0"
-                values[k] = 1 * max_value * 0.1
-
-        # Plot histogram if required
-        stat_text_col = "k"
-        if show_histogram:
-            bars = ax.bar(mid_angles, values, width=widths, bottom=top)
-            # Change color of text of stat annotations for better contrast
-            stat_text_col = "#FFFF00"
-
-            # Use custom colors and opacity
-            for color, bar in zip(colors, bars):
-                bar.set_facecolor(color)
-                bar.set_alpha(0.8)
-
-            # create legend for hist with color patches
-            bar_handles = [0, 0, 0]
-            legend_labels = ["large", "medium", "small"]
-            legend_colors = cmap[::-1]
-            for i, label in enumerate(legend_labels):
-                bar_handles[i] = Patch(color=legend_colors[i], label=label)
-
-        # Special modifications for the polar plot
-        if polar_depiction:
-
-            # Add xticklabels manually for each circle segment in the middle between ticks
-            for midangle, label in zip(mid_angles, xticklabels):
-                ax.text(midangle, ax.get_rmax() * 1.05, label, ha="center", va="center")
-
-            # Add stat annotations as text in plot
-            if add_stats:
-                z = 0
-                # Add annotation for each circle segment
-                for label in test_dict:
-                    ax.text(
-                        mid_angles[int(label)] + 0.02,
-                        ax.get_yticks()[-1]
-                        + (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 1.166,
-                        test_dict[label],
-                        ha="center",
-                        va="center",
-                        fontsize="small",
-                        color=stat_text_col,
-                        rotation=-np.flip(mid_angles[int(label)] * 180 / np.pi),
-                    )
-                    z += 1
-            # Update limits
-            lower_lim = ax.get_ylim()[0]
-            ax.set_rlim(lower_lim, ax.get_rmax())
-
-            # Only show histogram legend if required
-            if show_histogram:
-                legend_2 = ax.legend(
-                    handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
-                    title="Effect Size",
-                    loc="upper left",
-                    bbox_to_anchor=(0.0, 1.1),
-                    fontsize=8,
-                )
-                if z_run == 0:
-                    ax.add_artist(legend_2)
-        else:
-
-            # Add stat annotations as text in plot
-            if add_stats:
-                z = 0
-                # Add annotation for each plot segment
-                for label in test_dict:
-                    ax.text(
-                        mid_angles[int(label)],
-                        (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 0.166,
-                        test_dict[label],
-                        ha="center",
-                        va="center",
-                        color=stat_text_col,
-                        fontsize="small",
-                    )
-                    z += 1
-
-            # Only show histogram legend if required
-            if show_histogram:
-                if z_run == 0:
-                    ax.legend(
-                        handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
-                        title="Effect Size",
-                        loc="upper left",
-                        fontsize=8,
-                    )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
-        
-        z_run=z_run+1
+        z_run += 1
 
     # reset cohend warning
     deepof.visuals_utils.cohend._warning_issued = False
@@ -4327,7 +4171,7 @@ def plot_behavior_trends(
         )
 
     # If no axes are given, show plot
-    if show:
+    if created_figure:
         plt.show()
 
 
@@ -4410,7 +4254,9 @@ def plot_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
-    ax: Any = None,      
+    ax: Any = None, 
+    polar_depiction: bool = False,    
+    show_histogram: bool = False,     
 ):
     if roi_number == 0:
         roi_number=None
@@ -4434,22 +4280,26 @@ def plot_mouse_roi_interaction(
         mode = mode,
         unit_distance = unit_distance,
     )
+
     condition_values = sorted(binned_group_df["exp_condition"].astype(str).unique().tolist())
 
-    z_run=0
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(12, 4))  
+    sns.set_style("whitegrid")
 
-    # Get stats annotations if required
-    if add_stats and len(condition_values)==2:
+    # --- axis (now supports polar) ---
+    _, ax, show = deepof.visuals_utils.ensure_axis(
+        ax=ax,
+        polar_depiction=polar_depiction,
+        figsize=(8, 8) if polar_depiction else (12, 4),
+    )
 
-        # Initialize a set to keep track of seen pairs
+    # --- stats (unchanged; only computes test_dict, no auto-drawing) ---
+    test_dict = {}
+    if add_stats and len(condition_values) == 2:
         pairs = binned_group_df.groupby("time_bin").apply(
             lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
         )
-        # Exclude hidden bins and convert to list
         pairs = pairs[np.invert(hide_time_bins)].tolist()
-        # Do actual testing with annotator package
+
         annotator = Annotator(
             ax,
             pairs=pairs,
@@ -4466,192 +4316,144 @@ def plot_mouse_roi_interaction(
             comparisons_correction="fdr_bh",
             verbose=False,
         )
-        # Automatic annotiation to plots does not work with polar plots
-        # Hence test results get extracted manually and collected in a dict
-        test_dict = {}
         anni = annotator.apply_test()
         for annotation in anni.annotations:
             test_dict[annotation.structs[0]["group"][0]] = annotation.text
-    elif add_stats:
+
+    elif (add_stats and len(condition_values) != 2) or (show_histogram and len(condition_values) != 2):
         warning_message = (
             "\033[38;5;208m\n"
-            "Warning! Stats can currently only be added for compairing 2 conditions!"
+            "Warning! Stats and effect sizes can currently only be added for compairing 2 conditions!"
             "\033[0m"
         )
         warnings.warn(warning_message)
+        show_histogram = False
 
+    # --- geometry in radians (standardized) ---
+    bin_lengths = binned_group_df.groupby("time_bin")["bin_length"].first().values
+    geom = deepof.visuals_utils.get_binned_geometry(bin_lengths)
 
-    sns.set_style("whitegrid")
-    # Define x axis based on bins
-    bin_lengths = binned_group_df.groupby('time_bin')['bin_length'].first().values
-    bin_centers, _ = deepof.visuals_utils.get_bin_centers(bin_lengths)
+    # --- colors (unchanged logic) ---
+    marker_handles = [None] * len(condition_values)
+    colors = [None] * len(condition_values)
 
-    # plot distances over time
-    marker_handles=[None]*len(condition_values)
-    # Only used for 4+ conditions
-    color_map = plt.get_cmap('tab10', lut=len(condition_values))
-
+    color_map = plt.get_cmap("tab10", lut=len(condition_values))
     for k, exp_cond in enumerate(condition_values):
-        
-        # Nicer colors for not too many different conditions
-        if len(condition_values)<4:    
+
+        if len(condition_values) < 4:
             base_color = ARENA_COLOR
             if roi_number is not None:
-                base_color = ROI_COLORS[roi_number-1]
+                base_color = ROI_COLORS[roi_number - 1]
             if k == 1:
-                base_color = (np.array(base_color)*0.6).astype(int)
-            elif k==2:
-                base_color = (np.array(base_color)*0.2).astype(int)
-        # Otherwise standard color palette
+                base_color = (np.array(base_color) * 0.6).astype(int)
+            elif k == 2:
+                base_color = (np.array(base_color) * 0.2).astype(int)
         else:
-            base_color=(color_map.colors[k][0:3]*255).astype(int)
+            base_color = (color_map.colors[k][0:3] * 255).astype(int)
 
-        color = BGR_to_hex(base_color)
-        
-        marker_handles [k] = deepof.visuals_utils.plot_binned_line(
-            ax=ax,
-            x=bin_centers,
-            y=mean_dist[exp_cond],
-            yerr=std_dist[exp_cond],
-            hide_time_bins=hide_time_bins,
-            color=color,
-            label=str(exp_cond),
-        )
+        colors[k] = BGR_to_hex(base_color)
 
-    # Set custom ticks and labels for the y axes
-    #ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18) #, y=1.15)
-    max_value = max(max(v) for v in mean_dist.values())
-    y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
-    ax.set_yticks(y_ticks)
+    # --- line plot (x now in radians) ---
+    marker_handles, max_value = deepof.visuals_utils.plot_binned_groups(
+        ax=ax,
+        x_radians=geom["centers"],
+        mean_values=mean_dist,
+        error_values=std_dist,
+        condition_values=condition_values,
+        hide_time_bins=hide_time_bins,
+        colors=colors,
+        plot_binned_line_func=deepof.visuals_utils.plot_binned_line,
+    )
 
-    # Set custom xticklabels
-    xticklabels = [str(i) for i in range(1, N_time_bins + 1)]
-
-
-    # Set xticks to mid_angles and display labels
-    ax.set_xticks(bin_centers)
-    ax.set_xticklabels(xticklabels)
-    # Start position of histograms on y axis
-    top = ax.get_ylim()[0]
-
-    # Add axis labels
-    ax.set_xlabel("Time Bins", fontsize=12)
-
+    # --- y-label text (same as before, but only on cartesian) ---
     if mode == "distance":
-        ax.set_ylabel("distance from {} in {}".format("arena" if roi_number is None else "roi " + str(roi_number), DistanceUnit[unit_distance].name), fontsize=12)
+        ylabel = "distance from {} in {}".format(
+            "arena" if roi_number is None else "roi " + str(roi_number),
+            DistanceUnit[unit_distance].name,
+        )
     elif mode == "fov":
-        ax.set_ylabel(f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mouse {animal_id}", fontsize=12)
-        ax.set_ylim([0,1])
+        ylabel = f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mouse {animal_id}"
+    else:
+        ylabel = mode
 
-    if len(condition_values) > 1:
-        legend = ax.legend(
-            handles=marker_handles,
-            labels=list(condition_values),
-            fontsize=12,
-            loc="best",
+    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
+    if mode == "fov" and not polar_depiction:
+        ax.set_ylim([0, 1])
+
+    # --- axis formatting (ticks/labels/limits; now uses radians geometry) ---
+    hist_bottom = deepof.visuals_utils.format_time_binned_axis(
+        ax=ax,
+        geom=geom,
+        polar_depiction=polar_depiction,
+        max_value=max_value,
+        title="deepOF - {}-plot for roi {}".format(mode, roi_number),
+        xlabel=None if polar_depiction else "Time Bins",
+        ylabel=None if polar_depiction else ylabel,
+    )
+
+    # --- histogram ---
+    effect_handles, stat_text_col = deepof.visuals_utils.plot_effectsize_histogram(
+        ax=ax,
+        geom=geom,
+        effect_size_categories=binned_effect_sizes_df["Effect_Size_Category"].astype(int).values,
+        hide_time_bins=hide_time_bins,
+        max_value=max_value,
+        bottom=hist_bottom,
+        show_histogram=show_histogram,
+    )
+
+    # polar bin labels (1..N) around the ring
+    if polar_depiction:
+        deepof.visuals_utils.add_polar_bin_labels(ax, geom)
+
+    # --- stats text (manual placement; works for both cartesian and polar) ---
+    if add_stats and test_dict:
+        deepof.visuals_utils.annotate_binwise_stats(
+            ax=ax,
+            test_dict=test_dict,
+            geom=geom,
+            polar_depiction=polar_depiction,
+            text_color=stat_text_col,
         )
 
-        ax.add_artist(legend)
-
-    #####
-    # Histogram
-    #####
-
-    # Some inits
-    ax.grid(True)
-    values = binned_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
-    # Calculate widths of histogram bars
-    widths = bin_lengths / np.sum(bin_lengths) 
-
-    # Set colors
-    cmap = [
-        "#9370DB",
-        "#6A5ACD",
-        "#4B0082",
-    ]  # 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
-    colors = [
-        cmap[val]
-        for val in binned_effect_sizes_df["Effect_Size_Category"].astype(int).values - 1
-    ]
-    for k in range(0, len(colors)):
-        if hide_time_bins[k]:
-            colors[k] = "#C0C0C0"
-            values[k] = 1 * max_value * 0.1
-
-    # Plot histogram if required
-    stat_text_col = "k"
-    show_histogram = True
-    if show_histogram:
-        bars = ax.bar(bin_centers, values, width=widths, bottom=top)
-        # Change color of text of stat annotations for better contrast
-        stat_text_col = "#FFFF00"
-
-        # Use custom colors and opacity
-        for color, bar in zip(colors, bars):
-            bar.set_facecolor(color)
-            bar.set_alpha(0.8)
-
-        # create legend for hist with color patches
-        bar_handles = [0, 0, 0]
-        legend_labels = ["large", "medium", "small"]
-        legend_colors = cmap[::-1]
-        for i, label in enumerate(legend_labels):
-            bar_handles[i] = Patch(color=legend_colors[i], label=label)
-
-
-    # Add stat annotations as text in plot
-    if add_stats:
-        z = 0
-        # Add annotation for each plot segment
-        for label in test_dict:
-            ax.text(
-                bin_centers[int(label)],
-                (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 0.166,
-                test_dict[label],
-                ha="center",
-                va="center",
-                color=stat_text_col,
-                fontsize="small",
-            )
-            z += 1
-
-    # Only show histogram legend if required
-    if show_histogram:
-        if z_run == 0:
-            ax.legend(
-                handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
-                title="Effect Size",
-                loc="upper left",
-                fontsize=8,
-            )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
-    
-    z_run=z_run+1
+    # --- legends (unified placement; single plot => first_plot=True) ---
+    if len(condition_values) > 1:
+        deepof.visuals_utils.add_binned_legends(
+            ax=ax,
+            condition_handles=marker_handles,
+            condition_labels=condition_values,
+            effect_handles=effect_handles,
+            polar_depiction=polar_depiction,
+            show_histogram=show_histogram,
+            first_plot=True,
+        )
+    else:
+        # still add effect size legend if only 1 condition (optional; matches prior behavior loosely)
+        if show_histogram and effect_handles is not None:
+            if polar_depiction:
+                leg2 = ax.legend(
+                    handles=effect_handles,
+                    title="Effect Size",
+                    loc="upper left",
+                    bbox_to_anchor=(0.0, 1.1),
+                    fontsize=8,
+                )
+                ax.add_artist(leg2)
+            else:
+                ax.legend(
+                    handles=effect_handles,
+                    title="Effect Size",
+                    loc="upper left",
+                    fontsize=8,
+                )
 
     # reset cohend warning
     deepof.visuals_utils.cohend._warning_issued = False
 
-    # Save plot if required
-    save=False
-    if save:
-        plt.savefig(
-            os.path.join(
-                coordinates._project_path,
-                coordinates._project_name,
-                "Figures",
-                "deepof_time_plot{}_behavior={}_error_bars={}_test={}_{}.pdf".format(
-                    (f"_{save}" if isinstance(save, str) else ""),
-                    mode,
-                    error_bars,
-                    add_stats,
-                    calendar.timegm(time.gmtime()),
-                ),
-            )
-        )
-
-    # If no axes are given, show plot
-    show=False
     if show:
         plt.show()
+
+    return ax
 
 
 def get_roi_data(
@@ -4784,7 +4586,7 @@ def return_supervised_summary(
     )
 
     # Prepare bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from IPython.display import clear_output
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Patch
 from natsort import os_sorted
 from enum import Enum
 from scipy.interpolate import interp1d
@@ -397,11 +397,17 @@ def calculate_average_arena(
             intp_points[Cumsum_points[j] : Cumsum_points[j + 1], 1] = np.linspace(
                 start_point[1], end_point[1], interp_points
             )
-
+ 
+        # check orientation to correct for clockwise / counterclockwise differences with signed area
+        s = np.sign(0.5 * np.sum(intp_points[:,0] * np.roll(intp_points[:,1], -1) - np.roll(intp_points[:,0], -1) * intp_points[:,1]))
+        if s <= 0:
+            intp_points = intp_points[::-1].copy()
+        
         # reorganize points so that array starts at top left corner and sum to average
         min_pos = np.argmin(np.sum(intp_points, 1))
         avg_points[0 : (num_points - min_pos)] += intp_points[min_pos:]
         avg_points[(num_points - min_pos) :] += intp_points[:min_pos]
+        first_arena = False
 
     avg_points = avg_points / len(all_vertices)
 
@@ -657,7 +663,7 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
-def validate_custom_bins(N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
+def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -756,13 +762,9 @@ def postprocess_df_bins(df: pd.DataFrame, bin_lengths, hide_time_bins):
         )
         print(warning_message)    
 
-    # exclude time bins that are always NaN (which will also exclude them from statistics)
-    mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
-    df = df[mask].copy()
-
     assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!" 
 
-    return df
+    return df, hide_time_bins
 
 
 
@@ -2167,24 +2169,6 @@ def _preprocess_mouse_roi_interaction(
     error_bars: str = "sem",
     unit_distance: str = "m",
 ):
-    def _smooth_signal(signal, smoothing_factor):
-        
-        assert smoothing_factor >= 0 and smoothing_factor <= 1, "Smoothing factor has to be in range 0<=x<=1!"
-
-        l_s = len(signal)
-        lag=int(l_s*smoothing_factor)
-
-        # Early exit 
-        if lag == 0:
-            return signal
-    
-        signal_padded=np.zeros([2*lag+l_s])
-        signal_padded[0:lag]=signal[lag-1::-1]
-        signal_padded[lag:l_s+lag]=signal
-        signal_padded[l_s+lag:]=signal[l_s-lag:]
-
-        signal_padded=deepof.utils.moving_average(signal_padded,lag, ignore_nans=True)
-        return(signal_padded[lag:l_s+lag])
 
     if roi_number==0:
         roi_number=None
@@ -2242,7 +2226,7 @@ def _preprocess_mouse_roi_interaction(
     )
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = validate_custom_bins(N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
     multi_bin_info={}
@@ -2350,12 +2334,15 @@ def _preprocess_mouse_roi_interaction(
     df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
 
   
-    df = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+    df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
 
     mean_values, error_values, binned_effect_sizes_df = process_df(df, error_bars=error_bars)
 
     return mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins
 
+#####
+# Trendline plotting helpers
+#####
 
 def process_df(df: pd.DataFrame, error_bars: str = "sem"):
     """
@@ -2596,3 +2583,293 @@ def get_bin_centers(bin_lengths, as_radians: bool = False):
         return centers * s, starts * s
     return centers, starts
 
+
+def ensure_axis(ax=None, polar_depiction=False, figsize=(12, 4)):
+    """
+    If ax is None: create proper axis and return (fig, ax, show=True)
+    If ax is given:
+      - if polar_depiction=True and ax is not polar, convert it in-place
+      - return (ax.figure, ax, show=False)
+    """
+    if ax is None:
+        if polar_depiction:
+            fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=figsize)
+        else:
+            fig, ax = plt.subplots(figsize=figsize)
+        return fig, ax, True
+
+    if polar_depiction and getattr(ax, "name", "") != "polar":
+        fig = ax.figure
+        position = ax.get_position()
+        fig.delaxes(ax)
+        new_ax = fig.add_axes(position, projection="polar")
+
+        # in-place swap to preserve outside references
+        ax.__dict__.clear()
+        ax.__dict__.update(new_ax.__dict__)
+        ax.__class__ = new_ax.__class__
+        fig.axes[fig.axes.index(new_ax)] = ax
+        del new_ax
+
+    return ax.figure, ax, False
+
+
+def get_binned_geometry(bin_lengths):
+    """
+    Returns a dict with centers/widths/edges in radians (0..2π) + labels "1..N".
+    """
+    bl = np.asarray(bin_lengths, dtype=float)
+    if bl.ndim != 1 or bl.size == 0:
+        raise ValueError("bin_lengths must be a 1D non-empty sequence")
+
+    total = float(np.nansum(bl))
+    if not np.isfinite(total) or total <= 0:
+        widths = np.ones_like(bl) * (2 * np.pi / bl.size)
+    else:
+        widths = bl / total * (2 * np.pi)
+
+    edges = np.concatenate([[0.0], np.cumsum(widths)])
+    centers = edges[:-1] + widths / 2.0
+    labels = [str(i) for i in range(1, bl.size + 1)]
+
+    return {"centers": centers, "widths": widths, "edges": edges, "labels": labels}
+
+
+def format_time_binned_axis(
+    ax,
+    geom,
+    polar_depiction,
+    max_value,
+    title=None,
+    xlabel=None,
+    ylabel=None,
+):
+    if title:
+        if polar_depiction:
+            ax.set_title(title, fontsize=14, pad=35)
+        else:
+            ax.set_title(title, fontsize=18)
+
+    base = float(max_value) if np.isfinite(max_value) else 0.0
+    y_main = (base * 1.5) if base > 0 else 1.0
+
+    # IMPORTANT: do NOT include y_main in the ticks (restores old placement logic)
+    step = y_main / 6.0
+    y_ticks = np.arange(0, y_main, step)
+    ax.set_yticks(y_ticks)
+    ax.grid(True)
+
+    if polar_depiction:
+        ax.set_xticks(geom["edges"])
+        ax.set_xticklabels([])
+
+        ax.set_theta_zero_location("N")
+        ax.set_theta_direction(-1)
+        ax.set_rlabel_position(0)
+
+        hist_bottom = y_main
+        ax.set_ylim(ax.get_ylim()[0], max(ax.get_ylim()[1], y_main))
+
+    else:
+        ax.set_xlim(0, 2 * np.pi)
+        ax.set_xticks(geom["centers"])
+        ax.set_xticklabels(geom["labels"])
+        if xlabel:
+            ax.set_xlabel(xlabel, fontsize=12)
+        if ylabel:
+            ax.set_ylabel(ylabel, fontsize=12)
+
+        hist_bottom = ax.get_ylim()[0]
+
+    return hist_bottom
+
+
+def add_polar_bin_labels(ax, geom, radius_factor=1.05):
+    """Call after histogram so rmax is final."""
+    r = ax.get_rmax() * radius_factor
+    for theta, label in zip(geom["centers"], geom["labels"]):
+        ax.text(theta, r, label, ha="center", va="center")
+
+
+def plot_binned_groups(
+    ax,
+    x_radians,
+    mean_values,
+    error_values,
+    condition_values,
+    hide_time_bins,
+    colors,
+    plot_binned_line_func,
+):
+    """
+    Plots mean +/- error for each condition using your existing plot_binned_line.
+    Returns (handles, max_value).
+    """
+    handles = [None] * len(condition_values)
+
+    for i, cond in enumerate(condition_values):
+        cond = str(cond)
+        handles[i] = plot_binned_line_func(
+            ax=ax,
+            x=x_radians,
+            y=mean_values[cond],
+            yerr=error_values[cond],
+            hide_time_bins=hide_time_bins,
+            color=colors[i],
+            label=cond,
+        )
+
+    # nan-robust max
+    all_vals = []
+    for cond in condition_values:
+        arr = np.asarray(mean_values[str(cond)], dtype=float)
+        if np.any(~np.isnan(arr)):
+            all_vals.append(arr[~np.isnan(arr)])
+    max_value = float(np.nanmax(np.concatenate(all_vals))) if all_vals else 0.0
+
+    return handles, max_value
+
+
+def plot_effectsize_histogram(
+    ax,
+    geom,
+    effect_size_categories,
+    hide_time_bins,
+    max_value,
+    bottom,
+    show_histogram=True,
+    cmap=("#9370DB", "#6A5ACD", "#4B0082"),
+    hidden_color="#C0C0C0",
+    alpha=0.8,
+):
+    """
+    Draws effect size histogram bars. Returns (legend_handles, stat_text_col).
+    """
+    stat_text_col = "k"
+    if not show_histogram:
+        return None, stat_text_col
+
+    cats = np.asarray(effect_size_categories, dtype=float)
+    values = cats * (max_value * 0.1 if max_value > 0 else 0.1)
+
+    colors = []
+    for cat in cats.astype(int):
+        idx = int(np.clip(cat - 1, 0, len(cmap) - 1))
+        colors.append(cmap[idx])
+
+    for k in range(min(len(colors), len(hide_time_bins))):
+        if hide_time_bins[k]:
+            colors[k] = hidden_color
+            values[k] = (max_value * 0.1 if max_value > 0 else 0.1)
+
+    bars = ax.bar(geom["centers"], values, width=geom["widths"], bottom=bottom, align="center")
+
+    for c, b in zip(colors, bars):
+        b.set_facecolor(c)
+        b.set_alpha(alpha)
+
+    stat_text_col = "#FFFF00"
+
+    # expand polar r-limits to include the bars ---
+    if getattr(ax, "name", "") == "polar":
+        lower = ax.get_ylim()[0]
+
+        ax.set_rlim(lower, ax.get_rmax()+np.diff(ax.get_yticks())[0])
+
+    # effect size legend handles
+    legend_labels = ["large", "medium", "small"]
+    legend_colors = list(cmap)[::-1]
+    bar_handles = [Patch(color=legend_colors[i], label=legend_labels[i]) for i in range(3)]
+    return bar_handles, stat_text_col
+
+
+def annotate_binwise_stats(ax, test_dict, geom, polar_depiction, text_color="k"):
+    if not test_dict:
+        return
+
+    if polar_depiction:
+        yt = ax.get_yticks()
+        y = yt[-1] + (yt[-1] - yt[-2]) * 1.166 if len(yt) >= 2 else ax.get_rmax()
+
+        for k in test_dict:
+            idx = int(k)
+            theta = geom["centers"][idx] + 0.02
+            ax.text(
+                theta,
+                y,
+                test_dict[k],
+                ha="center",
+                va="center",
+                fontsize="small",
+                color=text_color,
+                rotation=-(geom["centers"][idx] * 180.0 / np.pi),
+            )
+    else:
+        yt = ax.get_yticks()
+        y = ax.get_ylim()[0] + (yt[-1] - yt[-2]) * 0.166 if len(yt) >= 2 else ax.get_ylim()[0]
+
+        for k in test_dict:
+            idx = int(k)
+            ax.text(
+                geom["centers"][idx],
+                y,
+                test_dict[k],
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize="small",
+            )
+
+
+def add_binned_legends(
+    ax,
+    condition_handles,
+    condition_labels,
+    effect_handles=None,
+    polar_depiction=False,
+    show_histogram=True,
+    first_plot=True,
+):
+    """
+    Adds condition legend + effect-size legend with consistent placement.
+    Only adds legends if first_plot=True.
+    """
+    if not first_plot:
+        return
+
+    # Legend 1: conditions
+    if polar_depiction:
+        leg1 = ax.legend(
+            handles=condition_handles,
+            labels=[str(c) for c in condition_labels],
+            fontsize=12,
+            loc="upper right",
+            bbox_to_anchor=(1.0, 1.1),
+        )
+    else:
+        leg1 = ax.legend(
+            handles=condition_handles,
+            labels=[str(c) for c in condition_labels],
+            fontsize=12,
+            loc="upper right",
+        )
+    ax.add_artist(leg1)
+
+    # Legend 2: effect size (optional)
+    if show_histogram and effect_handles is not None:
+        if polar_depiction:
+            leg2 = ax.legend(
+                handles=effect_handles,
+                title="Effect Size",
+                loc="upper left",
+                bbox_to_anchor=(0.0, 1.1),
+                fontsize=8,
+            )
+            ax.add_artist(leg2)
+        else:
+            ax.legend(
+                handles=effect_handles,
+                title="Effect Size",
+                loc="upper left",
+                fontsize=8,
+            )
