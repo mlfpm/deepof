@@ -692,7 +692,6 @@ def test_contiguous_segments(binary_table):
         assert np.where(binary_array)[1][0] == slices[0].start
 
 
-@settings(deadline=None, max_examples=25)
 @given(
     fps=st.floats(10.0, 120.0, allow_nan=False, allow_infinity=False, width=32),
     mm_to_px=st.floats(0.10000000149011612, 10.0, allow_nan=False, allow_infinity=False, width=32),
@@ -735,3 +734,12 @@ def test_scale_units(fps, mm_to_px, value):
     out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "mm/s", "px", "frames")
     out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "px/frames", "mm", "s")
     assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+
+@given(n=st.integers(1, 100))
+def test_get_square_shape_for_gridlike_plot(n):
+    r, c = deepof.visuals_utils.get_square_shape_for_gridlike_plot(n)
+    assert r * c == n
+    if n == 12: assert (r, c) == (3, 4)
+
+test_get_square_shape_for_gridlike_plot()

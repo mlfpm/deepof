@@ -1534,6 +1534,20 @@ def scale_units(coordinates, key, data, unit: str, target_distance: str = None, 
 
     return data * factor, unit_out
 
+def get_square_shape_for_gridlike_plot(N):
+    """get best number of rows and columns for grid like plots"""
+    assert N > 0
+    assert isinstance(N, int)
+    
+    sqrt_n = np.sqrt(N)
+    # Find divisor closest to sqrt(N)
+    n_cols = min(
+        (d for d in range(int(sqrt_n), 0, -1) if N % d == 0),
+        key=lambda d: abs(d - sqrt_n)
+    )
+    n_rows = N // n_cols
+    return n_rows, n_cols
+
 
 ######
 #Functions not included in property based testing for not having a clean return
@@ -1842,20 +1856,6 @@ def plot_arena(
             lw=3,
             ls="--",
         )
-        
-def get_square_shape_for_gridlike_plot(N):
-    """get best number of rows and columns for grid like plots"""
-    assert N > 0
-    assert isinstance(N, int)
-    
-    sqrt_n = np.sqrt(N)
-    # Find divisor closest to sqrt(N)
-    n_cols = min(
-        (d for d in range(int(sqrt_n), 0, -1) if N % d == 0),
-        key=lambda d: abs(d - sqrt_n)
-    )
-    n_rows = N // n_cols
-    return n_rows, n_cols
 
 def heatmap(
     dframe: pd.DataFrame,
