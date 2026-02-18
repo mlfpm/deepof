@@ -740,7 +740,7 @@ def test_scale_units(fps, mm_to_px, value):
 def test_get_square_shape_for_gridlike_plot(n):
     r, c = deepof.visuals_utils.get_square_shape_for_gridlike_plot(n)
     assert r * c == n
-    if n == 12: assert (r, c) == (3, 4)
+    if n == 12: assert (r, c) == (4, 3)
 
 
 ######
