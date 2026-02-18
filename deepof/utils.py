@@ -16,6 +16,9 @@ from itertools import combinations, product
 from math import atan2, dist
 from typing import Any, List, NewType, Tuple, Union
 
+# For optional verification plots, will probably be removed later
+from matplotlib import pyplot as plt
+
 
 import cv2
 import h5py
@@ -1386,7 +1389,6 @@ def get_point_polygon_distance_numba(points, poly_xy):
 
     return out
 
-from matplotlib import pyplot as plt
 def in_field_of_view(mouse_pts: np.ndarray,
                      fov_angle_deg: float,
                      roi: Polygon,
@@ -1455,7 +1457,7 @@ def in_field_of_view(mouse_pts: np.ndarray,
             sectors.append(None)
             continue
 
-        r = 1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6
+        r = (1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6)*(1 / np.cos(half))
         if not np.isfinite(r) or r <= 0:
             sectors.append(None)
             continue
@@ -1702,7 +1704,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10):
         dx = c2x - apex_x; dy = c2y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
         dx = c3x - apex_x; dy = c3y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
 
-        r = 1.05 * np.sqrt(maxd2) + 1e-6
+        r = (1.05 * np.sqrt(maxd2) + 1e-6) *(1 / np.cos(half))
         if not np.isfinite(r) or r <= 0.0:
             continue
 

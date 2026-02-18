@@ -947,9 +947,23 @@ def test_point_in_polygon(points, polygons):
 
 
 @settings(deadline=None, max_examples=25)
-@given(seed=st.integers(0, 2**32 - 1), poly_idx=st.integers(0, 2))
-def test_get_point_polygon_distance(seed, poly_idx):
-    # --- 3 fixed polygons + fixed points with known distances to verify---
+@given(
+    poly_idx=st.integers(0, 2),
+    rand_pts=st.lists(
+        st.tuples(
+            st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+            st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+        ),
+        min_size=1,
+        max_size=50,
+    ),
+    x0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    y0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    w=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+    h=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_get_point_polygon_distance(poly_idx, rand_pts, x0, y0, w, h):
+    # --- 3 fixed polygons + fixed points with known distances to verify ---
     cases = [
         # unit square
         (
@@ -972,20 +986,78 @@ def test_get_point_polygon_distance(seed, poly_idx):
     ]
 
     for poly_xy, pts, expected in cases:
-        d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy) 
+        d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy)
         d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_xy)
 
-        # Make sure that distances are as expected for specific point polygon combinations
+        # Make sure that distances are as expected for specific point/polygon combinations
         assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
         assert np.allclose(d_shapely, expected, rtol=0.0, atol=1e-9)
 
-    
-    rng = np.random.default_rng(seed)
-    poly_xy = cases[poly_idx][0]
-    pts = rng.normal(size=(rng.integers(1, 50), 2)).astype(np.float64)
+    pts = np.asarray(rand_pts, dtype=np.float64)  # (N,2)
+    poly_rand = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]], dtype=np.float64)
 
-    d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy)
-    d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_xy)
+    d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_rand)
+    d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_rand)
     
     # Make sure that both versions of the point polygon distance functions return similar results
     assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
+
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    mouse_pts=st.lists(
+        st.lists(
+            st.tuples(
+                st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+                st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+            ),
+            min_size=3,
+            max_size=3,
+        ),
+        min_size=1,
+        max_size=50,
+    ),
+    fov_angle_deg=st.floats(0.0010000000474974513, 179.99899291992188, allow_nan=False, allow_infinity=False, width=32),
+    x0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    y0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    w=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+    h=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
+    # Fixed ROIs
+    roi_front = np.array([[-1.0, 4.0], [1.0, 4.0], [1.0, 6.0], [-1.0, 6.0]], dtype=float)
+    roi_back  = np.array([[-1.0, -6.0], [1.0, -6.0], [1.0, -4.0], [-1.0, -4.0]], dtype=float)
+    roi_diag  = np.array([[9.9, 9.9], [10.1, 9.9], [10.1, 10.1], [9.9, 10.1]], dtype=float)  # ~45deg from +y
+    roi_far   = np.array([[9.9, 9809.9], [10.1, 9809.9], [10.1, 10010.1], [9.9, 10010.1]], dtype=float)
+
+    # Fixed mouse head position examples
+    mouse_up  = np.array([[-1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=float)    # faces +y
+    mouse_dn  = np.array([[-1.0, 0.0], [0.0, -1.0], [1.0, 0.0]], dtype=float)   # faces -y
+    mouse_bad = np.array([[0.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=float)     # degenerate ears
+
+    # Test special cases
+    small = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_diag, plot=False)[0]
+    large = deepof.utils.in_field_of_view(mouse_up, 120.0, roi_diag, plot=False)[0]
+    far   = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_far, plot=False)[0]
+    updown = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_back, plot=False)[0]
+    downdown = deepof.utils.in_field_of_view(mouse_dn, 60.0, roi_back, plot=False)[0]
+    
+    # Mouse sees diagonal ROI up close only with wide angle, far away also with small angle
+    assert small == 0.0 and large == 1.0 and far == 1.0 and updown == 0.0 and downdown == 1.0
+
+    
+    bad_py = deepof.utils.in_field_of_view(mouse_bad, 60.0, roi_front, plot=False)[0]
+    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64))[0]
+    
+    # degenerate geometry -> nan
+    assert np.isnan(bad_py) and np.isnan(bad_nb)
+
+    mouse = np.asarray(mouse_pts, dtype=np.float64)  # (N,3,2)
+    roi = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]], dtype=np.float64)
+
+    out_py = deepof.utils.in_field_of_view(mouse, float(fov_angle_deg), roi, plot=False)
+    out_nb = deepof.utils.in_field_of_view_numba(mouse, float(fov_angle_deg), roi)
+
+    # Both versions are the same for random head / angle / ROI combinations
+    assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)
