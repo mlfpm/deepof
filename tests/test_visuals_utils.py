@@ -20,6 +20,7 @@ from hypothesis import strategies as st
 from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from types import SimpleNamespace
 from shutil import rmtree
 import warnings
 
@@ -689,3 +690,48 @@ def test_contiguous_segments(binary_table):
     assert len(slices) <= np.sum(binary_array)
     if (binary_array==1).any():
         assert np.where(binary_array)[1][0] == slices[0].start
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    fps=st.floats(10.0, 120.0, allow_nan=False, allow_infinity=False, width=32),
+    mm_to_px=st.floats(0.10000000149011612, 10.0, allow_nan=False, allow_infinity=False, width=32),
+    value=st.floats(1.0, 100.0, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_scale_units(fps, mm_to_px, value):
+    key = "k"
+    coordinates =  SimpleNamespace(_frame_rate=fps, _scales={key: (0.0, 0.0, mm_to_px, 1.0)})
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, value, None)
+    # unit=None returns unchanged
+    assert out == value and out_u is None
+
+    # known conversions (fps and mm_to_px dependent)
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 100.0, "frames", None, "s")
+    assert np.allclose(out, 100.0 / fps, rtol=0.0, atol=1e-9) and out_u == "s"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 10.0, "mm", "px", None)
+    assert np.allclose(out, 10.0 * mm_to_px, rtol=0.0, atol=1e-9) and out_u == "px"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 1.0, "mm/s", "px", "frames")
+    assert np.allclose(out, (1.0*mm_to_px) / fps, rtol=0.0, atol=1e-9) and out_u == "px/frames"
+
+    # known conversions (fps and mm_to_px independent)
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 10.0, "mm", "cm", None)
+    assert np.allclose(out, 1.0, rtol=0.0, atol=1e-9) and out_u == "cm"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 60.0, "s", None, "min")
+    assert np.allclose(out, 1.0, rtol=0.0, atol=1e-9) and out_u == "min"
+
+    # round-trip: A->B->A preserves value
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "mm", "px", None)
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "px", "mm", None)
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "frames", None, "s")
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "s", None, "frames")
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "mm/s", "px", "frames")
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "px/frames", "mm", "s")
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
