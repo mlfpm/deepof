@@ -1003,7 +1003,6 @@ def test_get_point_polygon_distance(poly_idx, rand_pts, x0, y0, w, h):
     assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
 
 
-
 @settings(deadline=None, max_examples=25)
 @given(
     mouse_pts=st.lists(
