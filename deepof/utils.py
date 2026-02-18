@@ -1341,8 +1341,8 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
     return distances
 
 
-#@nb.njit(cache=True)
-def _seg_dist2(px, py, ax, ay, bx, by):
+@nb.njit(cache=True)
+def _seg_dist2(px, py, ax, ay, bx, by): # pragma: no cover
     vx, vy = bx - ax, by - ay
     wx, wy = px - ax, py - ay
     c1 = wx * vx + wy * vy
@@ -1361,8 +1361,8 @@ def _seg_dist2(px, py, ax, ay, bx, by):
     dx, dy = px - qx, py - qy
     return dx*dx + dy*dy
 
-#@nb.njit(parallel=True, cache=True)
-def get_point_polygon_distance_numba(points, poly_xy):
+@nb.njit(parallel=True, cache=True)
+def get_point_polygon_distance_numba(points, poly_xy): # pragma: no cover
     pts = points
     M = poly_xy.shape[0]
     # drop closing vertex if repeated
@@ -1512,13 +1512,13 @@ def in_field_of_view(mouse_pts: np.ndarray,
 
     return out
 
-#@nb.njit(cache=True)
-def _orient(ax, ay, bx, by, cx, cy):
+@nb.njit(cache=True)
+def _orient(ax, ay, bx, by, cx, cy): # pragma: no cover
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 
 
-#@nb.njit(cache=True)
-def _on_segment(ax, ay, bx, by, px, py, eps):
+@nb.njit(cache=True)
+def _on_segment(ax, ay, bx, by, px, py, eps): # pragma: no cover
     # p collinear with segment a-b and within bounding box
     if abs(_orient(ax, ay, bx, by, px, py)) > eps:
         return False
@@ -1529,8 +1529,8 @@ def _on_segment(ax, ay, bx, by, px, py, eps):
     return True
 
 
-#@nb.njit(cache=True)
-def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps):
+@nb.njit(cache=True)
+def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
     o1 = _orient(ax, ay, bx, by, cx, cy)
     o2 = _orient(ax, ay, bx, by, dx, dy)
     o3 = _orient(cx, cy, dx, dy, ax, ay)
@@ -1550,8 +1550,8 @@ def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps):
     return False
 
 
-#@nb.njit(cache=True)
-def _point_in_poly(px, py, poly, eps):
+@nb.njit(cache=True)
+def _point_in_poly(px, py, poly, eps): # pragma: no cover
     """Ray casting + boundary included."""
     m = poly.shape[0]
     inside = False
@@ -1574,8 +1574,8 @@ def _point_in_poly(px, py, poly, eps):
     return inside
 
 
-#@nb.njit(cache=True)
-def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+@nb.njit(cache=True)
+def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     """Same-side test; boundary included."""
     abp = _orient(ax, ay, bx, by, px, py)
     bcp = _orient(bx, by, cx, cy, px, py)
@@ -1586,8 +1586,8 @@ def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
     return not (has_neg and has_pos)
 
 
-#@nb.njit(cache=True)
-def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps):
+@nb.njit(cache=True)
+def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     # 1) triangle vertex in polygon
     if _point_in_poly(ax, ay, poly, eps): return True
     if _point_in_poly(bx, by, poly, eps): return True
@@ -1613,15 +1613,15 @@ def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps):
     return False
 
 
-#@nb.njit(cache=True)
-def _rotate_vec(vx, vy, ang):
+@nb.njit(cache=True)
+def _rotate_vec(vx, vy, ang): # pragma: no cover
     ca = np.cos(ang)
     sa = np.sin(ang)
     return ca * vx - sa * vy, sa * vx + ca * vy
 
 
-#@nb.njit(parallel=True, cache=True)
-def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10):
+@nb.njit(parallel=True, cache=True)
+def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pragma: no cover
     """
     Numba version of in_field_of_view (no plotting, no shapely).
 
