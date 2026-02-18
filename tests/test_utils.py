@@ -21,6 +21,8 @@ from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
 from shapely.geometry import Point, Polygon
+from typing import Any, List, NewType, Tuple, Union
+
 
 
 import deepof.data
@@ -689,10 +691,15 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
     if detection_mode=="circular-autodetect":
 
+        # Legacy compatibility
+        if isinstance(coords._arena_params[video_key], Tuple):
+            vgl_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
+        else:
+            vgl_arena_parameters=coords._arena_params[video_key]
         #check if the detected circular areas are sufficiently similar
         for i in range(3):
             assert np.linalg.norm(
-                np.array(coords._arena_params[video_key][i]) - np.array(arena_parameters[i])
+                np.array(vgl_arena_parameters[i]) - np.array(arena_parameters[i])
                 ) < 1
 
         pass
