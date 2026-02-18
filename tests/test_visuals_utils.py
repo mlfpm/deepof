@@ -742,4 +742,63 @@ def test_get_square_shape_for_gridlike_plot(n):
     assert r * c == n
     if n == 12: assert (r, c) == (3, 4)
 
-test_get_square_shape_for_gridlike_plot()
+
+######
+# Regression testing of plot Data for consitency
+######
+
+
+def test_mouse_roi_interaction():
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
+        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions=None,
+    ).create(force=True, test=True)
+
+    roi = np.array([[158.61861862, 154.05405405],
+                    [276.15615616, 152.91291291],
+                    [276.15615616, 260.18018018],
+                    [158.61861862, 260.18018018]])
+    prun._roi_dicts = {"test": {1: roi}, "test2": {1: roi}}
+
+    ref_path = os.path.join(".", "tests", "test_examples", "test_data", "mouse_roi_interaction")
+
+    # FOV mode with experiment_ids
+    effect_fov, group_fov = deepof.visuals.return_mouse_roi_interaction(
+        prun, animal_id="B", roi_number=1, N_time_bins=20, mode="fov",
+        experiment_ids={"a": ["test"], "b": ["test2"]},
+    )
+    
+    ref_fov_e = os.path.join(ref_path, "fov_effect.csv")
+    ref_fov_g = os.path.join(ref_path, "fov_group.csv")
+        
+    # Output data matches reference (FOV mode)
+    pd.testing.assert_frame_equal(effect_fov, pd.read_csv(ref_fov_e), atol=1e-9, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(group_fov, pd.read_csv(ref_fov_g), atol=1e-9, check_like=True, check_dtype=False)
+
+    # Distance mode with custom bins
+    effect_dist, group_dist = deepof.visuals.return_mouse_roi_interaction(
+        prun, bodyparts=["B_Nose"], roi_number=1, mode="distance",
+        custom_time_bins=[[0, 2], [3, 6], [7, 20], [21, 99]],
+        hide_time_bins=[False, True, False, True],
+    )
+    
+    ref_dist_e = os.path.join(ref_path, "distance_effect.csv")
+    ref_dist_g = os.path.join(ref_path, "distance_group.csv")
+    
+    if not os.path.exists(ref_dist_e):
+        effect_dist.to_csv(ref_dist_e, index=False)
+        group_dist.to_csv(ref_dist_g, index=False)
+    
+    # Output data matches reference (distance mode)
+    pd.testing.assert_frame_equal(effect_dist, pd.read_csv(ref_dist_e), atol=1e-9, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(group_dist, pd.read_csv(ref_dist_g), atol=1e-9, check_like=True, check_dtype=False)
+
+    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
