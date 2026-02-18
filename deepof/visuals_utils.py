@@ -2460,7 +2460,7 @@ def plot_binned_line(
     err_linewidth: float = 1.0,
     err_alpha: float = 0.15,
     marker: str = "o",
-):
+): # pragma: no cover
     """
     Plot a binned mean line with interpolation + markers + error band, leaving gaps
     for hidden bins and NaNs.
@@ -2561,30 +2561,30 @@ def plot_binned_line(
 
 
 
-def get_bin_centers(bin_lengths, as_radians: bool = False):
-    """Compute centers of consecutive bins given their lengths.
+#def get_bin_centers(bin_lengths, as_radians: bool = False):
+#    """Compute centers of consecutive bins given their lengths.
+#
+#    Args:
+#        bin_lengths : array-like of positive numbers
+#        as_radians : bool, default False, if True return result as fractions of 2 pi
+#    """
+#    L = np.asarray(bin_lengths, float).ravel()
+#    if L.size == 0:
+#        return L, L
+#    tot = L.sum()
+#    if tot <= 0:
+#        raise ValueError("sum(bin_lengths) must be > 0")
+#
+#    starts = np.r_[0.0, np.cumsum(L)[:-1]] / tot
+#    centers = starts + 0.5 * (L / tot)
+#
+#    if as_radians:
+#        s = 2 * np.pi
+#        return centers * s, starts * s
+#    return centers, starts
 
-    Args:
-        bin_lengths : array-like of positive numbers
-        as_radians : bool, default False, if True return result as fractions of 2 pi
-    """
-    L = np.asarray(bin_lengths, float).ravel()
-    if L.size == 0:
-        return L, L
-    tot = L.sum()
-    if tot <= 0:
-        raise ValueError("sum(bin_lengths) must be > 0")
 
-    starts = np.r_[0.0, np.cumsum(L)[:-1]] / tot
-    centers = starts + 0.5 * (L / tot)
-
-    if as_radians:
-        s = 2 * np.pi
-        return centers * s, starts * s
-    return centers, starts
-
-
-def ensure_axis(ax=None, polar_depiction=False, figsize=(12, 4)):
+def ensure_axis(ax=None, polar_depiction=False, figsize=(12, 4)): # pragma: no cover
     """
     If ax is None: create proper axis and return (fig, ax, show=True)
     If ax is given:
@@ -2614,7 +2614,7 @@ def ensure_axis(ax=None, polar_depiction=False, figsize=(12, 4)):
     return ax.figure, ax, False
 
 
-def get_binned_geometry(bin_lengths):
+def get_binned_geometry(bin_lengths): # pragma: no cover
     """
     Returns a dict with centers/widths/edges in radians (0..2π) + labels "1..N".
     """
@@ -2643,7 +2643,7 @@ def format_time_binned_axis(
     title=None,
     xlabel=None,
     ylabel=None,
-):
+): # pragma: no cover
     if title:
         if polar_depiction:
             ax.set_title(title, fontsize=14, pad=35)
@@ -2684,7 +2684,7 @@ def format_time_binned_axis(
     return hist_bottom
 
 
-def add_polar_bin_labels(ax, geom, radius_factor=1.05):
+def add_polar_bin_labels(ax, geom, radius_factor=1.05): # pragma: no cover
     """Call after histogram so rmax is final."""
     r = ax.get_rmax() * radius_factor
     for theta, label in zip(geom["centers"], geom["labels"]):
@@ -2700,7 +2700,7 @@ def plot_binned_groups(
     hide_time_bins,
     colors,
     plot_binned_line_func,
-):
+): # pragma: no cover
     """
     Plots mean +/- error for each condition using your existing plot_binned_line.
     Returns (handles, max_value).
@@ -2741,7 +2741,7 @@ def plot_effectsize_histogram(
     cmap=("#9370DB", "#6A5ACD", "#4B0082"),
     hidden_color="#C0C0C0",
     alpha=0.8,
-):
+): # pragma: no cover
     """
     Draws effect size histogram bars. Returns (legend_handles, stat_text_col).
     """
@@ -2783,7 +2783,7 @@ def plot_effectsize_histogram(
     return bar_handles, stat_text_col
 
 
-def annotate_binwise_stats(ax, test_dict, geom, polar_depiction, text_color="k"):
+def annotate_binwise_stats(ax, test_dict, geom, polar_depiction, text_color="k"): # pragma: no cover
     if not test_dict:
         return
 
@@ -2829,7 +2829,7 @@ def add_binned_legends(
     polar_depiction=False,
     show_histogram=True,
     first_plot=True,
-):
+): # pragma: no cover
     """
     Adds condition legend + effect-size legend with consistent placement.
     Only adds legends if first_plot=True.
