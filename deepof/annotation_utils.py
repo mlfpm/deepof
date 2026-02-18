@@ -234,7 +234,6 @@ def climb_arena(
 
 def sniff_object(
     speed_dframe: pd.DataFrame,
-    arena_type: str,
     arena: np.array,
     pos_dict: pd.DataFrame,
     tol: float,
@@ -250,7 +249,6 @@ def sniff_object(
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time.
-        arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect'].
         arena (np.array): contains arena location and shape details.
         pos_dict (table_dict): position over time for all videos in a project.
         tol (float): minimum tolerance to report a hit.
@@ -1221,7 +1219,6 @@ def supervised_tagging(
         tag_dict[_id + undercond + "sniff-arena"] = deepof.utils.binary_moving_median_numba(
             sniff_object(
                 speed_dframe=speeds,
-                arena_type=arena_type,
                 arena=arena_params_scaled,
                 pos_dict=raw_coords,
                 tol=params["sniff_arena_tol"],
