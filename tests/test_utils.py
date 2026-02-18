@@ -924,6 +924,7 @@ polygons = [
     ],  # ring polygon
 ]
 
+
 @settings(max_examples=100, deadline=None)
 @given(
     points=st.lists(
@@ -945,4 +946,46 @@ def test_point_in_polygon(points, polygons):
     )
 
 
-test_point_in_polygon()
+@settings(deadline=None, max_examples=25)
+@given(seed=st.integers(0, 2**32 - 1), poly_idx=st.integers(0, 2))
+def test_get_point_polygon_distance(seed, poly_idx):
+    # --- 3 fixed polygons + fixed points with known distances to verify---
+    cases = [
+        # unit square
+        (
+            np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]),
+            np.array([[0.5, 0.5], [2.0, 0.5], [0.0, 0.0], [0.2, 1.0]]),
+            np.array([0.5, 1.0, 0.0, 0.0]),
+        ),
+        # right triangle
+        (
+            np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]),
+            np.array([[0.5, 0.5], [1.0, 1.0], [3.0, 0.0]]),
+            np.array([0.5, 0.0, 1.0]),
+        ),
+        # diamond (rotated square)
+        (
+            np.array([[0.0, 1.0], [1.0, 0.0], [0.0, -1.0], [-1.0, 0.0]]),
+            np.array([[0.0, 0.0], [2.0, 0.0], [1.0, 0.0], [0.5, 0.5]]),
+            np.array([1.0 / np.sqrt(2.0), 1.0, 0.0, 0.0]),
+        ),
+    ]
+
+    for poly_xy, pts, expected in cases:
+        d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy) 
+        d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_xy)
+
+        # Make sure that distances are as expected for specific point polygon combinations
+        assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
+        assert np.allclose(d_shapely, expected, rtol=0.0, atol=1e-9)
+
+    
+    rng = np.random.default_rng(seed)
+    poly_xy = cases[poly_idx][0]
+    pts = rng.normal(size=(rng.integers(1, 50), 2)).astype(np.float64)
+
+    d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy)
+    d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_xy)
+    
+    # Make sure that both versions of the point polygon distance functions return similar results
+    assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
