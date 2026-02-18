@@ -802,3 +802,66 @@ def test_mouse_roi_interaction():
     pd.testing.assert_frame_equal(group_dist, pd.read_csv(ref_dist_g), atol=1e-9, check_like=True, check_dtype=False)
 
     rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
+
+
+def test_transitions():
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
+        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions=None,
+    ).create(force=True, test=True)
+
+    # Create exp_conditions with pandas DataFrames containing "CSDS" column
+    prun._exp_conditions = {
+        "test": pd.DataFrame({"CSDS": ["test_cond1"]}),
+        "test2": pd.DataFrame({"CSDS": ["test_cond2"]}),
+    }
+
+    # Generate supervised annotations (replace with actual method if different)
+    supervised_annotation = prun.supervised_annotation()
+
+    ref_path = os.path.join(".", "tests", "test_examples", "test_data", "transitions")
+
+    # Call 1: silence_diagonal=True, normalize=False, delta_T=2
+    result1 = deepof.visuals.return_transitions(
+        prun,
+        supervised_annotations=supervised_annotation,
+        visualization="heatmaps",
+        bin_size=6,
+        bin_index=0,
+        exp_condition="CSDS",
+        delta_T=2,
+        normalize=False,
+        silence_diagonal=True,
+    )
+    
+    ref1 = os.path.join(ref_path, "transitions_silenced.csv")  
+    
+    pd.testing.assert_frame_equal(result1, pd.read_csv(ref1, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
+
+    # Call 2: normalize=True, diagonal_behavior_counting="Events"
+    result2 = deepof.visuals.return_transitions(
+        prun,
+        supervised_annotations=supervised_annotation,
+        visualization="networks",
+        bin_size=3,
+        bin_index=1,
+        exp_condition="CSDS",
+        delta_T=1,
+        normalize=True,
+        silence_diagonal=False,
+        diagonal_behavior_counting="Events",
+    )
+    
+    ref2 = os.path.join(ref_path, "transitions_normalized.csv")
+    
+    pd.testing.assert_frame_equal(result2, pd.read_csv(ref2, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
+
+    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
