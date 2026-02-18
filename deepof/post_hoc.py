@@ -357,8 +357,6 @@ def get_contrastive_soft_counts(
         exp_conditions=coordinates.get_exp_conditions,
     )
 
-    if isinstance(states, str):
-        return soft_counts_out, model_selection
     return soft_counts_out
     
 

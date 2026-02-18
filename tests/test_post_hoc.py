@@ -9,6 +9,7 @@ Testing module for deepof.post_hoc
 """
 import os
 from shutil import rmtree
+from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -60,21 +61,22 @@ def test_get_contrastive_soft_counts(states):
         exp_conditions=None,
     )
     
-    #if states == "priors":
-    #    # Define a test matrix of soft counts
-    #    soft_counts = {}
-    #    for i in range(10):
-    #        counts = np.abs(np.random.normal(size=(100, 2)))
-    #        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-    #else:
-    #    soft_counts = None
+    if states == "priors":
+        # Define a test matrix of soft counts
+        soft_counts = {}
+        for i in range(10):
+            counts = np.abs(np.random.normal(size=(100, 2)))
+            soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    else:
+        soft_counts = None
 
-    deepof.post_hoc.get_contrastive_soft_counts(
+    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts(
         prun,
         embeddings,
         states=states,
         min_states=2,
         max_states=3,
+        soft_counts=soft_counts,
     )
 
     rmtree(
@@ -82,6 +84,16 @@ def test_get_contrastive_soft_counts(states):
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
+    
+    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
+    assert all([np.sum(soft_counts_out[key])==100.0 for key in soft_counts_out.keys()])
+
+    # Check if Ideal states determined based on different modes stay consistent 
+    # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
+    if states != "bic":
+        assert all([np.shape(soft_counts_out[key])[1]==3 for key in soft_counts_out.keys()])
+    else:
+        assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
 
 
 
