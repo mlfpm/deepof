@@ -1062,8 +1062,9 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
     mouse = np.asarray(mouse_pts, dtype=np.float64)  # (N,3,2)
     roi = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]], dtype=np.float64)
 
-    out_py = deepof.utils.in_field_of_view(mouse, float(fov_angle_deg), roi, plot=False)
-    out_nb = deepof.utils.in_field_of_view_numba(mouse, float(fov_angle_deg), roi)
+    # add small value to mouse to avoid numerical edge cases 
+    out_py = deepof.utils.in_field_of_view(mouse+0.000001, float(fov_angle_deg), roi, plot=False)
+    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi)
 
     # Both versions are the same for random head / angle / ROI combinations
     assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)

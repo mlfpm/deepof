@@ -1421,60 +1421,46 @@ def in_field_of_view(mouse_pts: np.ndarray,
     half = np.deg2rad(fov_angle_deg) / 2.0
     out = np.full((mouse_pts.shape[0],), np.nan, dtype=float)
 
-    # radius large enough to cover ROI (use bounds corners)
     minx, miny, maxx, maxy = roi.bounds
     roi_corners = np.array([[minx, miny], [minx, maxy], [maxx, miny], [maxx, maxy]], dtype=float)
 
     sectors = []
     for i, (L, N, R) in enumerate(mouse_pts):
-        # invalid detection -> nan
-        if not (np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all()):
-            sectors.append(None)
-            continue
-
         apex = 0.5 * (L + R)
         ear_vec = R - L
-        if np.linalg.norm(ear_vec) < eps:
-            sectors.append(None)
-            continue
-
-        # forward is perpendicular to ear line; choose sign that points toward the nose
         perp = np.array([-ear_vec[1], ear_vec[0]], dtype=float)
         if np.dot(perp, N - apex) < 0:
             perp = -perp
 
         nrm = np.linalg.norm(perp)
-        if nrm < eps:
-            sectors.append(None)
-            continue
-
-        fwd = perp / nrm
-        d1 = rotate(fwd, +half, origin=np.array([0.0, 0.0]))
-        d2 = rotate(fwd, -half, origin=np.array([0.0, 0.0]))
-
-        # degenerate if rays almost identical
+        fwd = perp / nrm if nrm >= eps else perp
+        
+        ca, sa = np.cos(half), np.sin(half)
+        d1 = np.array([ca * fwd[0] - sa * fwd[1], sa * fwd[0] + ca * fwd[1]], dtype=float)
+        d2 = np.array([ca * fwd[0] + sa * fwd[1], -sa * fwd[0] + ca * fwd[1]], dtype=float)
+        
         cross = d1[0] * d2[1] - d1[1] * d2[0]
-        if abs(cross) < 1e-12:
-            sectors.append(None)
-            continue
-
-        r = (1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6)*(1 / np.cos(half))
-        if not np.isfinite(r) or r <= 0:
-            sectors.append(None)
-            continue
-
+        r = (1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6) * (1 / np.cos(half))
+        
         p0, p1, p2 = apex, apex + r * d1, apex + r * d2
-        if not (np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all()):
-            sectors.append(None)
-            continue
-
         sector = Polygon([tuple(p0), tuple(p1), tuple(p2)])
-        if sector.is_empty or (not sector.is_valid) or sector.area < 1e-12:
+        
+        # Validation check
+        valid = (
+            np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all() and
+            np.linalg.norm(ear_vec) >= eps and
+            nrm >= eps and
+            abs(cross) >= 1e-12 and
+            np.isfinite(r) and r > 0 and
+            np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all() and
+            not sector.is_empty and sector.is_valid and sector.area >= 1e-12
+        )
+        
+        if valid:
+            sectors.append(sector)
+            out[i] = 1.0 if sector.intersects(roi) else 0.0
+        else:
             sectors.append(None)
-            continue
-
-        sectors.append(sector)
-        out[i] = 1.0 if sector.intersects(roi) else 0.0
 
     if plot: # pragma: no cover
         idx = -1
@@ -1484,18 +1470,15 @@ def in_field_of_view(mouse_pts: np.ndarray,
 
         fig, ax = plt.subplots(figsize=(6, 6))
 
-        # ROI
         x, y = roi.exterior.xy
         ax.plot(x, y, "k-", lw=2, label="ROI")
         ax.fill(x, y, color="k", alpha=0.08)
 
-        # FOV
         if sector is not None:
             sx, sy = sector.exterior.xy
             ax.plot(sx, sy, "C0-", lw=2, label="FOV")
             ax.fill(sx, sy, color="C0", alpha=0.15)
 
-        # Mouse points + ear line + apex
         ax.plot([L[0], R[0]], [L[1], R[1]], "C1--", lw=1)
         ax.scatter([L[0], apex[0], N[0], R[0]],
                    [L[1], apex[1], N[1], R[1]],
