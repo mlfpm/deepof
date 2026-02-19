@@ -2300,6 +2300,7 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        only_window_and_split: bool = False,
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2463,6 +2464,10 @@ class Coordinates:
 
         # Create graph datasets
         if preprocess:
+
+            collect_quality = True
+            if collect_quality==True:
+                quality_to_load = self.get_quality()
             to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
@@ -2470,8 +2475,10 @@ class Coordinates:
                 bin_index=bin_index,
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
+                save_as_paths=return_as_paths,
+                only_window_and_split=only_window_and_split,
+                quality_to_load=quality_to_load,
                 **kwargs,
-                save_as_paths=return_as_paths
                 )
    
             shapes=[]
@@ -3384,6 +3391,8 @@ class TableDict(dict):
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
         skip_angles: bool = True,
+        only_window_and_split = False,
+        quality_to_load = None, 
     ) -> np.ndarray:
 
         available_mem = psutil.virtual_memory().available * 0.9
@@ -3440,7 +3449,12 @@ class TableDict(dict):
                     pbar.update()
                     continue
 
-                if filter_low_variance:
+                if quality_to_load is not None:
+                    quality = get_dt(quality_to_load.filter_videos([key]), key)
+                    speed_feature_names = list(set(tab.columns) & set(quality.columns)) # speed columns included in tab and names of quality columns are the same
+                    tab[speed_feature_names] = quality[speed_feature_names].iloc[bin_info[key]]
+
+                if filter_low_variance and not only_window_and_split:
                     keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
                                 list(np.where(["pheno" in str(col) for col in tab.columns])[0])
                     tab = tab.iloc[:, keep_cols]
@@ -3450,12 +3464,12 @@ class TableDict(dict):
                     )
                 
                 # Remove angle columns and put them back at the end of the loop
-                if skip_angles:
+                if skip_angles and not only_window_and_split:
                     angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
                     angle_cols = tab.loc[:,angle_col_mask].copy()
                     tab = tab.drop(columns=angle_cols)
 
-                if scale:
+                if scale and not only_window_and_split:
 
                     current_tab_local = deepof.utils.scale_table(
                         feature_array=tab,
@@ -3474,7 +3488,7 @@ class TableDict(dict):
                         tab = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
 
                 #re-add unprocessed angle columns
-                if skip_angles:
+                if skip_angles and not only_window_and_split:
                     for i, col in enumerate(angle_cols):
                         tab.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
 
@@ -3490,7 +3504,7 @@ class TableDict(dict):
                 f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
             )
 
-        if scale:
+        if scale and not only_window_and_split:
             if scale == "standard":
                 global_scaler = StandardScaler()
             elif scale == "minmax":
@@ -3508,7 +3522,7 @@ class TableDict(dict):
             else:
                 global_scaler = pretrained_scaler
 
-        if resave_after_global:
+        if resave_after_global and not only_window_and_split:
             with tqdm(total=len(keys_list), desc=f"{'Rescaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for key in keys_list:
                     tab = get_dt(self, key)
