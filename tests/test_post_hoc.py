@@ -158,15 +158,25 @@ def test_get_time_on_cluster():
 
     # Define a test matrix of soft counts
     soft_counts = {}
+    bin_info = {}
     for i in range(10):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+        bin_info[i] = {}
+        bin_info[i]["time"]=np.array([0,1,2,3,4,5,6,7,8]) 
+        bin_info[i][""]=np.array([True]*5+[False]*4)
 
-    toc = deepof.post_hoc.get_time_on_cluster(soft_counts)
+    roi_number=1
+
+    toc = deepof.post_hoc.get_time_on_cluster(soft_counts,False)
+    toc2 = deepof.post_hoc.get_time_on_cluster(soft_counts,False, False, bin_info,roi_number)
 
     # Assert that both the soft counts and breaks are correctly aggregated
     assert toc.shape[0] * 100 == np.concatenate(list(soft_counts.values())).shape[0]
-    assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1]
+    assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1] # one shorter due to binning
+    assert np.sum(np.sum(toc)) > np.sum(np.sum(toc2))
+    assert all(np.sum(toc, axis=1)==100)    
+    assert all(np.sum(toc2, axis=1)==5)
 
 
 @given(
