@@ -2427,6 +2427,11 @@ class Coordinates:
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
+            speed_feature_names = (
+                list(graph.nodes())
+                #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
+            )
+
             # Sort indices to have always the same node order
             node_sorting_indices = []
             angle_sorting_indices = []
@@ -2520,6 +2525,12 @@ class Coordinates:
                 for key in to_preprocess.keys():
 
                     tab, table_path = get_dt(to_preprocess, key, return_path=True) 
+
+                    collect_quality = True
+                    if collect_quality==True:
+                        quality_to_load = self.get_quality().filter_videos([key])
+                        quality = get_dt(quality_to_load, key)
+                        tab[speed_feature_names] = quality[speed_feature_names]
 
                     tab = np.array(tab)
 
