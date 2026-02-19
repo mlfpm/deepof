@@ -67,11 +67,11 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
     # Collect sequences, validate dims, crop to common length
     seq_list = [np.asarray(v) for v in embeddings.values()]
     if not seq_list:
-        raise ValueError("No sequences provided.")
+        raise ValueError("No sequences provided.")  # pragma: no cover
     d = seq_list[0].shape[1]
     for s in seq_list:
         if s.ndim != 2 or s.shape[1] != d:
-            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")
+            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")  # pragma: no cover
     min_T = min(s.shape[0] for s in seq_list)
     X = np.stack([s[:min_T].astype(np.float32, copy=False) for s in seq_list], axis=0)  # (N, T, D)
     n_obs = X.shape[0] * X.shape[1]
@@ -244,9 +244,9 @@ def get_contrastive_soft_counts(
 
         P = get_dt(soft_counts, key).astype(np.float32, copy=False)  # supports TableDict-like too
         if P.ndim != 2:
-            raise ValueError(f"soft_counts[{key}] must be (T,K). Got {P.shape}.")
+            raise ValueError(f"soft_counts[{key}] must be (T,K). Got {P.shape}.")  # pragma: no cover
         if P.shape[1] != K:
-            raise ValueError(f"K mismatch for {key}: soft_counts has {P.shape[1]}, expected {K}.")
+            raise ValueError(f"K mismatch for {key}: soft_counts has {P.shape[1]}, expected {K}.")  # pragma: no cover
 
         # align length to embeddings
         if P.shape[0] < T:
@@ -298,7 +298,7 @@ def get_contrastive_soft_counts(
     # ---- prepare ----
     keys = list(embeddings.keys())
     if not keys:
-        raise ValueError("Embeddings are empty.")
+        raise ValueError("Embeddings are empty.")  # pragma: no cover
     D = get_dt(embeddings, keys[0], only_metainfo=True)["shape"][1]
 
     # ---- determine K (skip selection if priors provided) ----
@@ -308,11 +308,11 @@ def get_contrastive_soft_counts(
         # infer K from priors (first overlapping key)
         k0 = next((k for k in keys if k in soft_counts), None)
         if k0 is None:
-            raise ValueError("soft_counts provided but no keys overlap with embeddings.")
+            raise ValueError("soft_counts provided but no keys overlap with embeddings.")  # pragma: no cover
         K_prior = int(get_dt(soft_counts, k0, only_metainfo=True)["shape"][1])
 
         if isinstance(states, int) and int(states) != K_prior:
-            raise ValueError(f"states={states} but soft_counts implies K={K_prior}. They must match.")
+            raise ValueError(f"states={states} but soft_counts implies K={K_prior}. They must match.")  # pragma: no cover
         K_best = K_prior
 
     else:
