@@ -502,7 +502,8 @@ def connect_mouse(
     return final_graph
 
 
-def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray):
+# Candidate for removal or rework as it is part of a basically unused preprocessing pathway
+def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray): # pragma: no cover
     """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
@@ -1475,7 +1476,7 @@ def in_field_of_view(mouse_pts: np.ndarray,
         sectors.append(sector)
         out[i] = 1.0 if sector.intersects(roi) else 0.0
 
-    if plot:
+    if plot: # pragma: no cover
         idx = -1
         L, N, R = mouse_pts[idx]
         apex = 0.5 * (L + R)
