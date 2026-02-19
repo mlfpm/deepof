@@ -24,7 +24,7 @@ from deepof.data import TableDict
 
 
 @settings(deadline=None, max_examples=25)
-@given(states=st.sampled_from([3, "aic", "bic"]))
+@given(states=st.sampled_from([3, 2, "aic", "bic"]))
 def test_get_contrastive_soft_counts(states):
 
     prun = deepof.data.Project(
@@ -61,11 +61,11 @@ def test_get_contrastive_soft_counts(states):
         exp_conditions=None,
     )
     
-    if states == "priors":
+    if isinstance(states, int):
         # Define a test matrix of soft counts
         soft_counts = {}
         for i in range(10):
-            counts = np.abs(np.random.normal(size=(100, 2)))
+            counts = np.abs(np.random.normal(size=(100, states)))
             soft_counts[i] = counts / counts.sum(axis=1)[:, None]
     else:
         soft_counts = None
@@ -90,7 +90,7 @@ def test_get_contrastive_soft_counts(states):
 
     # Check if Ideal states determined based on different modes stay consistent 
     # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
-    if states != "bic":
+    if states != "bic" and states != 2:
         assert all([np.shape(soft_counts_out[key])[1]==3 for key in soft_counts_out.keys()])
     else:
         assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
