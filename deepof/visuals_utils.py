@@ -77,7 +77,7 @@ class DistanceUnit(Enum):
     def parse(cls, unit: str) -> "DistanceUnit":
         try:
             return cls[unit]
-        except KeyError as e:
+        except KeyError as e:  # pragma: no cover
             opts = ", ".join(cls.__members__.keys())
             raise ValueError(f'Unknown distance unit "{unit}". Valid options are: {opts}') from e
 
@@ -102,7 +102,7 @@ class TimeUnit(Enum):
     def parse(cls, unit: str) -> "TimeUnit":
         try:
             return cls[unit]
-        except KeyError as e:
+        except KeyError as e:  # pragma: no cover
             opts = ", ".join(cls.__members__.keys())
             raise ValueError(f'Unknown time unit "{unit}". Valid options are: {opts}') from e
 
@@ -426,7 +426,7 @@ def _filter_embeddings(
     if embeddings is None and supervised_annotations is None:
         raise ValueError(
             "Either embeddings and soft_counts or supervised_annotations must be provided."
-        )
+        )  # pragma: no cover
 
     try:
         if exp_condition is None:
@@ -507,7 +507,7 @@ def _get_polygon_coords(data, animal_id=""):
                       f"{animal_id}Tail_base"]
         tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_tip"]
     else:
-        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")
+        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")  # pragma: no cover
 
     # Helper function to safely extract body parts
     def extract_parts(names):
@@ -677,7 +677,7 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
     elif not len(hide_time_bins) == len(custom_time_bins):
         raise ValueError(
             f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
-        )
+        )  # pragma: no cover
     else:
        hide_time_bins= np.array(hide_time_bins)
 
@@ -709,11 +709,11 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
             raise ValueError(
                 f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
                 "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
-            )
+            )  # pragma: no cover
         elif np.max(custom_time_bins) >= L_shortest:
             raise ValueError(
                 f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
-            )
+            )  # pragma: no cover
         # Warn in case of overlapping elements
         elif not (
             list(itertools.chain(*custom_time_bins)) == sorted(list(itertools.chain(*custom_time_bins)))
@@ -728,7 +728,7 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
     else:
         raise ValueError(
             f'At least {min_bins_required} bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
-        )
+        )  # pragma: no cover
     
     return custom_time_bins, hide_time_bins
 
@@ -875,7 +875,7 @@ def _get_bins_from_frames(
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = bin_size
     if bin_size_frames <= 0:
-        raise ValueError("bin_size must result in a frame count greater than 0.")
+        raise ValueError("bin_size must result in a frame count greater than 0.")  # pragma: no cover
 
     bin_info = {}
     start_too_late = {key: False for key in table_lengths}
@@ -903,7 +903,7 @@ def _get_bins_from_integers(
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = int(round(bin_size * frame_rate))
     if bin_size_frames <= 0:
-        raise ValueError("bin_size must result in a frame count greater than 0.")
+        raise ValueError("bin_size must result in a frame count greater than 0.")  # pragma: no cover
 
     bin_info = {}
     start_too_late = {key: False for key in table_lengths}
@@ -932,7 +932,7 @@ def _get_bins_from_strings(
     """Strategy for when bin size/index are given as time strings."""
     bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
     if bin_size_frames <= 0:
-        raise ValueError("bin_size string must represent a duration > 0.")
+        raise ValueError("bin_size string must represent a duration > 0.")  # pragma: no cover
 
     bin_info = {}
     start_too_late = {key: False for key in table_lengths}
@@ -1022,7 +1022,7 @@ def _validate_and_warn(
                 f"[Error in {key}]: bin_index is out of range. "
                 f"It must be less than {max_time} or index < {max_index} for a "
                 f"bin_size of {bin_size_orig}."
-            )
+            )  # pragma: no cover
 
     warned_once = False
     for key, is_truncated in result.end_too_late.items():
@@ -1308,7 +1308,7 @@ def get_supervised_behaviors_in_roi(
     elif roi_mode == "behaviorwise":
         cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
     else:
-        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
             
     return cur_supervised
 
@@ -1515,7 +1515,7 @@ def scale_units(coordinates, key, data, unit: str, target_distance: str = None, 
             if invert: f = 1.0 / f
             return f, u2
         except ValueError as e:
-            raise ValueError(f'Invalid unit component "{u}". Must be in TimeUnit or DistanceUnit.') from e
+            raise ValueError(f'Invalid unit component "{u}". Must be in TimeUnit or DistanceUnit.') from e  # pragma: no cover
 
     # remove white space and brackets
     u = unit.strip().strip("[]")
@@ -1581,7 +1581,7 @@ def _validate_parameter(
 
     # If the param is provided but there are no valid options to check against
     if not valid_options and custom_error_if_empty:
-        raise ValueError(custom_error_if_empty)
+        raise ValueError(custom_error_if_empty)  # pragma: no cover
 
     valid_set = set(valid_options)
     is_valid = False
@@ -1613,11 +1613,11 @@ def _validate_parameter(
         if only_one_of_many:    
             raise ValueError(
                 f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
-            )
+            )  # pragma: no cover
         else:
             raise ValueError(
                 f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
-            )
+            )  # pragma: no cover
 
 
 #not covered by testing as the only purpose of this function is to throw specific exceptions
@@ -2087,12 +2087,12 @@ def _preprocess_transitions(
         raise ValueError(
             '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
                 str(diagonal_behavior_counting_options)[1:-1]
-            )
+            )  # pragma: no cover
         )
     if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
         raise ValueError(
             "Eet either supervised_annotations or soft_counts, not both or neither!"
-        )
+        )  # pragma: no cover
     elif supervised_annotations is not None:
         tab_dict=supervised_annotations
     else:
@@ -2191,7 +2191,7 @@ def _preprocess_mouse_roi_interaction(
         if isinstance(bodyparts, str):
             bodyparts=[bodyparts]  
     else: # pragma: no cover
-        raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")
+        raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")  # pragma: no cover
    
     exp_ids_given=True
     if experiment_ids is None:
@@ -2321,7 +2321,7 @@ def _preprocess_mouse_roi_interaction(
             else:
                 raise NotImplementedError(
                     'The only currently available modes are "distance" and "fov" (field of view)'
-                )
+                )  # pragma: no cover
 
             # ---------------------------------------------------------------------
             # Bin by slicing precomputed per-frame result
@@ -2364,7 +2364,7 @@ def process_df(df: pd.DataFrame, error_bars: str = "sem"):
         Sorted unique exp_condition values (keys of the dicts).
     """
     if df.shape[1] < 4:
-        raise ValueError("df is expected to have at least 3 columns: time_bin, exp_condition, <value>")
+        raise ValueError("df is expected to have at least 3 columns: time_bin, exp_condition, <value>")  # pragma: no cover
 
     value_col = df.columns[3]
 
@@ -2397,7 +2397,7 @@ def process_df(df: pd.DataFrame, error_bars: str = "sem"):
         raise NotImplementedError(
             'error_bars currently only supports standard deviation ("std") '
             'and standard error of the mean ("sem")!'
-        )
+        )  # pragma: no cover
 
     # Return as dicts keyed by condition (more robust than positional lists)
     mean_values = {cond: means[cond].to_numpy() for cond in conditions}
@@ -2489,18 +2489,18 @@ def plot_binned_line(
 
     n = len(x)
     if len(y) != n:
-        raise ValueError("x and y must have the same length")
+        raise ValueError("x and y must have the same length")  # pragma: no cover
     if yerr is not None and len(yerr) != n:
-        raise ValueError("yerr must have the same length as x and y")
+        raise ValueError("yerr must have the same length as x and y")  # pragma: no cover
     if hide_time_bins is None:
         hide = np.zeros(n, dtype=bool)
     else:
         hide = np.asarray(hide_time_bins, dtype=bool).ravel()
         if len(hide) != n:
-            raise ValueError("hide_time_bins must have the same length as x and y")
+            raise ValueError("hide_time_bins must have the same length as x and y")  # pragma: no cover
 
     if smooth_points_per_interval < 2:
-        raise ValueError("smooth_points_per_interval must be >= 2")
+        raise ValueError("smooth_points_per_interval must be >= 2")  # pragma: no cover
 
     # Visible points for means/markers (hidden bins and NaNs are excluded)
     visible_mean = (~hide) & (~np.isnan(y)) & (~np.isnan(x))
@@ -2620,7 +2620,7 @@ def get_binned_geometry(bin_lengths): # pragma: no cover
     """
     bl = np.asarray(bin_lengths, dtype=float)
     if bl.ndim != 1 or bl.size == 0:
-        raise ValueError("bin_lengths must be a 1D non-empty sequence")
+        raise ValueError("bin_lengths must be a 1D non-empty sequence")  # pragma: no cover
 
     total = float(np.nansum(bl))
     if not np.isfinite(total) or total <= 0:

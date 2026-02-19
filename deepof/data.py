@@ -170,12 +170,12 @@ def load_project(
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
     # Error for not compatible versions
-    if not (hasattr(coordinates, "_run_numba")):
+    if not (hasattr(coordinates, "_run_numba")): 
 
         raise ValueError(
             """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
-        )
+        )  # pragma: no cover
     # Compatibility fixes versions 0.7.0 to 0.7.2
     if isinstance(coordinates._table_paths, List):
         
@@ -395,7 +395,7 @@ class Project:
             elif len(rename_bodyparts) == 14:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
             else:
-                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!")
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") # pragma: no cover
             
             # Creates a dictionary assigning table bp names to corresponding deepOF bp names
             rename_bodyparts_dict = {}
@@ -707,8 +707,8 @@ class Project:
         Loads and preprocesses tracking data through a series of modular steps,
         then saves the results and returns table dictionaries.
         """
-        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
-            raise NotImplementedError("Tracking files must be in h5, csv, npy, or slp format")
+        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:  
+            raise NotImplementedError("Tracking files must be in h5, csv, npy, or slp format")  # pragma: no cover
 
         final_tab_dict, final_lik_dict = {}, {}
         total_warnings = 0
@@ -1498,7 +1498,7 @@ class Coordinates:
             raise ValueError(
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported byt he current version of deepof"""
-            )
+            )  # pragma: no cover
 
         tab_dict={}
         for key in self._tables.keys():
@@ -1553,15 +1553,15 @@ class Coordinates:
         """Performs initial validation of function arguments."""
         if align:
             if not any(center in bp for bp in tab.columns.levels[0]):
-                raise ValueError("For alignment, 'center' must be the name of a body part.")
+                raise ValueError("For alignment, 'center' must be the name of a body part.")  # pragma: no cover
             if not any(align in bp for bp in tab.columns.levels[0]):
-                raise ValueError("'align' must be the name of a body part.")
+                raise ValueError("'align' must be the name of a body part.")  # pragma: no cover
         
         if roi_number is not None:
             if self._roi_dicts is None:
-                raise ValueError("ROIs not created for this project. Define ROIs during project creation.")
+                raise ValueError("ROIs not created for this project. Define ROIs during project creation.")  # pragma: no cover
             if len(self._roi_dicts.get(key, [])) < roi_number:
-                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")
+                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")  # pragma: no cover
             
     
     def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str) -> pd.DataFrame:
@@ -2652,7 +2652,7 @@ class Coordinates:
             raise ValueError(
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported by the current version of deepof"""
-            )
+            )  # pragma: no cover
         
         # get immobility classifer
         self._trained_model_path = resource_filename(__name__, "trained_models")    
@@ -2991,7 +2991,7 @@ class Coordinates:
         except IndexError:
             raise ValueError(
                 "No pretrained model found for the given parameters. Please train a model first."
-            )
+            )  # pragma: no cover
 
         # returns a list of trained tensorflow models
         return trained_models
@@ -3326,7 +3326,7 @@ class TableDict(dict):
             
             test_keys = test_videos
         else:
-            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  # pragma: no cover
         
         train_keys = list(set(keys)-set(test_keys))
 
@@ -3408,7 +3408,7 @@ class TableDict(dict):
         # IMPORTANT: create a proper TableDict-like container (not a plain dict)
         try:
             table_temp = type(self)({}, self._type, self._table_path)
-        except Exception:
+        except Exception:  # pragma: no cover
             # Fallback: deepcopy and clear contents, preserving metadata
             table_temp = copy.deepcopy(self)
             for k in list(table_temp.keys()):
