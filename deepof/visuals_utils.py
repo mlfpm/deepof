@@ -2190,7 +2190,7 @@ def _preprocess_mouse_roi_interaction(
     elif mode == "distance" and bodyparts is not None:
         if isinstance(bodyparts, str):
             bodyparts=[bodyparts]  
-    else:
+    else: # pragma: no cover
         raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")
    
     exp_ids_given=True

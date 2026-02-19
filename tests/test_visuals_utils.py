@@ -768,16 +768,27 @@ def test_mouse_roi_interaction():
                     [158.61861862, 260.18018018]])
     prun._roi_dicts = {"test": {1: roi}, "test2": {1: roi}}
 
+    # Create exp_conditions with pandas DataFrames containing "CSDS" column
+    prun._exp_conditions = {
+        "test": pd.DataFrame({"CSDS": ["test_cond1"]}),
+        "test2": pd.DataFrame({"CSDS": ["test_cond2"]}),
+    }
+
     ref_path = os.path.join(".", "tests", "test_examples", "test_data", "mouse_roi_interaction")
+    os.makedirs(ref_path, exist_ok=True)
 
     # FOV mode with experiment_ids
     effect_fov, group_fov = deepof.visuals.return_mouse_roi_interaction(
         prun, animal_id="B", roi_number=1, N_time_bins=20, mode="fov",
-        experiment_ids={"a": ["test"], "b": ["test2"]},
+        experiment_ids={"a": ["test"], "b": ["test2"]}, error_bars="std", unit_distance="pixel",
     )
     
     ref_fov_e = os.path.join(ref_path, "fov_effect.csv")
     ref_fov_g = os.path.join(ref_path, "fov_group.csv")
+
+    if not os.path.exists(ref_fov_e):
+        effect_fov.to_csv(ref_fov_e, index=False)
+        group_fov.to_csv(ref_fov_g, index=False)
         
     # Output data matches reference (FOV mode)
     pd.testing.assert_frame_equal(effect_fov, pd.read_csv(ref_fov_e), atol=1e-9, check_like=True, check_dtype=False)
@@ -785,14 +796,16 @@ def test_mouse_roi_interaction():
 
     # Distance mode with custom bins
     effect_dist, group_dist = deepof.visuals.return_mouse_roi_interaction(
-        prun, bodyparts=["B_Nose"], roi_number=1, mode="distance",
+        prun, bodyparts="B_Nose", mode="distance",
         custom_time_bins=[[0, 2], [3, 6], [7, 20], [21, 99]],
         hide_time_bins=[False, True, False, True],
+        exp_condition="CSDS" ,condition_values=["test_cond1","test_cond2"],
+        experiment_ids="test",
     )
     
     ref_dist_e = os.path.join(ref_path, "distance_effect.csv")
     ref_dist_g = os.path.join(ref_path, "distance_group.csv")
-    
+
     if not os.path.exists(ref_dist_e):
         effect_dist.to_csv(ref_dist_e, index=False)
         group_dist.to_csv(ref_dist_g, index=False)

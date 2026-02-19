@@ -1,4 +1,4 @@
-time_bin,Absolute_Cohens_d,Effect_Size_Category,bin_means_a,bin_sem_a,bin_means_b,bin_sem_b
+time_bin,Absolute_Cohens_d,Effect_Size_Category,bin_means_a,bin_std_a,bin_means_b,bin_std_b
 0,0,1,1.0,,1.0,
 1,0,1,1.0,,1.0,
 2,0,1,1.0,,1.0,
