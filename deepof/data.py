@@ -2485,7 +2485,7 @@ class Coordinates:
                         tab_nodes = tab[:, :, node_sorting_indices]
                         tab_edges = tab[:, :, edge_sorting_indices] 
                         tab_angles = tab[:, :, angle_sorting_indices]                    
-                        dataset = ( tab_nodes, tab_edges, tab_angles)
+                        dataset = (tab_nodes, tab_edges, tab_angles)
 
                         num_rows=num_rows+tab.shape[0]
                     
@@ -2501,6 +2501,15 @@ class Coordinates:
                         shapes=[(0,),(0,),(0,)]
                     pbar.update()
                 shapes=tuple(shapes)
+
+            return (
+                to_preprocess,
+                shapes,
+                nx.adjacency_matrix(graph).todense(),
+                tab_dict,
+                global_scaler,
+            )
+
 
         else:  # pragma: no cover
             to_preprocess = tab_dict #np.concatenate(list(tab_dict.values()))
@@ -2526,7 +2535,7 @@ class Coordinates:
                             ],
                         ),
                     )
-                    num_rows=num_rows+dataset.shape[0]
+                    num_rows=num_rows+tab.shape[0]
 
 
                     # save paths for modified tables
@@ -2536,18 +2545,9 @@ class Coordinates:
 
                 shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
                 shapes=tuple(shapes)
-                
-        try:
-            return (
-                to_preprocess,
-                shapes,
-                nx.adjacency_matrix(graph).todense(),
-                tab_dict,
-                global_scaler,
-            )
-        except UnboundLocalError:
-            return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
 
+            return to_preprocess, shapes, nx.adjacency_matrix(graph).todense(), tab_dict, None
+                
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:
         """Return the most frequent behaviour in a window of window_size frames.
