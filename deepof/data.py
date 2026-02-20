@@ -3392,6 +3392,16 @@ class TableDict(dict):
         quality_to_load = None, 
     ) -> np.ndarray:
 
+        def _sanitize_numeric_df(df: pd.DataFrame) -> pd.DataFrame:
+            out = df.copy()
+            num_cols = out.select_dtypes(include=[np.number]).columns
+            if len(num_cols) > 0:
+                out[num_cols] = out[num_cols].apply(pd.to_numeric, errors="coerce")
+                out[num_cols] = out[num_cols].interpolate(limit_direction="both")
+                # columns that are entirely NaN (or gaps too large) still remain NaN -> hard fill
+                out[num_cols] = out[num_cols].fillna(0.0)
+            return out
+        
         available_mem = psutil.virtual_memory().available * 0.9
         N_rows_max = int(available_mem / ((33 + 11) * window_size * 8))
         if samples_max is None:
@@ -3467,22 +3477,17 @@ class TableDict(dict):
                     tab = tab.drop(columns=angle_cols)
 
                 if scale:
+                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
 
-                    current_tab_local = deepof.utils.scale_table(
-                        feature_array=tab,
-                        scale=scale,
-                        global_scaler=None,
-                    )
-
-                    float_mask = (tab.dtypes == float).values
-                    n_take = min(samples_max, len(tab))
-                    if n_take > 0:
-                        idx = rng.choice(len(tab), size=n_take, replace=False)
-                        samples_for_fit.append(current_tab_local[idx][:, float_mask])
+                    # Fit global scaler ONLY on scalar features (speeds + distances), not coords
+                    scalar_cols = deepof.utils.infer_scalar_cols(tab_local)
+                    n_take = min(samples_max, len(tab_local))
+                    if n_take > 0 and len(scalar_cols) > 0:
+                        idx = rng.choice(len(tab_local), size=n_take, replace=False)
+                        samples_for_fit.append(tab_local.iloc[idx][scalar_cols].to_numpy(dtype=float))
 
                     if not resave_after_global:
-                        tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
-                        tab = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
+                        tab = tab_local
 
                 #re-add unprocessed angle columns
                 if skip_angles:
@@ -3490,6 +3495,7 @@ class TableDict(dict):
                         tab.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
 
                 table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                tab = _sanitize_numeric_df(tab)
                 table_temp[key] = save_dt(tab, table_path, save_as_paths)
 
                 pbar.update()
@@ -3514,8 +3520,7 @@ class TableDict(dict):
                     concat_array = np.vstack(samples_for_fit)
                     global_scaler.fit(concat_array)
                 else:
-                    # Will error if there are zero features
-                    global_scaler.fit(np.empty((0, 0)))
+                    global_scaler = None
             else:
                 global_scaler = pretrained_scaler
 
@@ -3537,46 +3542,22 @@ class TableDict(dict):
                         tab = tab.drop(columns=angle_cols)
 
                     # local -> global scaling 
-                    current_tab_local = deepof.utils.scale_table(
-                        feature_array=tab,
-                        scale=scale,
-                        global_scaler=None,
-                    )
-                    tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
+                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
 
-                    current_tab_global = deepof.utils.scale_table(
-                        feature_array=tab_local_df,
-                        scale=scale,
-                        global_scaler=global_scaler,
-                    )
-                    tab_scaled = pd.DataFrame(current_tab_global, columns=tab.columns, index=tab.index)
+                    if global_scaler is not None:
+                        tab_scaled = deepof.utils.scale_table(tab_local, scale=scale, global_scaler=global_scaler)
+                    else:
+                        tab_scaled = tab_local
 
                     if scale == "standard" and interpolate_normalized:
-                        cur_tab = tab_scaled.to_numpy(copy=True)
-                        try:
-                            cur_tab[cur_tab > interpolate_normalized] = np.nan
-                            cur_tab[cur_tab < -interpolate_normalized] = np.nan
-                        except TypeError:  # pragma: no cover
-                            cur_tab[
-                                np.append(
-                                    (cur_tab[:, :-1].astype(float) > interpolate_normalized),
-                                    np.array([[False] * len(cur_tab)]).T,
-                                    axis=1,
-                                )
-                            ] = np.nan
-                            cur_tab[
-                                np.append(
-                                    (cur_tab[:, :-1].astype(float) < -interpolate_normalized),
-                                    np.array([[False] * len(cur_tab)]).T,
-                                    axis=1,
-                                )
-                            ] = np.nan
-
-                        tab_scaled = (
-                            pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
-                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                            .interpolate(limit_direction="both")
-                        )
+                        scalar_cols = deepof.utils.infer_scalar_cols(tab_scaled)
+                        if scalar_cols:
+                            cur = tab_scaled[scalar_cols].to_numpy(copy=True, dtype=float)
+                            cur[np.abs(cur) > interpolate_normalized] = np.nan
+                            tab_scaled.loc[:, scalar_cols] = (
+                                pd.DataFrame(cur, index=tab_scaled.index, columns=scalar_cols)
+                                .interpolate(limit_direction="both")
+                            )
 
                         # Interpolate angle columns to avoid nans as only actual preprocesing step
                         angle_cols_nans_interpolated = (
@@ -3591,6 +3572,7 @@ class TableDict(dict):
                             tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols_nans_interpolated[col])
 
                     table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                    tab_scaled = _sanitize_numeric_df(tab_scaled)
                     table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
 
                     pbar.update()

@@ -1949,42 +1949,79 @@ def rename_track_bps(
     return loaded_tab
 
 
+def infer_scalar_cols(df: pd.DataFrame):
+    coord_cols = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bp_names = {c[0] for c in coord_cols}
+
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bp_names]
+    dist_cols  = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[0] in bp_names and c[1] in bp_names]
+
+    return speed_cols + dist_cols
+
+
 def scale_table(
-    feature_array: np.ndarray,
-    scale: str,
-    global_scaler: Any = None,
-):
-    """Scales features in a table controlling for both individual body size and interanimal variability.
-
-    Args:
-        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
-        global_scaler (Any): global scaler, fit in the whole dataset.
-    
-    Returns:
-        feature_array_scaled (np.ndarray): array after scaling.
-
+    df: pd.DataFrame,
+    scale: str = "standard",
+    global_scaler=None,
+    size_ref=("B_Nose", "B_Tail_base"),
+) -> pd.DataFrame:
     """
-    exp_temp = feature_array.to_numpy()
+    Geometry-safe scaling for DeepOF-like tables.
 
-    annot_length = 0
+    Local stage (global_scaler=None):
+      1) divide coords + speeds + distances by a single robust body-size scalar s
+      2) optionally scale only scalar features (speeds+distances) with {standard,robust,minmax}
 
-    if global_scaler is None:
-        # Scale each modality separately using a custom function
-        exp_temp = scale_animal(exp_temp, scale)
-    else:
-        # Scale all experiments together, to control for differential stats
-        exp_temp = global_scaler.transform(exp_temp)
+    Global stage (global_scaler!=None):
+      - apply global_scaler only to scalar features (speeds+distances)
+      - do NOT touch coordinates
+    """
+    out = df.copy()
 
-    feature_array_scaled = np.concatenate(
-        [
-            exp_temp,
-            feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
-        ],
-        axis=1,
-    )
+    coord_cols = [c for c in out.columns
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    scalar_cols = infer_scalar_cols(out)  # speeds + distances
 
-    return feature_array_scaled
+    # ---- global stage: only transform scalar cols ----
+    if global_scaler is not None:
+        if scalar_cols:
+            out.loc[:, scalar_cols] = global_scaler.transform(
+                out[scalar_cols].to_numpy(dtype=float)
+            )
+        return out
+
+    # ---- local stage: size-normalize coords + scalars by one scalar s ----
+    a, b = size_ref
+    dx = out[(a, "x")] - out[(b, "x")]
+    dy = out[(a, "y")] - out[(b, "y")]
+    s = np.nanmedian(np.hypot(dx, dy))
+    if not np.isfinite(s) or s == 0:
+        raise ValueError(f"Invalid body-size scale factor from {size_ref}: {s}")
+
+    if coord_cols:
+        out.loc[:, coord_cols] = out[coord_cols].to_numpy(dtype=float) / s
+    if scalar_cols:
+        out.loc[:, scalar_cols] = out[scalar_cols].to_numpy(dtype=float) / s
+
+    # ---- optional local standardization of scalars only (NOT coords) ----
+    if scale:
+        if scale == "standard":
+            scaler = StandardScaler()
+        elif scale == "minmax":
+            scaler = MinMaxScaler()
+        elif scale == "robust":
+            scaler = RobustScaler()
+        else:
+            raise ValueError("scale must be one of {'standard','robust','minmax', None}")
+
+        if scalar_cols:
+            out.loc[:, scalar_cols] = scaler.fit_transform(
+                out[scalar_cols].to_numpy(dtype=float)
+            )
+
+    return out
 
 
 def scale_animal(feature_array: np.ndarray, scale: str):
