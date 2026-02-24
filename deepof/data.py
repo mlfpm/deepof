@@ -3694,7 +3694,7 @@ class TableDict(dict):
                     tab = tab.drop(columns=angle_cols)
 
                 if scale:
-                    tab_local = deepof.utils.scale_table_old(tab, scale=scale, global_scaler=None)
+                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
 
                     # Fit global scaler ONLY on scalar features (speeds + distances), not coords
                     scalar_cols = deepof.utils.infer_scalar_cols(tab_local)
@@ -3759,10 +3759,10 @@ class TableDict(dict):
                         tab = tab.drop(columns=angle_cols)
 
                     # local -> global scaling 
-                    tab_local = deepof.utils.scale_table_old(tab, scale=scale, global_scaler=None)
+                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
 
                     if global_scaler is not None:
-                        tab_scaled = deepof.utils.scale_table_old(tab_local, scale=scale, global_scaler=global_scaler)
+                        tab_scaled = deepof.utils.scale_table(tab_local, scale=scale, global_scaler=global_scaler)
                     else:
                         tab_scaled = tab_local
 
