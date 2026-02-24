@@ -6205,40 +6205,103 @@ class VaDELossTFExact(nn.Module):
         }
     
 
-def _print_losses(model_name:str, epoch: int, n_epochs: int, train_logs: dict, val_logs: dict, klw: int = 0, lambda_d: int = 0,):
+def _init_log_summary():
+    """Initialize distionary structure of losses to collect"""
+
+    log_summary={}
+    log_summary['conf_norm']=[]
+    log_summary['bal_norm']=[]
+    log_summary['alignment_score']=[]
+    for data_type in ['train','val']:
+        log_summary[data_type]={}
+        log_summary[data_type]['total_loss']=[]
+        log_summary[data_type]['reconstruction_loss']=[]
+        log_summary[data_type]['kl_divergence']=[]
+        log_summary[data_type]['cat_cluster_loss']=[]
+        log_summary[data_type]['kmeans_loss']=[]
+        log_summary[data_type]['distill_loss']=[]
+        log_summary[data_type]['temporal_loss']=[]
+        log_summary[data_type]['scatter_loss']=[]
+        log_summary[data_type]['nonempty_loss']=[]
+        log_summary[data_type]['repel_loss']=[]
+        log_summary[data_type]['tf_cluster_loss']=[]
+
+
+    return log_summary
+
+
+def _update_log_summary(log_summary: dict, train_logs: dict, val_logs: dict):
+    """Append the current losses from train and val logs to the log summary."""
     
+    for data_type, logs in zip(['train', 'val'], [train_logs, val_logs]):
+        # Append scores directly
+        if data_type=="train":
+            for key in log_summary.keys():
+                if key=="train" or key=="val" or key=="test":
+                    continue
+                value = logs.get(key, np.nan)
+                log_summary[key].append(value)
+        # Append losses to training / testing dicts
+        for key in log_summary[data_type].keys():
+            value = logs.get(key, np.nan)
+            log_summary[data_type][key].append(value)
+    return log_summary
+
+
+def _print_losses(model_name: str,
+                  log_summary: dict,
+                  epoch: int,
+                  n_epochs: int,
+                  train_logs: dict,
+                  val_logs: dict,
+                  klw: float = 0.0,
+                  lambda_d: float = 0.0):
+    """Print losses neatly aligned and append them to the log summary."""
+
+    # Define consistent field width for alignment
+    col_width = 10
+
+    def _fmt_loss(name: str, logs: dict, width: int = col_width, precision: int = 4):
+        val = logs.get(name, float("nan"))
+        # right-aligned, fixed width, fixed decimals
+        return f"{val:<{width}.{precision}f}"
+
+    loss_names = [
+        "total_loss", "reconstruction_loss", "kl_divergence",
+        "cat_cluster_loss", "kmeans_loss", "distill_loss",
+        "temporal_loss", "scatter_loss", "nonempty_loss",
+        "repel_loss", "tf_cluster_loss",
+    ]
+    score_names=["conf_norm", "bal_norm", "alignment_score"]
+
+    # Print header line
+    header = f"Epoch {epoch+1}/{n_epochs}"
     if model_name == "vade":
-        print(f"Epoch {epoch+1}/{n_epochs} | KLw={klw:.3f}   | λ_distill={lambda_d:.3f}")
-        print(f"  Train: total={train_logs.get('total_loss', np.nan):.4f}   | rec={train_logs.get('reconstruction_loss', np.nan):.4f}    | "
-                f"kl={train_logs.get('kl_divergence', np.nan):.4f}      | cat={train_logs.get('cat_cluster_loss', np.nan):.4f}    | "
-                f"kmeans={train_logs.get('kmeans_loss', np.nan):.4f}      | distill={train_logs.get('distill_loss', np.nan):.4f} |\n"
-                f"         temporal={train_logs.get('temporal_loss', np.nan):.4f} | scatter={train_logs.get('scatter_loss', np.nan):.4f} |"
-                f" nonempty={train_logs.get('nonempty_loss', np.nan):.4f} | repel={train_logs.get('repel_loss', np.nan):.4f}  |"
-                f" clustering={train_logs.get('tf_cluster_loss', np.nan):.4f}")
-        print(f"  Val  : total={val_logs.get('total_loss', np.nan):.4f}   | rec={val_logs.get('reconstruction_loss', np.nan):.4f}    | "
-                f"kl={val_logs.get('kl_divergence', np.nan):.4f}      | cat={val_logs.get('cat_cluster_loss', np.nan):.4f}    | "
-                f"kmeans={val_logs.get('kmeans_loss', np.nan):.4f}      | distill={val_logs.get('distill_loss', np.nan):.4f} |\n"
-                f"         temporal={val_logs.get('temporal_loss', np.nan):.4f} | scatter={val_logs.get('scatter_loss', np.nan):.4f} |"
-                f" nonempty={val_logs.get('nonempty_loss', np.nan):.4f} | repel={val_logs.get('repel_loss', np.nan):.4f}  |"
-                f" clustering={val_logs.get('tf_cluster_loss', np.nan):.4f}")
-        print(f"  Align: conf={train_logs.get('conf_norm',np.nan):.3f} | bal={train_logs.get('bal_norm',np.nan):.3f} | score={train_logs.get('alignment_score'):.3f}")
-    elif model_name == "Contrastive":
-        print(f"Epoch {epoch+1}/{n_epochs}")
-        print(f"  Train: total={train_logs.get('total_loss', np.nan):.4f} | rec={train_logs.get('reconstruction_loss', np.nan):.4f} | "
-                f"kl={train_logs.get('kl_divergence', np.nan):.4f} | cat={train_logs.get('cat_cluster_loss', np.nan):.4f} | "
-                f"kmeans={train_logs.get('kmeans_loss', np.nan):.4f} | distill={train_logs.get('distill_loss', np.nan):.4f} |\n"
-                f"         temporal={train_logs.get('temporal_loss', np.nan):.4f} | scatter={train_logs.get('scatter_loss', np.nan):.4f} |"
-                f" nonempty={train_logs.get('nonempty_loss', np.nan):.4f} | repel={train_logs.get('repel_loss', np.nan):.4f}  |"
-                f" clustering={train_logs.get('tf_cluster_loss', np.nan):.4f}")
-        print(f"  Val  : total={val_logs.get('total_loss', np.nan):.4f} | rec={val_logs.get('reconstruction_loss', np.nan):.4f} | "
-                f"kl={val_logs.get('kl_divergence', np.nan):.4f} | cat={val_logs.get('cat_cluster_loss', np.nan):.4f} | "
-                f"kmeans={val_logs.get('kmeans_loss', np.nan):.4f} | distill={val_logs.get('distill_loss', np.nan):.4f} |\n"
-                f"         temporal={val_logs.get('temporal_loss', np.nan):.4f} | scatter={val_logs.get('scatter_loss', np.nan):.4f} |"
-                f" nonempty={val_logs.get('nonempty_loss', np.nan):.4f} | repel={val_logs.get('repel_loss', np.nan):.4f}  |"
-                f" clustering={val_logs.get('tf_cluster_loss', np.nan):.4f}")
-        print(f"  Align: conf={train_logs.get('conf_norm',np.nan):.3f} | bal={train_logs.get('bal_norm',np.nan):.3f} | score={train_logs.get('alignment_score'):.3f}")
-    else:
-        print("")
+        header += f" | KLw={klw:.3f} | λ_distill={lambda_d:.3f}"
+    print(header)
+
+    # Helper for print losses oderly
+    def _print_phase(phase: str, logs: dict):
+        line = f"  {phase:<7}:"
+        for i, name in enumerate(loss_names):
+            key_label = name.replace("_loss", "").replace("_", "")
+            line += f" {key_label[:8]:<8}: {_fmt_loss(name, logs)} |"
+            if (i + 1) % 5 == 0 and i != len(loss_names) - 1:  # line wrap for long outputs
+                line += "\n          "
+        print(line.rstrip("|"))
+
+    # Print train and validation sections
+    _print_phase("Train", train_logs)
+    _print_phase("Val", val_logs)
+
+    # Alignment metrics
+    print(f"  Align: conf={train_logs.get('conf_norm', np.nan):.3f} | "
+          f"bal={train_logs.get('bal_norm', np.nan):.3f} | "
+          f"score={train_logs.get('alignment_score', np.nan):.3f}")
+
+    # Update summary
+    log_summary = _update_log_summary(log_summary, train_logs, val_logs)
+    return log_summary
 
 
 ##############
@@ -7100,6 +7163,7 @@ def fit_VQVAE(
     best_val = float("inf")
     best_score = -float("inf")
     score_value = 0
+    log_summary=_init_log_summary()
 
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
@@ -7132,7 +7196,7 @@ def fit_VQVAE(
         # Print training progress
         print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
                 f"Val total={v_total:.4f} | λ_distill={lam:.2f}")              
-        _print_losses(model_name="vqvae", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+        log_summary = _print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
         if writer:
@@ -7185,7 +7249,7 @@ def fit_VQVAE(
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), None
+    return unwrap_dp(model), unwrap_dp(model_score), None, log_summary
 
 
 def fit_contrastive(
@@ -7253,6 +7317,7 @@ def fit_contrastive(
     best_val = float("inf")
     best_score = -float("inf")
     score_value = 0
+    log_summary=_init_log_summary()
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
@@ -7285,7 +7350,7 @@ def fit_contrastive(
         # Print training progress
         print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
                 f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
-        _print_losses(model_name="Contrastive", epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+        log_summary = _print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
         if writer:
@@ -7340,7 +7405,7 @@ def fit_contrastive(
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), None    
+    return unwrap_dp(model), unwrap_dp(model_score), None, log_summary   
 
 
 def fit_VADE(
@@ -7542,6 +7607,7 @@ def fit_VADE(
 
     print(f"\n--- Training for {common_cfg.epochs} epochs ---")
     print("NOTE: some losses are intentionally defined negative and function as rewards.")
+    log_summary=_init_log_summary()
     for epoch in range(common_cfg.epochs):
                
         apply_decoder_schedule(model, epoch)
@@ -7635,7 +7701,7 @@ def fit_VADE(
         train_logs["alignment_score"] = train_logs["conf_norm"] * train_logs["bal_norm"]
         val_total = float(val_logs.get("total_loss", float("inf")))
 
-        _print_losses(model_name="vade", epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+        log_summary = _print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
         if writer:
@@ -7644,8 +7710,8 @@ def fit_VADE(
             writer.add_scalar("Align/score", train_logs["alignment_score"], epoch)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
-        improved_score = (train_logs["alignment_score"] > best_align + 1e-6) or (
-            abs(train_logs["alignment_score"] - best_align) <= 1e-6 and val_total < (best_val - early_stop_min_delta)
+        improved_score = ((epoch > 5) and (train_logs["alignment_score"]) > best_align + 1e-6) or (
+            (epoch > 5) and abs(train_logs["alignment_score"] - best_align) <= 1e-6 and val_total < (best_val - early_stop_min_delta)
         )
         improved_val = (epoch > 5) and (val_total < best_val)
 
@@ -7689,6 +7755,10 @@ def fit_VADE(
                 print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
         
 
+        # Collect relevant logs
+
+
+
 
         #if epoch >= early_stop_warmup and epochs_no_improve >= early_stop_patience:
         #    print(f"[EarlyStopping] No val improvement for {early_stop_patience} epoch(s). Stop.")
@@ -7705,4 +7775,4 @@ def fit_VADE(
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model    
+    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model, log_summary    

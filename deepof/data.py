@@ -2467,7 +2467,7 @@ class Coordinates:
             collect_quality = True
             if collect_quality==True:
                 quality_to_load = self.get_quality()
-            to_preprocess, shapes, global_scaler = tab_dict.preprocess_old(
+            to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
                 bin_size=bin_size,
@@ -2475,7 +2475,7 @@ class Coordinates:
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
                 save_as_paths=return_as_paths,
-                quality_to_load=quality_to_load,
+                quality_to_load=None, #quality_to_load,
                 **kwargs,
                 )
    
@@ -3384,7 +3384,8 @@ class TableDict(dict):
         scale: str = "standard",
         pretrained_scaler=None,
         test_videos: int = 0,
-        outlier_std_threshold: int = 10,
+        interpolate_normalized: int = 10,
+        filter_low_variance: bool = False,
         file_name: str = "preprocessed",
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
@@ -3478,13 +3479,22 @@ class TableDict(dict):
                     continue
                 valid_keys.append(key)
 
+                if filter_low_variance:
+                    keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                    tab = tab.iloc[:, keep_cols]
+                    assert len(tab.columns) > 0, (
+                        "Error! During preprocessing the entire table was filtered out due to low variance!\n"
+                        "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
+                    )
+
                 if scale and pretrained_scaler is None:
                     tab_norm = deepof.utils.scale_table(
                         tab,
                         scale=scale,
                         global_scaler=None,
                         animal_ids=animal_ids,
-                        standardize=False,   # size-normalize only
+                        standardize=True,   # size-normalize only
                     )
 
                     col_types = deepof.utils.infer_column_types(tab_norm)
@@ -3515,7 +3525,7 @@ class TableDict(dict):
         with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in valid_keys:
                 tab = _load_and_prepare_table(key, bin_info[key])
-                orig_cols = get_dt(self, key, only_metainfo=True)['columns']
+                orig_cols = tab.columns
                 col_types = deepof.utils.infer_column_types(tab)
                 
                 # Separate angles (dimensionless; only need interpolation, not scaling)
@@ -3523,19 +3533,36 @@ class TableDict(dict):
                 angles_df = tab[angle_cols].copy() if angle_cols else None
                 tab = tab.drop(columns=angle_cols, errors="ignore")
 
+                if filter_low_variance:
+                    keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                    tab = tab.iloc[:, keep_cols]
+
                 # Apply full scaling (size + statistical)
                 if scale:
-                    tab = deepof.utils.scale_table(
-                        tab, scale=scale, global_scaler=global_scaler,
-                        animal_ids=animal_ids, standardize=True,
+                   
+                    tab_local = deepof.utils.scale_table(
+                        tab,
+                        scale=scale,
+                        global_scaler=None,
+                        animal_ids=animal_ids,
+                        standardize=True,  # local step
                     )
+
+                    # Apply the global scaler on top (global step)
+                    tab = tab_local
+
+                    if global_scaler is not None:
+                        scalar_cols = deepof.utils.infer_scalar_cols(tab)
+                        if scalar_cols:
+                            tab.loc[:, scalar_cols] = global_scaler.transform(tab[scalar_cols].to_numpy(float))
                     
                     # Clip outliers and interpolate (scalars only)
-                    if outlier_std_threshold and global_scaler:
+                    if scale == "standard" and interpolate_normalized:
                         scalars = [c for c in col_types["scalars"] if c in tab.columns]
                         if scalars:
                             arr = tab[scalars].to_numpy(float)
-                            arr[np.abs(arr) > outlier_std_threshold] = np.nan
+                            arr[np.abs(arr) > interpolate_normalized] = np.nan
                             tab[scalars] = pd.DataFrame(
                                 arr, index=tab.index, columns=scalars
                             ).interpolate(limit_direction="both")
