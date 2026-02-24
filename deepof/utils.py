@@ -1961,27 +1961,38 @@ def infer_scalar_cols(df: pd.DataFrame):
     return speed_cols + dist_cols
 
 
-def scale_table(
-    df: pd.DataFrame,
-    scale: str = "standard",
-    global_scaler=None,
-    size_ref=("B_Nose", "B_Tail_base"),
+def infer_column_types(df):
+    """Identify coord, speed, distance, and angle columns from a pose table."""
+    coord_cols = [c for c in df.columns 
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = {c[0] for c in coord_cols}
+    
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bodyparts]
+    dist_cols = [c for c in df.columns
+                 if isinstance(c, tuple) and len(c) == 2
+                 and c[0] in bodyparts and c[1] in bodyparts]
+    angle_cols = [c for c in df.columns if isinstance(c, tuple) and len(c) == 3]
+    
+    return {
+        "coords": coord_cols,
+        "speeds": speed_cols, 
+        "dists": dist_cols,
+        "angles": angle_cols,
+        "bodyparts": bodyparts,
+        "scalars": speed_cols + dist_cols,
+    }
+
+
+def scale_table_old(
+df: pd.DataFrame,
+scale: str = "standard",
+global_scaler=None,
+size_ref=("B_Nose", "B_Tail_base"),
 ) -> pd.DataFrame:
-    """
-    Geometry-safe scaling for DeepOF-like tables.
-
-    Local stage (global_scaler=None):
-      1) divide coords + speeds + distances by a single robust body-size scalar s
-      2) optionally scale only scalar features (speeds+distances) with {standard,robust,minmax}
-
-    Global stage (global_scaler!=None):
-      - apply global_scaler only to scalar features (speeds+distances)
-      - do NOT touch coordinates
-    """
     out = df.copy()
 
     coord_cols = [c for c in out.columns
-                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+                if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
     scalar_cols = infer_scalar_cols(out)  # speeds + distances
 
     # ---- global stage: only transform scalar cols ----
@@ -2021,6 +2032,247 @@ def scale_table(
                 out[scalar_cols].to_numpy(dtype=float)
             )
 
+    return out
+    
+
+def scale_table_not_so_old(
+    df: pd.DataFrame,
+    scale: str = "standard",
+    global_scaler=None,
+    animal_ids=None,
+    size_ref=("Nose", "Tail_base"),
+    inter_scale: str = "geom",
+    standardize: bool = True,
+) -> pd.DataFrame:
+    """
+    Multi-animal geometry-safe scaling for pose tracking tables.
+
+    Two-stage process:
+      1. Size normalization: divide by body length (nose-to-tail) per animal
+      2. Statistical scaling: standardize speeds/distances (coords untouched)
+
+    Args:
+        df: Table with coord tuples (bp, "x"/"y"), speed strings (bp), distance tuples (bp1, bp2)
+        scale: Scaler type ("standard", "minmax", "robust") or falsy to skip
+        global_scaler: Pre-fitted {"speed": scaler, "dist": scaler} or None to fit locally
+        animal_ids: List of animal prefixes (e.g., ["B", "W"]); auto-inferred if None
+        size_ref: Body part pair for size reference (without animal prefix)
+        inter_scale: How to combine scales for inter-animal distances ("mean", "geom", "global")
+        standardize: If False, only size-normalize without statistical scaling
+
+    Returns:
+        Scaled copy of df
+    """
+    if not scale:
+        return df.copy()
+    if scale not in {"standard", "minmax", "robust"}:
+        raise ValueError("scale must be 'standard', 'robust', 'minmax', or falsy")
+
+    out = df.copy()
+
+    # ========== Identify column types ==========
+    # Coords: (bodypart, "x"/"y"), Speeds: bodypart string, Dists: (bp1, bp2)
+
+    col_dict=infer_column_types(out)
+
+    # Map each bodypart to its animal prefix: "B_Nose" -> "B", "Nose" -> None
+    def get_animal_id(bp):
+        return bp.split("_", 1)[0] if "_" in bp else None
+
+    bp_to_animal = {bp: get_animal_id(bp) for bp in col_dict["bodyparts"]}
+
+    # Auto-infer animal IDs from bodypart prefixes
+    if animal_ids is None:
+        animal_ids = sorted({aid for aid in bp_to_animal.values() if aid}) or [None]
+
+    # ========== Compute body-size scale factor per animal ==========
+    # Uses median nose-to-tail distance as robust size estimate
+
+    def compute_size_factor(aid):
+        prefix = f"{aid}_" if aid else ""
+        cols = [(f"{prefix}{bp}", ax) for bp in size_ref for ax in ("x", "y")]
+        if not all(c in out.columns for c in cols):
+            return np.nan
+        a, b = size_ref
+        dx = out[(f"{prefix}{a}", "x")] - out[(f"{prefix}{b}", "x")]
+        dy = out[(f"{prefix}{a}", "y")] - out[(f"{prefix}{b}", "y")]
+        return np.nanmedian(np.hypot(dx, dy))
+
+    size_factors = {aid: compute_size_factor(aid) for aid in animal_ids}
+
+    # Fallback for missing/invalid factors
+    valid_factors = [s for s in size_factors.values() if np.isfinite(s) and s > 0]
+    default_size = float(np.nanmedian(valid_factors)) if valid_factors else 1.0
+    size_factors = {aid: (s if np.isfinite(s) and s > 0 else default_size)
+                    for aid, s in size_factors.items()}
+
+    # ========== Stage 1: Size normalization ==========
+    # Divide coords/speeds/distances by body length to express in "body units"
+
+    for aid in animal_ids:
+        s = size_factors[aid]
+        animal_bps = [bp for bp in col_dict["bodyparts"] if bp_to_animal[bp] == aid]
+
+        # Normalize this animal's coordinates
+        xy_cols = [(bp, ax) for bp in animal_bps for ax in ("x", "y") if (bp, ax) in out.columns]
+        if xy_cols:
+            out[xy_cols] = out[xy_cols].to_numpy(float) / s
+
+        # Normalize this animal's speeds
+        sp_cols = [bp for bp in animal_bps if bp in col_dict["speeds"]]
+        if sp_cols:
+            out[sp_cols] = out[sp_cols].to_numpy(float) / s
+
+    # Normalize distances (intra-animal: single factor, inter-animal: combined)
+    def combine_factors(s1, s2):
+        if inter_scale == "mean":
+            return (s1 + s2) / 2
+        elif inter_scale == "geom":
+            return np.sqrt(s1 * s2)
+        else:  # "global"
+            return default_size
+
+    for col in col_dict["dists"]:
+        a1, a2 = bp_to_animal[col[0]], bp_to_animal[col[1]]
+        s1, s2 = size_factors.get(a1, default_size), size_factors.get(a2, default_size)
+        s = s1 if a1 == a2 else combine_factors(s1, s2)
+        out[col] = out[col].to_numpy(float) / s
+
+    if not standardize:
+        return out
+
+    # ========== Stage 2: Statistical scaling (scalars only) ==========
+    # Fit ONE scaler across all speeds, ONE across all distances (preserves relative magnitudes)
+
+    SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+
+    def apply_groupwise(cols, scaler=None):
+        """Fit or apply a 1D scaler to all values in cols collectively."""
+        if not cols:
+            return
+        arr = out[cols].to_numpy(float)
+        flat = arr.reshape(-1, 1)
+
+        if scaler is None:  # fit locally
+            scaler = SCALERS[scale]()
+            scaler.fit(flat)
+
+        out[cols] = scaler.transform(flat).reshape(arr.shape)
+        return scaler  # Return for global scaler collection
+
+    if global_scaler:
+        # Apply pre-fitted scalers
+        apply_groupwise(col_dict["coords"], global_scaler.get("coords"))
+        apply_groupwise(col_dict["speeds"], global_scaler.get("speed"))
+        apply_groupwise(col_dict["dists"], global_scaler.get("dist"))
+    else:
+        # Fit and apply locally
+        apply_groupwise(col_dict["coords"])
+        apply_groupwise(col_dict["speeds"])
+        apply_groupwise(col_dict["dists"])
+
+    return out
+
+
+def scale_table(
+    df: pd.DataFrame,
+    scale: str = "standard",
+    global_scaler=None,           # sklearn scaler fitted on ALL scalar columns (per-column behavior)
+    animal_ids=None,
+    size_ref=("Nose", "Tail_base"),
+    inter_scale: str = "mean",    # {"mean","geom","global"}
+    standardize: bool = True,     # if False: only size-normalize
+) -> pd.DataFrame:
+    if not scale:
+        return df.copy()
+    if scale not in {"standard", "minmax", "robust"}:
+        raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
+
+    out = df.copy()
+
+    # ----- infer columns -----
+    coord_cols = [c for c in out.columns
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = sorted({c[0] for c in coord_cols})
+    bp_set = set(bodyparts)
+
+    def _split_bp(bp: str):
+        return bp.split("_", 1) if "_" in bp else (None, bp)
+
+    if animal_ids is None:
+        animal_ids = sorted({(_split_bp(bp)[0]) for bp in bodyparts if _split_bp(bp)[0] is not None}) or [None]
+    animal_ids = list(animal_ids)
+
+    speed_cols = [c for c in out.columns if isinstance(c, str) and c in bp_set]
+    dist_cols = [
+        c for c in out.columns
+        if isinstance(c, tuple) and len(c) == 2 and all(isinstance(x, str) for x in c)
+        and c[0] in bp_set and c[1] in bp_set
+    ]
+    scalar_cols = speed_cols + dist_cols
+
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
+
+    # ----- size factors per animal -----
+    ref_a, ref_b = size_ref
+    s_by_aid = {}
+    for aid in animal_ids:
+        a = ref_a if aid is None else f"{aid}_{ref_a}"
+        b = ref_b if aid is None else f"{aid}_{ref_b}"
+        need = [(a, "x"), (a, "y"), (b, "x"), (b, "y")]
+        if all(c in out.columns for c in need):
+            dx = out[(a, "x")].to_numpy(float) - out[(b, "x")].to_numpy(float)
+            dy = out[(a, "y")].to_numpy(float) - out[(b, "y")].to_numpy(float)
+            s_by_aid[aid] = np.nanmedian(np.hypot(dx, dy))
+        else:
+            s_by_aid[aid] = np.nan
+
+    valid = [v for v in s_by_aid.values() if np.isfinite(v) and v > 0]
+    s_default = float(np.nanmedian(valid)) if valid else 1.0
+    s_by_aid = {aid: (v if np.isfinite(v) and v > 0 else s_default) for aid, v in s_by_aid.items()}
+
+    def _comb(s1, s2):
+        if inter_scale == "mean":
+            return 0.5 * (s1 + s2)
+        if inter_scale == "geom":
+            return float(np.sqrt(s1 * s2))
+        if inter_scale == "global":
+            return s_default
+        raise ValueError("inter_scale must be one of {'mean','geom','global'}")
+
+    # ----- stage 1: size-normalize -----
+    for aid in animal_ids:
+        bps = [bp for bp in bodyparts if bp_to_aid.get(bp) == aid] if aid is not None \
+              else [bp for bp in bodyparts if bp_to_aid.get(bp) is None]
+        if not bps:
+            continue
+        s = s_by_aid[aid]
+
+        xy = [(bp, ax) for bp in bps for ax in ("x", "y") if (bp, ax) in out.columns]
+        if xy:
+            out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / s
+
+        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp name
+        if sp:
+            out.loc[:, sp] = out.loc[:, sp].to_numpy(float) / s
+
+    for (bp1, bp2) in dist_cols:
+        a1, a2 = bp_to_aid.get(bp1), bp_to_aid.get(bp2)
+        s = s_by_aid.get(a1, s_default) if a1 == a2 else _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
+        out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
+
+    if not standardize or not scalar_cols:
+        return out
+
+    # ----- stage 2: per-column standardization of scalars (like original) -----
+    if global_scaler is not None:
+        out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
+        return out
+
+    # local (per-table) scaling if no global scaler is provided
+    scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
+    scaler = scaler_cls()
+    out.loc[:, scalar_cols] = scaler.fit_transform(out[scalar_cols].to_numpy(float))
     return out
 
 

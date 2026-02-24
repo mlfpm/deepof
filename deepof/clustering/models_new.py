@@ -4824,7 +4824,7 @@ class TurtleHeads(nn.Module):
         self._optims = []
 
         for i, d in enumerate(feature_dims):
-            if i != supervised_index:
+            if False: #i != supervised_index:
                 head = MLPHead(d, n_components,
                                hidden_dim=mlp_hidden,
                                dropout=mlp_dropout)
@@ -4887,7 +4887,7 @@ class TaskEncoder(nn.Module):
 
         self.projs = nn.ModuleList()
         for i, d in enumerate(feature_dims):
-            if i != supervised_index:
+            if False: #i != supervised_index:
                 proj = MLPHead(d, n_components,
                                hidden_dim=mlp_hidden,
                                dropout=mlp_dropout)
@@ -5239,6 +5239,7 @@ def fit_nodes_pca(
     batch_size: int = 4096,
     num_workers: int = 0,
     max_samples: Optional[int] = None,
+    seed: Optional[int] = None,
 ):
     """
     Fits two IncrementalPCAs:
@@ -5252,18 +5253,24 @@ def fit_nodes_pca(
       ipca_pos, feats_pos_all  # [N, n_components_pos]
       ipca_spd, feats_spd_all  # [N, n_components_spd]
     """
+
+    shuffle=False
+    if seed is not None:
+        shuffle=True
+
     # ---- Pass 1: partial_fit ----
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=shuffle,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=False,
+        block_shuffle=shuffle,
         permute_within_block=False,
+        seed=seed,
     )
 
     ipca_pos = IncrementalPCA(n_components=n_components_pos)
@@ -5298,15 +5305,16 @@ def fit_nodes_pca(
     # ---- Pass 2: transform all ----
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=shuffle,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=False,
+        block_shuffle=shuffle,
         permute_within_block=False,
+        seed=seed,
     )
 
     feats_pos, feats_spd = [], []
@@ -5337,6 +5345,7 @@ def fit_angles_pca(
     n_components: int = 32,
     batch_size: int = 8192,
     num_workers: int = 0,
+    seed: Optional[int] = None,
 ) -> Tuple[IncrementalPCA, torch.Tensor]:
     """
     Fits IncrementalPCA on angle tensors and returns both the fitted ipca and features.
@@ -5345,14 +5354,19 @@ def fit_angles_pca(
     assert getattr(dataset_with_angles, "return_angles", False), \
         "fit_angles_pca expects a dataset created with return_angles=True."
 
+    shuffle=False
+    if seed is not None:
+        shuffle=True
+
     # Pass 1: partial_fit
     ipca = IncrementalPCA(n_components=n_components)
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=False, drop_last=False,
+        batch_size=batch_size, shuffle=shuffle, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
+        seed=seed,
     )
     for batch in loader:
         # Expected: (x, a, ang, vid) when return_angles=True
@@ -5367,11 +5381,12 @@ def fit_angles_pca(
     # Pass 2: transform all
     feats_all = []
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=False, drop_last=False,
+        batch_size=batch_size, shuffle=shuffle, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
+        seed=seed,
     )
     for batch in loader:
         ang = batch[2]
@@ -5388,6 +5403,7 @@ def extract_pca_angles_view(
     n_components: int = 32,
     batch_size: int = 8192,
     num_workers: int = 0,
+    seed: Optional[int] = None,
 ) -> torch.Tensor:
     """
     Builds an IncrementalPCA view from precomputed angles in the dataset.
@@ -5397,19 +5413,24 @@ def extract_pca_angles_view(
     assert getattr(dataset_with_angles, "return_angles", False), \
         "extract_pca_angles_view expects a dataset created with return_angles=True."
 
+    shuffle=False
+    if seed is not None:
+        shuffle=True
+
     # Pass 1: partial_fit
     ipca = IncrementalPCA(n_components=n_components)
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=False, drop_last=False,
+        batch_size=batch_size, shuffle=shuffle, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
+        seed=seed,
     )
     for batch in loader:
         # expected: x, a, ang, vid
         if len(batch) == 4:
-            _, _, ang, _ = batch
+            _, _, ang, _, _ = batch
         else:
             raise RuntimeError("Angles loader must yield (x, a, ang, vid)")
         X = ang.view(ang.size(0), -1).cpu().numpy()  # flatten (T*K*1)
@@ -5418,14 +5439,15 @@ def extract_pca_angles_view(
     # Pass 2: transform
     feats_all = []
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=False, drop_last=False,
+        batch_size=batch_size, shuffle=shuffle, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
+        seed=seed,
     )
     for batch in loader:
-        _, _, ang, _ = batch
+        _, _, ang, _, _ = batch
         X = ang.view(ang.size(0), -1).cpu().numpy()
         Z = ipca.transform(X)
         feats_all.append(torch.from_numpy(Z).float())
@@ -5437,7 +5459,8 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
                            n_components: int = 16,
                            batch_size: int = 8192,
                            num_workers: int = 0,
-                           max_samples: Optional[int] = None) -> torch.Tensor:
+                           max_samples: Optional[int] = None,
+                           seed: Optional[int] = None) -> torch.Tensor:
     """
     Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
     in order (shuffle=False), using two passes: partial_fit, then transform.
@@ -5447,18 +5470,23 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     - If edges have very different scale across datasets, consider pre-standardizing.
     """
 
+    shuffle=False
+    if seed is not None:
+        shuffle=True
+
     # 1) Pass 1: fit IncrementalPCA on flattened edges
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=shuffle,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=False,
+        block_shuffle=shuffle,
         permute_within_block=False,
+        seed=seed,
     )
 
     ipca = IncrementalPCA(n_components=n_components)
@@ -5478,15 +5506,16 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     # 2) Pass 2: transform all edges -> PCA
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=shuffle,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=False,
+        block_shuffle=shuffle,
         permute_within_block=False,
+        seed=seed,
     )
     feats = []
     for batch in loader:
@@ -5503,6 +5532,7 @@ def extract_supervised_labels_view(
     dataset: BatchDictDataset,
     batch_size: int = 8192,
     num_workers: int = 0,
+    seed: Optional[int] = None,
 ) -> torch.Tensor:
     """
     Extracts the supervised labels 'y' from the dataset for use as a teacher view.
@@ -5511,12 +5541,16 @@ def extract_supervised_labels_view(
     if dataset.supervised_dict is None:
         raise ValueError("Dataset does not contain supervised labels.")
 
+    shuffle=False
+    if seed is not None:
+        shuffle=True
     loader = dataset.make_loader(
-        batch_size=batch_size, shuffle=False, drop_last=False,
+        batch_size=batch_size, shuffle=shuffle, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=False, permute_within_block=False,
+        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
+        seed=seed,
     )
     
     labels_all = []
@@ -5657,12 +5691,11 @@ class DiscriminativeHead(nn.Module):
 def maybe_build_turtle_teacher(  
     *,
     teacher_cfg: TurtleTeacherCfg,  
+    common_cfg: CommonFitCfg,
     train_dataset: "BatchDictDataset",  
     preprocessed_train: dict,  
     data_path: str, 
-    batch_size: int,
     device: torch.device,
-    n_components: int,
     latent_view: Optional[torch.Tensor] = None, #get's calculated externally from the model
 
 ) -> Tuple[Optional[Any], Optional[torch.Tensor], Dict[str, Any]]:
@@ -5718,7 +5751,7 @@ def maybe_build_turtle_teacher(
         print("\n--- Building PCA views for teacher (angles) ---")
         angles_train_dataset = BatchDictDataset(
             preprocessed_train, data_path, "train_",
-            force_rebuild=False, h5_chunk_len=batch_size, return_angles=True
+            force_rebuild=False, h5_chunk_len=common_cfg.batch_size, return_angles=True
         )
         _, pca_angles_train = fit_angles_pca(
             angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=8192, num_workers=0 
@@ -5735,7 +5768,7 @@ def maybe_build_turtle_teacher(
 
     print("\n--- Running TURTLE teacher on views ---")
     teacher, tau_star = run_turtle_teacher_on_views(
-        views_dict=views, n_components=n_components, gamma=teacher_cfg.teacher_gamma,
+        views_dict=views, n_components=common_cfg.n_components, gamma=teacher_cfg.teacher_gamma,
         alpha_sample_entropy=teacher_cfg.teacher_alpha_sample_entropy, outer_steps=teacher_cfg.teacher_outer_steps,
         inner_steps=teacher_cfg.teacher_inner_steps, normalize_feats=teacher_cfg.teacher_normalize_feats,
         verbose=True, device=device, head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
@@ -6337,9 +6370,9 @@ def train_one_epoch_indexed(
     mean_lambda_weight = 0.0
     for step, batch in enumerate(iterator):
         batch = move_to(batch, device)
-        x, a, _, _ = batch  # assume dataset returns (x, a)
+        x, a, _, idx, _ = batch  # assume dataset returns (x, a)
         B = x.size(0)
-        idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
+        #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
 
         batch_idx = (x, a, idx)
@@ -6409,9 +6442,9 @@ def validate_one_epoch_indexed(
     seen = 0
     for batch in iterator:
         batch = move_to(batch, device)
-        x, a, _, _ = batch
+        x, a, _, idx, _ = batch
         B = x.size(0)
-        idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
+        #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
 
         res = step_fn(model, (x, a, idx), SimpleNamespace(
@@ -6564,6 +6597,7 @@ def step_vqvae_distill(
         z_e = encoder_output  # pre-quantization latent
         logits = ctx.distill_head(z_e)  # [B, C]
 
+        idx = batch[-2].to(device).long() 
         tau_b = ctx.tau_star[idx]  # (B, C)
         eps = 1e-8
         T = float(getattr(ctx, "distill_sharpen_T", 0.5))
@@ -6663,6 +6697,7 @@ def step_contrastive_distill(
         z_main = model(x, a)  # [B, D]
         logits = ctx.distill_head(z_main)  # [B, C]
 
+        idx = batch[-2].to(device).long() 
         tau_b = ctx.tau_star[idx]  # (B, C)
         eps = 1e-8
         T = float(getattr(ctx, "distill_sharpen_T", 0.5))
@@ -6819,6 +6854,7 @@ def embedding_model_fittingPT(
         kl_warmup=kl_warmup,
         kl_end_weight=kl_end_weight,
         kl_cooldown=kl_cooldown,
+        seed=0, 
     )
 
     teacher_cfg = TurtleTeacherCfg(
@@ -6921,6 +6957,8 @@ def embedding_model_fitting(
             torch.set_float32_matmul_precision("high")
         except Exception:
             pass
+    torch.manual_seed(common_cfg.seed)
+    np.random.seed(common_cfg.seed)
 
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     preprocessed_train, preprocessed_val, supervised_train, supervised_val = preprocessed_object
@@ -6934,9 +6972,9 @@ def embedding_model_fitting(
     )
 
     train_loader = train_dataset.make_loader(
-        batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
+        batch_size=common_cfg.batch_size, shuffle=True, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=True, permute_within_block=False, seed=common_cfg.seed,
     )
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
@@ -7035,12 +7073,11 @@ def fit_VQVAE(
     teacher_cfg.include_latent_view=False
     teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
+        common_cfg=common_cfg,
         train_dataset=train_loader.dataset,
         preprocessed_train=preprocessed_train,
         data_path=data_path,
-        batch_size=common_cfg.batch_size,
         device=device,
-        n_components=common_cfg.n_components,
         latent_view=None,
     )
 
@@ -7189,12 +7226,11 @@ def fit_contrastive(
     teacher_cfg.include_latent_view=False
     teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
+        common_cfg=common_cfg,
         train_dataset=train_loader.dataset,
         preprocessed_train=preprocessed_train,
         data_path=data_path,
-        batch_size=common_cfg.batch_size,
         device=device,
-        n_components=common_cfg.n_components,
         latent_view=None,
     )
 
@@ -7451,13 +7487,12 @@ def fit_VADE(
         # Build teacher for VADE
         teacher_cfg.include_latent_view=True # Vade has a free and useful latent view due to pretraining
         teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
-            teacher_cfg=teacher_cfg,            
+            teacher_cfg=teacher_cfg,    
+            common_cfg=common_cfg,        
             train_dataset=train_loader.dataset,
             preprocessed_train=preprocessed_train,
             data_path=data_path,
-            batch_size=common_cfg.batch_size,
             device=device,
-            n_components=common_cfg.n_components,
             latent_view=z_all.to(device),
         )
 

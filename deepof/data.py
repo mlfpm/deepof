@@ -2374,7 +2374,7 @@ class Coordinates:
                 # Merge and extract names
                 tab_dict = coords.merge(
                     speeds,
-                    #angles,
+                    angles,
                     dists,
                     save_as_paths=return_as_paths
                     )
@@ -2467,7 +2467,7 @@ class Coordinates:
             collect_quality = True
             if collect_quality==True:
                 quality_to_load = self.get_quality()
-            to_preprocess, shapes, global_scaler = tab_dict.preprocess(
+            to_preprocess, shapes, global_scaler = tab_dict.preprocess_old(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
                 bin_size=bin_size,
@@ -3369,7 +3369,224 @@ class TableDict(dict):
         )
 
 
+
+    # ========== Main preprocess method ==========
+
     def preprocess(
+        self,
+        coordinates,
+        window_size: int = 25,
+        window_step: int = 1,
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max: int = 227272,
+        scale: str = "standard",
+        pretrained_scaler=None,
+        test_videos: int = 0,
+        outlier_std_threshold: int = 10,
+        file_name: str = "preprocessed",
+        save_as_paths: Optional[bool] = None,
+        shuffle: bool = False,
+        quality_to_load=None,  # Restored
+    ) -> tuple:
+        """
+        Preprocess pose tables for model training.
+        
+        Pipeline:
+        1. Filter by time bins, drop all-NaN tables
+        2. Optionally replace speeds with quality scores
+        3. Collect samples to fit global scalers (size-normalized but not standardized)
+        4. Apply full scaling (size + statistical) and save
+        5. Extract sliding windows for training
+        
+        Args:
+            quality_to_load: Optional table_dict containing quality scores to replace speed values.
+                            Useful when speed reliability varies and you want to weight by tracking quality.
+        """
+
+        SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+
+        def _make_scaler(kind: str):
+            if kind not in SCALERS:
+                raise ValueError(f"Invalid scaler: {kind}. Choose from {set(SCALERS.keys())}")
+            return SCALERS[kind]()
+
+        def _sanitize_numeric(df: pd.DataFrame) -> pd.DataFrame:
+            """Interpolate NaNs and fill remaining gaps with zeros."""
+            out = df.copy()
+            num_cols = out.select_dtypes(include=[np.number]).columns
+            if len(num_cols) > 0:
+                out[num_cols] = out[num_cols].interpolate(limit_direction="both").fillna(0.0)
+            return out
+        
+        def _load_and_prepare_table(key, bin_indices):
+            """Load table, apply binning, and optionally replace speeds with quality scores."""
+            tab = get_dt(self, key).iloc[bin_indices]
+            
+            if quality_to_load is not None:
+                quality = get_dt(quality_to_load.filter_videos([key]), key)
+                # Speed columns that exist in both tables
+                shared_cols = list(set(tab.columns) & set(quality.columns))
+                if shared_cols:
+                    tab[shared_cols] = quality[shared_cols].iloc[bin_indices]
+            
+            return tab
+
+        # ========== Validation & setup ==========
+        
+        if scale and scale not in SCALERS:
+            raise ValueError(f"Invalid scaler: {scale}")
+        
+        if save_as_paths is None:
+            save_as_paths = coordinates._very_large_project
+
+        keys_list = list(self.keys())
+        animal_ids = coordinates._animal_ids
+        
+        bin_info = _preprocess_time_bins(
+            coordinates=coordinates,
+            bin_size=bin_size,
+            bin_index=bin_index,
+            precomputed_bins=precomputed_bins,
+            tab_dict_for_binning=self,
+            samples_max=samples_max,
+        )
+
+        # Create empty output container
+        try:
+            table_temp = type(self)({}, self._type, self._table_path)
+        except Exception:
+            table_temp = copy.deepcopy(self)
+            for k in list(table_temp.keys()):
+                del table_temp[k]
+        
+        rng = np.random.RandomState(42)
+        samples_coords, samples_speed, samples_dist = [], [], []
+        samples_for_fit = []
+        global_scaler = None
+        valid_keys = []
+
+        # ========== Pass 1: Collect samples for global scaler fitting ==========
+        
+        with tqdm(total=len(keys_list), desc=f"{'Sampling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+            for key in keys_list:
+                tab = _load_and_prepare_table(key, bin_info[key])  # includes quality replacement if you use it
+
+                if tab.isna().all().all():
+                    pbar.update()
+                    continue
+                valid_keys.append(key)
+
+                if scale and pretrained_scaler is None:
+                    tab_norm = deepof.utils.scale_table(
+                        tab,
+                        scale=scale,
+                        global_scaler=None,
+                        animal_ids=animal_ids,
+                        standardize=False,   # size-normalize only
+                    )
+
+                    col_types = deepof.utils.infer_column_types(tab_norm)
+                    scalar_cols = col_types["scalars"]  # speeds + dists
+
+                    n_take = min(samples_max, len(tab_norm))
+                    if n_take > 0 and scalar_cols:
+                        idx = rng.choice(len(tab_norm), size=n_take, replace=False)
+                        samples_for_fit.append(tab_norm.iloc[idx][scalar_cols].to_numpy(float))
+
+                pbar.update()
+
+        # ========== Fit global scaler (per-column) ==========
+        if pretrained_scaler is not None:
+            global_scaler = pretrained_scaler
+        elif scale:
+            if samples_for_fit:
+                scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
+                global_scaler = scaler_cls()
+                global_scaler.fit(np.vstack(samples_for_fit))
+            else:
+                global_scaler = None
+        else:
+            global_scaler = None
+
+        # ========== Pass 2: Apply scaling and save ==========
+        
+        with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+            for key in valid_keys:
+                tab = _load_and_prepare_table(key, bin_info[key])
+                orig_cols = get_dt(self, key, only_metainfo=True)['columns']
+                col_types = deepof.utils.infer_column_types(tab)
+                
+                # Separate angles (dimensionless; only need interpolation, not scaling)
+                angle_cols = col_types["angles"]
+                angles_df = tab[angle_cols].copy() if angle_cols else None
+                tab = tab.drop(columns=angle_cols, errors="ignore")
+
+                # Apply full scaling (size + statistical)
+                if scale:
+                    tab = deepof.utils.scale_table(
+                        tab, scale=scale, global_scaler=global_scaler,
+                        animal_ids=animal_ids, standardize=True,
+                    )
+                    
+                    # Clip outliers and interpolate (scalars only)
+                    if outlier_std_threshold and global_scaler:
+                        scalars = [c for c in col_types["scalars"] if c in tab.columns]
+                        if scalars:
+                            arr = tab[scalars].to_numpy(float)
+                            arr[np.abs(arr) > outlier_std_threshold] = np.nan
+                            tab[scalars] = pd.DataFrame(
+                                arr, index=tab.index, columns=scalars
+                            ).interpolate(limit_direction="both")
+
+                # Reattach interpolated angles
+                if angles_df is not None:
+                    angles_df = angles_df.apply(pd.to_numeric, errors="ignore").interpolate(limit_direction="both")
+                    tab = pd.concat([tab, angles_df], axis=1)
+
+                # restore column order
+                tab = tab.reindex(columns=orig_cols)
+
+                # Save
+                table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                table_temp[key] = save_dt(_sanitize_numeric(tab), table_path, save_as_paths)
+                pbar.update()
+
+                orig_cols2 = get_dt(self, key).iloc[bin_info[key]].columns
+                new_cols2  = get_dt(table_temp, key).columns  # after saving
+
+                assert list(orig_cols2) == list(new_cols2), "Column order changed during preprocessing!"
+
+
+        # ========== Extract windows ==========
+        
+        X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
+
+        X_train, train_shape = deepof.utils.extract_windows(
+            to_window=X_train,
+            window_size=window_size,
+            window_step=window_step,
+            save_as_paths=save_as_paths,
+            shuffle=shuffle,
+            windows_desc="Get training windows",
+        )
+
+        if test_videos and len(test_index) > 0:
+            X_test, test_shape = deepof.utils.extract_windows(
+                to_window=X_test,
+                window_size=window_size,
+                window_step=window_step,
+                save_as_paths=save_as_paths,
+                shuffle=shuffle,
+                windows_desc="Get testing windows",
+            )
+        else:
+            test_shape = (0,)
+
+        return (X_train, X_test), (train_shape, test_shape), global_scaler
+
+    def preprocess_old(
         self,
         coordinates: coordinates,
         window_size: int = 25,
@@ -3389,9 +3606,9 @@ class TableDict(dict):
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
         skip_angles: bool = True,
-        quality_to_load = None, 
-    ) -> np.ndarray:
-
+        quality_to_load = None,
+        ) -> np.ndarray:
+        
         def _sanitize_numeric_df(df: pd.DataFrame) -> pd.DataFrame:
             out = df.copy()
             num_cols = out.select_dtypes(include=[np.number]).columns
@@ -3401,7 +3618,7 @@ class TableDict(dict):
                 # columns that are entirely NaN (or gaps too large) still remain NaN -> hard fill
                 out[num_cols] = out[num_cols].fillna(0.0)
             return out
-        
+
         available_mem = psutil.virtual_memory().available * 0.9
         N_rows_max = int(available_mem / ((33 + 11) * window_size * 8))
         if samples_max is None:
@@ -3445,7 +3662,7 @@ class TableDict(dict):
         samples_for_fit = []
         global_scaler = None
         keys_to_drop=[]
-    
+
         with tqdm(total=len(keys_list), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in keys_list:
                 tab = get_dt(self, key)
@@ -3477,7 +3694,7 @@ class TableDict(dict):
                     tab = tab.drop(columns=angle_cols)
 
                 if scale:
-                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
+                    tab_local = deepof.utils.scale_table_old(tab, scale=scale, global_scaler=None)
 
                     # Fit global scaler ONLY on scalar features (speeds + distances), not coords
                     scalar_cols = deepof.utils.infer_scalar_cols(tab_local)
@@ -3499,7 +3716,7 @@ class TableDict(dict):
                 table_temp[key] = save_dt(tab, table_path, save_as_paths)
 
                 pbar.update()
-        
+
         # Remove all keys to invalid tables
         keys_list = [key for key in keys_list if key not in keys_to_drop]
         if len(keys_to_drop) > 0:
@@ -3542,10 +3759,10 @@ class TableDict(dict):
                         tab = tab.drop(columns=angle_cols)
 
                     # local -> global scaling 
-                    tab_local = deepof.utils.scale_table(tab, scale=scale, global_scaler=None)
+                    tab_local = deepof.utils.scale_table_old(tab, scale=scale, global_scaler=None)
 
                     if global_scaler is not None:
-                        tab_scaled = deepof.utils.scale_table(tab_local, scale=scale, global_scaler=global_scaler)
+                        tab_scaled = deepof.utils.scale_table_old(tab_local, scale=scale, global_scaler=global_scaler)
                     else:
                         tab_scaled = tab_local
 

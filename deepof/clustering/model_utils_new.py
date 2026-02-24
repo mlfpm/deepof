@@ -100,6 +100,7 @@ class CommonFitCfg:
 
     # Diagnostics
     diag_max_batches: int = 4
+    seed: int = None
 
 
 @dataclass

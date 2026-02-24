@@ -310,6 +310,7 @@ class BatchDictDataset:
             y_val = torch.from_numpy(np.ascontiguousarray(y_np)).float()
             ret.append(y_val)
 
+        ret.append(torch.tensor(idx, dtype=torch.long))
         ret.append(vid)
         return tuple(ret)
 
@@ -327,9 +328,15 @@ class BatchDictDataset:
         permute_within_block: bool = False,
         prefetch_factor: int = 4,
         persistent_workers: Optional[bool] = None,
+        seed: Optional[int] = None,  
     ) -> DataLoader:
         if persistent_workers is None:
             persistent_workers = num_workers > 0
+        
+        gen = None
+        if seed is not None:
+            gen = torch.Generator()
+            gen.manual_seed(int(seed))
 
         if iterable_for_h5:
             iterable = _H5BatchIterableDataset(
@@ -348,6 +355,7 @@ class BatchDictDataset:
                 block_shuffle=block_shuffle,
                 permute_within_block=permute_within_block,
                 return_angles=self.return_angles,
+                seed=seed, 
             )
             return DataLoader(
                 iterable,
@@ -357,6 +365,7 @@ class BatchDictDataset:
                 pin_memory=pin_memory,
                 persistent_workers=persistent_workers,
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
+                generator=gen, 
             )
         else:
             return DataLoader(
@@ -368,6 +377,7 @@ class BatchDictDataset:
                 pin_memory=pin_memory,
                 persistent_workers=persistent_workers,
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
+                generator=gen, 
             )
 
 
@@ -389,6 +399,7 @@ class _H5BatchIterableDataset(IterableDataset):
         block_shuffle: bool = True,
         permute_within_block: bool = False,
         return_angles: int = False,
+        seed: Optional[int] = None,
     ):
         super().__init__()
         self.base_dataset = base_dataset
@@ -406,6 +417,7 @@ class _H5BatchIterableDataset(IterableDataset):
         self.block_shuffle = block_shuffle
         self.permute_within_block = permute_within_block
         self.return_angles = return_angles
+        self.seed = None if seed is None else int(seed)
 
 
     def __getattr__(self, name):
@@ -446,10 +458,15 @@ class _H5BatchIterableDataset(IterableDataset):
             starts = np.arange(0, n, bs, dtype=np.int64)
 
         w = get_worker_info()
+        worker_id = w.id if w is not None else 0
+        shared_base_seed = (torch.initial_seed() - worker_id) % (2**32)
+
+        # epoch counter (increments once per __iter__ call in each worker)
+        self._epoch = getattr(self, "_epoch", 0) + 1
+        epoch_seed = (shared_base_seed + self._epoch) % (2**32)
+
+        rng = np.random.default_rng(epoch_seed)
         if self.shuffle and self.block_shuffle:
-            worker_id = w.id if w is not None else 0
-            base_seed = (torch.initial_seed() - worker_id) % (2**32)
-            rng = np.random.default_rng(base_seed)
             rng.shuffle(starts)
 
         if w is not None:
@@ -471,7 +488,7 @@ class _H5BatchIterableDataset(IterableDataset):
             y_np = Y[s:e] if Y is not None else None
 
             if self.shuffle and self.permute_within_block:
-                perm = np.random.default_rng().permutation(e - s)
+                perm = rng.permutation(e - s) 
                 x_np = x_np[perm]
                 a_np = a_np[perm]
                 if ang_np is not None:
@@ -483,6 +500,8 @@ class _H5BatchIterableDataset(IterableDataset):
             x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
             a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
             vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
+            idx_np = np.arange(s, e, dtype=np.int64)
+            idx_t = torch.from_numpy(idx_np)
 
             batch = [x, a]
             if ang_np is not None:
@@ -491,6 +510,7 @@ class _H5BatchIterableDataset(IterableDataset):
             if y_np is not None:
                 batch.append(torch.from_numpy(np.ascontiguousarray(y_np)).float())
 
+            batch.append(idx_t)
             batch.append(vid_t)
             yield tuple(batch)
 
