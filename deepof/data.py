@@ -3389,7 +3389,10 @@ class TableDict(dict):
         file_name: str = "preprocessed",
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
-        quality_to_load=None,  # Restored
+        quality_to_load=None, 
+        dist_standardize: str = "groupwise", 
+        speed_standardize: str = "groupwise", 
+        log_distances: bool = True, 
     ) -> tuple:
         """
         Preprocess pose tables for model training.
@@ -3462,9 +3465,9 @@ class TableDict(dict):
             for k in list(table_temp.keys()):
                 del table_temp[k]
         
-        rng = np.random.RandomState(42)
-        samples_coords, samples_speed, samples_dist = [], [], []
-        samples_for_fit = []
+        rng = np.random.RandomState(2)
+        samples_speed, samples_dist, samples_inner, samples_intra = [], [], [], []
+        ref_speed_cols, ref_dist_cols = None, None
         global_scaler = None
         valid_keys = []
 
@@ -3489,38 +3492,129 @@ class TableDict(dict):
                     )
 
                 if scale and pretrained_scaler is None:
-                    tab_norm = deepof.utils.scale_table(
+                    tab_local = deepof.utils.scale_table(
                         tab,
                         scale=scale,
                         global_scaler=None,
                         animal_ids=animal_ids,
                         standardize=True,   # size-normalize only
+                        dist_standardize=dist_standardize,
+                        speed_standardize=speed_standardize,
+                        log_distances=log_distances,
                     )
 
-                    col_types = deepof.utils.infer_column_types(tab_norm)
+                    col_types = deepof.utils.infer_column_types(tab_local)
                     scalar_cols = col_types["scalars"]  # speeds + dists
 
-                    n_take = min(samples_max, len(tab_norm))
-                    if n_take > 0 and scalar_cols:
-                        idx = rng.choice(len(tab_norm), size=n_take, replace=False)
-                        samples_for_fit.append(tab_norm.iloc[idx][scalar_cols].to_numpy(float))
+                    n_take = min(samples_max, len(tab_local))
+                    if n_take > 0:
+                        idx = rng.choice(len(tab_local), size=n_take, replace=False)
+                        if speed_standardize != "none" and col_types["speeds"]:
+                            if speed_standardize == "per_column":
+                                if ref_speed_cols is None:
+                                    ref_speed_cols = col_types["speeds"]
+                                samples_speed.append(
+                                    tab_local.iloc[idx].reindex(columns=ref_speed_cols)[ref_speed_cols].to_numpy(float)
+                                )
+                            else:  # groupwise
+                                samples_speed.append(
+                                    tab_local.iloc[idx][col_types["speeds"]].to_numpy(float).reshape(-1)
+                                )
+
+                        if dist_standardize != "none" and col_types["dists"]:
+                            if dist_standardize == "per_column":
+                                if ref_dist_cols is None:
+                                    ref_dist_cols = col_types["dists"]
+                                samples_dist.append(
+                                    tab_local.iloc[idx].reindex(columns=ref_dist_cols)[ref_dist_cols].to_numpy(float)
+                                )
+                            else:  # groupwise (separately inner vs intra)
+                                if col_types["inner_dists"]:
+                                    samples_inner.append(
+                                        tab_local.iloc[idx][col_types["inner_dists"]].to_numpy(float).reshape(-1)
+                                    )
+                                if col_types["intra_dists"]:
+                                    samples_intra.append(
+                                        tab_local.iloc[idx][col_types["intra_dists"]].to_numpy(float).reshape(-1)
+                                    )
 
                 pbar.update()
 
         # ========== Fit global scaler (per-column) ==========
+        def _fit_global_per_column(samples_2d):
+            if not samples_2d:
+                return None
+            sc = _make_scaler(scale)
+            sc.fit(np.vstack(samples_2d))
+            return sc
+
+        def _fit_global_groupwise(samples_1d):
+            if not samples_1d:
+                return None
+            sc = _make_scaler(scale)
+            sc.fit(np.concatenate(samples_1d).reshape(-1, 1))
+            return sc
+        
         if pretrained_scaler is not None:
             global_scaler = pretrained_scaler
-        elif scale:
-            if samples_for_fit:
-                scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
-                global_scaler = scaler_cls()
-                global_scaler.fit(np.vstack(samples_for_fit))
-            else:
-                global_scaler = None
-        else:
+        elif not scale:
             global_scaler = None
+        else:
+            global_scaler = {
+                "kind": scale,
+                "speed": None,
+                "dist": None,
+                "dist_inner": None,
+                "dist_intra": None,
+                "speed_mode": speed_standardize,
+                "dist_mode": dist_standardize,
+                "log_distances": log_distances,
+            }
+
+            if speed_standardize == "per_column":
+                global_scaler["speed"] = _fit_global_per_column(samples_speed)
+            elif speed_standardize == "groupwise":
+                global_scaler["speed"] = _fit_global_groupwise(samples_speed)
+
+            if dist_standardize == "per_column":
+                global_scaler["dist"] = _fit_global_per_column(samples_dist)
+            elif dist_standardize == "groupwise":
+                global_scaler["dist_inner"] = _fit_global_groupwise(samples_inner)
+                global_scaler["dist_intra"] = _fit_global_groupwise(samples_intra)
+
+            if all(global_scaler[k] is None for k in ("speed", "dist", "dist_inner", "dist_intra")):
+                global_scaler = None
+
 
         # ========== Pass 2: Apply scaling and save ==========
+        def _apply_global(tab_scaled, col_types, gs):
+            """Apply global scalers according to configured modes."""
+            if gs is None:
+                return tab_scaled
+
+            def _apply_1d(cols, scaler):
+                if not cols or scaler is None:
+                    return
+                arr = tab_scaled[cols].to_numpy(float)
+                tab_scaled.loc[:, cols] = scaler.transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+            def _apply_2d(cols, scaler):
+                if not cols or scaler is None:
+                    return
+                tab_scaled.loc[:, cols] = scaler.transform(tab_scaled[cols].to_numpy(float))
+
+            if speed_standardize == "per_column":
+                _apply_2d(col_types["speeds"], gs.get("speed"))
+            elif speed_standardize == "groupwise":
+                _apply_1d(col_types["speeds"], gs.get("speed"))
+
+            if dist_standardize == "per_column":
+                _apply_2d(col_types["dists"], gs.get("dist"))
+            elif dist_standardize == "groupwise":
+                _apply_1d(col_types["inner_dists"], gs.get("dist_inner"))
+                _apply_1d(col_types["intra_dists"], gs.get("dist_intra"))
+
+            return tab_scaled
         
         with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in valid_keys:
@@ -3546,16 +3640,16 @@ class TableDict(dict):
                         scale=scale,
                         global_scaler=None,
                         animal_ids=animal_ids,
-                        standardize=True,  # local step
+                        standardize=True,  
+                        dist_standardize=dist_standardize,
+                        speed_standardize=speed_standardize,
+                        log_distances=log_distances,
                     )
 
                     # Apply the global scaler on top (global step)
                     tab = tab_local
-
-                    if global_scaler is not None:
-                        scalar_cols = deepof.utils.infer_scalar_cols(tab)
-                        if scalar_cols:
-                            tab.loc[:, scalar_cols] = global_scaler.transform(tab[scalar_cols].to_numpy(float))
+                    col_types_local = deepof.utils.infer_column_types(tab)  # columns unchanged, but safer here
+                    tab = _apply_global(tab, col_types_local, global_scaler)
                     
                     # Clip outliers and interpolate (scalars only)
                     if scale == "standard" and interpolate_normalized:

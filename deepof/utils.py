@@ -1972,11 +1972,19 @@ def infer_column_types(df):
                  if isinstance(c, tuple) and len(c) == 2
                  and c[0] in bodyparts and c[1] in bodyparts]
     angle_cols = [c for c in df.columns if isinstance(c, tuple) and len(c) == 3]
+
+    def _prefix(bp: str):
+        return bp.split("_", 1)[0] if "_" in bp else None
+
+    inner_dist_cols = [d for d in dist_cols if _prefix(d[0]) == _prefix(d[1])]
+    intra_dist_cols = [d for d in dist_cols if _prefix(d[0]) != _prefix(d[1])]
     
     return {
         "coords": coord_cols,
         "speeds": speed_cols, 
         "dists": dist_cols,
+        "inner_dists": inner_dist_cols,
+        "intra_dists": intra_dist_cols,
         "angles": angle_cols,
         "bodyparts": bodyparts,
         "scalars": speed_cols + dist_cols,
@@ -2182,11 +2190,18 @@ def scale_table(
     size_ref=("Nose", "Tail_base"),
     inter_scale: str = "mean",    # {"mean","geom","global"}
     standardize: bool = True,     # if False: only size-normalize
+    dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
+    speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    log_distances: bool = True,   
 ) -> pd.DataFrame:
     if not scale:
         return df.copy()
     if scale not in {"standard", "minmax", "robust"}:
         raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
+    if dist_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
+    if speed_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
 
     out = df.copy()
 
@@ -2209,7 +2224,41 @@ def scale_table(
         if isinstance(c, tuple) and len(c) == 2 and all(isinstance(x, str) for x in c)
         and c[0] in bp_set and c[1] in bp_set
     ]
-    scalar_cols = speed_cols + dist_cols
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
+    inner_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) == bp_to_aid.get(d[1])]
+    intra_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) != bp_to_aid.get(d[1])]
+
+    # If applying a global scaler: do NOT touch coords/distances by size again; just transform scalars
+    if global_scaler is not None:
+
+        def _apply_1d(cols, scaler):
+            if not cols or scaler is None:
+                return
+            arr = out[cols].to_numpy(float)
+            out.loc[:, cols] = scaler.transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+        def _apply_2d(cols, scaler):
+            if not cols or scaler is None:
+                return
+            out.loc[:, cols] = scaler.transform(out[cols].to_numpy(float))
+
+        if isinstance(global_scaler, dict):
+            if speed_standardize == "per_column":
+                _apply_2d(speed_cols, global_scaler.get("speed"))
+            elif speed_standardize == "groupwise":
+                _apply_1d(speed_cols, global_scaler.get("speed"))
+
+            if dist_standardize == "per_column":
+                _apply_2d(dist_cols, global_scaler.get("dist"))
+            elif dist_standardize == "groupwise":
+                _apply_1d(inner_dist_cols, global_scaler.get("dist_inner"))
+                _apply_1d(intra_dist_cols, global_scaler.get("dist_intra"))
+            return out
+        
+        scalar_cols = speed_cols + dist_cols
+        if scalar_cols:
+            out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
+        return out
 
     bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 
@@ -2261,18 +2310,50 @@ def scale_table(
         s = s_by_aid.get(a1, s_default) if a1 == a2 else _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
         out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
 
-    if not standardize or not scalar_cols:
+    if log_distances and dist_cols:
+        arr = out[dist_cols].to_numpy(float)
+        arr[arr < 0] = 0.0  # safety (distances should be >= 0)
+        out.loc[:, dist_cols] = np.log1p(arr)
+
+    if not standardize:
         return out
 
     # ----- stage 2: per-column standardization of scalars (like original) -----
-    if global_scaler is not None:
-        out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
-        return out
+    #if global_scaler is not None:
+    #    out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
+    #    return out
 
     # local (per-table) scaling if no global scaler is provided
     scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
-    scaler = scaler_cls()
-    out.loc[:, scalar_cols] = scaler.fit_transform(out[scalar_cols].to_numpy(float))
+    
+    def _fit_transform_per_column(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        out.loc[:, cols] = sc.fit_transform(out[cols].to_numpy(float))
+
+    def _fit_transform_groupwise(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        arr = out[cols].to_numpy(float)
+        out.loc[:, cols] = sc.fit_transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+    # Speeds
+    if speed_standardize == "per_column":
+        _fit_transform_per_column(speed_cols)
+    elif speed_standardize == "groupwise":
+        _fit_transform_groupwise(speed_cols)
+    # else: "none" -> do nothing
+
+    # Distances (groupwise separately for inner vs intra)
+    if dist_standardize == "per_column":
+        _fit_transform_per_column(dist_cols)
+    elif dist_standardize == "groupwise":
+        _fit_transform_groupwise(inner_dist_cols)
+        _fit_transform_groupwise(intra_dist_cols)
+    # else: "none" -> do nothing
+
     return out
 
 

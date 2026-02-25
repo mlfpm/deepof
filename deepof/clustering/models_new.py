@@ -2807,7 +2807,7 @@ class VQVAE(tf.keras.models.Model):
             name="encoding_reconstruction_loss"
         )
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
+            name="reconstruct_loss"
         )
         self.vq_loss_tracker = tf.keras.metrics.Mean(name="vq_loss")
         self.cluster_population = tf.keras.metrics.Mean(
@@ -2907,7 +2907,7 @@ class VQVAE(tf.keras.models.Model):
         log_dict = {
             "total_loss": self.total_loss_tracker.result(),
             "encoding_reconstruction_loss": self.encoding_reconstruction_loss_tracker.result(),
-            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "reconstruct_loss": self.reconstruction_loss_tracker.result(),
             "vq_loss": self.vq_loss_tracker.result(),
             "number_of_populated_clusters": self.cluster_population.result(),
         }
@@ -2968,7 +2968,7 @@ class VQVAE(tf.keras.models.Model):
         log_dict = {
             "total_loss": self.val_total_loss_tracker.result(),
             "encoding_reconstruction_loss": self.val_encoding_reconstruction_loss_tracker.result(),
-            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
+            "reconstruct_loss": self.val_reconstruction_loss_tracker.result(),
             "vq_loss": self.val_vq_loss_tracker.result(),
             "number_of_populated_clusters": self.val_cluster_population.result(),
         }
@@ -3444,7 +3444,7 @@ class GaussianMixtureLatent(tf.keras.models.Model):
             self.add_metric(loss_prior, name="prior_loss", aggregation="mean")
 
             self.add_metric(self._kl_weight, aggregation="mean", name="kl_weight")
-            self.add_metric(kl, aggregation="mean", name="kl_divergence")
+            self.add_metric(kl, aggregation="mean", name="kl_div")
 
             self.add_loss(tf.math.reduce_mean(loss_clustering))
             self.add_loss(tf.math.reduce_mean(loss_prior))
@@ -3988,7 +3988,7 @@ class VaDE(tf.keras.models.Model):
         self.val_total_loss_tracker = tf.keras.metrics.Mean(name="val_total_loss")
 
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
+            name="reconstruct_loss"
         )
         self.val_reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="val_reconstruction_loss"
@@ -3996,7 +3996,7 @@ class VaDE(tf.keras.models.Model):
 
         if self.reg_cat_clusters:
             self.cat_cluster_loss_tracker = tf.keras.metrics.Mean(
-                name="cat_cluster_loss"
+                name="cat_clust_loss"
             )
             self.val_cat_cluster_loss_tracker = tf.keras.metrics.Mean(
                 name="val_cat_cluster_loss"
@@ -4162,12 +4162,12 @@ class VaDE(tf.keras.models.Model):
         # Log results (coupled with TensorBoard)
         log_dict = {
             "total_loss": self.total_loss_tracker.result(),
-            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "reconstruct_loss": self.reconstruction_loss_tracker.result(),
         }
 
         if self.reg_cat_clusters:
             self.cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
-            log_dict["cat_cluster_loss"] = self.cat_cluster_loss_tracker.result()
+            log_dict["cat_clust_loss"] = self.cat_cluster_loss_tracker.result()
 
         # Log to TensorBoard, both explicitly and implicitly (within model) tracked metrics
         return {**log_dict, **{met.name: met.result() for met in self.vade.metrics}}
@@ -4221,12 +4221,12 @@ class VaDE(tf.keras.models.Model):
         # Log results (coupled with TensorBoard)
         log_dict = {
             "total_loss": self.val_total_loss_tracker.result(),
-            "reconstruction_loss": self.val_reconstruction_loss_tracker.result(),
+            "reconstruct_loss": self.val_reconstruction_loss_tracker.result(),
         }
 
         if self.reg_cat_clusters:
             self.val_cat_cluster_loss_tracker.update_state(soft_counts_regulrization)
-            log_dict["cat_cluster_loss"] = self.val_cat_cluster_loss_tracker.result()
+            log_dict["cat_clust_loss"] = self.val_cat_cluster_loss_tracker.result()
 
         return {**log_dict, **{met.name: met.result() for met in self.vade.metrics}}
 
@@ -5867,6 +5867,7 @@ class VaDELossTFExact(nn.Module):
     def __init__(self, n_components: int, latent_dim: int,
                 l1_activity_weight: float = 0.1,
                 kl_scheduler: Optional["Dynamic_weight_manager"] = None,
+                lambda_scheduler: Optional["Dynamic_weight_manager"] = None,
                 reg_cat_clusters=0.0,
                 kl_weight=1.0,
                 prior_loss_weight=0.0,
@@ -5897,6 +5898,7 @@ class VaDELossTFExact(nn.Module):
 
         # Distillation
         self.lambda_distill = float(lambda_distill)
+        self.lambda_scheduler = lambda_scheduler
         self.tau_star = tau_star
         self.distill_sharpen_T = float(distill_sharpen_T)
         self.distill_conf_weight = bool(distill_conf_weight)
@@ -5921,9 +5923,10 @@ class VaDELossTFExact(nn.Module):
         self.gmm_logvar_clamp = (-8.0, 8.0)
 
 
-    def set_teacher(self, tau_star: torch.Tensor, lambda_distill: float = 1.0):
+    def set_teacher(self, tau_star: torch.Tensor, lambda_distill: float = 1.0, lambda_scheduler: Optional["Dynamic_weight_manager"] = None,):
         self.tau_star = tau_star
         self.lambda_distill = float(lambda_distill)
+        self.lambda_scheduler = lambda_scheduler
 
         # NEW: compute inverse-marginal class weights from teacher τ*
         self.class_weight = None
@@ -5941,6 +5944,11 @@ class VaDELossTFExact(nn.Module):
             with torch.no_grad():
                 eps = 1e-8
                 self.teacher_marginal = tau_star.mean(dim=0).clamp_min(eps)  # (C,)
+
+    def set_kl_scheduler(self, kl_scheduler: Optional["Dynamic_weight_manager"] = None):
+        self.kl_scheduler = kl_scheduler 
+        self.kl_scheduler.current_iteration = 0
+
 
     @staticmethod
     def _log_normal_diag(x, mean, log_var):
@@ -6025,12 +6033,12 @@ class VaDELossTFExact(nn.Module):
 
         if self.pretrain_mode:
             # Pretrain: only loss_variational_1 proxy (no q log q), as in TF (they multiply entropy by (1 - pretrain))
-            v_max = 2.0 * math.log(2.0) 
+            v_max = 0.5 #2.0 * math.log(2.0) 
             z_var_eff = z_log_var32.clamp_max(v_max) 
-            loss_var1 = -1 * (z_var_eff + 1.0).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
+            loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
             kl_vec = loss_var1
         else:
-            loss_var1 = -1 * (z_log_var32 + 1.0).sum(dim=-1)  # [B]
+            loss_var1 = -1 * (z_log_var32 + 0.5).sum(dim=-1)  # [B]
             if q32 is not None:
                 loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q
             else:
@@ -6058,8 +6066,9 @@ class VaDELossTFExact(nn.Module):
                 gmm_params["means"].float(),
                 gmm_params["log_vars"].float(),
             )
-            post_like = torch.softmax(logp, dim=-1)
-            tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
+            log_post_like = torch.log_softmax(logp, dim=-1)
+            tf_cluster = -(q * log_post_like).sum(dim=-1).mean() * self.tf_cluster_weight
+            #tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
 
             # Prior match (uniform)
             C = self.n_components
@@ -6186,15 +6195,15 @@ class VaDELossTFExact(nn.Module):
 
         return {
             "total_loss": total,
-            "reconstruction_loss": rec_nll,
-            "kl_surrogate": kl_batch,                               #### CHANGES SECTION #####
-            "kl_divergence": kl_vec.mean(),                         #### CHANGES SECTION #####
+            "reconstruct_loss": rec_nll,
+            "kl_surrogate": kl_batch,                               
+            "kl_div": kl_vec.mean(),                        
             "kl_weight": torch.tensor(klw, device=device, dtype=rec_nll.dtype),
-            "tf_cluster_loss": tf_cluster,
+            "tf_clust_loss": tf_cluster,
             "prior_loss": prior_loss,
             "kmeans_loss": kmeans_loss,
             "activity_l1": activity_l1,
-            "cat_cluster_loss": cat_cluster_loss,
+            "cat_clust_loss": cat_cluster_loss,
             "reg_cluster_var_loss": None,
             "distill_loss": distill_loss,
             "nonempty_loss": nonempty_loss,
@@ -6225,6 +6234,8 @@ def _init_log_summary():
         log_summary[data_type]['nonempty_loss']=[]
         log_summary[data_type]['repel_loss']=[]
         log_summary[data_type]['tf_cluster_loss']=[]
+        log_summary[data_type]['prior_loss']=[]
+        log_summary[data_type]['activity_l1']=[]
 
 
     return log_summary
@@ -6267,12 +6278,10 @@ def _print_losses(model_name: str,
         return f"{val:<{width}.{precision}f}"
 
     loss_names = [
-        "total_loss", "reconstruction_loss", "kl_divergence",
-        "cat_cluster_loss", "kmeans_loss", "distill_loss",
-        "temporal_loss", "scatter_loss", "nonempty_loss",
-        "repel_loss", "tf_cluster_loss",
+        "total_loss", "reconstruct_loss", "prior_loss", "kl_div",
+        "kmeans_loss", "cat_clust_loss", "distill_loss", "temporal_loss", 
+        "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
-    score_names=["conf_norm", "bal_norm", "alignment_score"]
 
     # Print header line
     header = f"Epoch {epoch+1}/{n_epochs}"
@@ -6285,7 +6294,8 @@ def _print_losses(model_name: str,
         line = f"  {phase:<7}:"
         for i, name in enumerate(loss_names):
             key_label = name.replace("_loss", "").replace("_", "")
-            line += f" {key_label[:8]:<8}: {_fmt_loss(name, logs)} |"
+            key_label = key_label.replace("reconstruct", "recon")
+            line += f" {key_label[:9]:<9}: {_fmt_loss(name, logs)} |"
             if (i + 1) % 5 == 0 and i != len(loss_names) - 1:  # line wrap for long outputs
                 line += "\n          "
         print(line.rstrip("|"))
@@ -6371,8 +6381,8 @@ def _progress_wrap(dataloader, show: bool, desc: str, leave=False):
 def _format_postfix(logs: Dict[str, float], max_items: int = 4) -> Dict[str, str]:
     priority = [
         "total_loss",
-        "reconstruction_loss", "enc_rec_loss",
-        "kl_divergence",
+        "reconstruct_loss", "enc_rec_loss",
+        "kl_div",
         "vq_loss", "kmeans_loss",
         "pos_similarity", "neg_similarity",
     ]
@@ -6467,14 +6477,14 @@ def train_one_epoch_indexed(
             optimizer.step()
 
         if ctx is not None:
-            if hasattr(ctx, "kl_scheduler") and ctx.kl_scheduler is not None:
-                ctx.kl_scheduler.step()
+            if hasattr(ctx.criterion, "kl_scheduler") and ctx.criterion.kl_scheduler is not None:
+                ctx.criterion.kl_scheduler.step()
                 if(step==int(len(iterator)/2)):
-                    mean_kl_weight=ctx.kl_scheduler.get_weight()
-            if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
-                ctx.lambda_scheduler.step()
+                    mean_kl_weight=ctx.criterion.kl_scheduler.get_weight()
+            if hasattr(ctx.criterion, "lambda_scheduler") and ctx.criterion.lambda_scheduler is not None:
+                ctx.criterion.lambda_scheduler.step()
                 if(step==int(len(iterator)/2)):
-                    mean_lambda_weight=ctx.lambda_scheduler.get_weight()
+                    mean_lambda_weight=ctx.criterion.lambda_scheduler.get_weight()
 
         logs_accum.append(res.logs)
         if show_progress and hasattr(iterator, "set_postfix"):
@@ -6559,9 +6569,9 @@ def step_vade(
     T_high = float(getattr(ctx, "resp_temp_start", 1.8))
     T_low  = 1.0
     T_resp = T_high
-    if hasattr(ctx, "kl_scheduler") and (ctx.kl_scheduler is not None):
-        w = float(ctx.kl_scheduler.get_weight())
-        w_max = float(getattr(ctx.kl_scheduler, "max_weight", 1.0))
+    if hasattr(ctx.criterion, "kl_scheduler") and (ctx.criterion.kl_scheduler is not None):
+        w = float(ctx.criterion.kl_scheduler.get_weight())
+        w_max = float(getattr(ctx.criterion.kl_scheduler, "max_weight", 1.0))
         prog = 0.0 if w_max <= 0 else min(1.0, max(0.0, w / w_max))
         T_resp = T_low + (T_high - T_low) * (1.0 - prog)
     # Clamp and set
@@ -6576,12 +6586,12 @@ def step_vade(
         apply_distill = getattr(ctx, "apply_distill", True)
         batch_indices = idx if apply_distill else None
 
-        if hasattr(ctx, "kl_scheduler") and ctx.kl_scheduler is not None:
-            ctx.criterion.kl_weight = float(ctx.kl_scheduler.get_weight())
-        elif hasattr(ctx, "kl_weight"):
-            ctx.criterion.kl_weight = float(ctx.kl_weight)
-        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
-            ctx.criterion.lambda_distill = float(ctx.lambda_scheduler.get_weight())
+        if hasattr(ctx.criterion, "kl_scheduler") and ctx.criterion.kl_scheduler is not None:
+            ctx.criterion.kl_weight = float(ctx.criterion.kl_scheduler.get_weight())
+        elif hasattr(ctx.criterion, "kl_weight"):
+            ctx.criterion.kl_weight = float(ctx.criterion.kl_weight)
+        if hasattr(ctx, "lambda_scheduler") and ctx.criterion.lambda_scheduler is not None:
+            ctx.criterion.lambda_distill = float(ctx.criterion.lambda_scheduler.get_weight())
 
         loss_dict = ctx.criterion(outputs, x, batch_indices=batch_indices)
         total = loss_dict["total_loss"]
@@ -6608,14 +6618,14 @@ def step_vade(
 
         logs = {
             "total_loss": float(total.detach().item()),
-            "reconstruction_loss": float(loss_dict["reconstruction_loss"].detach().item()),
-            "kl_divergence": float(loss_dict["kl_divergence"].detach().item()),
-            "cat_cluster_loss": float(loss_dict["cat_cluster_loss"].detach().item()),
+            "reconstruct_loss": float(loss_dict["reconstruct_loss"].detach().item()),
+            "kl_div": float(loss_dict["kl_div"].detach().item()),
+            "cat_clust_loss": float(loss_dict["cat_clust_loss"].detach().item()),
             "kmeans_loss": float(loss_dict["kmeans_loss"].detach().item()) if torch.is_tensor(loss_dict["kmeans_loss"]) else float(loss_dict["kmeans_loss"]),
             "prior_loss": float(loss_dict["prior_loss"].detach().item()),
             "distill_loss": float(loss_dict["distill_loss"].detach().item()),
             "student_clustering_loss": 0.0, #float(loss_dict["student_clustering_loss"].detach().item()),
-            "tf_cluster_loss" : float(loss_dict["tf_cluster_loss"].detach().item()),
+            "tf_clust_loss" : float(loss_dict["tf_clust_loss"].detach().item()),
             "nonempty_loss": float(loss_dict["nonempty_loss"].detach().item()),
             "temporal_loss": float(loss_dict["temporal_loss"].detach().item()),
             "scatter_loss": float(loss_dict["scatter_loss"].detach().item()),
@@ -6695,7 +6705,7 @@ def step_vqvae_distill(
     logs = {
         "total_loss": float(total.detach().item()),
         "enc_rec_loss": float(enc_rec_loss.detach().item()),
-        "reconstruction_loss": float(rec_loss.detach().item()),
+        "reconstruct_loss": float(rec_loss.detach().item()),
         "vq_loss": vq_loss,
         "kmeans_loss": kmeans_loss,
         "number_of_populated_clusters": populated_f,
@@ -6815,7 +6825,7 @@ def embedding_model_fittingPT(
     save_weights: bool = True,
     run: int = 0,
     # VaDE-specific
-    kl_annealing_mode: str = "sigmoid",
+    kl_annealing_mode: str = "linear",#"sigmoid",
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
     freeze_gmm_epochs: int = 0,
@@ -7447,8 +7457,8 @@ def fit_VADE(
     n_batches_per_epoch = len(train_loader)
     # Set up fixed KL weight schedule (determines KL weight for each epoch)
     kl_scheduler = Dynamic_weight_manager(
-        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-        warmup_epochs=15, max_weight=1.0, cooldown_epochs=1, end_weight=1.0
+        n_batches_per_epoch, mode="tf_sigmoid", #common_cfg.kl_annealing_mode,
+        warmup_epochs=15, max_weight=0.5, cooldown_epochs=1, end_weight=0.5
     )
 
     # Load pretrained model if available
@@ -7495,7 +7505,7 @@ def fit_VADE(
     unwrap_dp(model).set_pretrain_mode(True)
     criterion.pretrain_mode = True
     pre_epochs = min(10, max(1, common_cfg.epochs))
-    ctx = SimpleNamespace(kl_scheduler=kl_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
+    ctx = SimpleNamespace(criterion=criterion, scheduler=None, scheduler_per_batch=True)
 
     leave = False 
     for ep in range(pre_epochs):
@@ -7515,7 +7525,6 @@ def fit_VADE(
     # Finish pretraining, reset KL schedule
     unwrap_dp(model).set_pretrain_mode(False)
     criterion.pretrain_mode = False
-    criterion.kl_scheduler.current_iteration = 0
 
     # New user determiend KL schedule
     kl_scheduler = Dynamic_weight_manager(
@@ -7523,7 +7532,7 @@ def fit_VADE(
         warmup_epochs=common_cfg.kl_warmup, max_weight=common_cfg.kl_max_weight,
         cooldown_epochs=common_cfg.kl_cooldown, end_weight=common_cfg.kl_end_weight
     )
-    lambda_scheduler = None
+    criterion.set_kl_scheduler(kl_scheduler)
     
     optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
 
@@ -7666,7 +7675,7 @@ def fit_VADE(
                 head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
             )
             tau_star = tau_star.detach()
-            criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill)
+            criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill, lambda_scheduler=lambda_scheduler)
 
             # Optionally reinit GMM
             if teacher_cfg.reinit_gmm_on_refresh:
@@ -7674,7 +7683,7 @@ def fit_VADE(
                 print("  Reinitialized GMM from refreshed τ*.")
 
         # Actual training of the main model
-        ctx = SimpleNamespace(kl_scheduler=kl_scheduler, lambda_scheduler=lambda_scheduler, criterion=criterion, scheduler=None, scheduler_per_batch=True)
+        ctx = SimpleNamespace(criterion=criterion, scheduler_per_batch=True)
         # klw is updated in every training step, getting the weight for printing at the middle of the epochs
         train_logs, klw, lambda_d = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
