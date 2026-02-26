@@ -8,6 +8,9 @@ import os
 from typing import Any, List, NewType, Tuple, Union, Dict, Callable, Optional
 import copy
 from dataclasses import dataclass, asdict
+import tqdm
+from contextlib import nullcontext
+
 
 from IPython.display import clear_output
 import numpy as np
@@ -691,4 +694,190 @@ class ClusterControlPT(nn.Module):
         }
         
         return z, metrics
+    
+def embedding_per_video(
+    coordinates: coordinates,
+    to_preprocess: table_dict,
+    model: str,
+    scale: str = "standard",
+    animal_id: str = None,
+    global_scaler: Any = None,
+	pretrained: bool = False,
+	samples_max: int = 227272,
+    **kwargs,
+):  # pragma: no cover
+    """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
+
+    Args:
+        coordinates (coordinates): deepof.Coordinates object for the project at hand.
+        to_preprocess (table_dict): dictionary with (merged) features to process.
+        model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        pretrained (bool): whether to use the specified pretrained model to recluster the data.
+        scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
+        animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
+        global_scaler (Any): trained global scaler produced when processing the original dataset.
+        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
+
+    Returns:
+        embeddings (table_dict): embeddings per experiment.
+        soft_counts (table_dict): soft_counts per experiment.
+
+    """
+
+    # at some point _check_enum_inputs will get moved somewhere else and be reworked to function as a general guard function 
+    deepof.visuals_utils._check_enum_inputs(
+        coordinates,
+        animal_id=animal_id,
+    )
+
+    embeddings = {}
+    soft_counts = {}
+    #interim
+    file_name='unsup'
+
+
+    graph = False
+    contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
+    if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
+        graph = True 
+    
+    keys_to_drop=[]
+    window_size = model.window_size
+    for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+
+        dict_to_preprocess = to_preprocess.filter_videos([key])
+        #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
+        dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
+        if dict_to_preprocess[key].isna().all().all():
+            keys_to_drop.append(key)
+            continue
+
+        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
+        print("")
+
+        if graph:
+            processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
+                animal_id=animal_id,
+                precomputed_tab_dict=dict_to_preprocess,
+                preprocess=True,
+                scale=scale,
+                window_size=window_size,
+                window_step=1,
+                pretrained_scaler=global_scaler,
+                samples_max=samples_max,
+            )
+
+        else:
+
+            processed_exp, _, _ = dict_to_preprocess.preprocess(
+                coordinates=coordinates,
+                scale=scale,
+                window_size=window_size,
+                window_step=1,
+                shuffle=False,
+                pretrained_scaler=global_scaler,
+            )
+
+        tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
+        tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = model.to(device).eval()
+
+        x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
+        a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
+
+        batch_size = 256  # adjust to fit your GPU
+        recon_list, emb_list, sc_list = [], [], []
+
+        # Optional AMP for speed/memory on GPU
+        if False: #device.type == "cuda":
+            try:
+                bf16_ok = torch.cuda.is_bf16_supported()
+            except Exception:
+                major, _ = torch.cuda.get_device_capability()
+                bf16_ok = major >= 8  # Ampere+ typically supports bf16
+            amp_dtype = torch.bfloat16 if bf16_ok else torch.float16
+            amp_ctx = torch.amp.autocast(device_type="cuda", dtype=amp_dtype)
+        else:
+            amp_ctx = nullcontext()
+
+        with torch.inference_mode(), amp_ctx:
+            for s in range(0, x_all.size(0), batch_size):
+                xb = x_all[s:s + batch_size].to(device, non_blocking=True)
+                ab = a_all[s:s + batch_size].to(device, non_blocking=True)
+
+                # Disable attention collection if supported
+                if isinstance(model, deepof.clustering.models_new.VaDEPT):
+                    _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
+                    sc_list.append(sc_out.detach().cpu())
+                elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
+                    _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
+                    sc_list.append(sc_out.detach().cpu())
+                elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
+                    emb_out = model(xb, ab)
+                else:
+                    raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
+
+                emb_list.append(emb_out.detach().cpu())
+
+        # Stitch full outputs
+        emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
+        print('completed')
+        emb = emb_raw.cpu().numpy()
+
+        if not contrastive:
+            sc_raw = torch.cat(sc_list, dim=0) if sc_list else None
+            sc = sc_raw.cpu().numpy()
+            # save paths for modified tables
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
+            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
+
+        # save paths for modified tables
+        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
+        embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
+
+        #to not flood the output with loading bars
+        clear_output()
+
+    # Notify user about key removal, if applicable 
+    exp_conds=copy.copy(coordinates.get_exp_conditions)
+    if len(keys_to_drop) > 0:
+        for key in keys_to_drop:
+            del exp_conds[key]
+        print(
+            f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
+        )
+
+    
+    table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+    if isinstance(soft_counts, tuple):
+        soft_counts = soft_counts[0]
+    embeddings= deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=table_path, 
+        exp_conditions=exp_conds,
+    )
+
+    if contrastive:
+
+        soft_counts = deepof.post_hoc.get_contrastive_soft_counts(
+            coordinates, embeddings, 
+        )
+    else:
+        soft_counts=deepof.data.TableDict(
+            soft_counts,
+            typ="unsupervised_counts",
+            table_path=table_path, 
+            exp_conditions=exp_conds,
+        )
+
+    return (
+        embeddings,
+        soft_counts,
+    )
+
+
     

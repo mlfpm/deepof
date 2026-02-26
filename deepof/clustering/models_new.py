@@ -4040,7 +4040,7 @@ def _print_losses(model_name: str,
         return f"{val:<{width}.{precision}f}"
 
     loss_names = [
-        "total_loss", "reconstruct_loss", "prior_loss", "kl_div",
+        "total_loss", "pos_similarity", "neg_similarity", "reconstruct_loss", "prior_loss", "kl_div",
         "kmeans_loss", "cat_clust_loss", "distill_loss", "temporal_loss", 
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
@@ -4055,8 +4055,12 @@ def _print_losses(model_name: str,
     def _print_phase(phase: str, logs: dict):
         line = f"  {phase:<7}:"
         for i, name in enumerate(loss_names):
+            # Skip non-relevant losses
+            if np.isnan(logs.get(name, float("nan"))):
+                continue
             key_label = name.replace("_loss", "").replace("_", "")
             key_label = key_label.replace("reconstruct", "recon")
+            key_label = key_label.replace("similarity", "-sim")
             line += f" {key_label[:9]:<9}: {_fmt_loss(name, logs)} |"
             if (i + 1) % 5 == 0 and i != len(loss_names) - 1:  # line wrap for long outputs
                 line += "\n          "
@@ -4239,7 +4243,7 @@ def train_one_epoch_indexed(
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
             optimizer.step()
 
-        if ctx is not None:
+        if ctx is not None and model=="Vade":
             if hasattr(ctx.criterion, "kl_scheduler") and ctx.criterion.kl_scheduler is not None:
                 ctx.criterion.kl_scheduler.step()
                 if(step==int(len(iterator)/2)):
@@ -4248,6 +4252,11 @@ def train_one_epoch_indexed(
                 ctx.criterion.lambda_scheduler.step()
                 if(step==int(len(iterator)/2)):
                     mean_lambda_weight=ctx.criterion.lambda_scheduler.get_weight()
+        elif ctx is not None:
+            if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+                ctx.lambda_scheduler.step()
+                if(step==int(len(iterator)/2)):
+                    mean_lambda_weight=ctx.lambda_scheduler.get_weight()
 
         logs_accum.append(res.logs)
         if show_progress and hasattr(iterator, "set_postfix"):
@@ -4560,8 +4569,8 @@ def step_contrastive_distill(
 
     logs = {
         "total_loss": float(total.detach().item()),
-        "pos_similarity": float(pos_mean),
-        "neg_similarity": float(neg_mean),
+        "pos_similarity": float(pos_mean.detach().item()),
+        "neg_similarity": float(neg_mean.detach().item()),
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
     }
     return StepResult(loss=total, logs=logs)
@@ -5007,7 +5016,7 @@ def fit_VQVAE(
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False,
         )
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_vqvae_distill,
@@ -5161,7 +5170,7 @@ def fit_contrastive(
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=True,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False,
         )
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
