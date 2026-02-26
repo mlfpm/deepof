@@ -167,6 +167,8 @@ class VaDECfg:
 
     tf_cluster_weight: float = 0.0
     nonempty_weight: float = 2e-2
+    nonempty_p: float = 2.0
+    nonempty_floor_percent: float = 0.05
 
 
 @dataclass

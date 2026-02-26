@@ -6031,14 +6031,14 @@ class VaDELossTFExact(nn.Module):
             # If q is None, we cannot include the entropy term; fall back to loss_variational_1 only.
             q32 = None
 
+        
+        v_max = 0.5 #2.0 * math.log(2.0) 
+        z_var_eff = z_log_var32.clamp_max(v_max) 
+        loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
         if self.pretrain_mode:
             # Pretrain: only loss_variational_1 proxy (no q log q), as in TF (they multiply entropy by (1 - pretrain))
-            v_max = 0.5 #2.0 * math.log(2.0) 
-            z_var_eff = z_log_var32.clamp_max(v_max) 
-            loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
             kl_vec = loss_var1
         else:
-            loss_var1 = -1 * (z_log_var32 + 0.5).sum(dim=-1)  # [B]
             if q32 is not None:
                 loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q
             else:
@@ -6046,6 +6046,29 @@ class VaDELossTFExact(nn.Module):
             kl_vec = loss_var1 + loss_var2  # [B]
 
         kl_batch = klw * kl_vec.mean()  # this can be negative, as in TF
+
+        '''
+        v_max = 0.5
+        z_var_eff = z_log_var32.clamp_max(v_max)
+
+        if self.pretrain_mode:
+            # Pretrain: simplified proxy (original TF behavior)
+            loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean() / z_log_var32.shape[-1]
+            kl_vec = loss_var1
+        else:
+            # Main training: true KL divergence against N(0,1) prior
+            # KL(q(z|x) || N(0,1)) = -0.5 * sum(1 + log_var - mu^2 - exp(log_var))
+            z_mean32 = z_mean.float()
+            kl_per_dim = -0.5 * (1.0 + z_var_eff - z_mean32.pow(2) - z_var_eff.exp())
+            kl_vec = kl_per_dim.sum(dim=-1)  # Sum over latent dimensions -> (B,)
+            
+            # Add categorical entropy term if using clustering
+            if q32 is not None:
+                loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q (negative entropy)
+                kl_vec = kl_vec + loss_var2
+
+        kl_batch = klw * kl_vec.mean()
+        '''
 
         # ----------------------------------------------------------------
 
@@ -6085,24 +6108,6 @@ class VaDELossTFExact(nn.Module):
                 diffs = (q[1:] - q[:-1]).abs().sum(dim=-1).mean()
                 temporal_loss = (rho * diffs).to(rec_nll.dtype)
 
-            # Non-empty floor on batch marginal q̄(c)
-            nonempty_w = float(getattr(self, "nonempty_weight", 0.0))
-            if (nonempty_w > 0.0) and (q is not None):
-                p = int(getattr(self, "nonempty_p", 2))
-                q_marg = q.mean(dim=0)  # (C,)
-
-                base_floor = float(getattr(self, "nonempty_floor", max(1e-4, 0.05 / max(1, self.n_components))))
-                if getattr(self, "teacher_marginal", None) is not None:
-                    pi_t = self.teacher_marginal.to(q_marg.device)  # (C,)
-                    alpha = 0.9
-                    floor_c = torch.max(base_floor * torch.ones_like(pi_t),
-                                        alpha * pi_t)
-                else:
-                    floor_c = base_floor * torch.ones_like(q_marg)
-
-                underuse = (floor_c - q_marg).clamp_min(0.0)
-                pen = underuse.pow(p).sum()
-                nonempty_loss = (nonempty_w * pen).to(rec_nll.dtype)
 
             eta = float(getattr(self, "reg_scatter_weight", 3e-2))
             beta = float(getattr(self, "reg_scatter_beta", 1.0))
@@ -6119,20 +6124,58 @@ class VaDELossTFExact(nn.Module):
                 scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
 
             # Center repulsion between GMM means
-            repel_weight = float(getattr(self, "repel_weight", 8e-2))
-            repel_length_scale = float(getattr(self, "repel_length_scale", 1.0))
-            if repel_weight > 0.0 and gmm_params["means"].requires_grad:
-                with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
-                    means = gmm_params["means"].float()  # (C,D)
-                    C = means.size(0)
-                    diffs = means.unsqueeze(1) - means.unsqueeze(0)      # (C,C,D)
-                    D2 = (diffs * diffs).sum(dim=-1)                     # (C,C)
-                    Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
-                    Kmat = Kmat - torch.diag(torch.diag(Kmat))
-                    denom = float(max(1, C * C - C))
-                    repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
+        repel_weight = float(getattr(self, "repel_weight", 8e-2))
+        repel_length_scale = float(getattr(self, "repel_length_scale", 1.0))
+            #if repel_weight > 0.0 and gmm_params["means"].requires_grad:
+            #    with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
+            #        means = gmm_params["means"].float()  # (C,D)
+            #        C = means.size(0)
+            #        diffs = means.unsqueeze(1) - means.unsqueeze(0)      # (C,C,D)
+            #        D2 = (diffs * diffs).sum(dim=-1)                     # (C,C)
+            #        Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
+            #        Kmat = Kmat - torch.diag(torch.diag(Kmat))
+            #        denom = float(max(1, C * C - C))
+            #        repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
+            #else:
+            #    repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+            
+        if repel_weight > 0.0:
+            with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
+                # Use data-derived centroids instead of (possibly frozen) GMM means
+                if q is not None and latent_z is not None:
+                    qf = q.float().detach()  # (B, C)
+                    zf = latent_z.float()    # (B, D)
+                    pi_b = qf.sum(dim=0).clamp_min(1e-8)  # (C,)
+                    means = (qf.t() @ zf) / pi_b.unsqueeze(1)  # (C, D) — soft centroids
+                else:
+                    means = gmm_params["means"].float()
+                
+                C = means.size(0)
+                diffs = means.unsqueeze(1) - means.unsqueeze(0)
+                D2 = (diffs * diffs).sum(dim=-1)
+                Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
+                Kmat = Kmat - torch.diag(torch.diag(Kmat))
+                denom = float(max(1, C * C - C))
+                repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
+
+        # Non-empty floor on batch marginal q̄(c)
+        nonempty_w = float(getattr(self, "nonempty_weight", 0.0))
+        if (nonempty_w > 0.0) and (q is not None):
+            p = int(getattr(self, "nonempty_p", 2))
+            q_marg = q.mean(dim=0)  # (C,)
+
+            base_floor = float(getattr(self, "nonempty_floor", max(1e-4, 0.05 / max(1, self.n_components))))
+            if getattr(self, "teacher_marginal", None) is not None:
+                pi_t = self.teacher_marginal.to(q_marg.device)  # (C,)
+                alpha = 0.9
+                floor_c = torch.max(base_floor * torch.ones_like(pi_t),
+                                    alpha * pi_t)
             else:
-                repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+                floor_c = base_floor * torch.ones_like(q_marg)
+
+            underuse = (floor_c - q_marg).clamp_min(0.0)
+            pen = underuse.pow(p).sum()
+            nonempty_loss = (nonempty_w * pen).to(rec_nll.dtype)
 
         # Distillation (unchanged)
         if (self.lambda_distill > 0.0) and (self.tau_star is not None) and (batch_indices is not None):
@@ -6384,6 +6427,7 @@ def _format_postfix(logs: Dict[str, float], max_items: int = 4) -> Dict[str, str
         "reconstruct_loss", "enc_rec_loss",
         "kl_div",
         "vq_loss", "kmeans_loss",
+        "repel_loss", "nonempty_loss", 
         "pos_similarity", "neg_similarity",
     ]
     out: Dict[str, str] = {}
@@ -6808,7 +6852,6 @@ def step_contrastive_distill(
 # Main call
 ###########
 
-
 def embedding_model_fittingPT(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
@@ -6866,6 +6909,8 @@ def embedding_model_fittingPT(
     # TF-style cluster term
     tf_cluster_weight: float = 0.0,
     nonempty_weight: float = 2e-2,
+    nonempty_floor_percent: float = 0.05,
+    nonempty_p: float = 2.0,
     # Distillation weighting (VaDE)
     distill_conf_weight: bool = False,
     distill_conf_thresh: float = 0.3,
@@ -6985,6 +7030,8 @@ def embedding_model_fittingPT(
 
         tf_cluster_weight=tf_cluster_weight,
         nonempty_weight=nonempty_weight,
+        nonempty_floor_percent=nonempty_floor_percent,
+        nonempty_p=nonempty_p,
     )
 
     contrastive_cfg = ContrastiveCfg(
@@ -7458,7 +7505,7 @@ def fit_VADE(
     # Set up fixed KL weight schedule (determines KL weight for each epoch)
     kl_scheduler = Dynamic_weight_manager(
         n_batches_per_epoch, mode="tf_sigmoid", #common_cfg.kl_annealing_mode,
-        warmup_epochs=15, max_weight=0.5, cooldown_epochs=1, end_weight=0.5
+        warmup_epochs=15, max_weight=1.0, cooldown_epochs=1, end_weight=1.0
     )
 
     # Load pretrained model if available
@@ -7497,8 +7544,8 @@ def fit_VADE(
     criterion.reg_scatter_beta = vade_cfg.reg_scatter_beta
     criterion.repel_weight = vade_cfg.repel_weight
     criterion.repel_length_scale = vade_cfg.repel_length_scale
-    criterion.nonempty_floor = max(1e-4, 0.05 / common_cfg.n_components)
-    criterion.nonempty_p = 1
+    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent / common_cfg.n_components)
+    criterion.nonempty_p = vade_cfg.nonempty_p
 
     # Pretraining
     print("\n--- Pretraining (reconstruction and setting up the latent space) ---")
