@@ -2327,8 +2327,8 @@ class ContrastivePT(nn.Module):
         # Encode and normalize
         z_pos = self.encoder(pos_x, pos_a)  # (B, D)
         z_neg = self.encoder(neg_x, neg_a)  # (B, D)
-        z_pos = deepof.clustering.model_utils_new._l2_normalize(z_pos, dim=1, eps=1e-12)
-        z_neg = deepof.clustering.model_utils_new._l2_normalize(z_neg, dim=1, eps=1e-12)
+        z_pos = deepof.clustering.model_utils_new.l2_normalize(z_pos, dim=1, eps=1e-12)
+        z_neg = deepof.clustering.model_utils_new.l2_normalize(z_neg, dim=1, eps=1e-12)
 
         # Compute loss
         loss, pos_mean, neg_mean = deepof.clustering.model_utils_new.select_contrastive_loss_pt(
