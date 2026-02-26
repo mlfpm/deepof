@@ -14,7 +14,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Tuple, Union, Optional
 
 # For optional verification plots, will probably be removed later
 from matplotlib import pyplot as plt
@@ -3541,3 +3541,72 @@ def get_total_Frames(video_paths: dict) -> int:
         total_frames.append(int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         current_video_cap.release()
     return total_frames
+
+
+def validate_parameter(
+    param_name: str,
+    param_value: Any,
+    valid_options: List[Any],
+    is_list: bool = False,
+    custom_error_if_empty: Optional[str] = None,
+    only_one_of_many: Optional[bool] = True,
+    can_be_dict: Optional[bool] = False,
+): # pragma: no cover
+    """
+    A generic helper to validate a single parameter against a list of valid options.
+
+    Args:
+        param_name (str): The name of the parameter being checked (for error messages).
+        param_value (Any): The value of the parameter provided by the user.
+        valid_options (List[Any]): The list of allowed values.
+        is_list (bool): If True, checks if param_value is a subset of valid_options.
+                        Otherwise, checks if it is a member of valid_options.
+        custom_error_if_empty (Optional[str]): A specific error to raise if the
+                                               parameter is provided but the list
+                                               of valid options is empty.
+        only_one_of_many (Optional[bool]): If only one of the valid options is allowed: True
+                                           If a subset of the valid options is allowed: False
+        can_be_dict (Optional[bool]): Parameter can also be given as a dict (e.g. allowed for experiment_id)                                   
+    """
+    if param_value is None:
+        return  # Parameter not provided, no validation needed.
+
+    # If the param is provided but there are no valid options to check against
+    if not valid_options and custom_error_if_empty:
+        raise ValueError(custom_error_if_empty)  # pragma: no cover
+
+    valid_set = set(valid_options)
+    is_valid = False
+
+    if isinstance(param_value, dict) and can_be_dict:
+        value_set = set(
+            [x for lst in param_value.values() for x in lst]          
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    
+    elif not isinstance(param_value, dict) and is_list:
+        # Ensure param_value is a list-like object for set operations
+        value_set = set(
+            [param_value] if isinstance(param_value, str) else param_value
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    else:
+        if param_value in valid_set:
+            is_valid = True
+
+    if not is_valid:
+        # Truncate for readability
+        options_preview = str(valid_options[:5])[1:-1]
+        if len(valid_options) > 5:
+            options_preview += ", ..."
+
+        if only_one_of_many:    
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+            )  # pragma: no cover
+        else:
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
+            )  # pragma: no cover

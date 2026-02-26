@@ -6852,6 +6852,54 @@ def step_contrastive_distill(
 # Main call
 ###########
 
+def _check_model_inputs(
+    model_name: Optional[str] = None,
+    encoder_type: Optional[str] = None,
+    kl_annealing_mode: Optional[str] = None,
+    contrastive_similarity_function: Optional[str] = None,
+    contrastive_loss_function: Optional[str] = None, 
+):  # pragma: no cover
+    """
+    Checks and validates enum-like input parameters for various plot functions.
+
+    This function acts as a centralized guard to ensure that all categorical
+    and list-based inputs are valid before being used in downstream logic.
+
+    Args:
+        model_name (str): Name of the model
+        encoder_type (str): Type of encode-decoder pair being used
+        kl_annealing_mode (str): Which function should be used to increase and decrease KL
+        contrastive_similarity_function (str): Which function should be used to calculate similarity between sampels for the contrastive model
+        contrastive_loss_function (str): Which function should be used to calculate the loss for the contrastive model
+    """    
+
+    # =========================================================================
+    # 1. GENERATE LISTS OF VALID OPTIONS
+    # =========================================================================
+    
+    # --- Statically defined options ---
+    model_opts = ["VaDE", "VQVAE", "Contrastive"]
+    encoder_opts = ["recurrent", "TCN", "transformer"]
+    kl_annealing_mode_opts = ["linear","sigmoid","tf_sigmoid"]
+    contrastive_similarity_function_opts = ["cosine","dot","euclidean","edit"]
+    contrastive_loss_function_ops=["nce","fc", "dlc", "hard_dcl"]
+
+    # =========================================================================
+    # 3. CONFIGURE AND RUN VALIDATION CHECKS
+    # Format: (param_name, param_value, valid_options, is_list, custom_error)
+    # =========================================================================
+    validation_checks = [
+        ("model_name", model_name, model_opts, False, None, True, False),
+        ("encoder_type", encoder_type, encoder_opts, False, None, True, False),
+        ("kl_annealing_mode", kl_annealing_mode, kl_annealing_mode_opts, False, None, True, False),
+        ("contrastive_similarity_function", contrastive_similarity_function, contrastive_similarity_function_opts, False, None, True, False),
+        ("contrastive_loss_function", contrastive_loss_function, contrastive_loss_function_ops, False, None, True, False),
+    ]
+
+    for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
+        deepof.utils.validate_parameter(name, value, options, is_list, error_msg, only_one_of_many, can_be_dict)
+
+
 def embedding_model_fittingPT(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
@@ -6868,7 +6916,7 @@ def embedding_model_fittingPT(
     save_weights: bool = True,
     run: int = 0,
     # VaDE-specific
-    kl_annealing_mode: str = "linear",#"sigmoid",
+    kl_annealing_mode: str = "tf_sigmoid",#"sigmoid",
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
     freeze_gmm_epochs: int = 0,
@@ -6945,7 +6993,7 @@ def embedding_model_fittingPT(
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
-    #_check_model_inputs()
+    check_model_inputs()
 
     # Create configs for different models to avoid gigantic function signaturs
     common_cfg = CommonFitCfg(
