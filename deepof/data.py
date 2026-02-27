@@ -2374,7 +2374,7 @@ class Coordinates:
                 # Merge and extract names
                 tab_dict = coords.merge(
                     speeds,
-                    #angles,
+                    angles,
                     dists,
                     save_as_paths=return_as_paths
                     )
@@ -2458,8 +2458,17 @@ class Coordinates:
                     inner_link_bool_mask.append(
                         len(set([node.split("_")[0] for node in e])) == 1
                     )
+            edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
             
             pbar.update()
+
+        # Create metainfo
+        metainfo={}
+
+        metainfo['node_columns']=feature_names[node_sorting_indices]
+        metainfo['edge_columns']=feature_names[edge_sorting_indices]
+        metainfo['angle_columns']=feature_names[angle_sorting_indices]
+
 
         # Create graph datasets
         if preprocess:
@@ -2479,9 +2488,7 @@ class Coordinates:
                 **kwargs,
                 )
    
-            shapes=[]
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
-                edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
                 for k in range(0,len(to_preprocess)):
                 
                     num_rows=0
@@ -2505,16 +2512,18 @@ class Coordinates:
                             table_path = os.path.join(os.path.dirname(table_path.get("duckdb_file")) , table_path.get("table"))                    
                         to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
-                    if len(to_preprocess[k].keys())>0:
-                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
+                    if len(to_preprocess[k].keys())>0 and k==0:
+                        metainfo['shape_train']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
+                    elif len(to_preprocess[k].keys())>0 and k==1:    
+                        metainfo['shape_test']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]   
                     else:
-                        shapes=[(0,),(0,),(0,)]
+                        metainfo['shape_train']=[(0,),(0,),(0,)]
                     pbar.update()
-                shapes=tuple(shapes)
+
 
             return (
                 to_preprocess,
-                shapes,
+                metainfo,
                 nx.adjacency_matrix(graph).todense(),
                 tab_dict,
                 global_scaler,
@@ -2559,10 +2568,9 @@ class Coordinates:
                     pbar.update()
 
 
-                shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
-                shapes=tuple(shapes)
+                metainfo[f'shape_{key}']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
 
-            return to_preprocess, shapes, nx.adjacency_matrix(graph).todense(), tab_dict, None
+            return to_preprocess, metainfo, nx.adjacency_matrix(graph).todense(), tab_dict, None
                 
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:

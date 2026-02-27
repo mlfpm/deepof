@@ -9,9 +9,16 @@ from typing import Dict, Tuple, Optional
 from deepof.data_loading import get_dt
 
 def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
-    assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, likelihood)!"
-    final_shape = (*data.shape[:-1], int(data.shape[2]/3), 3)
-    return data.reshape(final_shape)
+    assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, speed)!"
+    D = data.shape[2]
+    N = D // 3
+
+    x = data[:, :, 0:N]
+    y = data[:, :, N:2*N]
+    s = data[:, :, 2*N:3*N]
+
+    out = np.stack([x, y, s], axis=-1)  # (B, W, N, 3)
+    return out
 
 
 class BatchDictDataset:

@@ -546,7 +546,7 @@ class TCNEncoderPT(nn.Module):
 
         if self.use_gnn:
             # Nodes: TF-style reshape pipeline to match memory layout exactly
-            x_3d = x.view(B, W, N * F_node)          # (B, W, N*F)
+            x_3d = x.reshape(B, W, N * F_node)          # (B, W, N*F)
             x_t = x_3d.permute(2, 1, 0)              # (N*F, W, B)
             x_reshaped_t = x_t.reshape(F_node, W, N, B)
             x_nodes = x_reshaped_t.permute(3, 2, 1, 0)  # (B, N, W, F)
@@ -2097,7 +2097,7 @@ class VaDEPT(nn.Module):
             print("z issues!")
 
         B, T, _, _ = x.shape
-        x_for_decoder = x.view(B, T, self.input_n_nodes * self.input_n_features_per_node)
+        x_for_decoder = x.reshape(B, T, self.input_n_nodes * self.input_n_features_per_node)
         reconstruction_dist = self.decoder(latent, x_for_decoder)
 
         if return_gmm_params:
@@ -2248,7 +2248,7 @@ class ContrastivePT(nn.Module):
             )
 
         self.full_time_steps = T
-        self.window_size = T // 2
+        self.window_size = T# // 2
         self.input_shape = input_shape
         self.edge_feature_shape = edge_feature_shape
         self.adjacency_matrix = adjacency_matrix
@@ -2314,6 +2314,8 @@ class ContrastivePT(nn.Module):
         self,
         x: torch.Tensor,  # (B, T, N, F)
         a: torch.Tensor,  # (B, T, E, Fe)
+        x_augmented: torch.Tensor,  # (B, T, N, F)
+        a_augmented: torch.Tensor,  # (B, T, E, Fe)
         return_debug: bool = False,
     ):
         B, T, N, F_in = x.shape
@@ -2321,19 +2323,19 @@ class ContrastivePT(nn.Module):
             raise ValueError(f"Input time dim T={T} does not match model T={self.full_time_steps}")
 
         # Slice windows exactly like TF
-        pos_x, neg_x = self._ts_samples(x, self.window_size)
-        pos_a, neg_a = self._ts_samples(a, self.window_size)
+        #x, x_augmented = self._ts_samples(x, self.window_size) just commented out for now
+        #a, a_augmented = self._ts_samples(a, self.window_size)
 
         # Encode and normalize
-        z_pos = self.encoder(pos_x, pos_a)  # (B, D)
-        z_neg = self.encoder(neg_x, neg_a)  # (B, D)
-        z_pos = deepof.clustering.model_utils_new.l2_normalize(z_pos, dim=1, eps=1e-12)
-        z_neg = deepof.clustering.model_utils_new.l2_normalize(z_neg, dim=1, eps=1e-12)
+        z = self.encoder(x, a)  # (B, D)
+        z_augmented = self.encoder(x_augmented, a_augmented)  # (B, D)
+        z = deepof.clustering.model_utils_new.l2_normalize(z, dim=1, eps=1e-12)
+        z_augmented = deepof.clustering.model_utils_new.l2_normalize(z_augmented, dim=1, eps=1e-12)
 
         # Compute loss
         loss, pos_mean, neg_mean = deepof.clustering.model_utils_new.select_contrastive_loss_pt(
-            z_pos,
-            z_neg,
+            z,
+            z_augmented,
             similarity=self.similarity_function,
             loss_fn=self.loss_function,
             temperature=self.temperature,
@@ -2347,16 +2349,16 @@ class ContrastivePT(nn.Module):
             # Build a minimal debug pack for parity troubleshooting
             sim_fn = deepof.clustering.model_utils_new._SIMILARITIES[self.similarity_function]
             with torch.no_grad():
-                sim = sim_fn(z_pos, z_neg)  # (B, B)
+                sim = sim_fn(z, z_augmented)  # (B, B)
                 diag = torch.diag(sim)
                 offdiag = sim[~torch.eye(B, dtype=torch.bool, device=sim.device)]
                 offdiag = offdiag.view(B, B - 1) if B > 1 else offdiag.view(B, 0)
 
                 debug = {
-                    "z_pos_shape": torch.tensor(z_pos.shape),
-                    "z_neg_shape": torch.tensor(z_neg.shape),
-                    "z_pos_norm_mean": torch.norm(z_pos, dim=1).mean().cpu(),
-                    "z_neg_norm_mean": torch.norm(z_neg, dim=1).mean().cpu(),
+                    "z_pos_shape": torch.tensor(z.shape),
+                    "z_neg_shape": torch.tensor(z_augmented.shape),
+                    "z_pos_norm_mean": torch.norm(z, dim=1).mean().cpu(),
+                    "z_neg_norm_mean": torch.norm(z_augmented, dim=1).mean().cpu(),
                     "sim_diag_mean": diag.mean().cpu(),
                     "sim_offdiag_mean": offdiag.mean().cpu() if offdiag.numel() > 0 else torch.tensor(0.0),
                     "loss": loss.detach().cpu(),
@@ -2369,23 +2371,7 @@ class ContrastivePT(nn.Module):
 
     def get_last_debug(self) -> Dict[str, Any]:
         return self._last_debug
-
-
-def training_step_contrastive_pt(
-    model: ContrastivePT,
-    x: torch.Tensor,
-    a: torch.Tensor,
-    optimizer: torch.optim.Optimizer,
-    clip_value: float = 0.75,
-):
-    model.train()
-    optimizer.zero_grad(set_to_none=True)
-    loss, pos_mean, neg_mean, _ = model.compute_loss(x, a, return_debug=False)
-    loss.backward()
-    torch.nn.utils.clip_grad_value_(model.parameters(), clip_value)
-    optimizer.step()
-    return loss.item(), float(pos_mean.item()), float(neg_mean.item())
-  
+ 
 
 #########################################################
 # Intermediary function stash for presentation
@@ -4209,8 +4195,9 @@ def train_one_epoch_indexed(
     mean_kl_weight = 0.0
     mean_lambda_weight = 0.0
     for step, batch in enumerate(iterator):
-        batch = move_to(batch, device)
-        x, a, _, idx, _ = batch  # assume dataset returns (x, a)
+        batch = move_to(batch, device) 
+        x, a = batch[0], batch[1]              # <----
+        idx = batch[-2]   # assume dataset returns (x, a)
         B = x.size(0)
         #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
@@ -4497,6 +4484,41 @@ def _soft_ce_logits(logits: torch.Tensor, soft_targets: torch.Tensor, eps: float
     return per_sample
 
 
+def _recompute_edges(
+    x: torch.Tensor,           # (B, T, N, 3) with [x,y,speed] per node
+    edge_index: torch.Tensor,  # indices pairs of nodes to connect
+) -> torch.Tensor:
+    """
+    Recompute edge distances from node coordinates.
+
+    Returns:
+        a: (B, T, E, 1) where a[..., e, 0] is the Euclidean distance between the
+           two nodes specified by edge_index[e].
+    """
+    # vvvvv NEW block vvvvv
+    if x.ndim != 4 or x.size(-1) < 2:
+        raise ValueError(f"x must have shape (B,T,N,>=2). Got {tuple(x.shape)}")
+    if edge_index.ndim != 2 or edge_index.size(-1) != 2:
+        raise ValueError(f"edge_index must have shape (E,2). Got {tuple(edge_index.shape)}")
+
+    coords = x[..., 0:2]  # (B,T,N,2)
+
+    # Ensure edge_index on same device
+    if edge_index.device != x.device:
+        edge_index = edge_index.to(x.device)
+
+    i = edge_index[:, 0].long()  # (E,)
+    j = edge_index[:, 1].long()  # (E,)
+
+    pi = coords.index_select(dim=2, index=i)  # (B,T,E,2)
+    pj = coords.index_select(dim=2, index=j)  # (B,T,E,2)
+
+    d2 = (pi - pj).pow(2).sum(dim=-1)         # (B,T,E)
+    d = torch.sqrt(torch.clamp(d2, min=1e-12))  # (B,T,E)
+
+    return d.unsqueeze(-1)  # (B,T,E,1)
+
+
 def step_contrastive_distill(
     model: nn.Module,  # ContrastivePT or DataParallel(ContrastivePT)
     batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],  # (x, a, idx)
@@ -4505,28 +4527,33 @@ def step_contrastive_distill(
     x, a, idx = batch
     base = unwrap_dp(model)
     device = x.device
-    win = base.window_size
     apply_distill = getattr(ctx, "apply_distill", True)
+    edge_index = getattr(ctx, "edge_index", None)  
+    if edge_index is None:
+        raise RuntimeError("ctx.edge_index is required for contrastive augmentation!")
+    
+    a = _recompute_edges(x, edge_index)
+    triplets, adj = _valid_triplets_from_edge_index(edge_index, x.shape[2])
 
-    def ts_samples(mb, w):
-        pos = mb[:, 1:w + 1]
-        neg = mb[:, -w:]
-        return pos, neg
-
-    pos_x, neg_x = ts_samples(x, win)
-    pos_a, neg_a = ts_samples(a, win)
-
+    x_aug, a_aug = _make_augmented_view(
+        x, a, edge_index, triplets, adj,
+        noise_sigma=float(getattr(ctx, "aug_noise_sigma", 0.05)),  
+        p_noise=float(getattr(ctx, "aug_p_noise", 1.0)),           
+        max_interp=int(getattr(ctx, "aug_max_interp", 6)),         
+        p_interp=float(getattr(ctx, "aug_p_interp", 0.3)),         
+    )
+        
     # Encode via forward for DP compatibility
-    z_pos = model(pos_x, pos_a)
-    z_neg = model(neg_x, neg_a)
+    z = model(x, a)
+    z_aug = model(x_aug, a_aug)
 
     # Normalize row-wise
-    z_pos = torch.nn.functional.normalize(z_pos, dim=1)
-    z_neg = torch.nn.functional.normalize(z_neg, dim=1)
+    z = torch.nn.functional.normalize(z, dim=1)
+    z_aug = torch.nn.functional.normalize(z_aug, dim=1)
 
     # Base contrastive loss
     loss, pos_mean, neg_mean = select_contrastive_loss_pt(
-        z_pos, z_neg,
+        z, z_aug,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
         temperature=base.temperature,
@@ -4539,7 +4566,7 @@ def step_contrastive_distill(
 
     # Distillation on the main window embedding
     if apply_distill and hasattr(ctx, "distill_head") and (getattr(ctx, "lambda_distill", 0.0) > 0.0):
-        z_main = model(x, a)  # [B, D]
+        z_main = z  # [B, D]
         logits = ctx.distill_head(z_main)  # [B, C]
 
         idx = batch[-2].to(device).long() 
@@ -4631,6 +4658,7 @@ def _check_model_inputs(
 def embedding_model_fittingPT(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
+    meta_info: dict,
     encoder_type: str,
     batch_size: int,
     latent_dim: int,
@@ -4818,7 +4846,7 @@ def embedding_model_fittingPT(
         tau=tau,
     )
 
-    return embedding_model_fitting(preprocessed_object, adjacency_matrix, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
+    return embedding_model_fitting(preprocessed_object, adjacency_matrix, meta_info, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
 
 
 # Unified checkpoint paths per model/run
@@ -4834,6 +4862,7 @@ def _ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
 def embedding_model_fitting(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
+    meta_info: dict,
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
@@ -4909,6 +4938,7 @@ def embedding_model_fitting(
             val_loader,
             preprocessed_train,
             adjacency_matrix,
+            meta_info,
             common_cfg,
             teacher_cfg,
             contrastive_cfg,
@@ -5090,6 +5120,7 @@ def fit_contrastive(
     val_loader: DataLoader,
     preprocessed_train: dict,
     adjacency_matrix: np.ndarray,
+    meta_info: dict,
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     contrastive_cfg: ContrastiveCfg,
@@ -5118,6 +5149,13 @@ def fit_contrastive(
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
+
+    n_nodes = train_loader.dataset.x_shape[1]  # <----
+    edge_index = _build_edge_from_metainfo(   # <----
+        meta_info=meta_info,
+        device=device,
+        n_nodes=n_nodes,
+    )
 
     # Create teacher
     teacher_cfg.include_latent_view=False
@@ -5164,18 +5202,19 @@ def fit_contrastive(
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
+            edge_index=edge_index
         )
 
         # Train and validate
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False,
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False, 
         )
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         # To do: calculate score
@@ -5608,3 +5647,355 @@ def fit_VADE(
         writer.flush(); writer.close()
 
     return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model, log_summary    
+
+
+def _build_edge_from_metainfo(
+    meta_info: dict,
+    device: torch.device,
+    n_nodes: int,
+) -> torch.Tensor:
+    if "node_columns" not in meta_info or "edge_columns" not in meta_info:
+        raise RuntimeError("meta_info must contain 'node_columns' and 'edge_columns'.")
+
+    node_cols = list(meta_info["node_columns"])
+    edge_cols = list(meta_info["edge_columns"])
+
+    # Extract node order from the first N (bp,'x') entries (your tensor node axis order)
+    node_names = []  # length N, entries like "B_Spine_2"
+    for c in node_cols:
+        if isinstance(c, tuple) and len(c) == 2 and c[1] == "x":
+            node_names.append(c[0])
+            if len(node_names) == n_nodes:
+                break
+
+    if len(node_names) != n_nodes:
+        raise RuntimeError(
+            f"Failed to infer {n_nodes} node names from meta_info['node_columns']. Got {len(node_names)}."
+        )
+
+    node_to_idx = {name: i for i, name in enumerate(node_names)}
+
+    pairs = []
+    for (u, v) in edge_cols:
+        # Edges are undirected; accept either orientation
+        if u in node_to_idx and v in node_to_idx:
+            pairs.append((node_to_idx[u], node_to_idx[v]))
+        elif v in node_to_idx and u in node_to_idx:
+            pairs.append((node_to_idx[v], node_to_idx[u]))
+        else:
+            raise RuntimeError(
+                f"Edge ({u},{v}) contains node(s) not found in inferred node list. "
+                f"Check prefixing and meta_info consistency."
+            )
+
+    edge_index = torch.tensor(pairs, dtype=torch.long, device=device)
+    return edge_index
+
+
+def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
+    """
+    Plots one random batch element as a row of skeletons over time (top: original, bottom: augmented).
+    Uses _plot_augmentation._edge_index if available (set by augmentation functions).
+    """
+    import matplotlib.pyplot as plt
+
+    edge_index = getattr(_plot_augmentation, "_edge_index", None)
+
+    b = int(torch.randint(0, x_in.size(0), (1,)).item())
+    xin = x_in[b, ::4, :, 0:2].detach().cpu()   # (T,N,2)
+    xau = x_aug[b, ::4, :, 0:2].detach().cpu()  # (T,N,2)
+    T = xin.size(0)
+
+    dx = 2.5  # horizontal offset per frame
+    fig, ax = plt.subplots(2, 1, figsize=(min(28, 1.2 * T), 6), sharey=True)
+
+    def draw_row(ax_, X, title):
+        for t in range(T):
+            off = t * dx
+            pts = X[t]  # (N,2)
+            xs = pts[:, 0].numpy() + off
+            ys = pts[:, 1].numpy()
+            ax_.plot(xs, ys, "kx", ms=3)
+
+            if edge_index is not None:
+                ei = edge_index.detach().cpu().numpy()
+                for (i, j) in ei:
+                    ax_.plot([xs[i], xs[j]], [ys[i], ys[j]], "k-", lw=0.8, alpha=0.7)
+
+        ax_.set_title(title)
+        ax_.axis("off")
+
+    draw_row(ax[0], xin, "original")
+    draw_row(ax[1], xau, "augmented")
+    plt.tight_layout()
+    plt.show()
+
+def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
+    adj = [[] for _ in range(n_nodes)]
+    for u, v in ei.detach().cpu().tolist():
+        adj[u].append(v)
+        adj[v].append(u)
+
+    triplets = []
+    for b in range(n_nodes):
+        nb = adj[b]
+        if len(nb) < 2:
+            continue
+        # all unordered neighbor pairs define (a,b,c)
+        for i in range(len(nb)):
+            for j in range(i + 1, len(nb)):
+                a_ = nb[i]
+                c_ = nb[j]
+                triplets.append((a_, b, c_))
+    return triplets, adj
+    
+def _augment_angle_rotations(
+    x: torch.Tensor,             # (B,T,N,3)
+    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
+    edge_index: torch.Tensor,    # (E,2)
+    triplets: list, 
+    adj: list,
+    n_rot: int = 3,
+    max_rot: float = 30.0,
+    p: float = 0.5,
+    plot: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Randomly apply up to n_rot joint-like rotations (consistent across time per sample).
+    - Derives valid angle triplets (a,b,c) from edge_index adjacency.
+    - Picks up to n_rot triplets without replacement and with unique centers b.
+    - Rotates a "branch" around center b by theta ~ U(-max_rot, max_rot) (deg), per sample with prob p.
+    - Recomputes a from x after augmentation.
+    """
+
+    B, T, N, _ = x.shape
+    if n_rot <= 0 or max_rot <= 0.0 or p <= 0.0:
+        return x, a
+
+    if len(triplets) == 0:
+        return x, a
+
+    # vvvvv build a spanning tree (to define "branch" despite cycles) vvvvv
+    deg = torch.tensor([len(adj[i]) for i in range(N)])
+    root = int(torch.argmax(deg).item())
+    parent = [-1] * N
+    parent[root] = root
+    q = [root]
+    for u in q:
+        for v in adj[u]:
+            if parent[v] == -1:
+                parent[v] = u
+                q.append(v)
+    children = [[] for _ in range(N)]
+    for v in range(N):
+        if v != root and parent[v] != -1:
+            children[parent[v]].append(v)
+
+    def subtree_nodes(start: int):
+        out = [start]
+        stack = [start]
+        while stack:
+            u = stack.pop()
+            for c in children[u]:
+                out.append(c)
+                stack.append(c)
+        return out
+    # <^^^^ spanning tree <^^^^
+
+    # vvvvv choose up to n_rot triplets, unique centers (avoid compounding > max_rot) vvvvv
+    perm = torch.randperm(len(triplets))
+    chosen = []
+    used_centers = set()
+    for k in perm.tolist():
+        a0, b0, c0 = triplets[k]
+        if b0 in used_centers:
+            continue
+        chosen.append((a0, b0, c0))
+        used_centers.add(b0)
+        if len(chosen) >= n_rot:
+            break
+    # <^^^^ choose triplets <^^^^
+
+    x_aug = x.clone()
+
+    # Rotation angles per sample (consistent across time); samples not selected get theta=0
+    apply = (torch.rand(B, device=x.device) < p)  # (B,)
+    theta = (torch.rand(B, device=x.device) * 2.0 - 1.0) * (max_rot * math.pi / 180.0)  # (B,)
+    theta = theta * apply.float()
+
+    cos_t = torch.cos(theta).view(B, 1, 1)  # (B,1,1)
+    sin_t = torch.sin(theta).view(B, 1, 1)
+
+    coords = x_aug[..., 0:2]  # view (B,T,N,2)
+
+    # vvvvv apply rotations sequentially (n_rot <= 3) vvvvv
+    for (a0, b0, c0) in chosen:
+        # pick which side to rotate (prefer a child of b in the spanning tree)
+        side = c0
+        if parent[c0] != b0 and parent[a0] == b0:
+            side = a0
+        elif parent[c0] != b0 and parent[a0] != b0:
+            # if neither is a child (rare), rotate the second neighbor only
+            side = c0
+
+        rot_nodes = subtree_nodes(side) if parent[side] == b0 else [side]
+        rot_nodes = torch.tensor(rot_nodes, device=x.device, dtype=torch.long)
+
+        pivot = coords[:, :, b0, :].unsqueeze(2)                 # (B,T,1,2)
+        pts = coords.index_select(dim=2, index=rot_nodes)        # (B,T,K,2)
+        rel = pts - pivot                                        # (B,T,K,2)
+
+        rx = rel[..., 0] * cos_t - rel[..., 1] * sin_t
+        ry = rel[..., 0] * sin_t + rel[..., 1] * cos_t
+        new_pts = torch.stack([rx, ry], dim=-1) + pivot          # (B,T,K,2)
+
+        coords[:, :, rot_nodes, :] = new_pts
+
+    x_aug[..., 0:2] = coords
+    # <^^^^ apply rotations <^^^^
+
+    if plot:
+        _plot_augmentation._edge_index = edge_index  # <----
+        _plot_augmentation(x, x_aug)                 # <----
+
+    a_aug = _recompute_edges(x_aug, edge_index)  # <----
+    return x_aug, a_aug
+
+
+def _augment_noise_xy(
+    x: torch.Tensor,             # (B,T,N,3)
+    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
+    edge_index: torch.Tensor,    # (E,2)
+    sigma: float = 0.03,
+    p: float = 0.5,
+    plot: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Add Gaussian noise to either all x or all y coordinates (chosen per sample), consistent across the window.
+    Speed channel is unchanged. Recomputes a from x after augmentation.
+    """
+    if sigma <= 0.0 or p <= 0.0:
+        return x, a
+
+    B = x.size(0)
+    x_aug = x.clone()
+
+    apply = (torch.rand(B, device=x.device) < p)                      # (B,)
+    axis = torch.randint(0, 2, (B,), device=x.device)                 # (B,) 0=x, 1=y
+    offset = sigma * torch.randn(B, device=x.device, dtype=x.dtype)   # (B,)
+    offset = offset * apply.to(offset.dtype)                          # zero out non-applied
+
+    dx = offset * (axis == 0).to(offset.dtype)                        # (B,)
+    dy = offset * (axis == 1).to(offset.dtype)                        # (B,)
+
+    x_aug[:, :, :, 0] = x_aug[:, :, :, 0] + dx.view(B, 1, 1)          # <----
+    x_aug[:, :, :, 1] = x_aug[:, :, :, 1] + dy.view(B, 1, 1)          # <----
+
+    if plot:
+        _plot_augmentation._edge_index = edge_index  # <----
+        _plot_augmentation(x, x_aug)                 # <----
+
+    a_aug = _recompute_edges(x_aug, edge_index)  # <----
+    return x_aug, a_aug
+
+
+def _augment_linear_interpolate_segments(
+    x: torch.Tensor,             # (B,T,N,3)
+    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
+    edge_index: torch.Tensor,    # (E,2)
+    max_len: int = 6,
+    p: float = 0.3,
+    plot: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Replace one random contiguous segment (length <= max_len) with linear interpolation, per sample with prob p.
+    Applies to all node channels (x,y,speed). Recomputes a from x after augmentation.
+    """
+    if max_len <= 0 or p <= 0.0:
+        return x, a
+
+    B, T = x.size(0), x.size(1)
+    if T < 3:
+        return x, a
+
+    x_aug = x.clone()
+
+    # vvvvv VECTORIZED interpolation (no python loops over bs / frames) vvvvv
+    device = x.device
+    dtype = x_aug.dtype
+
+    apply = (torch.rand(B, device=device) < p)  # (B,)
+
+    # Sample L per sample (even for non-applied; we mask later)
+    L = torch.randint(1, max_len + 1, (B,), device=device)  # (B,)
+
+    # Need endpoints at (t0-1) and (t0+L) within [0, T-1]
+    # -> t0 in [1, T-L-1]  (inclusive) => randint(1, T-L) (exclusive high)
+    t0_max = (T - L).clamp_min(2)  # ensure high>=2 so randint(1, high) is valid
+    # torch.randint doesn't support per-element highs directly; sample uniform and mod safely:
+    # We'll sample from a generous range then clamp.
+    t0 = torch.randint(1, T - 1, (B,), device=device)  # provisional
+    t0 = torch.minimum(t0, (T - L - 1).clamp_min(1))   # enforce t0 <= T-L-1
+
+    t_start = t0 - 1                 # (B,)
+    t_end = t0 + L                   # (B,)
+
+    # Gather endpoints: (B,N,3)
+    b_idx = torch.arange(B, device=device)
+    start = x_aug[b_idx, t_start]    # (B,N,3)
+    end   = x_aug[b_idx, t_end]      # (B,N,3)
+
+    # Build mask over time: frames to replace are t0..t0+L-1
+    tt = torch.arange(T, device=device).view(1, T)                    # (1,T)
+    t0v = t0.view(B, 1)                                                # (B,1)
+    Lv  = L.view(B, 1)                                                 # (B,1)
+    mask = (tt >= t0v) & (tt < (t0v + Lv)) & apply.view(B, 1)          # (B,T)
+
+    # Alpha for each t in the segment: alpha = (t - (t0-1)) / (L+1)
+    denom = (Lv + 1).to(dtype)                                         # (B,1)
+    alpha = ((tt.to(dtype) - (t0v.to(dtype) - 1.0)) / denom)           # (B,T)
+    alpha = alpha.clamp(0.0, 1.0)
+
+    # Interpolated frames: (B,T,N,3)
+    start_e = start.unsqueeze(1)                                       # (B,1,N,3)
+    end_e   = end.unsqueeze(1)                                         # (B,1,N,3)
+    alpha_e = alpha.unsqueeze(-1).unsqueeze(-1)                        # (B,T,1,1)
+    interp  = (1.0 - alpha_e) * start_e + alpha_e * end_e              # (B,T,N,3)
+
+    # Apply only on masked frames
+    x_aug = torch.where(mask.unsqueeze(-1).unsqueeze(-1), interp, x_aug)
+    # <^^^^ VECTORIZED interpolation <^^^^
+
+    if plot:
+        _plot_augmentation._edge_index = edge_index  # <----
+        _plot_augmentation(x, x_aug)                 # <----
+
+    a_aug = _recompute_edges(x_aug, edge_index)  # <----
+    return x_aug, a_aug
+
+
+def _make_augmented_view(
+    x: torch.Tensor,   # (B,T,N,3)
+    a: torch.Tensor,   # (B,T,E,1)
+    edge_index: torch.Tensor,
+    triplets: list,
+    adj: list,
+    noise_sigma: float = 0.02,
+    p_angle: float = 0.8,
+    p_noise: float = 1.0,
+    max_interp: int = 6,
+    p_interp: float = 0.5,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
+    """
+    x_aug = x
+    a_aug = a
+
+    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=3, max_rot=30, p=p_angle, plot=False)
+    x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, max_len=max_interp, p=p_interp, plot=False)
+    x_aug, a_aug = _augment_noise_xy(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+
+
+
+    return x_aug, a_aug

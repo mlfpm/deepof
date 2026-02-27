@@ -418,66 +418,6 @@ def hard_loss_pt(
     return loss, mean_sim, mean_neg
 
 
-def select_contrastive_loss(
-    history,
-    future,
-    similarity,
-    loss_fn="nce",
-    temperature=0.1,
-    tau=0.1,
-    beta=0.1,
-    elimination_topk=0.1,
-):  # pragma: no cover
-    """Select and applies the contrastive loss function to be used in the Contrastive embedding models.
-
-    Args:
-        history: Tensor of shape (batch_size, seq_len, embedding_dim).
-        future: Tensor of shape (batch_size, seq_len, embedding_dim).
-        similarity: Function that computes the similarity between two tensors.
-        loss_fn: String indicating the loss function to be used.
-        temperature: Float indicating the temperature to be used in the specified loss function.
-        tau: Float indicating the tau value to be used if DCL or hard DLC are selected.
-        beta: Float indicating the beta value to be used if hard DLC is selected.
-        elimination_topk: Float indicating the top-k value to be used if FC is selected.
-
-    """
-    similarity_dict = {
-        "cosine": _cosine_similarity,
-        "dot": _dot_similarity,
-        "euclidean": _euclidean_similarity,
-        "edit": _edit_similarity,
-    }
-    similarity = similarity_dict[similarity]
-
-    if loss_fn == "nce":
-        loss, pos, neg = nce_loss(history, future, similarity, temperature)
-    elif loss_fn == "dcl":
-        loss, pos, neg = dcl_loss(
-            history, future, similarity, temperature, debiased=True, tau_plus=tau
-        )
-    elif loss_fn == "fc":
-        loss, pos, neg = fc_loss(
-            history,
-            future,
-            similarity,
-            temperature,
-            elimination_topk=elimination_topk,
-        )
-    elif loss_fn == "hard_dcl":
-        loss, pos, neg = hard_loss(
-            history,
-            future,
-            similarity,
-            temperature,
-            beta=beta,
-            debiased=True,
-            tau_plus=tau,
-        )
-
-    # noinspection PyUnboundLocalVariable
-    return loss, pos, neg
-
-
 def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.Tensor:
     """
     Computes a loss based on the singular values of the Gram matrix of the
