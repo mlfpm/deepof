@@ -4537,7 +4537,7 @@ def step_contrastive_distill(
 
     x_aug, a_aug = _make_augmented_view(
         x, a, edge_index, triplets, adj,
-        noise_sigma=float(getattr(ctx, "aug_noise_sigma", 0.05)),  
+        noise_sigma=float(getattr(ctx, "aug_noise_sigma", 0.03)),  
         p_noise=float(getattr(ctx, "aug_p_noise", 1.0)),           
         max_interp=int(getattr(ctx, "aug_max_interp", 6)),         
         p_interp=float(getattr(ctx, "aug_p_interp", 0.3)),         
@@ -5749,11 +5749,12 @@ def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
                 triplets.append((a_, b, c_))
     return triplets, adj
     
+    
 def _augment_angle_rotations(
     x: torch.Tensor,             # (B,T,N,3)
     a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
-    triplets: list, 
+    triplets: list,
     adj: list,
     n_rot: int = 3,
     max_rot: float = 30.0,
@@ -5762,47 +5763,35 @@ def _augment_angle_rotations(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Randomly apply up to n_rot joint-like rotations (consistent across time per sample).
-    - Derives valid angle triplets (a,b,c) from edge_index adjacency.
-    - Picks up to n_rot triplets without replacement and with unique centers b.
-    - Rotates a "branch" around center b by theta ~ U(-max_rot, max_rot) (deg), per sample with prob p.
-    - Recomputes a from x after augmentation.
+    Branch selection is done by a graph-cut rule:
+      - For a center b and neighbor side s, rotate the connected component reachable from s
+        when traversal through b is forbidden.
+    This yields more realistic articulated rotations (e.g., center rotating head/tail as a unit).
+
+    Notes on speed:
+      - n_rot is small (<=3), so small Python loops are fine.
+      - Rotations are vectorized across (B,T,...) with Torch ops.
     """
-
     B, T, N, _ = x.shape
-    if n_rot <= 0 or max_rot <= 0.0 or p <= 0.0:
+    if n_rot <= 0 or max_rot <= 0.0 or p <= 0.0 or len(triplets) == 0:
         return x, a
 
-    if len(triplets) == 0:
-        return x, a
-
-    # vvvvv build a spanning tree (to define "branch" despite cycles) vvvvv
-    deg = torch.tensor([len(adj[i]) for i in range(N)])
-    root = int(torch.argmax(deg).item())
-    parent = [-1] * N
-    parent[root] = root
-    q = [root]
-    for u in q:
-        for v in adj[u]:
-            if parent[v] == -1:
-                parent[v] = u
-                q.append(v)
-    children = [[] for _ in range(N)]
-    for v in range(N):
-        if v != root and parent[v] != -1:
-            children[parent[v]].append(v)
-
-    def subtree_nodes(start: int):
-        out = [start]
-        stack = [start]
+    # vvvvv helper: component(branch) from side when cutting at center vvvvv
+    def _branch_nodes(center: int, side: int):
+        # BFS/DFS over tiny graph (N=11); returns python list of node indices (excluding center)
+        seen = {side}
+        stack = [side]
         while stack:
             u = stack.pop()
-            for c in children[u]:
-                out.append(c)
-                stack.append(c)
-        return out
-    # <^^^^ spanning tree <^^^^
+            for v in adj[u]:
+                if v == center or v in seen:
+                    continue
+                seen.add(v)
+                stack.append(v)
+        return list(seen)
+    # <^^^^ helper <^^^^
 
-    # vvvvv choose up to n_rot triplets, unique centers (avoid compounding > max_rot) vvvvv
+    # Choose up to n_rot triplets with unique centers
     perm = torch.randperm(len(triplets))
     chosen = []
     used_centers = set()
@@ -5814,55 +5803,64 @@ def _augment_angle_rotations(
         used_centers.add(b0)
         if len(chosen) >= n_rot:
             break
-    # <^^^^ choose triplets <^^^^
+
+    if len(chosen) == 0:
+        return x, a
 
     x_aug = x.clone()
+    coords = x_aug[..., 0:2]  # (B,T,N,2)
 
-    # Rotation angles per sample (consistent across time); samples not selected get theta=0
-    apply = (torch.rand(B, device=x.device) < p)  # (B,)
-    theta = (torch.rand(B, device=x.device) * 2.0 - 1.0) * (max_rot * math.pi / 180.0)  # (B,)
-    theta = theta * apply.float()
+    apply = (torch.rand(B, device=x.device) < p).to(x.dtype)  # (B,)
 
-    cos_t = torch.cos(theta).view(B, 1, 1)  # (B,1,1)
-    sin_t = torch.sin(theta).view(B, 1, 1)
-
-    coords = x_aug[..., 0:2]  # view (B,T,N,2)
-
-    # vvvvv apply rotations sequentially (n_rot <= 3) vvvvv
+    # vvvvv apply up to n_rot rotations vvvvv
+    max_rad = float(max_rot) * math.pi / 180.0
     for (a0, b0, c0) in chosen:
-        # pick which side to rotate (prefer a child of b in the spanning tree)
-        side = c0
-        if parent[c0] != b0 and parent[a0] == b0:
-            side = a0
-        elif parent[c0] != b0 and parent[a0] != b0:
-            # if neither is a child (rare), rotate the second neighbor only
-            side = c0
+        # Compute candidate branches for both sides
+        br_a = _branch_nodes(b0, a0)
+        br_c = _branch_nodes(b0, c0)
 
-        rot_nodes = subtree_nodes(side) if parent[side] == b0 else [side]
-        rot_nodes = torch.tensor(rot_nodes, device=x.device, dtype=torch.long)
+        # Prefer rotating the smaller branch (more "articulated" / realistic)
+        if len(br_a) < len(br_c):
+            rot_list = br_a
+        elif len(br_c) < len(br_a):
+            rot_list = br_c
+        else:
+            rot_list = br_a if (torch.rand(1).item() < 0.5) else br_c
 
-        pivot = coords[:, :, b0, :].unsqueeze(2)                 # (B,T,1,2)
-        pts = coords.index_select(dim=2, index=rot_nodes)        # (B,T,K,2)
-        rel = pts - pivot                                        # (B,T,K,2)
+        # If something went odd, skip
+        if len(rot_list) == 0:
+            continue
+
+        rot_nodes = torch.as_tensor(rot_list, device=x.device, dtype=torch.long)  # (K,)
+
+        # Per-sample rotation angle for THIS joint, constant over time
+        theta = (torch.rand(B, device=x.device, dtype=x.dtype) * 2.0 - 1.0) * max_rad
+        theta = theta * apply  # (B,)
+
+        cos_t = torch.cos(theta).view(B, 1, 1)  # (B,1,1)
+        sin_t = torch.sin(theta).view(B, 1, 1)
+
+        pivot = coords[:, :, b0, :].unsqueeze(2)            # (B,T,1,2)
+        pts = coords.index_select(dim=2, index=rot_nodes)   # (B,T,K,2)
+        rel = pts - pivot                                   # (B,T,K,2)
 
         rx = rel[..., 0] * cos_t - rel[..., 1] * sin_t
         ry = rel[..., 0] * sin_t + rel[..., 1] * cos_t
-        new_pts = torch.stack([rx, ry], dim=-1) + pivot          # (B,T,K,2)
+        new_pts = torch.stack([rx, ry], dim=-1) + pivot     # (B,T,K,2)
 
         coords[:, :, rot_nodes, :] = new_pts
 
     x_aug[..., 0:2] = coords
-    # <^^^^ apply rotations <^^^^
 
     if plot:
-        _plot_augmentation._edge_index = edge_index  # <----
-        _plot_augmentation(x, x_aug)                 # <----
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(x, x_aug)
 
-    a_aug = _recompute_edges(x_aug, edge_index)  # <----
+    a_aug = _recompute_edges(x_aug, edge_index)
     return x_aug, a_aug
 
 
-def _augment_noise_xy(
+def _augment_noise_xys(
     x: torch.Tensor,             # (B,T,N,3)
     a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
@@ -5871,31 +5869,42 @@ def _augment_noise_xy(
     plot: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Add Gaussian noise to either all x or all y coordinates (chosen per sample), consistent across the window.
-    Speed channel is unchanged. Recomputes a from x after augmentation.
+    Add Gaussian noise per bodypart (per sample), consistent across the window:
+      - For each (sample, node), choose axis in {x,y} and add a random offset to that axis.
+      - Also add random offset to speed channel.
+    Recomputes a from x after augmentation.
     """
     if sigma <= 0.0 or p <= 0.0:
         return x, a
 
-    B = x.size(0)
+    B, T, N, F = x.shape
     x_aug = x.clone()
 
-    apply = (torch.rand(B, device=x.device) < p)                      # (B,)
-    axis = torch.randint(0, 2, (B,), device=x.device)                 # (B,) 0=x, 1=y
-    offset = sigma * torch.randn(B, device=x.device, dtype=x.dtype)   # (B,)
-    offset = offset * apply.to(offset.dtype)                          # zero out non-applied
+    # vvvvv VECTORIZED per-node offsets (no python loop) vvvvv
+    apply = (torch.rand(B, device=x.device) < p).to(x.dtype)          # (B,)
+    apply_bn = apply.view(B, 1).expand(B, N)                           # (B,N)
 
-    dx = offset * (axis == 0).to(offset.dtype)                        # (B,)
-    dy = offset * (axis == 1).to(offset.dtype)                        # (B,)
+    # For each (B,N) choose whether to perturb x or y
+    axis = torch.randint(0, 2, (B, N), device=x.device)                # (B,N), 0=x 1=y
 
-    x_aug[:, :, :, 0] = x_aug[:, :, :, 0] + dx.view(B, 1, 1)          # <----
-    x_aug[:, :, :, 1] = x_aug[:, :, :, 1] + dy.view(B, 1, 1)          # <----
+    # One offset per (B,N), constant over time
+    offset_xy = sigma * torch.randn((B, N), device=x.device, dtype=x.dtype) * apply_bn  # (B,N)
+    dx = offset_xy * (axis == 0).to(x.dtype)                            # (B,N)
+    dy = offset_xy * (axis == 1).to(x.dtype)                            # (B,N)
+
+    # Speed offsets per (B,N)
+    ds = sigma * torch.randn((B, N), device=x.device, dtype=x.dtype) * apply_bn         # (B,N)
+
+    # Broadcast across time
+    x_aug[:, :, :, 0] = x_aug[:, :, :, 0] + dx.view(B, 1, N)            # <----
+    x_aug[:, :, :, 1] = x_aug[:, :, :, 1] + dy.view(B, 1, N)            # <----
+    x_aug[:, :, :, 2] = x_aug[:, :, :, 2] + ds.view(B, 1, N)            # <----
 
     if plot:
         _plot_augmentation._edge_index = edge_index  # <----
         _plot_augmentation(x, x_aug)                 # <----
 
-    a_aug = _recompute_edges(x_aug, edge_index)  # <----
+    a_aug = _recompute_edges(x_aug, edge_index)      # <----
     return x_aug, a_aug
 
 
@@ -5994,7 +6003,7 @@ def _make_augmented_view(
 
     x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=3, max_rot=30, p=p_angle, plot=False)
     x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, max_len=max_interp, p=p_interp, plot=False)
-    x_aug, a_aug = _augment_noise_xy(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+    x_aug, a_aug = _augment_noise_xys(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
 
 
 
