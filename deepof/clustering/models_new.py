@@ -3984,6 +3984,8 @@ def _init_log_summary():
         log_summary[data_type]['tf_cluster_loss']=[]
         log_summary[data_type]['prior_loss']=[]
         log_summary[data_type]['activity_l1']=[]
+        log_summary[data_type]['pos_similarity']=[]
+        log_summary[data_type]['neg_similarity']=[]
 
 
     return log_summary
@@ -4532,15 +4534,21 @@ def step_contrastive_distill(
     if edge_index is None:
         raise RuntimeError("ctx.edge_index is required for contrastive augmentation!")
     
+    contrastive_cfg=getattr(ctx, "contrastive_cfg", None)
+    
     a = _recompute_edges(x, edge_index)
     triplets, adj = _valid_triplets_from_edge_index(edge_index, x.shape[2])
 
     x_aug, a_aug = _make_augmented_view(
         x, a, edge_index, triplets, adj,
-        noise_sigma=float(getattr(ctx, "aug_noise_sigma", 0.03)),  
-        p_noise=float(getattr(ctx, "aug_p_noise", 1.0)),           
-        max_interp=int(getattr(ctx, "aug_max_interp", 6)),         
-        p_interp=float(getattr(ctx, "aug_p_interp", 0.3)),         
+        noise_sigma=contrastive_cfg.aug_noise_sigma,  
+        p_noise=contrastive_cfg.aug_p_noise,           
+        max_interp=contrastive_cfg.aug_max_interp,
+        min_interp=contrastive_cfg.aug_min_interp,         
+        p_interp=contrastive_cfg.aug_p_interp, 
+        max_rot=contrastive_cfg.aug_max_rot, 
+        n_rot=contrastive_cfg.aug_n_rot,
+        p_rot=contrastive_cfg.aug_p_rot,         
     )
         
     # Encode via forward for DP compatibility
@@ -4746,6 +4754,15 @@ def embedding_model_fittingPT(
     contrastive_loss_function: str = "nce",
     beta: float = 0.1,
     tau: float = 0.1,
+    # Contrastive augmentations
+    aug_max_rot: int = 30, 
+    aug_n_rot: int = 4, 
+    aug_p_rot: int = 0.8,
+    aug_max_interp: int = 15,
+    aug_min_interp: int = 5,         
+    aug_p_interp: float = 0.3, 
+    aug_noise_sigma: float = 0.03,  
+    aug_p_noise: float = 1.0, 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
@@ -4844,6 +4861,14 @@ def embedding_model_fittingPT(
         contrastive_loss_function=contrastive_loss_function,
         beta=beta,
         tau=tau,
+        aug_noise_sigma=aug_noise_sigma,
+        aug_p_noise=aug_p_noise,
+        aug_min_interp=aug_min_interp,
+        aug_max_interp=aug_max_interp,
+        aug_p_interp=aug_p_interp,
+        aug_max_rot=aug_max_rot,
+        aug_n_rot=aug_n_rot,
+        aug_p_rot=aug_p_rot,
     )
 
     return embedding_model_fitting(preprocessed_object, adjacency_matrix, meta_info, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
@@ -5202,7 +5227,8 @@ def fit_contrastive(
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
-            edge_index=edge_index
+            edge_index=edge_index,
+            contrastive_cfg=contrastive_cfg,
         )
 
         # Train and validate
@@ -5214,7 +5240,7 @@ def fit_contrastive(
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index,contrastive_cfg=contrastive_cfg), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         # To do: calculate score
@@ -5749,7 +5775,7 @@ def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
                 triplets.append((a_, b, c_))
     return triplets, adj
     
-    
+
 def _augment_angle_rotations(
     x: torch.Tensor,             # (B,T,N,3)
     a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
@@ -5912,7 +5938,8 @@ def _augment_linear_interpolate_segments(
     x: torch.Tensor,             # (B,T,N,3)
     a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
-    max_len: int = 6,
+    min_len: int = 5,
+    max_len: int = 15,
     p: float = 0.3,
     plot: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -5936,7 +5963,7 @@ def _augment_linear_interpolate_segments(
     apply = (torch.rand(B, device=device) < p)  # (B,)
 
     # Sample L per sample (even for non-applied; we mask later)
-    L = torch.randint(1, max_len + 1, (B,), device=device)  # (B,)
+    L = torch.randint(min_len, max_len + 1, (B,), device=device)  # (B,)
 
     # Need endpoints at (t0-1) and (t0+L) within [0, T-1]
     # -> t0 in [1, T-L-1]  (inclusive) => randint(1, T-L) (exclusive high)
@@ -5989,11 +6016,14 @@ def _make_augmented_view(
     edge_index: torch.Tensor,
     triplets: list,
     adj: list,
-    noise_sigma: float = 0.02,
+    n_rot: int =3,
+    max_rot: int = 30, 
     p_angle: float = 0.8,
-    p_noise: float = 1.0,
     max_interp: int = 6,
+    min_interp: int = 5,
     p_interp: float = 0.5,
+    noise_sigma: float = 0.02,
+    p_noise: float = 1.0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
@@ -6001,8 +6031,8 @@ def _make_augmented_view(
     x_aug = x
     a_aug = a
 
-    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=3, max_rot=30, p=p_angle, plot=False)
-    x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, max_len=max_interp, p=p_interp, plot=False)
+    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=n_rot, max_rot=max_rot, p=p_angle, plot=False)
+    x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug, a_aug = _augment_noise_xys(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
 
 

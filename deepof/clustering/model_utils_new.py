@@ -152,8 +152,15 @@ class ContrastiveCfg:
     contrastive_similarity_function: str = "cosine"
     contrastive_loss_function: str = "nce"
     beta: float = 0.1
-    tau: float = 0.1
-
+    tau: float = 0.1        
+    aug_max_rot: int = 30, 
+    aug_n_rot: int = 4, 
+    aug_p_rot: int = 0.8,
+    aug_max_interp: int = 15,
+    aug_min_interp: int = 5,         
+    aug_p_interp: float = 0.3, 
+    aug_noise_sigma: float = 0.03,  
+    aug_p_noise: float = 1.0, 
 
 def _append_cfg(lines, title: str, cfg) -> None:
     if cfg is None:
@@ -287,31 +294,41 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
-def nce_loss_pt(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    temperature: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
-    """
-    N = history.shape[0]
-    sim = similarity(history, future)  # (N, N)
-    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
+#def nce_loss_pt(
+#    history: torch.Tensor,
+#    future: torch.Tensor,
+#    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+#    temperature: float = 0.1,
+#) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+#    """
+#    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
+#    """
+#    N = history.shape[0]
+#    sim = similarity(history, future)  # (N, N)
+#    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
 
-    neg = _off_diagonal_rows(sim)  # (N, N-1)
-    all_sim = torch.exp(sim / temperature)  # (N, N)
+#    neg = _off_diagonal_rows(sim)  # (N, N-1)
+#    all_sim = torch.exp(sim / temperature)  # (N, N)
 
-    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
-    labels = torch.ones_like(logits)
+#    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
+#    labels = torch.ones_like(logits)
 
-    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
-    loss = bce(logits, labels)
+#    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
+#    loss = bce(logits, labels)
 
-    mean_sim = torch.diag(sim).mean()
-    mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
+#    mean_sim = torch.diag(sim).mean()
+#    mean_neg = neg.mean()
+#    return loss, mean_sim, mean_neg
+
+def nce_loss_pt(history, future, similarity, temperature=0.1):
+    sim = similarity(history, future) / temperature        # (N,N)
+    labels = torch.arange(sim.size(0), device=sim.device)
+    loss = torch.nn.functional.cross_entropy(sim, labels)  # row-wise softmax
+
+    mean_pos = torch.diag(sim).mean() * temperature
+    off = _off_diagonal_rows(sim * temperature)  # if you want consistent logging
+    mean_neg = off.mean() if off.numel() else torch.tensor(0., device=sim.device)
+    return loss, mean_pos, mean_neg
 
 
 def dcl_loss_pt(
