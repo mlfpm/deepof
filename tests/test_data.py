@@ -657,7 +657,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
        prun._distances[key_with_nans].iloc[::]=np.nan 
        prun._angles[key_with_nans].iloc[::]=np.nan
 
-    graph_dset, shapes, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
+    graph_dset, meta_info, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
         scale=sampler.draw(
             st.one_of(
@@ -687,7 +687,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
     # data from nan table was removed
     if full_nan_table:
         assert len(graph_dset[0])==0
-        assert len(shapes[0])==1 and len(shapes[3])==3
+        assert isinstance(meta_info, dict) and len(meta_info['shape_train'])==3
 
 
 @settings(deadline=None)
