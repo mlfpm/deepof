@@ -3713,7 +3713,10 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
-        return (X_train, X_test), (train_shape, test_shape), global_scaler
+        metainfo={}
+        metainfo['shape_train']=train_shape
+        metainfo['shape_test']=test_shape
+        return (X_train, X_test), metainfo, global_scaler
 
     def preprocess_old(
         self,
