@@ -2248,7 +2248,7 @@ class ContrastivePT(nn.Module):
             )
 
         self.full_time_steps = T
-        self.window_size = T# // 2
+        self.window_size = T // 2 # To enable length shift augmentation
         self.input_shape = input_shape
         self.edge_feature_shape = edge_feature_shape
         self.adjacency_matrix = adjacency_matrix
@@ -4526,9 +4526,9 @@ def step_contrastive_distill(
     batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],  # (x, a, idx)
     ctx: SimpleNamespace,
 ) -> StepResult:
-    x, a, idx = batch
+    x_full, a_full, idx = batch
     base = unwrap_dp(model)
-    device = x.device
+    device = x_full.device
     apply_distill = getattr(ctx, "apply_distill", True)
     edge_index = getattr(ctx, "edge_index", None)  
     if edge_index is None:
@@ -4536,11 +4536,11 @@ def step_contrastive_distill(
     
     contrastive_cfg=getattr(ctx, "contrastive_cfg", None)
     
-    a = _recompute_edges(x, edge_index)
-    triplets, adj = _valid_triplets_from_edge_index(edge_index, x.shape[2])
+    a_full = _recompute_edges(x_full, edge_index)
+    triplets, adj = _valid_triplets_from_edge_index(edge_index, x_full.shape[2])
 
     x_aug, a_aug = _make_augmented_view(
-        x, a, edge_index, triplets, adj,
+        x_full, a_full, edge_index, triplets, adj,
         noise_sigma=contrastive_cfg.aug_noise_sigma,  
         p_noise=contrastive_cfg.aug_p_noise,           
         max_interp=contrastive_cfg.aug_max_interp,
@@ -4550,6 +4550,13 @@ def step_contrastive_distill(
         n_rot=contrastive_cfg.aug_n_rot,
         p_rot=contrastive_cfg.aug_p_rot,         
     )
+
+    # Cut middle section from tensor
+    half_len = x_full.shape[1] // 2
+    starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
+
+    x = deepof.clustering.model_utils_new._slice_time_per_sample(x_full, starts, half_len)
+    a = deepof.clustering.model_utils_new._slice_time_per_sample(a_full, starts, half_len)
         
     # Encode via forward for DP compatibility
     z = model(x, a)
@@ -4756,10 +4763,10 @@ def embedding_model_fittingPT(
     tau: float = 0.1,
     # Contrastive augmentations
     aug_max_rot: int = 30, 
-    aug_n_rot: int = 4, 
+    aug_n_rot: int = 3, 
     aug_p_rot: int = 0.8,
-    aug_max_interp: int = 15,
-    aug_min_interp: int = 5,         
+    aug_max_interp: int = 8,
+    aug_min_interp: int = 3,         
     aug_p_interp: float = 0.3, 
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 1.0, 
@@ -5776,6 +5783,47 @@ def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
     return triplets, adj
     
 
+def _augment_time_shift(
+    x: torch.Tensor,             # (B,T_full,N,3)
+    a: torch.Tensor,             # (B,T_full,E,1)
+    edge_index: torch.Tensor,    # (E,2) (not used here, kept for signature consistency / plotting)
+    min_shift: int = 1,
+    max_shift: int = 5,
+    p: float = 0.8,
+    plot: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Returns a half-window slice (T_full//2) from the middle of the full window.
+    If triggered, shifts the slice start by +/- U[min_shift, max_shift] (per sample).
+    Shift is consistent across the whole window (no frame-to-frame jitter).
+    """
+    B, T = x.shape[0], x.shape[1]
+    half_len = T // 2
+    base = (T - half_len) // 2  # == T//4 when T even
+
+    # vvvvv sample shifts per sample vvvvv
+    apply = (torch.rand(B, device=x.device) < p)
+
+    mag = torch.randint(min_shift, max_shift + 1, (B,), device=x.device)     # (B,)
+    sgn = (torch.randint(0, 2, (B,), device=x.device) * 2 - 1)               # (B,) in {-1,+1}
+    shift = mag * sgn
+    shift = shift * apply.long()  # (B,) zero if not applied
+
+    start = base + shift
+    start = start.clamp(0, T - half_len)  # keep valid
+    # <^^^^ sample shifts <^^^^
+
+    x_cut = deepof.clustering.model_utils_new._slice_time_per_sample(x, start, half_len)
+    a_cut = deepof.clustering.model_utils_new._slice_time_per_sample(a, start, half_len)
+
+    if plot:
+        # show what changed (note: this plots only the cut windows)
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(deepof.clustering.model_utils_new._slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
+
+    return x_cut, a_cut
+
+
 def _augment_angle_rotations(
     x: torch.Tensor,             # (B,T,N,3)
     a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
@@ -6016,9 +6064,12 @@ def _make_augmented_view(
     edge_index: torch.Tensor,
     triplets: list,
     adj: list,
+    min_shift: int = 1,
+    max_shift: int = 10,
+    p_shift: float = 0.8,
     n_rot: int =3,
     max_rot: int = 30, 
-    p_angle: float = 0.8,
+    p_rot: float = 0.8,
     max_interp: int = 6,
     min_interp: int = 5,
     p_interp: float = 0.5,
@@ -6028,10 +6079,11 @@ def _make_augmented_view(
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
     """
-    x_aug = x
-    a_aug = a
+    x_aug_raw = x
+    a_aug_raw = a
 
-    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=n_rot, max_rot=max_rot, p=p_angle, plot=False)
+    x_aug, a_aug = _augment_time_shift(x_aug_raw, a_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
+    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug, a_aug = _augment_noise_xys(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
 

@@ -156,8 +156,8 @@ class ContrastiveCfg:
     aug_max_rot: int = 30, 
     aug_n_rot: int = 4, 
     aug_p_rot: int = 0.8,
-    aug_max_interp: int = 15,
-    aug_min_interp: int = 5,         
+    aug_max_interp: int = 8,
+    aug_min_interp: int = 3,         
     aug_p_interp: float = 0.3, 
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 1.0, 
@@ -773,6 +773,7 @@ def embedding_per_video(
                     _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
+                    # Split window in two as W_dim = 2* model input W (because of data augmentation with shifting in training)
                     emb_out = model(xb, ab)
                 else:
                     raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
@@ -835,6 +836,21 @@ def embedding_per_video(
         embeddings,
         soft_counts,
     )
+
+
+def _slice_time_per_sample(
+    x: torch.Tensor,          # (B,T,...)
+    start: torch.Tensor,      # (B,)
+    length: int,
+) -> torch.Tensor:
+    """
+    Slice a per-sample contiguous window along time dim=1.
+    Returns shape (B, length, ...)
+    """
+    B, T = x.shape[0], x.shape[1]
+    t_idx = start[:, None] + torch.arange(length, device=x.device)[None, :]  # (B,L)
+    b_idx = torch.arange(B, device=x.device)[:, None]                       # (B,1)
+    return x[b_idx, t_idx]  # advanced indexing -> (B,L,...)
 
 
     
