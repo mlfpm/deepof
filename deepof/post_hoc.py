@@ -9,7 +9,7 @@ import os
 import pickle
 import warnings
 from collections import Counter, defaultdict
-from itertools import product
+from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
@@ -163,12 +163,12 @@ def get_contrastive_soft_counts(
     eps = 1e-12
 
     # ---- helpers ----
-    def _fit_diag_gmm(emb_dict, C, reg, max_n, seed):
+    def _fit_diag_gmm(emb_dict, C, reg, max_n, covariance_type="diag", seed=0,):
         """Fit a diagonal GaussianMixture (sklearn) on a subset of embeddings."""
         Z = emb_dict.sample_windows_from_data(N_windows_tab=int(max_n / len(emb_dict)))[0]
         gm = GaussianMixture(
             n_components=C,
-            covariance_type="diag",
+            covariance_type=covariance_type,
             reg_covar=reg,
             max_iter=200,
             tol=1e-3,
@@ -267,8 +267,8 @@ def get_contrastive_soft_counts(
         return P
 
     # ---- select K ----
-    def _fit_params_for_K(K: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, random_state)
+    def _fit_params_for_K(K: int, covariance_type: str = "diag") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, covariance_type, random_state)
 
     def _score_K(K: int, criterion: str) -> Tuple[float, float]:
         """caclulates the score for the given number of clusters (K)"""
@@ -329,8 +329,8 @@ def get_contrastive_soft_counts(
                 if (best_score is None) or (score < best_score):
                     best_score, K_best = score, K
 
-    # ---- final decode with best K ----
-    mu, var, pi = _fit_params_for_K(K_best)
+    # ---- final decode with best K and full covariance----
+    mu, var, pi = _fit_params_for_K(K_best, covariance_type="full")
     A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
     log_A = np.log(np.maximum(A, 1e-12))
     log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
@@ -359,6 +359,215 @@ def get_contrastive_soft_counts(
 
     return soft_counts_out
     
+
+
+def get_pairwise_distances(
+    coordinates,
+    window_len: int, 
+    distance_bp: str = "Nose",
+) -> Optional[Dict[str, Dict[Tuple[str, str], np.ndarray]]]:
+    """
+    Build pairwise distances between animals for a given bodypart (if N_animals > 1 and < 5).
+
+    Args:
+        coordinates (project): deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        distance_bp (str): The body part that will be used for both mice to determine their distance
+ 
+    Returns:
+        out[key][(aid1, aid2)] = np.ndarray shape (T_frames,) with distances.
+    """
+
+    animal_ids = coordinates._animal_ids
+
+    # Don't do gating for too few or too many animals
+    get_distances=True
+    if not animal_ids or len(animal_ids) < 2:
+        get_distances=False
+    if len(animal_ids) > 4:
+        print(f"[distance gating] Skipping: {len(animal_ids)} animals (supports up to 4).")
+        get_distances=False
+
+    pairs = list(combinations(list(animal_ids), 2))
+    out = {}
+
+    for key in coordinates._tables.keys():
+        tab = coordinates._tables[key]
+        out[key] = {}
+        if get_distances:
+            for a_id, b_id in pairs:
+                ax, ay = tab[(f"{a_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{a_id}_{distance_bp}", "y")].to_numpy(np.float64)
+                bx, by = tab[(f"{b_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{b_id}_{distance_bp}", "y")].to_numpy(np.float64)
+                dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
+                
+                # Average distance per window
+                dist_win = np.convolve(dist_raw, np.ones(window_len, dtype=np.float32) / window_len, mode="valid")
+
+                out[key][(a_id, b_id)] = dist_win
+        else:
+            
+            out[key][""] = np.convolve(np.ones(tab.shape[0], dtype=np.float32), np.ones(window_len, dtype=np.float32) / window_len, mode="valid")
+
+    return out
+
+
+def get_contrastive_soft_counts_gmm(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],     # key -> (T_windows, D)
+    animal_ids: list,
+    *,
+    window_size: int = 12,                 # must match embedding windowing
+    K_pose: int = 8,                     # clusters within each distance bin
+    M_bins: int = 3,                      # near/mid/far
+    binning: str = "quantile",            # "quantile" or "fixed"
+    fixed_edges: Optional[list] = None,   # if binning="fixed", boundaries length M_bins+1
+    reg_covar: float = 1e-5,
+    sample_size: int = 200000,
+    random_state: int = 0,
+    distance_bp: str = "Center",
+):
+    """
+    Distance-gated decoder:
+      1) compute per-window center-center distance from coordinates._tables
+      2) bin windows into M distance regimes
+      3) fit one full-cov GMM per bin to get K_pose subclusters
+      4) output (T, M_bins*K_pose) soft counts, hard-gated to the bin block (with eps smoothing)
+
+    This enforces "distance first, then pose" by construction.
+    """
+    eps = 1e-12
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # ---- build frame-level distances dict from tables ----
+    dist_series_dict = get_pairwise_distances(
+        coordinates, window_size, distance_bp=distance_bp
+    )
+    animal_pairs = list(combinations(list(animal_ids), 2))
+    desc_loading_final = 'Get dist. gated soft counts'
+    if len(animal_ids)==1 or len(animal_ids)>4:
+        animal_pairs=(animal_ids[0])
+        M_bins = 1
+        desc_loading_final = 'Get soft counts'
+
+    # 1. Determine valid indices
+    edges = {}
+    dist_indices_dict = {}
+    fit_indices_dict = {}
+    for animal_pair in animal_pairs:
+        all_dw =[]
+        dist_indices_dict[animal_pair] = {}
+        fit_indices_dict[animal_pair] = {}
+        # Collect 
+        for key in keys:
+            
+            all_dw.append(dist_series_dict[key][animal_pair])
+
+        full_dw=np.concatenate(all_dw)
+            
+        if binning == "quantile":
+            qs = np.linspace(0, 1, M_bins + 1)
+            edges[animal_pair] = np.nanquantile(full_dw, qs).astype(np.float64)
+            edges[animal_pair][0] = -np.inf
+            edges[animal_pair][-1] = np.inf
+        elif binning == "fixed":
+            if fixed_edges is None or len(fixed_edges) != (M_bins + 1):
+                raise ValueError("fixed_edges must be length M_bins+1")
+            edges[animal_pair] = np.asarray(fixed_edges, dtype=np.float64)
+            edges[animal_pair][0], edges[animal_pair][-1] = -np.inf, np.inf    
+            
+
+        for bin in range(M_bins):
+            # Get distances within current bin (This will also autmatically 
+            # handle NaNs as they are always false and hence get excluded)
+            in_bin = (full_dw>edges[animal_pair][bin]) & (full_dw<=edges[animal_pair][bin+1])
+            
+            # Only allow up to sample_size samples in bin
+            if in_bin.sum() > sample_size:
+                s = in_bin.sum()
+                t_mask = np.zeros(s, dtype=bool)
+                t_mask[np.random.choice(s, sample_size, replace=False)] = True
+                in_bin_sample = in_bin.copy()
+                in_bin_sample[in_bin_sample] = t_mask
+            
+            dist_indices_dict[animal_pair][bin] = {}
+            fit_indices_dict[animal_pair][bin] = {}
+            cum_len=0
+            for key in keys:
+                len_emb=get_dt(embeddings, key, only_metainfo=True)["shape"][0]
+
+                dist_indices_dict[animal_pair][bin][key] = in_bin[cum_len:cum_len+len_emb]
+                fit_indices_dict[animal_pair][bin][key] = in_bin_sample[cum_len:cum_len+len_emb]
+
+                cum_len=cum_len+len_emb
+
+
+    # keys in relative outer loop to avoid expensive re-loading of embeddings 
+    gmms = {}    
+    total_steps=len(animal_pairs)*M_bins     
+    with tqdm.tqdm(total=total_steps, desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="gmm") as pbar:
+        for pair_idx, animal_pair in enumerate(animal_pairs):
+            gmms[animal_pair] = []
+
+            for bin in range(M_bins):
+
+                Zs=[]
+                for key in keys:
+                    Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+
+                    Zs.append(Z[fit_indices_dict[animal_pair][bin][key],:])
+
+                gmm_embeddings=np.concatenate(Zs)
+        
+                gmm = GaussianMixture(
+                    n_components=int(K_pose),
+                    covariance_type="full",
+                    reg_covar=float(reg_covar),
+                    random_state=int(random_state + 17 * bin + 3*pair_idx),
+                    init_params="kmeans",
+                    max_iter=200,
+                    tol=1e-3,
+                ).fit(gmm_embeddings)
+        
+                gmms[animal_pair].append(gmm)
+                pbar.update(1)
+        
+    
+    # ---- 4) Decode per key ----
+    K_total = int(M_bins) * int(K_pose) * len(animal_pairs)
+    soft_counts_out = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")  
+
+    for key in tqdm.tqdm(keys, desc=f"{desc_loading_final:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+        P = np.full((Z0.shape[0], K_total), 1e-4, dtype=np.float32)
+
+        for pair_idx, animal_pair in enumerate(animal_pairs):
+        
+            for bin in range(M_bins):
+
+                Z = Z0[dist_indices_dict[animal_pair][bin][key],:]    
+                gmm = gmms[animal_pair][bin]
+
+                R = gmm.predict_proba(Z).astype(np.float32, copy=False)
+
+                base = pair_idx * (M_bins * K_pose)
+                block = slice(base + bin*K_pose, base + (bin+1)*K_pose)
+                P[dist_indices_dict[animal_pair][bin][key], block] = R
+
+        P = P / P.sum(axis=1, keepdims=True)
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
+
+    return deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
 
 def recluster(
     coordinates: coordinates,
