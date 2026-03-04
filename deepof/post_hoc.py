@@ -330,7 +330,7 @@ def get_contrastive_soft_counts(
                     best_score, K_best = score, K
 
     # ---- final decode with best K and full covariance----
-    mu, var, pi = _fit_params_for_K(K_best, covariance_type="full")
+    mu, var, pi = _fit_params_for_K(K_best, covariance_type="diag")
     A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
     log_A = np.log(np.maximum(A, 1e-12))
     log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
@@ -449,7 +449,7 @@ def get_contrastive_soft_counts_gmm(
     animal_pairs = list(combinations(list(animal_ids), 2))
     desc_loading_final = 'Get dist. gated soft counts'
     if len(animal_ids)==1 or len(animal_ids)>4:
-        animal_pairs=(animal_ids[0])
+        animal_pairs=[animal_ids[0]]
         M_bins = 1
         desc_loading_final = 'Get soft counts'
 
@@ -486,11 +486,11 @@ def get_contrastive_soft_counts_gmm(
             in_bin = (full_dw>edges[animal_pair][bin]) & (full_dw<=edges[animal_pair][bin+1])
             
             # Only allow up to sample_size samples in bin
+            in_bin_sample = in_bin.copy()
             if in_bin.sum() > sample_size:
                 s = in_bin.sum()
                 t_mask = np.zeros(s, dtype=bool)
                 t_mask[np.random.choice(s, sample_size, replace=False)] = True
-                in_bin_sample = in_bin.copy()
                 in_bin_sample[in_bin_sample] = t_mask
             
             dist_indices_dict[animal_pair][bin] = {}
@@ -498,6 +498,7 @@ def get_contrastive_soft_counts_gmm(
             cum_len=0
             for key in keys:
                 len_emb=get_dt(embeddings, key, only_metainfo=True)["shape"][0]
+                assert len(dist_series_dict[key][animal_pair]) == len_emb, "Error! Windowed distances mist match embedding length! Check Window length input!"
 
                 dist_indices_dict[animal_pair][bin][key] = in_bin[cum_len:cum_len+len_emb]
                 fit_indices_dict[animal_pair][bin][key] = in_bin_sample[cum_len:cum_len+len_emb]
