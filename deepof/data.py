@@ -1465,6 +1465,7 @@ class Coordinates:
         polar: bool = False,
         speed: int = 0,
         align: str = False,
+        align_group: bool = False,
         align_inplace: bool = True,
         selected_id: str = None,
         roi_number: int = None,
@@ -1510,6 +1511,7 @@ class Coordinates:
                 polar = polar,
                 speed = speed,
                 align = align,
+                align_group = align_group,
                 align_inplace = align_inplace,
                 selected_id = selected_id,
                 roi_number = roi_number,
@@ -1552,8 +1554,8 @@ class Coordinates:
     def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_number: int):
         """Performs initial validation of function arguments."""
         if align:
-            if not any(center in bp for bp in tab.columns.levels[0]):
-                raise ValueError("For alignment, 'center' must be the name of a body part.")  # pragma: no cover
+            #if not any(center in bp for bp in tab.columns.levels[0]):
+            #    raise ValueError("For alignment, 'center' must be the name of a body part.")  # pragma: no cover
             if not any(align in bp for bp in tab.columns.levels[0]):
                 raise ValueError("'align' must be the name of a body part.")  # pragma: no cover
         
@@ -1649,7 +1651,7 @@ class Coordinates:
         tab.loc[:, (slice(None), list(coords))] *= pixel_ratio
         return tab
 
-    def _align_trajectories(self, tab: pd.DataFrame, align: str, align_inplace: bool, polar: bool, animal_ids: List[str]) -> pd.DataFrame:
+    def _align_trajectories(self, tab: pd.DataFrame, align: str, align_group : bool, align_inplace: bool, polar: bool, animal_ids: List[str]) -> pd.DataFrame:
         """Aligns animal trajectories to a reference body part."""
         if not (align and align_inplace and not polar):
             return tab
@@ -1657,10 +1659,14 @@ class Coordinates:
         all_aligned_parts = []
         all_columns = []
 
+        first_aid = animal_ids[0]+'_'
         for aid in animal_ids:
             if aid:
                 aid=aid+'_'
-            align_bp_name = f"{aid}{align}"
+            if align_group:
+                align_bp_name = f"{first_aid}{align}"
+            else:
+                align_bp_name = f"{aid}{align}"
             
             # Define alignment columns and remaining columns for the animal
             align_cols = [(align_bp_name, "phi" if polar else "x"),
@@ -1668,7 +1674,10 @@ class Coordinates:
             other_cols = [col for col in tab.columns if col[0].startswith(aid) and col[0] != align_bp_name]
             
             # Reorder columns to have the alignment body part first
-            ordered_cols = align_cols + other_cols
+            if aid == first_aid or not align_group:
+                ordered_cols = align_cols + other_cols
+            else:
+                ordered_cols = other_cols
             partial_tab = tab[ordered_cols]
             
             # Perform alignment
@@ -1716,6 +1725,7 @@ class Coordinates:
     polar: bool = False,
     speed: int = 0,
     align: str = False,
+    align_group: bool = False,
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
@@ -1772,7 +1782,7 @@ class Coordinates:
 
         # 8. Align trajectories
         if align:
-            tab = self._align_trajectories(tab, align, align_inplace, polar, animal_ids)
+            tab = self._align_trajectories(tab, align, align_group, align_inplace, polar, animal_ids)
 
         # 9. Calculate speed/derivatives
         if speed:
@@ -2349,7 +2359,7 @@ class Coordinates:
 
                 # Get all relevant features
                 coords = self.get_coords(
-                    selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
+                    selected_id=animal_id, center="arena", align=align, align_group=True, polar=polar, return_path=return_as_paths,
                 )
 
                 pbar.update()
@@ -2703,12 +2713,12 @@ class Coordinates:
             pbar.set_postfix(step="Loading coords")
             def load_coords():
                 try:
-                    return self.get_coords(center=center, align=align, return_path=self._very_large_project)
+                    return self.get_coords(center=center, align=align, align_group=False, return_path=self._very_large_project)
                 except ValueError:
                     try:
-                        return self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
+                        return self.get_coords(center="Center", align="Spine_1", align_group=False, return_path=self._very_large_project)
                     except ValueError:
-                        return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
+                        return self.get_coords(center="Center", align="Nose", align_group=False, return_path=self._very_large_project)
 
             # Disable warnings manually around ThreadPoolExecutor
             # Reason: ThreadPoolExecutor will break the warnings if warning decorator functions are accessed in parallel
