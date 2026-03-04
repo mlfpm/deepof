@@ -96,6 +96,76 @@ def test_get_contrastive_soft_counts(states):
         assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
 
 
+@settings(deadline=None, max_examples=25)
+@given(K_pose=st.sampled_from([3, 2]), M_bins=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
+def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,exp_type):
+
+
+    animal_ids = [""]
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale=380,
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    embeddings = {key: np.random.normal(size=(100-window_size+1, 10)) for key in keys}
+
+    embeddings=deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=None, 
+        exp_conditions=None,
+    )
+    
+    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts_gmm(
+        prun,
+        embeddings,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        K_pose=K_pose,
+        M_bins=M_bins,
+        distance_bp=distance_bp,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+        )
+    )
+    
+    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
+    assert all([np.round(np.sum(soft_counts_out[key]))==100-window_size+1 for key in soft_counts_out.keys()])
+
+    # Check if Ideal states determined based on different modes stay consistent 
+    # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
+    if exp_type=="test_single_topview":
+        assert all([np.shape(soft_counts_out[key])[1]==K_pose for key in soft_counts_out.keys()])
+    else:
+        assert all([np.shape(soft_counts_out[key])[1]==K_pose*M_bins for key in soft_counts_out.keys()])
+
 
 @settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
