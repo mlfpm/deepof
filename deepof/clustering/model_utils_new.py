@@ -173,6 +173,10 @@ def _append_cfg(lines, title: str, cfg) -> None:
     lines.append("")  # spacer
 
 
+def _unwrap_dp(m: nn.Module) -> nn.Module:
+    return m.module if isinstance(m, torch.nn.DataParallel) else m
+
+
 def save_model_info(
     ckpt_path: str,
     *,
@@ -186,8 +190,13 @@ def save_model_info(
     teacher_cfg=None,
     vade_cfg=None,
     contrastive_cfg=None,
+    model: Optional[nn.Module] = None,
+    log_summary: Optional[Dict[str, Any]] = None,
+    rebuild_spec: Optional[Dict[str, Any]] = None,
+    save_weights: bool = True,
+    save_bundle: bool = True,   # if True -> saves dict with state_dict + optional spec/log; else raw state_dict
 ) -> None:
-    """ Saves all config and training information for a freshly trained model """
+    """Saves all config and training information for a freshly trained model (+ optionally the model weights)."""
     info_path = os.path.splitext(ckpt_path)[0] + "_info.txt"
     lines = []
     lines.append(f"stage: {stage}")
@@ -201,7 +210,19 @@ def save_model_info(
         lines.append(f"score_value: {float(score_value)}")
     lines.append("")
 
-    # Dump configs
+    if save_weights and (model is not None):
+        lines.append("[checkpoint_format]")
+        if save_bundle:
+            lines.append("ckpt_contains: bundle")
+            keys = ["state_dict"]
+            if rebuild_spec is not None: keys.append("rebuild_spec")
+            if log_summary is not None: keys.append("log_summary")
+            lines.append("bundle_keys: " + ", ".join(keys))
+        else:
+            lines.append("ckpt_contains: state_dict_only")
+        lines.append("")
+
+    # Dump configs (unchanged)
     _append_cfg(lines, "common_cfg", common_cfg)
     _append_cfg(lines, "teacher_cfg", teacher_cfg)
     _append_cfg(lines, "vade_cfg", vade_cfg)
@@ -214,6 +235,19 @@ def save_model_info(
         lines.append("")
 
     os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+
+    if save_weights and (model is not None):
+        m = _unwrap_dp(model)
+        if save_bundle:
+            payload = {"state_dict": m.state_dict()}
+            if rebuild_spec is not None:
+                payload["rebuild_spec"] = rebuild_spec
+            if log_summary is not None:
+                payload["log_summary"] = log_summary
+            torch.save(payload, ckpt_path)
+        else:
+            torch.save(m.state_dict(), ckpt_path)
+
     with open(info_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
@@ -294,31 +328,31 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
-#def nce_loss_pt(
-#    history: torch.Tensor,
-#    future: torch.Tensor,
-#    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-#    temperature: float = 0.1,
-#) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-#    """
-#    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
-#    """
-#    N = history.shape[0]
-#    sim = similarity(history, future)  # (N, N)
-#    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
+def nce_loss_pt_old(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    temperature: float = 0.1,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
+    """
+    N = history.shape[0]
+    sim = similarity(history, future)  # (N, N)
+    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
 
-#    neg = _off_diagonal_rows(sim)  # (N, N-1)
-#    all_sim = torch.exp(sim / temperature)  # (N, N)
+    neg = _off_diagonal_rows(sim)  # (N, N-1)
+    all_sim = torch.exp(sim / temperature)  # (N, N)
 
-#    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
-#    labels = torch.ones_like(logits)
+    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
+    labels = torch.ones_like(logits)
 
-#    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
-#    loss = bce(logits, labels)
+    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
+    loss = bce(logits, labels)
 
-#    mean_sim = torch.diag(sim).mean()
-#    mean_neg = neg.mean()
-#    return loss, mean_sim, mean_neg
+    mean_sim = torch.diag(sim).mean()
+    mean_neg = neg.mean()
+    return loss, mean_sim, mean_neg
 
 def nce_loss_pt(history, future, similarity, temperature=0.1):
     sim = similarity(history, future) / temperature        # (N,N)
@@ -659,7 +693,9 @@ def embedding_per_video(
     scale: str = "standard",
     animal_id: str = None,
     global_scaler: Any = None,
-	pretrained: bool = False,
+    softcounts_extraction_method = None,
+    distance_bp: str = "Center",
+    states: int = 24,
 	samples_max: int = 227272,
     **kwargs,
 ):  # pragma: no cover
@@ -673,6 +709,8 @@ def embedding_per_video(
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
+        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, gmm or hierarchical. If None, decoder of model is used. If model has no decoder, gmm is used as a default.
+        distance_bp (str): Teh mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
@@ -695,7 +733,10 @@ def embedding_per_video(
 
 
     graph = False
+    # The contrastive model only consists out of an encoder and hence needs additional soft_counts extraction
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
+    if contrastive and softcounts_extraction_method is None:
+        softcounts_extraction_method = "gmm"
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
     
@@ -773,7 +814,6 @@ def embedding_per_video(
                     _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
-                    # Split window in two as W_dim = 2* model input W (because of data augmentation with shifting in training)
                     emb_out = model(xb, ab)
                 else:
                     raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
@@ -819,11 +859,18 @@ def embedding_per_video(
         exp_conditions=exp_conds,
     )
 
-    if contrastive:
+    if softcounts_extraction_method == "gmm":
 
-        soft_counts = deepof.post_hoc.get_contrastive_soft_counts(
-            coordinates, embeddings, 
+        soft_counts = deepof.post_hoc.get_contrastive_soft_counts_gmm(
+            coordinates, embeddings, animal_id, window_size=window_size, distance_bp=distance_bp, K_pose=states,
         )
+    elif softcounts_extraction_method == "hierarchical":
+
+        soft_counts = get_contrastive_soft_counts_hierarchical(
+            coordinates, embeddings, window_size=window_size, distance_bp=distance_bp, states=states,
+        )
+    elif softcounts_extraction_method is not None:
+        raise ValueError("For \"softcounts_extraction_method\" only \"gmm\" or \"hierarchical\" are supported!")
     else:
         soft_counts=deepof.data.TableDict(
             soft_counts,
@@ -853,4 +900,80 @@ def _slice_time_per_sample(
     return x[b_idx, t_idx]  # advanced indexing -> (B,L,...)
 
 
-    
+def load_model_from_ckpt(path: str, device=None, strict: bool = False):
+    """
+    Load a single model checkpoint saved via save_model_info(..., save_bundle=True)
+    using only the checkpoint path.
+    Returns: model, log_summary, rebuild_spec, load_report
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    ckpt = torch.load(path, map_location=device, weights_only=False)  # weights_only=True is NOT compatible with arbitrary dict payloads
+    if "state_dict" not in ckpt:
+        raise RuntimeError(f"Checkpoint at {path} is not a bundle (missing 'state_dict').")
+    if "rebuild_spec" not in ckpt:
+        raise RuntimeError(f"Checkpoint at {path} is missing 'rebuild_spec' (cannot rebuild model from path only).")
+
+    spec = ckpt["rebuild_spec"]
+    state = ckpt["state_dict"]
+    log_summary = ckpt.get("log_summary", {})
+
+    model_name = spec["model_name"].lower()
+
+    # --- rebuild ---
+    if model_name == "vqvae":
+        from deepof.clustering.models_new import VQVAEPT
+        model = VQVAEPT(
+            input_shape=tuple(spec["x_shape"]),
+            edge_feature_shape=tuple(spec["a_shape"]),
+            adjacency_matrix=np.asarray(spec["adjacency_matrix"]),
+            latent_dim=int(spec["latent_dim"]),
+            n_components=int(spec["n_components"]),
+            encoder_type=str(spec["encoder_type"]),
+            use_gnn=bool(spec.get("use_gnn", True)),
+            interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
+            kmeans_loss=float(spec.get("kmeans_loss", 0.0)),
+        )
+
+    elif model_name == "contrastive":
+        import deepof.clustering.models_new as models_new
+        model = models_new.ContrastivePT(
+            input_shape=tuple(spec["x_shape"]),
+            edge_feature_shape=tuple(spec["a_shape"]),
+            adjacency_matrix=np.asarray(spec["adjacency_matrix"]),
+            latent_dim=int(spec["latent_dim"]),
+            encoder_type=str(spec["encoder_type"]),
+            use_gnn=bool(spec.get("use_gnn", True)),
+            temperature=float(spec.get("temperature", 0.1)),
+            similarity_function=str(spec.get("similarity_function", "cosine")),
+            loss_function=str(spec.get("loss_function", "nce")),
+            beta=float(spec.get("beta", 0.1)),
+            tau=float(spec.get("tau", 0.1)),
+            interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
+        )
+
+    elif model_name == "vade":
+        from deepof.clustering.models_new import VaDEPT
+        model = VaDEPT(
+            input_shape=tuple(spec["x_shape"]),
+            edge_feature_shape=tuple(spec["a_shape"]),
+            adjacency_matrix=np.asarray(spec["adjacency_matrix"]),
+            latent_dim=int(spec["latent_dim"]),
+            n_components=int(spec["n_components"]),
+            encoder_type=str(spec["encoder_type"]),
+            use_gnn=bool(spec.get("use_gnn", True)),
+            kmeans_loss=float(spec.get("kmeans_loss", 1.0)),
+            interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
+            lens_enabled=bool(spec.get("lens_enabled", False)),
+        )
+
+    else:
+        raise ValueError(f"Unknown model_name in rebuild_spec: {model_name}")
+
+    model.to(device)
+    rep = model.load_state_dict(state, strict=strict)
+    model.eval()
+
+    load_report = {"missing": rep.missing_keys, "unexpected": rep.unexpected_keys}
+    return model, log_summary, spec, load_report

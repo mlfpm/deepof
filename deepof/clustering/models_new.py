@@ -1061,7 +1061,7 @@ class TFMEncoderPT(nn.Module):
             # === Process Nodes ===
             # Reshape to process each node's time series independently
             # Following the same memory layout as TCN encoder
-            x_flat = x.view(B, W, N * NF)
+            x_flat = x.reshape(B, W, N * NF)
             x_transposed = x_flat.permute(2, 1, 0)           # (N*NF, W, B)
             x_reshaped = x_transposed.reshape(NF, W, N, B)   # (NF, W, N, B)
             x_nodes = x_reshaped.permute(3, 2, 1, 0)         # (B, N, W, NF)
@@ -1073,7 +1073,7 @@ class TFMEncoderPT(nn.Module):
             # === Process Edges ===
             # Reshape to process each edge's time series independently
             # Same pattern as TCN encoder
-            a_flat = a.view(B, W, E * EF)
+            a_flat = a.reshape(B, W, E * EF)
             a_transposed = a_flat.permute(2, 1, 0)           # (E*EF, W, B)
             a_reshaped = a_transposed.reshape(EF, W, E, B)   # (EF, W, E, B)
             a_edges = a_reshaped.permute(3, 2, 1, 0)         # (B, E, W, EF)
@@ -1100,7 +1100,7 @@ class TFMEncoderPT(nn.Module):
             
         else:
             # === Non-GNN path ===
-            x_flat = x.view(B, W, N * NF)  # (B, W, N*NF)
+            x_flat = x.reshape(B, W, N * NF)  # (B, W, N*NF)
             enc = self.flat_tf(x_flat)     # (B, key_dim)
 
         # === Apply MLP head ===
@@ -5103,7 +5103,6 @@ def fit_VQVAE(
         if v_total < best_val:
             best_val = v_total
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_val)
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -5113,6 +5112,21 @@ def fit_VQVAE(
                     score_value=None,
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "vqvae",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
@@ -5120,7 +5134,6 @@ def fit_VQVAE(
         if score_value > best_score:
             best_score = score_value
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_score)
                 save_model_info(
                     best_path_score,
                     stage="best_score",
@@ -5130,6 +5143,21 @@ def fit_VQVAE(
                     score_value=score_value,
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "vqvae",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
         
@@ -5137,9 +5165,11 @@ def fit_VQVAE(
     # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
-        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
+        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
     if common_cfg.save_weights and os.path.exists(best_path_score):
-        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
+        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
 
     if writer:
         writer.flush(); writer.close()
@@ -5267,7 +5297,6 @@ def fit_contrastive(
         if v_total < best_val:
             best_val = v_total
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_val)
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -5278,6 +5307,21 @@ def fit_contrastive(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     contrastive_cfg=contrastive_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "contrastive",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
@@ -5285,7 +5329,6 @@ def fit_contrastive(
         if score_value > best_score:
             best_score = score_value
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_score)
                 save_model_info(
                     best_path_score,
                     stage="best_score",
@@ -5296,6 +5339,21 @@ def fit_contrastive(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     contrastive_cfg=contrastive_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "contrastive",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
 
@@ -5303,9 +5361,11 @@ def fit_contrastive(
     # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
-        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
+        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
     if common_cfg.save_weights and os.path.exists(best_path_score):
-        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
+        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
 
     if writer:
         writer.flush(); writer.close()
@@ -5359,7 +5419,7 @@ def fit_VADE(
     # Load pretrained model if available
     if common_cfg.pretrained:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
-        unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device))
+        unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device, weights_only=False))
         if writer:
             writer.flush(); writer.close()
         return unwrap_dp(model), unwrap_dp(model), None
@@ -5479,7 +5539,6 @@ def fit_VADE(
         # Save teacher-init checkpoint + info (VaDE only)
         teacher_init_model = deepcopy(unwrap_dp(model))
         if common_cfg.save_weights:
-            torch.save(teacher_init_model.state_dict(), teacher_init_path)
             save_model_info(
                 teacher_init_path,
                 stage="teacher_init",
@@ -5489,6 +5548,21 @@ def fit_VADE(
                 common_cfg=common_cfg,
                 teacher_cfg=teacher_cfg,
                 vade_cfg=vade_cfg,
+                model=unwrap_dp(model),
+                log_summary=log_summary,
+                rebuild_spec={                    
+                    "model_name": "vade",
+                    "x_shape": train_loader.dataset.x_shape,
+                    "a_shape": train_loader.dataset.a_shape,
+                    "adjacency_matrix": adjacency_matrix.astype("float32"),
+                    "latent_dim": common_cfg.latent_dim,
+                    "n_components": common_cfg.n_components,
+                    "encoder_type": common_cfg.encoder_type,
+                    "use_gnn": True,
+                    "interaction_regularization": common_cfg.interaction_regularization,
+                },
+                save_weights=common_cfg.save_weights,
+                save_bundle=True,
             )
             print(f"  Saved teacher-init model -> {teacher_init_path}")
 
@@ -5624,7 +5698,6 @@ def fit_VADE(
             best_val = val_total
             epochs_no_improve = 0
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_val)
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -5634,6 +5707,21 @@ def fit_VADE(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     vade_cfg=vade_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "vade",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
         #else:
@@ -5655,6 +5743,21 @@ def fit_VADE(
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     vade_cfg=vade_cfg,
+                    model=unwrap_dp(model),
+                    log_summary=log_summary,
+                    rebuild_spec={                    
+                        "model_name": "vade",
+                        "x_shape": train_loader.dataset.x_shape,
+                        "a_shape": train_loader.dataset.a_shape,
+                        "adjacency_matrix": adjacency_matrix.astype("float32"),
+                        "latent_dim": common_cfg.latent_dim,
+                        "n_components": common_cfg.n_components,
+                        "encoder_type": common_cfg.encoder_type,
+                        "use_gnn": True,
+                        "interaction_regularization": common_cfg.interaction_regularization,
+                    },
+                    save_weights=common_cfg.save_weights,
+                    save_bundle=True,
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
         
@@ -5672,9 +5775,11 @@ def fit_VADE(
     # Load states of best val and score models
     model_score = deepcopy(model)
     if common_cfg.save_weights and os.path.exists(best_path_val):
-        unwrap_dp(model).load_state_dict(torch.load(best_path_val, map_location=device))
+        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
+        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
     if common_cfg.save_weights and os.path.exists(best_path_score):
-        unwrap_dp(model_score).load_state_dict(torch.load(best_path_score, map_location=device))
+        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
+        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
 
     if writer:
         writer.flush(); writer.close()
@@ -5788,7 +5893,7 @@ def _augment_time_shift(
     a: torch.Tensor,             # (B,T_full,E,1)
     edge_index: torch.Tensor,    # (E,2) (not used here, kept for signature consistency / plotting)
     min_shift: int = 1,
-    max_shift: int = 5,
+    max_shift: int = 3,
     p: float = 0.8,
     plot: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -6065,14 +6170,14 @@ def _make_augmented_view(
     triplets: list,
     adj: list,
     min_shift: int = 1,
-    max_shift: int = 10,
+    max_shift: int = 3,
     p_shift: float = 0.8,
     n_rot: int =3,
     max_rot: int = 30, 
-    p_rot: float = 0.8,
+    p_rot: float = 0.7,
     max_interp: int = 6,
     min_interp: int = 5,
-    p_interp: float = 0.5,
+    p_interp: float = 0.6,
     noise_sigma: float = 0.02,
     p_noise: float = 1.0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
