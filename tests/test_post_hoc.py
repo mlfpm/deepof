@@ -152,7 +152,7 @@ def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,e
 
     rmtree(
         os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
+            ".", "tests", "test_examples", exp_type, "deepof_project"
         )
     )
     
