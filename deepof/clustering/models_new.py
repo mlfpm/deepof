@@ -5212,8 +5212,8 @@ def fit_contrastive(
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
 
-    n_nodes = train_loader.dataset.x_shape[1]  # <----
-    edge_index = _build_edge_from_metainfo(   # <----
+    n_nodes = train_loader.dataset.x_shape[1]  
+    edge_index = _build_edge_from_metainfo(   
         meta_info=meta_info,
         device=device,
         n_nodes=n_nodes,
@@ -5844,7 +5844,7 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
     xau = x_aug[b, ::4, :, 0:2].detach().cpu()  # (T,N,2)
     T = xin.size(0)
 
-    dx = 2.5  # horizontal offset per frame
+    dx = 0.025  # horizontal offset per frame
     fig, ax = plt.subplots(2, 1, figsize=(min(28, 1.2 * T), 6), sharey=True)
 
     def draw_row(ax_, X, title):

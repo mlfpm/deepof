@@ -2384,7 +2384,7 @@ class Coordinates:
                 # Merge and extract names
                 tab_dict = coords.merge(
                     speeds,
-                    angles,
+                    #angles,
                     dists,
                     save_as_paths=return_as_paths
                     )
