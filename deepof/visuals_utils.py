@@ -21,7 +21,6 @@ import seaborn as sns
 from IPython.display import clear_output
 from matplotlib.patches import Ellipse, Patch
 from natsort import os_sorted
-from enum import Enum
 from scipy.interpolate import interp1d
 
 
@@ -43,6 +42,8 @@ from deepof.config import (
     CONTINUOUS_BEHAVIORS,
     ARENA_COLOR,
     ROI_COLORS,
+    DistanceUnit,
+    TimeUnit,
 )
 
 
@@ -50,68 +51,6 @@ from deepof.config import (
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
-
-
-# ENUMS # 
-
-# DeepOF saves all distances internally in mm, correspondingly thsi enum contains appropriate conversion factors
-class DistanceUnit(Enum):
-    pixel = 0.0 
-    px = 0.0
-    mm = 1.0 # identity, measures are saved in mm per default
-    millimeter = 1.0
-    cm = 10
-    centimeter = 10
-    m = 1000
-    meter = 1000
-    km = 1000000
-    kilometer = 1000000
-
-    def factor(self, mm_to_pix):
-        """Multiplier to convert mm -> this unit. mm_to_pix can be scalar or array-like."""
-        if self in (DistanceUnit.px, DistanceUnit.pixel):
-            return np.asarray(mm_to_pix, dtype=float)
-        return 1.0 / self.value
-
-    @classmethod
-    def parse(cls, unit: str) -> "DistanceUnit":
-        try:
-            return cls[unit]
-        except KeyError as e:  # pragma: no cover
-            opts = ", ".join(cls.__members__.keys())
-            raise ValueError(f'Unknown distance unit "{unit}". Valid options are: {opts}') from e
-
-# DeepOF saves all distances internally in frames, correspondingly this enum calculates appropriate conversion factors
-class TimeUnit(Enum):
-    fr = 0.0 # identity (frames -> frames)
-    frames = 0.0   
-    s     = 1.0   # seconds per unit
-    seconds = 1.0
-    min   = 60.0
-    minutes = 60.0
-    h     = 3600.0
-    hours = 3600.0
-
-    def factor(self, fps: float) -> float:
-        """Multiplier to convert frames -> this unit."""
-        if self is TimeUnit.frames or fps is None:
-            return 1.0
-        return 1.0 / (fps * self.value)
-    
-    @classmethod
-    def parse(cls, unit: str) -> "TimeUnit":
-        try:
-            return cls[unit]
-        except KeyError as e:  # pragma: no cover
-            opts = ", ".join(cls.__members__.keys())
-            raise ValueError(f'Unknown time unit "{unit}". Valid options are: {opts}') from e
-
-
-# Native time unit in DeepOF is 
-class Speed_Unit(Enum):
-    mm_s = 1 
-    m_s = 0.001
-    m_h = 3.6
 
 
 def time_to_seconds(time_string: str) -> float:

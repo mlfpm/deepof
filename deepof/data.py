@@ -82,7 +82,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context, DistanceUnit
 import deepof.model_utils
 import deepof.models
 #import deepof.clustering.models_new
@@ -257,7 +257,7 @@ class Project:
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
-        video_scale: int = 1,
+        video_scale: str = None,
         number_of_rois: int = 0,
         fast_implementations_threshold: int = 50000,
     ):
@@ -368,7 +368,23 @@ class Project:
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
-        self.arena_dims = video_scale
+        pattern = re.compile(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s+\S+')
+        if isinstance(video_scale, str) and pattern.fullmatch(video_scale) is not None:
+            str_components=video_scale.split(" ")
+            self.arena_dims=float(str_components[0])/DistanceUnit.parse(str_components[1]).factor(None)
+            if self.arena_dims < 50 or self.arena_dims > 5000:
+                warnings.warn(
+                    f"\033[38;5;208m"
+                    f"The arena dimension you entered is {self.arena_dims} mm."
+                    f"If your arena is really this small or large, you can ignore this warning."
+                    f"\033[0m"
+                )
+        else:
+            raise ValueError('Error! Please enter video_scale as \"[value] [unit of measurment]\", e.g. \"200 mm\"')
+        print(
+            f"\033[33mInfo! Set arena dimension to {self.arena_dims} mm!\033[0m"
+        )
+
         self.number_of_rois = number_of_rois
         self.ellipse_detection = None
 

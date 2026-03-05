@@ -34,15 +34,13 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
+from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS, DistanceUnit, TimeUnit
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
     output_videos_per_cluster, 
 )
 from deepof.visuals_utils import (
-    DistanceUnit,
-    TimeUnit,
     _check_enum_inputs,
     plot_arena,
     heatmap,
