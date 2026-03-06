@@ -581,7 +581,7 @@ def test_remove_outliers(mode):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".csv",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -648,7 +648,7 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
             ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -740,7 +740,7 @@ def test_detection_modes(detection_mode):
             ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},

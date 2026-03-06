@@ -64,7 +64,7 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
             else {table_bodyparts[0]: table_bodyparts[1:]}
         ),
         arena=arena_detection,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=table_type,
     )
@@ -117,7 +117,7 @@ def test_project_extend():
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format="h5",
     )
@@ -135,7 +135,7 @@ def test_project_extend():
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format="h5",
     )
@@ -178,7 +178,7 @@ def test_project_properties():
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -207,7 +207,7 @@ def test_project_filters():
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     ).create(force=True, test=True)
@@ -251,7 +251,7 @@ def test_get_distances(nodes, ego):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -293,7 +293,7 @@ def test_get_angles(nodes, ego):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -328,7 +328,7 @@ def test_run(nodes, ego, use_numba):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".csv",
         iterative_imputation="full",
@@ -379,7 +379,7 @@ def test_get_supervised_annotation(use_numba,detection_mode,bodypart_graph):
         arena=detection_mode,
         bodypart_graph=bodypart_graph,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
@@ -409,7 +409,7 @@ def test_supervised_parameters():
         ),
         arena="circular-autodetect",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     ).create(force=True, test=True)
@@ -474,7 +474,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         ),
         project_name=f"deepof_project_{random_id}",
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
@@ -644,7 +644,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
         ),
         project_name=f"deepof_project_{random_id}",
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
@@ -765,7 +765,7 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
             animal_ids=["B","W"],
             bodypart_graph="deepof_11",
             arena="circular-autodetect",
-            video_scale=380,
+            video_scale="380 mm",
             video_format=".mp4",
             table_format=table_type,
         )
