@@ -399,6 +399,11 @@ def get_pairwise_distances(
                 ax, ay = tab[(f"{a_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{a_id}_{distance_bp}", "y")].to_numpy(np.float64)
                 bx, by = tab[(f"{b_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{b_id}_{distance_bp}", "y")].to_numpy(np.float64)
                 dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
+
+                # imute gaps linearily
+                idx = np.arange(dist_raw.size)
+                mask = ~np.isnan(dist_raw)
+                dist_raw = np.interp(idx, idx[mask], dist_raw[mask]).astype(np.float32)
                 
                 # Average distance per window
                 dist_win = np.convolve(dist_raw, np.ones(window_len, dtype=np.float32) / window_len, mode="valid")

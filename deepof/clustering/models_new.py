@@ -4537,18 +4537,23 @@ def step_contrastive_distill(
     contrastive_cfg=getattr(ctx, "contrastive_cfg", None)
     
     a_full = _recompute_edges(x_full, edge_index)
-    triplets, adj = _valid_triplets_from_edge_index(edge_index, x_full.shape[2])
+    rot_precomp = getattr(ctx, "rot_precomp", None)
+    if rot_precomp is None:
+        raise RuntimeError("ctx.rot_precomp is required (build it once in fit_contrastive).")
 
     x_aug, a_aug = _make_augmented_view(
-        x_full, a_full, edge_index, triplets, adj,
-        noise_sigma=contrastive_cfg.aug_noise_sigma,  
-        p_noise=contrastive_cfg.aug_p_noise,           
-        max_interp=contrastive_cfg.aug_max_interp,
-        min_interp=contrastive_cfg.aug_min_interp,         
-        p_interp=contrastive_cfg.aug_p_interp, 
-        max_rot=contrastive_cfg.aug_max_rot, 
-        n_rot=contrastive_cfg.aug_n_rot,
-        p_rot=contrastive_cfg.aug_p_rot,         
+        x_full, a_full, edge_index, rot_precomp,
+        min_shift = contrastive_cfg.aug_min_shift,
+        max_shift = contrastive_cfg.aug_max_shift,
+        p_shift = contrastive_cfg.aug_p_shift,
+        noise_sigma = contrastive_cfg.aug_noise_sigma,  
+        p_noise = contrastive_cfg.aug_p_noise,           
+        max_interp = contrastive_cfg.aug_max_interp,
+        min_interp = contrastive_cfg.aug_min_interp,         
+        p_interp = contrastive_cfg.aug_p_interp, 
+        max_rot = contrastive_cfg.aug_max_rot, 
+        n_rot = contrastive_cfg.aug_n_rot,
+        p_rot = contrastive_cfg.aug_p_rot,         
     )
 
     # Cut middle section from tensor
@@ -4762,14 +4767,17 @@ def embedding_model_fittingPT(
     beta: float = 0.1,
     tau: float = 0.1,
     # Contrastive augmentations
+    aug_min_shift: int = 1,
+    aug_max_shift: int = 5,
+    aug_p_shift: int = 0.6,
     aug_max_rot: int = 30, 
     aug_n_rot: int = 3, 
-    aug_p_rot: int = 0.8,
+    aug_p_rot: int = 0.6,
     aug_max_interp: int = 8,
     aug_min_interp: int = 3,         
     aug_p_interp: float = 0.3, 
-    aug_noise_sigma: float = 0.03,  
-    aug_p_noise: float = 1.0, 
+    aug_noise_sigma: float = 0.02,  
+    aug_p_noise: float = 0.4, 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
@@ -4868,6 +4876,9 @@ def embedding_model_fittingPT(
         contrastive_loss_function=contrastive_loss_function,
         beta=beta,
         tau=tau,
+        aug_min_shift=aug_min_shift,
+        aug_max_shift=aug_max_shift,
+        aug_p_shift=aug_p_shift,
         aug_noise_sigma=aug_noise_sigma,
         aug_p_noise=aug_p_noise,
         aug_min_interp=aug_min_interp,
@@ -5212,12 +5223,14 @@ def fit_contrastive(
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
 
-    n_nodes = train_loader.dataset.x_shape[1]  
-    edge_index = _build_edge_from_metainfo(   
-        meta_info=meta_info,
-        device=device,
-        n_nodes=n_nodes,
+    n_nodes = train_loader.dataset.x_shape[1]
+    edge_index_global, edge_index_local, _ = _build_edge_from_metainfo(
+    meta_info=meta_info,
+    device=device,
+    n_nodes=n_nodes,
+    return_local=True,
     )
+    rot_precomp = build_rotation_precomp(edge_index=edge_index_local, n_nodes=n_nodes, device=device)
 
     # Create teacher
     teacher_cfg.include_latent_view=False
@@ -5264,8 +5277,10 @@ def fit_contrastive(
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
-            edge_index=edge_index,
+            edge_index=edge_index_global,
+            edge_index_local=edge_index_local,
             contrastive_cfg=contrastive_cfg,
+            rot_precomp=rot_precomp,
         )
 
         # Train and validate
@@ -5277,7 +5292,7 @@ def fit_contrastive(
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index,contrastive_cfg=contrastive_cfg), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         # To do: calculate score
@@ -5791,15 +5806,25 @@ def _build_edge_from_metainfo(
     meta_info: dict,
     device: torch.device,
     n_nodes: int,
-) -> torch.Tensor:
+    return_local: bool = True,
+    return_node_names: bool = False,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[List[str]]]:
+    """
+    Builds:
+      - edge_index_global: (E,2) long on device, includes cross-mouse edges (e.g. B_Nose--W_Nose)
+      - edge_index_local:  (E_local,2) long on device, excludes cross-mouse edges (within-mouse only)
+      - node_names: list[str] length n_nodes in node-axis order (optional)
+
+    Assumes node names are like 'B_Nose', 'W_Tail_base', etc.
+    """
     if "node_columns" not in meta_info or "edge_columns" not in meta_info:
         raise RuntimeError("meta_info must contain 'node_columns' and 'edge_columns'.")
 
     node_cols = list(meta_info["node_columns"])
     edge_cols = list(meta_info["edge_columns"])
 
-    # Extract node order from the first N (bp,'x') entries (your tensor node axis order)
-    node_names = []  # length N, entries like "B_Spine_2"
+    # 1) Infer node order from the first n_nodes entries of form (bp, 'x')
+    node_names: List[str] = []
     for c in node_cols:
         if isinstance(c, tuple) and len(c) == 2 and c[1] == "x":
             node_names.append(c[0])
@@ -5813,21 +5838,39 @@ def _build_edge_from_metainfo(
 
     node_to_idx = {name: i for i, name in enumerate(node_names)}
 
+    # 2) Build global edge index (unchanged behavior)
     pairs = []
-    for (u, v) in edge_cols:
-        # Edges are undirected; accept either orientation
-        if u in node_to_idx and v in node_to_idx:
-            pairs.append((node_to_idx[u], node_to_idx[v]))
-        elif v in node_to_idx and u in node_to_idx:
-            pairs.append((node_to_idx[v], node_to_idx[u]))
-        else:
+    for (u_name, v_name) in edge_cols:
+        if u_name not in node_to_idx or v_name not in node_to_idx:
             raise RuntimeError(
-                f"Edge ({u},{v}) contains node(s) not found in inferred node list. "
-                f"Check prefixing and meta_info consistency."
+                f"Edge ({u_name},{v_name}) contains node(s) not found in inferred node list."
             )
+        pairs.append((node_to_idx[u_name], node_to_idx[v_name]))
 
-    edge_index = torch.tensor(pairs, dtype=torch.long, device=device)
-    return edge_index
+    edge_index_global = torch.tensor(pairs, dtype=torch.long, device=device)
+
+    if not return_local:
+        return edge_index_global, None, (node_names if return_node_names else None)
+
+    # 3) Build local/within-mouse edge index by filtering on name prefix ('B_' vs 'W_')
+    def animal_key(name: str) -> str:
+        # 'B_Right_bhip' -> 'B', 'W_Nose' -> 'W'
+        # (split on first underscore)
+        if "_" not in name:
+            raise RuntimeError(f"Cannot infer animal prefix from node name '{name}'.")
+        return name.split("_", 1)[0]
+
+    keys = [animal_key(nm) for nm in node_names]  # len N
+    # map each node index -> animal id (e.g., B->0, W->1)
+    uniq = {k: i for i, k in enumerate(sorted(set(keys)))}
+    animal_id = torch.tensor([uniq[k] for k in keys], dtype=torch.long, device=device)  # (N,)
+
+    u = edge_index_global[:, 0]
+    v = edge_index_global[:, 1]
+    same_animal = (animal_id[u] == animal_id[v])
+    edge_index_local = edge_index_global[same_animal]
+
+    return edge_index_global, edge_index_local, (node_names if return_node_names else None)
 
 
 def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
@@ -5844,7 +5887,7 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
     xau = x_aug[b, ::4, :, 0:2].detach().cpu()  # (T,N,2)
     T = xin.size(0)
 
-    dx = 0.025  # horizontal offset per frame
+    dx = 2.5  # horizontal offset per frame
     fig, ax = plt.subplots(2, 1, figsize=(min(28, 1.2 * T), 6), sharey=True)
 
     def draw_row(ax_, X, title):
@@ -5868,6 +5911,7 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
     plt.tight_layout()
     plt.show()
 
+
 def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
     adj = [[] for _ in range(n_nodes)]
     for u, v in ei.detach().cpu().tolist():
@@ -5886,11 +5930,95 @@ def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
                 c_ = nb[j]
                 triplets.append((a_, b, c_))
     return triplets, adj
-    
+
+
+@dataclass
+class RotationPrecomp:
+    # Triplets (a,b,c) in a tensor for cheap access
+    triplets: torch.Tensor            # (M,3) long, on device
+    centers: torch.Tensor             # (M,) long, on device
+
+    # Variable-length node lists, stored as list-of-tensors (each on device)
+    branches_a: List[torch.Tensor]    # len M, each (Ka,) long
+    branches_c: List[torch.Tensor]    # len M, each (Kc,) long
+
+    # 0 => prefer a-branch, 1 => prefer c-branch, 2 => tie (random at runtime)
+    prefer_side: torch.Tensor         # (M,) uint8 on device
+
+
+def build_rotation_precomp(edge_index: torch.Tensor, n_nodes: int, device: torch.device) -> RotationPrecomp:
+    """
+    Build triplets and per-triplet branch node sets ONCE.
+
+    This runs Python/CPU graph logic once, but stores results as CUDA tensors (if device is CUDA)
+    so the augmentation step doesn't do BFS anymore.
+    """
+    ei_cpu = edge_index.detach().cpu().tolist()
+
+    # adjacency list on CPU
+    adj = [[] for _ in range(n_nodes)]
+    for u, v in ei_cpu:
+        adj[u].append(v)
+        adj[v].append(u)
+
+    # triplets (a,b,c): for each center b, all unordered neighbor pairs (a,c)
+    triplets_py: List[Tuple[int,int,int]] = []
+    for b in range(n_nodes):
+        nb = adj[b]
+        if len(nb) < 2:
+            continue
+        for i in range(len(nb)):
+            for j in range(i + 1, len(nb)):
+                triplets_py.append((nb[i], b, nb[j]))
+
+    # branch BFS (still CPU, but one-time)
+    def branch_nodes(center: int, side: int) -> List[int]:
+        seen = {side}
+        stack = [side]
+        while stack:
+            u = stack.pop()
+            for v in adj[u]:
+                if v == center or v in seen:
+                    continue
+                seen.add(v)
+                stack.append(v)
+        return list(seen)  # excludes center by construction
+
+    branches_a: List[torch.Tensor] = []
+    branches_c: List[torch.Tensor] = []
+    prefer: List[int] = []
+
+    for (a, b, c) in triplets_py:
+        ba = branch_nodes(b, a)
+        bc = branch_nodes(b, c)
+
+        branches_a.append(torch.tensor(ba, dtype=torch.long, device=device))
+        branches_c.append(torch.tensor(bc, dtype=torch.long, device=device))
+
+        prefer.append(2)
+
+        #if len(ba) < len(bc):
+        #    prefer.append(0)
+        #elif len(bc) < len(ba):
+        #    prefer.append(1)
+        #else:
+        #    prefer.append(2)  # tie
+
+    triplets = torch.tensor(triplets_py, dtype=torch.long, device=device)
+    centers = triplets[:, 1].contiguous() if triplets.numel() else torch.empty((0,), dtype=torch.long, device=device)
+    prefer_side = torch.tensor(prefer, dtype=torch.uint8, device=device)
+
+    return RotationPrecomp(
+        triplets=triplets,
+        centers=centers,
+        branches_a=branches_a,
+        branches_c=branches_c,
+        prefer_side=prefer_side,
+    )
+
 
 def _augment_time_shift(
     x: torch.Tensor,             # (B,T_full,N,3)
-    a: torch.Tensor,             # (B,T_full,E,1)
     edge_index: torch.Tensor,    # (E,2) (not used here, kept for signature consistency / plotting)
     min_shift: int = 1,
     max_shift: int = 3,
@@ -5919,22 +6047,19 @@ def _augment_time_shift(
     # <^^^^ sample shifts <^^^^
 
     x_cut = deepof.clustering.model_utils_new._slice_time_per_sample(x, start, half_len)
-    a_cut = deepof.clustering.model_utils_new._slice_time_per_sample(a, start, half_len)
 
     if plot:
         # show what changed (note: this plots only the cut windows)
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(deepof.clustering.model_utils_new._slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
 
-    return x_cut, a_cut
+    return x_cut
 
 
 def _augment_angle_rotations(
     x: torch.Tensor,             # (B,T,N,3)
-    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
-    triplets: list,
-    adj: list,
+    rot_precomp: RotationPrecomp,
     n_rot: int = 3,
     max_rot: float = 30.0,
     p: float = 0.5,
@@ -5952,80 +6077,59 @@ def _augment_angle_rotations(
       - Rotations are vectorized across (B,T,...) with Torch ops.
     """
     B, T, N, _ = x.shape
-    if n_rot <= 0 or max_rot <= 0.0 or p <= 0.0 or len(triplets) == 0:
-        return x, a
-
-    # vvvvv helper: component(branch) from side when cutting at center vvvvv
-    def _branch_nodes(center: int, side: int):
-        # BFS/DFS over tiny graph (N=11); returns python list of node indices (excluding center)
-        seen = {side}
-        stack = [side]
-        while stack:
-            u = stack.pop()
-            for v in adj[u]:
-                if v == center or v in seen:
-                    continue
-                seen.add(v)
-                stack.append(v)
-        return list(seen)
-    # <^^^^ helper <^^^^
-
-    # Choose up to n_rot triplets with unique centers
-    perm = torch.randperm(len(triplets))
-    chosen = []
-    used_centers = set()
-    for k in perm.tolist():
-        a0, b0, c0 = triplets[k]
-        if b0 in used_centers:
-            continue
-        chosen.append((a0, b0, c0))
-        used_centers.add(b0)
-        if len(chosen) >= n_rot:
-            break
-
-    if len(chosen) == 0:
-        return x, a
+    M = int(rot_precomp.triplets.shape[0])
+    if n_rot <= 0 or max_rot <= 0.0 or p <= 0.0 or M == 0:
+        return x
 
     x_aug = x.clone()
     coords = x_aug[..., 0:2]  # (B,T,N,2)
 
     apply = (torch.rand(B, device=x.device) < p).to(x.dtype)  # (B,)
-
-    # vvvvv apply up to n_rot rotations vvvvv
     max_rad = float(max_rot) * math.pi / 180.0
-    for (a0, b0, c0) in chosen:
-        # Compute candidate branches for both sides
-        br_a = _branch_nodes(b0, a0)
-        br_c = _branch_nodes(b0, c0)
 
-        # Prefer rotating the smaller branch (more "articulated" / realistic)
-        if len(br_a) < len(br_c):
-            rot_list = br_a
-        elif len(br_c) < len(br_a):
-            rot_list = br_c
+    # choose up to n_rot triplets with unique centers (still a tiny Python loop)
+    perm = torch.randperm(M, device=x.device)
+    chosen_idx = []
+    center_count = torch.zeros(N, dtype=torch.int, device=x.device)
+    
+    # NOTE: this .tolist() is small (M is small for N=11), but you could avoid it later if needed
+    for k in perm.tolist():
+        b0 = int(rot_precomp.centers[k].item())
+        if center_count[b0] >= 2:
+            continue
+        center_count[b0] += 1
+        chosen_idx.append(k)
+        if len(chosen_idx) >= n_rot:
+            break
+
+    for k in chosen_idx:
+        a0, b0, c0 = rot_precomp.triplets[k].tolist()
+
+        pref = int(rot_precomp.prefer_side[k].item())
+        if pref == 0:
+            rot_nodes = rot_precomp.branches_a[k]
+        elif pref == 1:
+            rot_nodes = rot_precomp.branches_c[k]
         else:
-            rot_list = br_a if (torch.rand(1).item() < 0.5) else br_c
+            # tie
+            rot_nodes = rot_precomp.branches_a[k] if torch.rand((), device=x.device) < 0.5 else rot_precomp.branches_c[k]
 
-        # If something went odd, skip
-        if len(rot_list) == 0:
+        if rot_nodes.numel() == 0:
             continue
 
-        rot_nodes = torch.as_tensor(rot_list, device=x.device, dtype=torch.long)  # (K,)
-
-        # Per-sample rotation angle for THIS joint, constant over time
         theta = (torch.rand(B, device=x.device, dtype=x.dtype) * 2.0 - 1.0) * max_rad
         theta = theta * apply  # (B,)
 
-        cos_t = torch.cos(theta).view(B, 1, 1)  # (B,1,1)
+        cos_t = torch.cos(theta).view(B, 1, 1)
         sin_t = torch.sin(theta).view(B, 1, 1)
 
-        pivot = coords[:, :, b0, :].unsqueeze(2)            # (B,T,1,2)
-        pts = coords.index_select(dim=2, index=rot_nodes)   # (B,T,K,2)
-        rel = pts - pivot                                   # (B,T,K,2)
+        pivot = coords[:, :, b0, :].unsqueeze(2)                  # (B,T,1,2)
+        pts = coords.index_select(dim=2, index=rot_nodes)         # (B,T,K,2)
+        rel = pts - pivot                                         # (B,T,K,2)
 
         rx = rel[..., 0] * cos_t - rel[..., 1] * sin_t
         ry = rel[..., 0] * sin_t + rel[..., 1] * cos_t
-        new_pts = torch.stack([rx, ry], dim=-1) + pivot     # (B,T,K,2)
+        new_pts = torch.stack([rx, ry], dim=-1) + pivot           # (B,T,K,2)
 
         coords[:, :, rot_nodes, :] = new_pts
 
@@ -6035,13 +6139,11 @@ def _augment_angle_rotations(
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
 
-    a_aug = _recompute_edges(x_aug, edge_index)
-    return x_aug, a_aug
+    return x_aug
 
 
 def _augment_noise_xys(
     x: torch.Tensor,             # (B,T,N,3)
-    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
     sigma: float = 0.03,
     p: float = 0.5,
@@ -6054,7 +6156,7 @@ def _augment_noise_xys(
     Recomputes a from x after augmentation.
     """
     if sigma <= 0.0 or p <= 0.0:
-        return x, a
+        return x
 
     B, T, N, F = x.shape
     x_aug = x.clone()
@@ -6083,13 +6185,11 @@ def _augment_noise_xys(
         _plot_augmentation._edge_index = edge_index  # <----
         _plot_augmentation(x, x_aug)                 # <----
 
-    a_aug = _recompute_edges(x_aug, edge_index)      # <----
-    return x_aug, a_aug
+    return x_aug
 
 
 def _augment_linear_interpolate_segments(
     x: torch.Tensor,             # (B,T,N,3)
-    a: torch.Tensor,             # (B,T,E,1) (will be recomputed)
     edge_index: torch.Tensor,    # (E,2)
     min_len: int = 5,
     max_len: int = 15,
@@ -6101,11 +6201,11 @@ def _augment_linear_interpolate_segments(
     Applies to all node channels (x,y,speed). Recomputes a from x after augmentation.
     """
     if max_len <= 0 or p <= 0.0:
-        return x, a
+        return x
 
     B, T = x.size(0), x.size(1)
     if T < 3:
-        return x, a
+        return x
 
     x_aug = x.clone()
 
@@ -6159,18 +6259,16 @@ def _augment_linear_interpolate_segments(
         _plot_augmentation._edge_index = edge_index  # <----
         _plot_augmentation(x, x_aug)                 # <----
 
-    a_aug = _recompute_edges(x_aug, edge_index)  # <----
-    return x_aug, a_aug
+    return x_aug
 
 
 def _make_augmented_view(
     x: torch.Tensor,   # (B,T,N,3)
     a: torch.Tensor,   # (B,T,E,1)
     edge_index: torch.Tensor,
-    triplets: list,
-    adj: list,
+    rot_precomp: RotationPrecomp,
     min_shift: int = 1,
-    max_shift: int = 3,
+    max_shift: int = 6,
     p_shift: float = 0.8,
     n_rot: int =3,
     max_rot: int = 30, 
@@ -6185,13 +6283,12 @@ def _make_augmented_view(
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
     """
     x_aug_raw = x
-    a_aug_raw = a
 
-    x_aug, a_aug = _augment_time_shift(x_aug_raw, a_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
-    x_aug, a_aug = _augment_angle_rotations(x_aug, a_aug, edge_index, triplets, adj, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
-    x_aug, a_aug = _augment_linear_interpolate_segments(x_aug, a_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
-    x_aug, a_aug = _augment_noise_xys(x_aug, a_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+    x_aug = _augment_time_shift(x_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
+    x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
+    x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
+    x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
 
-
+    a_aug = _recompute_edges(x_aug, edge_index) 
 
     return x_aug, a_aug

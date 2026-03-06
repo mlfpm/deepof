@@ -153,9 +153,12 @@ class ContrastiveCfg:
     contrastive_loss_function: str = "nce"
     beta: float = 0.1
     tau: float = 0.1        
+    aug_min_shift: int = 1,
+    aug_max_shift: int = 6,
+    aug_p_shift: float = 0.8,
     aug_max_rot: int = 30, 
     aug_n_rot: int = 4, 
-    aug_p_rot: int = 0.8,
+    aug_p_rot: float = 0.8,
     aug_max_interp: int = 8,
     aug_min_interp: int = 3,         
     aug_p_interp: float = 0.3, 
