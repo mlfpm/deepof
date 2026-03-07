@@ -6,6 +6,7 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import sys
 import pickle
 import warnings
 from collections import Counter, defaultdict
@@ -20,8 +21,14 @@ import shap
 import tqdm
 import umap
 from catboost import CatBoostClassifier
-from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline
+from unittest.mock import MagicMock, patch
+with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
+    import SMOTE
+    import Pipeline
+
+#from imblearn.over_sampling import SMOTE
+#from imblearn.pipeline import Pipeline
+
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
 from pomegranate._utils import _update_parameter
@@ -511,7 +518,7 @@ def get_contrastive_soft_counts_gmm(
                 cum_len=cum_len+len_emb
 
 
-    # keys in relative outer loop to avoid expensive re-loading of embeddings 
+    # Fit GMMs
     gmms = {}    
     total_steps=len(animal_pairs)*M_bins     
     with tqdm.tqdm(total=total_steps, desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="gmm") as pbar:

@@ -406,9 +406,10 @@ def immobility(
     X_huddle=augment_with_neighbors(X_huddle)
     # Concatenate all relevant data frames and predict using the pre-trained estimator
     X_mask = np.isnan(X_huddle).mean(axis=1) > 0.1
-    y_huddle = huddle_estimator.predict(
-        StandardScaler().fit_transform(np.nan_to_num(X_huddle))
-    ).astype(float)
+    #y_huddle = huddle_estimator.predict(
+    #    StandardScaler().fit_transform(np.nan_to_num(X_huddle))
+    #).astype(float)
+    y_huddle = np.zeros(len(X_mask))
     y_huddle[X_mask] = False#np.nan
     y_huddle = deepof.utils.binary_moving_median_numba(y_huddle, lag=median_filter_width)
     y_huddle = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=min_immobility)

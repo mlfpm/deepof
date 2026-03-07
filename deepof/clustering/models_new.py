@@ -4768,15 +4768,15 @@ def embedding_model_fittingPT(
     tau: float = 0.1,
     # Contrastive augmentations
     aug_min_shift: int = 1,
-    aug_max_shift: int = 5,
-    aug_p_shift: int = 0.6,
+    aug_max_shift: int = 3,
+    aug_p_shift: int = 0.4,
     aug_max_rot: int = 30, 
     aug_n_rot: int = 3, 
-    aug_p_rot: int = 0.6,
+    aug_p_rot: int = 0.8,
     aug_max_interp: int = 8,
     aug_min_interp: int = 3,         
-    aug_p_interp: float = 0.3, 
-    aug_noise_sigma: float = 0.02,  
+    aug_p_interp: float = 0.4, 
+    aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 0.4, 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     

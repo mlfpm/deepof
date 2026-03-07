@@ -869,8 +869,8 @@ def embedding_per_video(
         )
     elif softcounts_extraction_method == "hierarchical":
 
-        soft_counts = get_contrastive_soft_counts_hierarchical(
-            coordinates, embeddings, window_size=window_size, distance_bp=distance_bp, states=states,
+        soft_counts = get_contrastive_soft_counts_dbscan(
+            coordinates, embeddings, animal_id, window_size=window_size, distance_bp=distance_bp, K_pose=states,
         )
     elif softcounts_extraction_method is not None:
         raise ValueError("For \"softcounts_extraction_method\" only \"gmm\" or \"hierarchical\" are supported!")
