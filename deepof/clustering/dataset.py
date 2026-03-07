@@ -31,11 +31,13 @@ class BatchDictDataset:
         h5_chunk_len: Optional[int] = None,
         return_angles: Optional[bool] = False,
         supervised_dict: Optional[Dict] = None,
+        read_only: bool = False,
     ):
         self.dataset_folder = dataset_folder
         self.dataset_name = dataset_name
         self.return_angles = return_angles
         self.supervised_dict = supervised_dict
+        self.read_only = read_only 
         
         # Determine if the dataset has angles
         self.has_angles = False
@@ -48,7 +50,7 @@ class BatchDictDataset:
         self.y_path = os.path.join(dataset_folder, dataset_name + 'y_data.h5')
         self.idx_path = os.path.join(dataset_folder, dataset_name + 'video_idx.npy')
 
-        self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len)
+        self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len, read_only=read_only)
 
 
     def _does_need_build(self, preprocessed_dict: Dict) -> Tuple[bool, str]:
@@ -124,19 +126,23 @@ class BatchDictDataset:
         except (OSError, KeyError) as e:
             return True, f"Error reading files: {e}"
 
-    def _init_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int], force_rebuild: bool = False):
+    def _init_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int], force_rebuild: bool = False, read_only: bool = False):
         os.makedirs(self.dataset_folder, exist_ok=True)
 
-        if force_rebuild:
-            need_build, reason = True, "Force rebuild requested"
-        else:
-            need_build, reason = self._does_need_build(preprocessed_dict)
+        if not read_only:
+            if force_rebuild:
+                need_build, reason = True, "Force rebuild requested"
+            else:
+                need_build, reason = self._does_need_build(preprocessed_dict)
 
-        if need_build:
-            print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
-            print(f"  Reason: {reason}")
-            self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
+            if need_build:
+                print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
+                print(f"  Reason: {reason}")
+                self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
+            else:
+                print(f"BatchDictDataset: reusing existing HDF5 at {self.dataset_folder}")
         else:
+            
             print(f"BatchDictDataset: reusing existing HDF5 at {self.dataset_folder}")
 
         with h5py.File(self.X_path, 'r') as f:

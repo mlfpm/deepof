@@ -4778,6 +4778,8 @@ def embedding_model_fittingPT(
     aug_p_interp: float = 0.4, 
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 0.4, 
+    # Dataset management 
+    h5_dataset_folder: Optional[str] = None,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
@@ -4889,7 +4891,16 @@ def embedding_model_fittingPT(
         aug_p_rot=aug_p_rot,
     )
 
-    return embedding_model_fitting(preprocessed_object, adjacency_matrix, meta_info, common_cfg=common_cfg, teacher_cfg=teacher_cfg, vade_cfg=vade_cfg, contrastive_cfg=contrastive_cfg)
+    return embedding_model_fitting(
+        preprocessed_object, 
+        adjacency_matrix,
+        meta_info,
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg, 
+        vade_cfg=vade_cfg,
+        contrastive_cfg=contrastive_cfg,
+        h5_dataset_folder=h5_dataset_folder,
+    )
 
 
 # Unified checkpoint paths per model/run
@@ -4910,6 +4921,7 @@ def embedding_model_fitting(
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
     contrastive_cfg: ContrastiveCfg,
+    h5_dataset_folder: str = None,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
@@ -4928,7 +4940,10 @@ def embedding_model_fitting(
     torch.manual_seed(common_cfg.seed)
     np.random.seed(common_cfg.seed)
 
-    data_path = os.path.join(common_cfg.output_path, "Datasets")
+    if h5_dataset_folder is None:
+        data_path = os.path.join(common_cfg.output_path, "Datasets")
+    else:
+        data_path = h5_dataset_folder
     preprocessed_train, preprocessed_val, supervised_train, supervised_val = preprocessed_object
     train_dataset = BatchDictDataset(
         preprocessed_train, data_path, "train_", force_rebuild=False,
