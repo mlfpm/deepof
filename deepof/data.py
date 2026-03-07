@@ -218,7 +218,7 @@ def load_project(
             smooth_alpha=smooth_alpha,
             table_format=table_extension,
             video_format=video_extension,
-            video_scale=coordinates._arena_dims,
+            video_scale=str(coordinates._arena_dims)+ " mm",
             number_of_rois = number_of_rois,
             fast_implementations_threshold=fast_implementations_threshold,
         )
