@@ -22,12 +22,8 @@ import tqdm
 import umap
 from catboost import CatBoostClassifier
 from unittest.mock import MagicMock, patch
-with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
-    import SMOTE
-    import Pipeline
-
-#from imblearn.over_sampling import SMOTE
-#from imblearn.pipeline import Pipeline
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
@@ -571,6 +567,293 @@ def get_contrastive_soft_counts_gmm(
                 block = slice(base + bin*K_pose, base + (bin+1)*K_pose)
                 P[dist_indices_dict[animal_pair][bin][key], block] = R
 
+        P = P / P.sum(axis=1, keepdims=True)
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
+
+    return deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
+    """Convert boolean mask (T,) into list of contiguous (start, end) runs where mask==True."""
+    mask = np.asarray(mask, dtype=bool)
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return []
+    # break points where consecutive indices differ by >1
+    cut = np.where(np.diff(idx) > 1)[0]
+    runs = []
+    s = idx[0]
+    for c in cut:
+        e = idx[c] + 1
+        if (e - s) >= min_len:
+            runs.append((int(s), int(e)))
+        s = idx[c + 1]
+    e = idx[-1] + 1
+    if (e - s) >= min_len:
+        runs.append((int(s), int(e)))
+    return runs
+
+
+def _sample_fixed_length_clips(
+    segments,
+    *,
+    clip_len: int,
+    max_total_windows: int,
+    seed: int = 0,
+    max_clips_per_segment: int = 5,
+):
+    """
+    segments: list of (L_i, D) arrays
+    returns: X_clips (N, clip_len, D) float32, or None if insufficient data
+    """
+    rng = np.random.default_rng(seed)
+
+    segments = [s for s in segments if s is not None and s.ndim == 2 and s.shape[0] >= clip_len]
+    if len(segments) == 0:
+        return None
+
+    rng.shuffle(segments)
+    clips = []
+    total = 0
+
+    for seg in segments:
+        L = seg.shape[0]
+        n_possible = L - clip_len + 1
+        if n_possible <= 0:
+            continue
+
+        # sample a few clips from each segment to increase diversity
+        n_take = min(max_clips_per_segment, n_possible)
+        starts = rng.integers(0, n_possible, size=n_take)
+
+        for st in starts:
+            if total + clip_len > max_total_windows:
+                break
+            clip = seg[st:st + clip_len].astype(np.float32, copy=False)
+            clips.append(clip)
+            total += clip_len
+
+        if total + clip_len > max_total_windows:
+            break
+
+    if len(clips) == 0:
+        return None
+
+    return np.stack(clips, axis=0).astype(np.float32, copy=False)
+
+
+def _fit_hmm_on_segments_pome104(
+    segments,
+    n_states: int,
+    *,
+    covariance_type: str = "diag",
+    random_state: int = 0,
+    max_train_windows: int = 200000,
+    train_clip_len: int = 200,
+    max_clips_per_segment: int = 5,
+):
+    """
+    Fit HMM on fixed-length clips sampled from segments.
+    This avoids padding and is much more stable in pomegranate 1.0.4.
+    """
+    X = _sample_fixed_length_clips(
+        segments,
+        clip_len=int(train_clip_len),
+        max_total_windows=int(max_train_windows),
+        seed=int(random_state),
+        max_clips_per_segment=int(max_clips_per_segment),
+    )
+    if X is None:
+        return None
+
+    # If you have too few clips relative to states, fitting can get unstable.
+    if X.shape[0] < max(10, int(n_states)):
+        return None
+
+    hmm = DenseHMM([Normal(covariance_type=covariance_type) for _ in range(int(n_states))])
+
+    Xt = torch.from_numpy(X)  # (N, T, D)
+
+    # Important: in pomegranate 1.0.x, X is often treated as a list of feature blocks.
+    # Passing [Xt] is the safe way to ensure it is interpreted as one feature block.
+    try:
+        hmm = hmm.fit([Xt])
+    except Exception:
+        # fallback to diag cov if something else was requested
+        if covariance_type != "diag":
+            hmm = DenseHMM([Normal(covariance_type="diag") for _ in range(int(n_states))])
+            hmm = hmm.fit([Xt])
+        else:
+            return None
+
+    return hmm
+
+
+def _predict_segment_posteriors_pome104(hmm: DenseHMM, seg: np.ndarray) -> np.ndarray:
+    """
+    seg: (L, D) -> returns (L, K)
+    """
+    seg = seg.astype(np.float32, copy=False)
+    Xt = torch.from_numpy(seg[None, :, :])  # (1, L, D)
+    post = hmm.predict_proba(Xt)[0]       # (L, K)
+    return np.asarray(post, dtype=np.float32)
+
+
+def get_contrastive_soft_counts_hmm(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],     # key -> (T_windows, D) OR TableDict-like
+    animal_ids: list,
+    *,
+    window_size: int = 12,
+    K_pose: int = 8,                      # HMM states per distance bin
+    M_bins: int = 3,
+    binning: str = "quantile",
+    fixed_edges: Optional[list] = None,
+    sample_size: int = 200000,            # max total windows used to train each bin-HMM
+    random_state: int = 0,
+    distance_bp: str = "Center",
+    covariance_type: str = "full",
+    min_segment_len: int = 6,             # important: too short segments won't help an HMM
+    smoothing: float = 1e-4,
+    cache_embeddings: bool = True,
+):
+    """
+    Distance-gated HMM decoder:
+      1) compute per-window pairwise distance
+      2) bin windows into M distance regimes
+      3) for each (pair, bin): collect contiguous within-bin segments and fit an HMM with K_pose states
+      4) decode each experiment by running predict_proba on each contiguous segment and writing into block
+      5) output (T, len(pairs)*M_bins*K_pose) soft counts
+
+    This enforces "distance first, then temporal pose state" by construction.
+    """
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # Optional caching to avoid repeated disk I/O via get_dt
+    if cache_embeddings:
+        Z_by_key = {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
+    else:
+        Z_by_key = None
+
+    # Distances
+    dist_series_dict = get_pairwise_distances(coordinates, window_size, distance_bp=distance_bp)
+
+    animal_pairs = list(combinations(list(animal_ids), 2))
+    desc_loading_final = "Get dist. gated soft counts (HMM)"
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        animal_pairs = [animal_ids[0]]
+        M_bins = 1
+        desc_loading_final = "Get soft counts (HMM)"
+
+    # ---- Build bin edges + per-key masks ----
+    edges = {}
+    dist_indices_dict = {}
+
+    for animal_pair in animal_pairs:
+        all_dw = [dist_series_dict[key][animal_pair] for key in keys]
+        full_dw = np.concatenate(all_dw)
+
+        if binning == "quantile":
+            qs = np.linspace(0, 1, M_bins + 1)
+            e = np.nanquantile(full_dw, qs).astype(np.float64)
+            e[0] = -np.inf
+            e[-1] = np.inf
+            edges[animal_pair] = e
+        elif binning == "fixed":
+            if fixed_edges is None or len(fixed_edges) != (M_bins + 1):
+                raise ValueError("fixed_edges must be length M_bins+1")
+            e = np.asarray(fixed_edges, dtype=np.float64)
+            e[0], e[-1] = -np.inf, np.inf
+            edges[animal_pair] = e
+        else:
+            raise ValueError('binning must be "quantile" or "fixed"')
+
+        dist_indices_dict[animal_pair] = {}
+        for b in range(M_bins):
+            # global in-bin mask over concatenated distances
+            in_bin = (full_dw > edges[animal_pair][b]) & (full_dw <= edges[animal_pair][b + 1])
+
+            # split back to keys
+            dist_indices_dict[animal_pair][b] = {}
+            cum_len = 0
+            for key in keys:
+                len_emb = get_dt(embeddings, key, only_metainfo=True)["shape"][0]
+                assert len(dist_series_dict[key][animal_pair]) == len_emb, (
+                    "Windowed distances must match embedding length. Check window_size!"
+                )
+                dist_indices_dict[animal_pair][b][key] = in_bin[cum_len:cum_len + len_emb]
+                cum_len += len_emb
+
+    # ---- Fit one HMM per (pair, bin) ----
+    hmms = {}
+    total_steps = len(animal_pairs) * M_bins
+    with tqdm.tqdm(total=total_steps, desc=f"{'Fit HMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="hmm") as pbar:
+        for pair_idx, animal_pair in enumerate(animal_pairs):
+            hmms[animal_pair] = []
+            for b in range(M_bins):
+                # collect contiguous segments across all keys for this bin
+                segments = []
+                for key in keys:
+                    Z = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
+                    mask = dist_indices_dict[animal_pair][b][key]
+                    for s, e in _mask_to_runs(mask, min_len=min_segment_len):
+                        segments.append(Z[s:e, :])
+
+                hmm = _fit_hmm_on_segments_pome104(
+                    segments,
+                    n_states=K_pose,
+                    covariance_type=covariance_type,
+                    random_state=int(random_state + 17 * b + 3 * pair_idx),
+                    max_train_windows=int(sample_size),
+                    train_clip_len=200,
+                    max_clips_per_segment=5,
+                )
+                hmms[animal_pair].append(hmm)
+                pbar.update(1)
+
+    # ---- Decode per key ----
+    K_total = int(M_bins) * int(K_pose) * len(animal_pairs)
+    soft_counts_out = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
+    for key in tqdm.tqdm(keys, desc=f"{desc_loading_final:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z0 = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
+        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
+
+        for pair_idx, animal_pair in enumerate(animal_pairs):
+            base = pair_idx * (M_bins * K_pose)
+
+            for b in range(M_bins):
+                hmm = hmms[animal_pair][b]
+                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
+                mask = dist_indices_dict[animal_pair][b][key]
+
+                # If fitting failed / no data, fall back to uniform within this block
+                if hmm is None:
+                    if np.any(mask):
+                        P[mask, block] = 1.0 / float(K_pose)
+                    continue
+
+                # Decode each contiguous segment with temporal smoothing
+                for s, e in _mask_to_runs(mask, min_len=2):
+                    seg = Z0[s:e, :]
+                    post = _predict_segment_posteriors_pome104(hmm, seg)
+                    P[s:e, block] = post
+                    if post.shape[1] != K_pose:
+                        # defensive fallback
+                        post = np.full((seg.shape[0], K_pose), 1.0 / float(K_pose), dtype=np.float32)
+                    P[s:e, block] = post
+
+        # global row-normalization
         P = P / P.sum(axis=1, keepdims=True)
         soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
 
