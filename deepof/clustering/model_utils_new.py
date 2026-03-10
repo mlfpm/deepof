@@ -693,11 +693,12 @@ def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
     model: str,
+    supervised_annotations: table_dict = None,
     scale: str = "standard",
     animal_id: str = None,
     global_scaler: Any = None,
     softcounts_extraction_method = None,
-    distance_bp: str = "Center",
+    embedding_gates: str = "Center",
     states: int = 24,
 	samples_max: int = 227272,
     **kwargs,
@@ -708,6 +709,7 @@ def embedding_per_video(
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         pretrained (bool): whether to use the specified pretrained model to recluster the data.
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
@@ -739,7 +741,7 @@ def embedding_per_video(
     # The contrastive model only consists out of an encoder and hence needs additional soft_counts extraction
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if contrastive and softcounts_extraction_method is None:
-        softcounts_extraction_method = "gmm"
+        softcounts_extraction_method = "hmm"
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
     
@@ -865,12 +867,12 @@ def embedding_per_video(
     if softcounts_extraction_method == "gmm":
 
         soft_counts = deepof.post_hoc.get_contrastive_soft_counts_gmm(
-            coordinates, embeddings, animal_id, window_size=window_size, distance_bp=distance_bp, K_pose=states,
+            coordinates, embeddings, animal_id, supervised_annotations=supervised_annotations, window_size=window_size, embedding_gates=embedding_gates, K_pose=states,
         )
-    elif softcounts_extraction_method == "hierarchical":
+    elif softcounts_extraction_method == "hmm":
 
-        soft_counts = get_contrastive_soft_counts_dbscan(
-            coordinates, embeddings, animal_id, window_size=window_size, distance_bp=distance_bp, K_pose=states,
+        soft_counts = deepof.post_hoc.get_contrastive_soft_counts_hmm(
+            coordinates, embeddings, animal_id, supervised_annotations=supervised_annotations, window_size=window_size, embedding_gates=embedding_gates, K_pose=states,
         )
     elif softcounts_extraction_method is not None:
         raise ValueError("For \"softcounts_extraction_method\" only \"gmm\" or \"hierarchical\" are supported!")
@@ -901,6 +903,27 @@ def _slice_time_per_sample(
     t_idx = start[:, None] + torch.arange(length, device=x.device)[None, :]  # (B,L)
     b_idx = torch.arange(B, device=x.device)[:, None]                       # (B,1)
     return x[b_idx, t_idx]  # advanced indexing -> (B,L,...)
+
+
+@torch.no_grad()
+def _materialize_encoder(model, x_shape, a_shape, device):
+    """
+    Run a tiny encoder forward pass to force lazy modules (CensNetConvPT) to build
+    their Parameters so load_state_dict can actually load them.
+    """
+
+    T, N, F = x_shape
+    T2, E, EF = a_shape
+    assert T == T2
+
+    x = torch.zeros((1, T, N, F), device=device, dtype=torch.float32)
+    a = torch.zeros((1, T, E, EF), device=device, dtype=torch.float32)
+
+    # Make sure there's at least one non-zero timestep (guards any masking logic)
+    x[:, 0, 0, 0] = 1.0
+    a[:, 0, 0, 0] = 1.0
+
+    _ = model.encoder(x, a)   # sufficient to build encoder.spatial_gnn_block params
 
 
 def load_model_from_ckpt(path: str, device=None, strict: bool = False):
@@ -975,6 +998,8 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
         raise ValueError(f"Unknown model_name in rebuild_spec: {model_name}")
 
     model.to(device)
+    model.eval()
+    _materialize_encoder(model, tuple(spec["x_shape"]), tuple(spec["a_shape"]), device)
     rep = model.load_state_dict(state, strict=strict)
     model.eval()
 

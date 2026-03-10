@@ -367,7 +367,9 @@ def get_contrastive_soft_counts(
 def get_pairwise_distances(
     coordinates,
     window_len: int, 
-    distance_bp: str = "Nose",
+    supervised_annotations: table_dict = None,
+    embedding_gates: str = "Nose",
+    behavior_combinations: bool = True,
 ) -> Optional[Dict[str, Dict[Tuple[str, str], np.ndarray]]]:
     """
     Build pairwise distances between animals for a given bodypart (if N_animals > 1 and < 5).
@@ -381,29 +383,42 @@ def get_pairwise_distances(
         out[key][(aid1, aid2)] = np.ndarray shape (T_frames,) with distances.
     """
 
+    # minimal preprocessing
     animal_ids = coordinates._animal_ids
+    embedding_gates = set(embedding_gates)
 
     # Don't do gating for too few or too many animals
-    get_distances=True
-    if not animal_ids or len(animal_ids) < 2:
-        get_distances=False
-    if len(animal_ids) > 4:
-        print(f"[distance gating] Skipping: {len(animal_ids)} animals (supports up to 4).")
-        get_distances=False
+    gating=None
+    if animal_ids and len(animal_ids) <= 4 and supervised_annotations is None and len(embedding_gates)==1:
+        gating="distances"
+        animal_pairs = list(combinations(list(animal_ids), 2))
 
-    pairs = list(combinations(list(animal_ids), 2))
+    elif animal_ids and supervised_annotations is not  None:
+        gating="behaviors"
+        first_key=list(supervised_annotations.keys())[0]
+        available_behaviors=set(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
+        embedding_gates = embedding_gates & available_behaviors
+        if len(embedding_gates) < 1:
+            print(f"[distance gating] Skipping: No valid bheaviors given!")
+            gating = None
+
+        #print(f"[distance gating] Skipping: {len(animal_ids)} animals (supports up to 4).")
+
+
+
+
     out = {}
 
     for key in coordinates._tables.keys():
-        tab = coordinates._tables[key]
+        tab = get_dt(coordinates._tables, key)
         out[key] = {}
-        if get_distances:
-            for a_id, b_id in pairs:
-                ax, ay = tab[(f"{a_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{a_id}_{distance_bp}", "y")].to_numpy(np.float64)
-                bx, by = tab[(f"{b_id}_{distance_bp}", "x")].to_numpy(np.float64), tab[(f"{b_id}_{distance_bp}", "y")].to_numpy(np.float64)
+        if gating == "distances":
+            for a_id, b_id in animal_pairs:
+                ax, ay = tab[(f"{a_id}_{embedding_gates}", "x")].to_numpy(np.float64), tab[(f"{a_id}_{embedding_gates}", "y")].to_numpy(np.float64)
+                bx, by = tab[(f"{b_id}_{embedding_gates}", "x")].to_numpy(np.float64), tab[(f"{b_id}_{embedding_gates}", "y")].to_numpy(np.float64)
                 dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
 
-                # imute gaps linearily
+                # impute gaps linearily
                 idx = np.arange(dist_raw.size)
                 mask = ~np.isnan(dist_raw)
                 dist_raw = np.interp(idx, idx[mask], dist_raw[mask]).astype(np.float32)
@@ -412,6 +427,24 @@ def get_pairwise_distances(
                 dist_win = np.convolve(dist_raw, np.ones(window_len, dtype=np.float32) / window_len, mode="valid")
 
                 out[key][(a_id, b_id)] = dist_win
+        elif gating == "behaviors":
+            sup = get_dt(supervised_annotations, key)
+            behavior_combs = []
+            for beh in embedding_gates:
+                
+                behavior_col_raw = sup[beh].to_numpy()
+                behavior_col = (np.convolve(behavior_col_raw, np.ones(window_len, dtype=np.float32), mode="valid")>0).astype(int)
+                if not behavior_combinations:
+                    out[key][beh] = behavior_col
+                else:
+                    behavior_combs.append(behavior_col)
+            if behavior_combinations:
+                # Get unique numbers for all possible combinations
+                arr=np.array(behavior_combs)
+                powers = 2 ** np.arange(len(behavior_combs)) 
+                out[key]['behavior_combinations'] = np.dot(powers, arr)
+
+                
         else:
             
             out[key][""] = np.convolve(np.ones(tab.shape[0], dtype=np.float32), np.ones(window_len, dtype=np.float32) / window_len, mode="valid")
@@ -424,6 +457,7 @@ def get_contrastive_soft_counts_gmm(
     embeddings: Dict[str, np.ndarray],     # key -> (T_windows, D)
     animal_ids: list,
     *,
+    supervised_annotations: table_dict = None,
     window_size: int = 12,                 # must match embedding windowing
     K_pose: int = 8,                     # clusters within each distance bin
     M_bins: int = 3,                      # near/mid/far
@@ -432,7 +466,7 @@ def get_contrastive_soft_counts_gmm(
     reg_covar: float = 1e-5,
     sample_size: int = 200000,
     random_state: int = 0,
-    distance_bp: str = "Center",
+    embedding_gates: str = "Center",
 ):
     """
     Distance-gated decoder:
@@ -450,14 +484,20 @@ def get_contrastive_soft_counts_gmm(
     if animal_ids is None:
         animal_ids = coordinates._animal_ids
 
+    if len(set(embedding_gates))>1:
+        M_bins=2**len(set(embedding_gates))
+
     # ---- build frame-level distances dict from tables ----
     dist_series_dict = get_pairwise_distances(
-        coordinates, window_size, distance_bp=distance_bp
+        coordinates, window_size, supervised_annotations, embedding_gates=embedding_gates
     )
-    animal_pairs = list(combinations(list(animal_ids), 2))
+
+    first_key=list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
     desc_loading_final = 'Get dist. gated soft counts'
     if len(animal_ids)==1 or len(animal_ids)>4:
-        animal_pairs=[animal_ids[0]]
+        gates=[animal_ids[0]]
         M_bins = 1
         desc_loading_final = 'Get soft counts'
 
@@ -465,33 +505,38 @@ def get_contrastive_soft_counts_gmm(
     edges = {}
     dist_indices_dict = {}
     fit_indices_dict = {}
-    for animal_pair in animal_pairs:
+    for gate in gates:
         all_dw =[]
-        dist_indices_dict[animal_pair] = {}
-        fit_indices_dict[animal_pair] = {}
+        dist_indices_dict[gate] = {}
+        fit_indices_dict[gate] = {}
         # Collect 
         for key in keys:
             
-            all_dw.append(dist_series_dict[key][animal_pair])
+            all_dw.append(dist_series_dict[key][gate])
 
         full_dw=np.concatenate(all_dw)
             
         if binning == "quantile":
-            qs = np.linspace(0, 1, M_bins + 1)
-            edges[animal_pair] = np.nanquantile(full_dw, qs).astype(np.float64)
-            edges[animal_pair][0] = -np.inf
-            edges[animal_pair][-1] = np.inf
+            if supervised_annotations is None:
+                qs = np.linspace(0, 1, M_bins + 1)
+                e = np.nanquantile(full_dw, qs).astype(np.float64)
+            else:
+                e = np.zeros(M_bins + 1)
+                e[1:-1] = np.linspace(0.5, M_bins-1.5,M_bins-1)
+            e[0] = -np.inf
+            e[-1] = np.inf
+            edges[gate] = e
         elif binning == "fixed":
             if fixed_edges is None or len(fixed_edges) != (M_bins + 1):
                 raise ValueError("fixed_edges must be length M_bins+1")
-            edges[animal_pair] = np.asarray(fixed_edges, dtype=np.float64)
-            edges[animal_pair][0], edges[animal_pair][-1] = -np.inf, np.inf    
+            edges[gate] = np.asarray(fixed_edges, dtype=np.float64)
+            edges[gate][0], edges[gate][-1] = -np.inf, np.inf    
             
 
         for bin in range(M_bins):
             # Get distances within current bin (This will also autmatically 
             # handle NaNs as they are always false and hence get excluded)
-            in_bin = (full_dw>edges[animal_pair][bin]) & (full_dw<=edges[animal_pair][bin+1])
+            in_bin = (full_dw>edges[gate][bin]) & (full_dw<=edges[gate][bin+1])
             
             # Only allow up to sample_size samples in bin
             in_bin_sample = in_bin.copy()
@@ -501,25 +546,25 @@ def get_contrastive_soft_counts_gmm(
                 t_mask[np.random.choice(s, sample_size, replace=False)] = True
                 in_bin_sample[in_bin_sample] = t_mask
             
-            dist_indices_dict[animal_pair][bin] = {}
-            fit_indices_dict[animal_pair][bin] = {}
+            dist_indices_dict[gate][bin] = {}
+            fit_indices_dict[gate][bin] = {}
             cum_len=0
             for key in keys:
                 len_emb=get_dt(embeddings, key, only_metainfo=True)["shape"][0]
-                assert len(dist_series_dict[key][animal_pair]) == len_emb, "Error! Windowed distances mist match embedding length! Check Window length input!"
+                assert len(dist_series_dict[key][gate]) == len_emb, "Error! Windowed distances mist match embedding length! Check Window length input!"
 
-                dist_indices_dict[animal_pair][bin][key] = in_bin[cum_len:cum_len+len_emb]
-                fit_indices_dict[animal_pair][bin][key] = in_bin_sample[cum_len:cum_len+len_emb]
+                dist_indices_dict[gate][bin][key] = in_bin[cum_len:cum_len+len_emb]
+                fit_indices_dict[gate][bin][key] = in_bin_sample[cum_len:cum_len+len_emb]
 
                 cum_len=cum_len+len_emb
 
 
     # Fit GMMs
     gmms = {}    
-    total_steps=len(animal_pairs)*M_bins     
+    total_steps=len(gates)*M_bins     
     with tqdm.tqdm(total=total_steps, desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="gmm") as pbar:
-        for pair_idx, animal_pair in enumerate(animal_pairs):
-            gmms[animal_pair] = []
+        for gate_idx, gate in enumerate(gates):
+            gmms[gate] = []
 
             for bin in range(M_bins):
 
@@ -527,7 +572,7 @@ def get_contrastive_soft_counts_gmm(
                 for key in keys:
                     Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
 
-                    Zs.append(Z[fit_indices_dict[animal_pair][bin][key],:])
+                    Zs.append(Z[fit_indices_dict[gate][bin][key],:])
 
                 gmm_embeddings=np.concatenate(Zs)
         
@@ -535,18 +580,18 @@ def get_contrastive_soft_counts_gmm(
                     n_components=int(K_pose),
                     covariance_type="full",
                     reg_covar=float(reg_covar),
-                    random_state=int(random_state + 17 * bin + 3*pair_idx),
+                    random_state=int(random_state + 17 * bin + 3*gate_idx),
                     init_params="kmeans",
                     max_iter=200,
                     tol=1e-3,
                 ).fit(gmm_embeddings)
         
-                gmms[animal_pair].append(gmm)
+                gmms[gate].append(gmm)
                 pbar.update(1)
         
     
     # ---- 4) Decode per key ----
-    K_total = int(M_bins) * int(K_pose) * len(animal_pairs)
+    K_total = int(M_bins) * int(K_pose) * len(gates)
     soft_counts_out = {}
     table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")  
 
@@ -554,18 +599,21 @@ def get_contrastive_soft_counts_gmm(
         Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
         P = np.full((Z0.shape[0], K_total), 1e-4, dtype=np.float32)
 
-        for pair_idx, animal_pair in enumerate(animal_pairs):
+        for gate_idx, gate in enumerate(gates):
         
             for bin in range(M_bins):
 
-                Z = Z0[dist_indices_dict[animal_pair][bin][key],:]    
-                gmm = gmms[animal_pair][bin]
+                Z = Z0[dist_indices_dict[gate][bin][key],:]    
+                gmm = gmms[gate][bin]
 
+                if Z.shape[0]==0:
+                    print("skipped!")
+                    continue
                 R = gmm.predict_proba(Z).astype(np.float32, copy=False)
 
-                base = pair_idx * (M_bins * K_pose)
+                base = gate_idx * (M_bins * K_pose)
                 block = slice(base + bin*K_pose, base + (bin+1)*K_pose)
-                P[dist_indices_dict[animal_pair][bin][key], block] = R
+                P[dist_indices_dict[gate][bin][key], block] = R
 
         P = P / P.sum(axis=1, keepdims=True)
         soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
@@ -681,15 +729,15 @@ def _fit_hmm_on_segments_pome104(
 
     # Important: in pomegranate 1.0.x, X is often treated as a list of feature blocks.
     # Passing [Xt] is the safe way to ensure it is interpreted as one feature block.
-    try:
-        hmm = hmm.fit([Xt])
-    except Exception:
-        # fallback to diag cov if something else was requested
-        if covariance_type != "diag":
-            hmm = DenseHMM([Normal(covariance_type="diag") for _ in range(int(n_states))])
-            hmm = hmm.fit([Xt])
-        else:
-            return None
+    #try:
+    hmm = hmm.fit([Xt])
+    #except Exception:
+    #    # fallback to diag cov if something else was requested
+    #    if covariance_type != "diag":
+    #        hmm = DenseHMM([Normal(covariance_type="diag") for _ in range(int(n_states))])
+    #        hmm = hmm.fit([Xt])
+    #    else:
+    #        return None
 
     return hmm
 
@@ -709,6 +757,7 @@ def get_contrastive_soft_counts_hmm(
     embeddings: Dict[str, np.ndarray],     # key -> (T_windows, D) OR TableDict-like
     animal_ids: list,
     *,
+    supervised_annotations: table_dict = None,
     window_size: int = 12,
     K_pose: int = 8,                      # HMM states per distance bin
     M_bins: int = 3,
@@ -716,13 +765,16 @@ def get_contrastive_soft_counts_hmm(
     fixed_edges: Optional[list] = None,
     sample_size: int = 200000,            # max total windows used to train each bin-HMM
     random_state: int = 0,
-    distance_bp: str = "Center",
+    embedding_gates: str = "Center",
     covariance_type: str = "full",
     min_segment_len: int = 6,             # important: too short segments won't help an HMM
     smoothing: float = 1e-4,
     cache_embeddings: bool = True,
 ):
     """
+
+    supervised_annotations (table_dict): table dict with supervised annotations per experiment.
+
     Distance-gated HMM decoder:
       1) compute per-window pairwise distance
       2) bin windows into M distance regimes
@@ -744,13 +796,18 @@ def get_contrastive_soft_counts_hmm(
     else:
         Z_by_key = None
 
-    # Distances
-    dist_series_dict = get_pairwise_distances(coordinates, window_size, distance_bp=distance_bp)
+    if len(set(embedding_gates))>1:
+        M_bins=2**len(set(embedding_gates))
 
-    animal_pairs = list(combinations(list(animal_ids), 2))
+    # Distances
+    dist_series_dict = get_pairwise_distances(coordinates,  window_size, supervised_annotations, embedding_gates=embedding_gates)
+
+    first_key=list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
     desc_loading_final = "Get dist. gated soft counts (HMM)"
     if len(animal_ids) == 1 or len(animal_ids) > 4:
-        animal_pairs = [animal_ids[0]]
+        gates = [animal_ids[0]]
         M_bins = 1
         desc_loading_final = "Get soft counts (HMM)"
 
@@ -758,53 +815,57 @@ def get_contrastive_soft_counts_hmm(
     edges = {}
     dist_indices_dict = {}
 
-    for animal_pair in animal_pairs:
-        all_dw = [dist_series_dict[key][animal_pair] for key in keys]
+    for gate in gates:
+        all_dw = [dist_series_dict[key][gate] for key in keys]
         full_dw = np.concatenate(all_dw)
 
         if binning == "quantile":
-            qs = np.linspace(0, 1, M_bins + 1)
-            e = np.nanquantile(full_dw, qs).astype(np.float64)
+            if supervised_annotations is None:
+                qs = np.linspace(0, 1, M_bins + 1)
+                e = np.nanquantile(full_dw, qs).astype(np.float64)
+            else:
+                e = np.zeros(M_bins + 1)
+                e[1:-1] = np.linspace(0.5, M_bins-1.5,M_bins-1)
             e[0] = -np.inf
             e[-1] = np.inf
-            edges[animal_pair] = e
+            edges[gate] = e
         elif binning == "fixed":
             if fixed_edges is None or len(fixed_edges) != (M_bins + 1):
                 raise ValueError("fixed_edges must be length M_bins+1")
             e = np.asarray(fixed_edges, dtype=np.float64)
             e[0], e[-1] = -np.inf, np.inf
-            edges[animal_pair] = e
+            edges[gate] = e
         else:
             raise ValueError('binning must be "quantile" or "fixed"')
 
-        dist_indices_dict[animal_pair] = {}
+        dist_indices_dict[gate] = {}
         for b in range(M_bins):
             # global in-bin mask over concatenated distances
-            in_bin = (full_dw > edges[animal_pair][b]) & (full_dw <= edges[animal_pair][b + 1])
+            in_bin = (full_dw > edges[gate][b]) & (full_dw <= edges[gate][b + 1])
 
             # split back to keys
-            dist_indices_dict[animal_pair][b] = {}
+            dist_indices_dict[gate][b] = {}
             cum_len = 0
             for key in keys:
                 len_emb = get_dt(embeddings, key, only_metainfo=True)["shape"][0]
-                assert len(dist_series_dict[key][animal_pair]) == len_emb, (
+                assert len(dist_series_dict[key][gate]) == len_emb, (
                     "Windowed distances must match embedding length. Check window_size!"
                 )
-                dist_indices_dict[animal_pair][b][key] = in_bin[cum_len:cum_len + len_emb]
+                dist_indices_dict[gate][b][key] = in_bin[cum_len:cum_len + len_emb]
                 cum_len += len_emb
 
     # ---- Fit one HMM per (pair, bin) ----
     hmms = {}
-    total_steps = len(animal_pairs) * M_bins
+    total_steps = len(gates) * M_bins
     with tqdm.tqdm(total=total_steps, desc=f"{'Fit HMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="hmm") as pbar:
-        for pair_idx, animal_pair in enumerate(animal_pairs):
-            hmms[animal_pair] = []
+        for gate_idx, gate in enumerate(gates):
+            hmms[gate] = []
             for b in range(M_bins):
                 # collect contiguous segments across all keys for this bin
                 segments = []
                 for key in keys:
                     Z = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
-                    mask = dist_indices_dict[animal_pair][b][key]
+                    mask = dist_indices_dict[gate][b][key]
                     for s, e in _mask_to_runs(mask, min_len=min_segment_len):
                         segments.append(Z[s:e, :])
 
@@ -812,16 +873,16 @@ def get_contrastive_soft_counts_hmm(
                     segments,
                     n_states=K_pose,
                     covariance_type=covariance_type,
-                    random_state=int(random_state + 17 * b + 3 * pair_idx),
+                    random_state=int(random_state + 17 * b + 3 * gate_idx),
                     max_train_windows=int(sample_size),
                     train_clip_len=200,
                     max_clips_per_segment=5,
                 )
-                hmms[animal_pair].append(hmm)
+                hmms[gate].append(hmm)
                 pbar.update(1)
 
     # ---- Decode per key ----
-    K_total = int(M_bins) * int(K_pose) * len(animal_pairs)
+    K_total = int(M_bins) * int(K_pose) * len(gates)
     soft_counts_out = {}
     table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
 
@@ -829,13 +890,13 @@ def get_contrastive_soft_counts_hmm(
         Z0 = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
         P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
 
-        for pair_idx, animal_pair in enumerate(animal_pairs):
-            base = pair_idx * (M_bins * K_pose)
+        for gate_idx, gate in enumerate(gates):
+            base = gate_idx * (M_bins * K_pose)
 
             for b in range(M_bins):
-                hmm = hmms[animal_pair][b]
+                hmm = hmms[gate][b]
                 block = slice(base + b * K_pose, base + (b + 1) * K_pose)
-                mask = dist_indices_dict[animal_pair][b][key]
+                mask = dist_indices_dict[gate][b][key]
 
                 # If fitting failed / no data, fall back to uniform within this block
                 if hmm is None:
@@ -849,9 +910,10 @@ def get_contrastive_soft_counts_hmm(
                     post = _predict_segment_posteriors_pome104(hmm, seg)
                     P[s:e, block] = post
                     if post.shape[1] != K_pose:
-                        # defensive fallback
-                        post = np.full((seg.shape[0], K_pose), 1.0 / float(K_pose), dtype=np.float32)
-                    P[s:e, block] = post
+                        print("oddity!")
+                    #    # defensive fallback
+                    #    post = np.full((seg.shape[0], K_pose), 1.0 / float(K_pose), dtype=np.float32)
+                    #P[s:e, block] = post
 
         # global row-normalization
         P = P / P.sum(axis=1, keepdims=True)
@@ -1064,7 +1126,7 @@ def get_time_on_cluster(
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
         #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
-        hard_counts = np.argmax(preloaded[key], axis=1)
+        hard_counts = deepof.utils.row_nanargmax(preloaded[key])
 
         if roi_number is not None:
             hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
@@ -1072,7 +1134,7 @@ def get_time_on_cluster(
         
         
         # Create dictionary with number of bin_occurences per bin
-        hard_count_counters[key] = Counter(hard_counts)
+        hard_count_counters[key] = Counter(hard_counts[~np.isnan(hard_counts)])
 
         if normalize:
             hard_count_counters[key]={

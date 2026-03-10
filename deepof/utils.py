@@ -3257,6 +3257,15 @@ def get_behavior_mask_and_confidence(
     return mask, confidence
 
 
+
+def row_nanargmax(arr):
+    """argmax per row, ignoring NaNs. Returns NaN for all-NaN rows."""
+    mask = np.all(np.isnan(arr), axis=1)
+    result = np.nanargmax(np.where(mask[:, None], 0, arr), axis=1).astype(float)
+    result[mask] = np.nan
+    return result
+
+
 def filter_short_bouts(
     cluster_assignments: np.ndarray,
     cluster_confidence: np.ndarray,

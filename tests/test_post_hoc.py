@@ -147,7 +147,7 @@ def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,e
         window_size=window_size,
         K_pose=K_pose,
         M_bins=M_bins,
-        distance_bp=distance_bp,
+        embedding_gates=distance_bp,
     )
 
     rmtree(

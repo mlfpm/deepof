@@ -38,43 +38,34 @@ class CensNetConvPT(nn.Module):
         self.node_channels = node_channels
         self.edge_channels = edge_channels
         self.use_bias = use_bias
-
-        # Activation function (none is default in tensorflow version)
+        self._built = False  # Track if _build has been called
+        
+        # Activation function
         if activation == 'relu':
             self.activation = F.relu
         elif activation is None:
             self.activation = lambda x: x
         else:
-            # You can add more activations here if needed
             raise NotImplementedError(f"Activation '{activation}' not implemented.")
-            
-        # Weights are difined as None here. They will be created in the first
-        # forward pass, mimicking Keras's `build` method. This makes the layer
-        # input-shape-agnostic until it's first used.
-        self.node_kernel = None
-        self.edge_kernel = None
-        self.node_weights = None
-        self.edge_weights = None
-        self.node_bias = None
-        self.edge_bias = None
 
     def _build(self, node_features_shape, edge_features_shape):
         """
-        Mimics Keras's build method to initialize weights based on input shapes.
+        Initialize weights based on input shapes.
+        This should only be called once.
         """
+        if self._built:
+            return  # Already built, don't reinitialize
+            
         num_input_node_features = node_features_shape[-1]
         num_input_edge_features = edge_features_shape[-1]
         
-        # Using Glorot/Xavier uniform initialization, the default in Keras
-        # and a good standard choice in PyTorch.
-        
+        # Register parameters properly
         self.node_kernel = nn.Parameter(torch.empty(num_input_node_features, self.node_channels))
         nn.init.xavier_uniform_(self.node_kernel)
 
         self.edge_kernel = nn.Parameter(torch.empty(num_input_edge_features, self.edge_channels))
         nn.init.xavier_uniform_(self.edge_kernel)
         
-        # These are P_n and P_e in the paper.
         self.node_weights = nn.Parameter(torch.empty(num_input_node_features, 1))
         nn.init.xavier_uniform_(self.node_weights)
         
@@ -85,39 +76,38 @@ class CensNetConvPT(nn.Module):
             self.node_bias = nn.Parameter(torch.empty(self.node_channels))
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.node_kernel)
             bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            nn.init.uniform_(self.node_bias, -bound, bound) # Keras default bias init
+            nn.init.uniform_(self.node_bias, -bound, bound)
             
             self.edge_bias = nn.Parameter(torch.empty(self.edge_channels))
             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.edge_kernel)
             bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            nn.init.uniform_(self.edge_bias, -bound, bound) # Keras default bias init
+            nn.init.uniform_(self.edge_bias, -bound, bound)
+        else:
+            # Register as None so state_dict is consistent
+            self.register_parameter('node_bias', None)
+            self.register_parameter('edge_bias', None)
+        
+        self._built = True
             
     def _propagate_nodes(self, inputs):
         """Performs the node feature propagation step."""
         node_features, (laplacian, _, incidence), edge_features = inputs
         
-        # weighted_edge_features = diag(I^T * P_e)
         weighted_edge_features = modal_dot_pt(edge_features, self.edge_weights)
         weighted_edge_features = weighted_edge_features.squeeze(-1)
-        # tf.linalg.diag is batch-wise, torch.diag is not. Need to handle batch.
-        if weighted_edge_features.ndim == 2: # Batch dimension exists
+        if weighted_edge_features.ndim == 2:
             weighted_edge_features_diag = torch.diag_embed(weighted_edge_features)
-        else: # No batch dimension
+        else:
             weighted_edge_features_diag = torch.diag(weighted_edge_features)
 
-        # node_adjacency = (I * diag(E * P_e) * I^T) * L_tilde
-        # First part: I * diag(...)
         temp = modal_dot_pt(incidence, weighted_edge_features_diag)
-        # Second part: (I * diag(...)) * I^T
         weighted_incidence = modal_dot_pt(temp, incidence, transpose_b=True)
         
         node_adjacency = weighted_incidence * laplacian
         
-        # H_n' = (node_adjacency @ H_n) @ W_n
         output = modal_dot_pt(node_adjacency, node_features)
         output = modal_dot_pt(output, self.node_kernel)
 
-        # Apply bias and activation
         if self.use_bias:
             output = output + self.node_bias
         return self.activation(output)
@@ -126,27 +116,21 @@ class CensNetConvPT(nn.Module):
         """Performs the edge feature propagation step."""
         node_features, (laplacian, line_laplacian, incidence), edge_features = inputs
         
-        # weighted_node_features = diag(H_n * P_n)
         weighted_node_features = modal_dot_pt(node_features, self.node_weights)
         weighted_node_features = weighted_node_features.squeeze(-1)
-        if weighted_node_features.ndim == 2: # Batch
+        if weighted_node_features.ndim == 2:
              weighted_node_features_diag = torch.diag_embed(weighted_node_features)
-        else: # No Batch
+        else:
             weighted_node_features_diag = torch.diag(weighted_node_features)
         
-        # edge_adjacency = (I^T * diag(H_n * P_n) * I) * L_line_tilde
-        # First part: I^T * diag(...)
         temp = modal_dot_pt(incidence, weighted_node_features_diag, transpose_a=True)
-        # Second part: (I^T * diag(...)) * I
         weighted_line_graph = modal_dot_pt(temp, incidence)
         
         edge_adjacency = weighted_line_graph * line_laplacian
         
-        # H_e' = (edge_adjacency @ H_e) @ W_e
         output = modal_dot_pt(edge_adjacency, edge_features)
         output = modal_dot_pt(output, self.edge_kernel)
         
-        # Apply bias and activation
         if self.use_bias:
             output = output + self.edge_bias
         return self.activation(output)
@@ -164,8 +148,7 @@ class CensNetConvPT(nn.Module):
         node_features, graph_ops, edge_features = inputs
 
         # Build weights on first pass
-        if self.node_kernel is None:
-            # Move parameters to the same device as input tensors
+        if not self._built:
             self._build(node_features.shape, edge_features.shape)
             self.to(node_features.device)
 

@@ -1719,7 +1719,7 @@ class VQVAEPT(nn.Module):
         
         # Prepare input for decoder (flatten spatial dimensions for teacher forcing)
         B, T, N, F = x.shape
-        x_for_decoder = x.view(B, T, N * F)  # Flatten to (B, T, node_features)
+        x_for_decoder = x.reshape(B, T, N * F)  # Flatten to (B, T, node_features)
         
         # Decode from QUANTIZED latents (main path)
         encoding_reconstruction_dist = self.decoder(quantized_latents, x_for_decoder)
@@ -5589,7 +5589,9 @@ def fit_VADE(
                     "n_components": common_cfg.n_components,
                     "encoder_type": common_cfg.encoder_type,
                     "use_gnn": True,
+                    "kmeans_loss": common_cfg.kmeans_loss,
                     "interaction_regularization": common_cfg.interaction_regularization,
+                    "lens_enabled": False,
                 },
                 save_weights=common_cfg.save_weights,
                 save_bundle=True,
@@ -5748,7 +5750,9 @@ def fit_VADE(
                         "n_components": common_cfg.n_components,
                         "encoder_type": common_cfg.encoder_type,
                         "use_gnn": True,
+                        "kmeans_loss": common_cfg.kmeans_loss,
                         "interaction_regularization": common_cfg.interaction_regularization,
+                        "lens_enabled": False,
                     },
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
@@ -5784,7 +5788,9 @@ def fit_VADE(
                         "n_components": common_cfg.n_components,
                         "encoder_type": common_cfg.encoder_type,
                         "use_gnn": True,
+                        "kmeans_loss": common_cfg.kmeans_loss,
                         "interaction_regularization": common_cfg.interaction_regularization,
+                        "lens_enabled": False,
                     },
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
@@ -5923,6 +5929,10 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
 
     draw_row(ax[0], xin, "original")
     draw_row(ax[1], xau, "augmented")
+    range_min=np.min([plt.xlim(),plt.ylim()])
+    range_max=np.max([plt.xlim(),plt.ylim()])
+    plt.xlim([range_min,range_max])
+    plt.ylim([range_min,range_max])
     plt.tight_layout()
     plt.show()
 
@@ -6069,6 +6079,47 @@ def _augment_time_shift(
         _plot_augmentation(deepof.clustering.model_utils_new._slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
 
     return x_cut
+
+
+def _augment_full_rotation(
+    x: torch.Tensor,             # (B,T,N,3)
+    edge_index: torch.Tensor,    # only used for plotting
+    max_rot: float = 30.0,
+    p: float = 0.5,
+    plot: bool = False,
+) -> torch.Tensor:
+    """
+    Rotate the entire graph (all nodes) by a single angle per sample (constant over time).
+    Rotation is applied around the per-frame centroid (keeps the skeleton "in place").
+    """
+    if max_rot <= 0.0 or p <= 0.0:
+        return x
+
+    B = x.size(0)
+    x_aug = x.clone()
+
+    apply = (torch.rand(B, device=x.device) < p).to(x.dtype)  # (B,)
+    theta = (torch.rand(B, device=x.device, dtype=x.dtype) * 2.0 - 1.0) * (max_rot * math.pi / 180.0)
+    theta = theta * apply
+
+    cos_t = torch.cos(theta).view(B, 1, 1, 1)  # (B,1,1,1)
+    sin_t = torch.sin(theta).view(B, 1, 1, 1)
+
+    coords = x_aug[..., 0:2]                    # (B,T,N,2)
+    pivot = coords.mean(dim=2, keepdim=True)    # (B,T,1,2)
+    rel = coords - pivot                        # (B,T,N,2)
+
+    rx = rel[..., 0:1] * cos_t - rel[..., 1:2] * sin_t
+    ry = rel[..., 0:1] * sin_t + rel[..., 1:2] * cos_t
+    coords = torch.cat([rx, ry], dim=-1) + pivot
+
+    x_aug[..., 0:2] = coords
+
+    if plot:
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(x, x_aug)
+
+    return x_aug
 
 
 def _augment_angle_rotations(
@@ -6300,6 +6351,7 @@ def _make_augmented_view(
     x_aug_raw = x
 
     x_aug = _augment_time_shift(x_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
+    x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
     x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
