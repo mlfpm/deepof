@@ -351,7 +351,8 @@ def get_contrastive_soft_counts(
             log_emiss = log_emiss + float(prior_weight) * np.log(np.maximum(P.astype(np.float64), eps))
 
         cur_soft_counts = _forward_backward(log_emiss, log_A, log_pi)
-        soft_counts_out[key] = deepof.utils.save_dt(cur_soft_counts, table_path, coordinates._very_large_project)
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts")
+        soft_counts_out[key] = deepof.utils.save_dt(cur_soft_counts, table_path_key, coordinates._very_large_project)
 
     soft_counts_out = deepof.data.TableDict(
         soft_counts_out,
@@ -616,7 +617,8 @@ def get_contrastive_soft_counts_gmm(
                 P[dist_indices_dict[gate][bin][key], block] = R
 
         P = P / P.sum(axis=1, keepdims=True)
-        soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts")
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
 
     return deepof.data.TableDict(
         soft_counts_out,
@@ -917,7 +919,8 @@ def get_contrastive_soft_counts_hmm(
 
         # global row-normalization
         P = P / P.sum(axis=1, keepdims=True)
-        soft_counts_out[key] = deepof.utils.save_dt(P, table_path, coordinates._very_large_project)
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts")
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
 
     return deepof.data.TableDict(
         soft_counts_out,
