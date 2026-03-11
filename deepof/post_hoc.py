@@ -385,15 +385,15 @@ def get_pairwise_distances(
 
     # minimal preprocessing
     animal_ids = coordinates._animal_ids
-    embedding_gates = set(embedding_gates)
 
     # Don't do gating for too few or too many animals
     gating=None
-    if animal_ids and len(animal_ids) <= 4 and supervised_annotations is None and len(embedding_gates)==1:
+    if animal_ids and len(animal_ids) <= 4 and supervised_annotations is None and isinstance(embedding_gates,str):
         gating="distances"
         animal_pairs = list(combinations(list(animal_ids), 2))
 
     elif animal_ids and supervised_annotations is not  None:
+        embedding_gates = set(embedding_gates)
         gating="behaviors"
         first_key=list(supervised_annotations.keys())[0]
         available_behaviors=set(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
@@ -484,7 +484,7 @@ def get_contrastive_soft_counts_gmm(
     if animal_ids is None:
         animal_ids = coordinates._animal_ids
 
-    if len(set(embedding_gates))>1:
+    if not isinstance(embedding_gates, str):
         M_bins=2**len(set(embedding_gates))
 
     # ---- build frame-level distances dict from tables ----
@@ -796,7 +796,7 @@ def get_contrastive_soft_counts_hmm(
     else:
         Z_by_key = None
 
-    if len(set(embedding_gates))>1:
+    if not isinstance(embedding_gates, str):
         M_bins=2**len(set(embedding_gates))
 
     # Distances
