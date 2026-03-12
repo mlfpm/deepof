@@ -22,8 +22,13 @@ import tqdm
 import umap
 from catboost import CatBoostClassifier
 from unittest.mock import MagicMock, patch
-from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline
+with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
+    import SMOTE
+    import Pipeline
+
+#from imblearn.over_sampling import SMOTE
+#from imblearn.pipeline import Pipeline
+
 
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal

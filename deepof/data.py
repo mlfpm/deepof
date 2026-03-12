@@ -2706,12 +2706,13 @@ class Coordinates:
         
         # get immobility classifer
         self._trained_model_path = resource_filename(__name__, "trained_models")    
-        immobility_estimator = deepof.utils.load_precompiled_model(
-            None,
-            download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
-            model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
-            model_name="Immobility classifier"
-        ) 
+        immobility_estimator = None #deepof.utils.load_precompiled_model(
+        #    None,
+        #    download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
+        #    model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
+        #    model_name="Immobility classifier"
+        #    ) 
+
     
         N_preprocessing_steps=2+len(self._animal_ids)
         N_processing_steps=len(self._tables.keys())

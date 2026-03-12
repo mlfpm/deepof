@@ -6351,7 +6351,7 @@ def _make_augmented_view(
     x_aug_raw = x
 
     x_aug = _augment_time_shift(x_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
-    x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
+    #x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
     x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
