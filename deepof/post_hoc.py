@@ -634,6 +634,326 @@ def get_contrastive_soft_counts_gmm(
 
 
 def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
+    mask = np.asarray(mask, dtype=bool)
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return []
+    cut = np.where(np.diff(idx) > 1)[0]
+    runs = []
+    s = idx[0]
+    for c in cut:
+        e = idx[c] + 1
+        if (e - s) >= min_len:
+            runs.append((int(s), int(e)))
+        s = idx[c + 1]
+    e = idx[-1] + 1
+    if (e - s) >= min_len:
+        runs.append((int(s), int(e)))
+    return runs
+
+
+def _subsample_rows(X: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
+    if X.shape[0] <= n:
+        return X
+    rng = np.random.default_rng(seed)
+    idx = rng.choice(X.shape[0], size=n, replace=False)
+    return X[idx]
+
+
+def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:
+    """
+    Try to get PCCA memberships from deeptime MSM model.
+    Returns chi: (n_micro_active, n_macrostates)
+    """
+    # deeptime MSM models typically implement .pcca(m)
+    if hasattr(msm_model, "pcca"):
+        pcca = msm_model.pcca(int(n_macrostates))
+        # pcca.memberships is typical
+        if hasattr(pcca, "memberships"):
+            return np.asarray(pcca.memberships, dtype=np.float32)
+        # fallback: some versions store in .chi
+        if hasattr(pcca, "chi"):
+            return np.asarray(pcca.chi, dtype=np.float32)
+    raise RuntimeError("Could not obtain PCCA memberships from deeptime MSM model. Check deeptime version/API.")
+
+
+def get_contrastive_soft_counts_msm_pcca_gmm(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],   # key -> (T_windows, D) OR TableDict-like
+    animal_ids: list,
+    *,
+    supervised_annotations=None,
+    window_size: int = 12,
+    K_pose: int = 10,                   # macrostates per bin
+    M_bins: int = 3,
+    binning: str = "quantile",
+    fixed_edges: Optional[list] = None,
+    sample_size: int = 200000,          # max windows used to fit microstate kmeans per bin
+    random_state: int = 0,
+    embedding_gates: Any = "Center",    # str -> distance bodypart, list -> behaviors (via your get_pairwise_distances)
+    covariance_type: str = "diag",      # unused (MSM), kept for API similarity
+    min_segment_len: int = 6,
+    smoothing: float = 1e-4,
+    cache_embeddings: bool = True,
+    # MSM/PCCA-specific knobs
+    n_micro: int = 300,                 # number of microstates (kmeans clusters)
+    lagtime: int = 1,                   # MSM lag τ in windows; start with 1–5
+    standardize: bool = True,           # scale embeddings before kmeans
+):
+    """
+    Distance/behavior-gated MSM + PCCA:
+      - fit microstates in embedding space
+      - estimate MSM from microstate trajectories
+      - lump microstates into K_pose macrostates via PCCA (soft memberships)
+      - decode soft counts: chi[microstate]
+
+    Output per key: (T_windows, len(gates)*M_bins*K_pose)
+    """
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # Cache embeddings
+    if cache_embeddings:
+        Z_by_key = {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
+    else:
+        Z_by_key = None
+
+    # If behavior gating list provided, you already use combinations -> M_bins = 2^n
+    if not isinstance(embedding_gates, str):
+        M_bins = 2 ** len(set(embedding_gates))
+
+    # Build gate series (distances or behavior-combo codes)
+    dist_series_dict = deepof.post_hoc.get_pairwise_distances(
+        coordinates,
+        window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+        behavior_combinations=True,
+    )
+
+    first_key = list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
+    desc_loading_final = "Get gated soft counts (MSM/PCCA)"
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        gates = [animal_ids[0]]
+        M_bins = 1
+        desc_loading_final = "Get soft counts (MSM/PCCA)"
+
+    # ---- Build per-key masks per (gate, bin) ----
+    edges = {}
+    gate_masks = {}  # gate_masks[gate][b][key] = mask (T,)
+
+    for gate in gates:
+        all_g = [dist_series_dict[key][gate] for key in keys]
+        full_g = np.concatenate(all_g)
+
+        gate_masks[gate] = {}
+
+        # Distance gating: quantiles or fixed edges.
+        # Behavior-combo gating: treat as discrete codes 0..M_bins-1 by equality.
+        is_behavior_gate = supervised_annotations is not None
+
+        if is_behavior_gate:
+            # use equality bins; ensure codes are in [0, M_bins-1]
+            # (still supports missing bins)
+            for b in range(M_bins):
+                in_bin = (full_g == b)
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = get_dt(embeddings, key, only_metainfo=True)["shape"][0]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+        else:
+            if binning == "quantile":
+                qs = np.linspace(0, 1, M_bins + 1)
+                e = np.nanquantile(full_g, qs).astype(np.float64)
+                e[0], e[-1] = -np.inf, np.inf
+            elif binning == "fixed":
+                if fixed_edges is None or len(fixed_edges) != (M_bins + 1):
+                    raise ValueError("fixed_edges must be length M_bins+1")
+                e = np.asarray(fixed_edges, dtype=np.float64)
+                e[0], e[-1] = -np.inf, np.inf
+            else:
+                raise ValueError('binning must be "quantile" or "fixed"')
+
+            edges[gate] = e
+
+            for b in range(M_bins):
+                in_bin = (full_g > e[b]) & (full_g <= e[b + 1])
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = get_dt(embeddings, key, only_metainfo=True)["shape"][0]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+
+    # ---- Fit MSM/PCCA model per (gate, bin) ----
+    models = {}  # models[gate][b] = dict with clustering_model, scaler, chi, active_set
+    total_steps = len(gates) * M_bins
+    with tqdm.tqdm(total=total_steps, desc=f"{'Fit MSM/PCCA':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="model") as pbar:
+        for gate_idx, gate in enumerate(gates):
+            models[gate] = []
+            for b in range(M_bins):
+
+                # Collect contiguous segments across all keys
+                segments = []
+                for key in keys:
+                    Z = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
+                    mask = gate_masks[gate][b][key]
+                    for s, e in _mask_to_runs(mask, min_len=max(min_segment_len, lagtime + 2)):
+                        segments.append(Z[s:e, :])
+
+                if len(segments) == 0:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                # Stack points for microstate fit
+                X_all = np.concatenate(segments, axis=0)
+                X_fit = _subsample_rows(X_all, int(sample_size), seed=int(random_state + 1000 * gate_idx + 17 * b))
+
+                scaler = None
+                if standardize:
+                    scaler = StandardScaler()
+                    X_fit = scaler.fit_transform(X_fit)
+
+                # Fit microstate clustering (kmeans)
+                # Note: n_micro should be << number of fit points
+                n_micro_eff = int(min(n_micro, max(2, X_fit.shape[0] // 50)))
+                kmeans_est = MiniBatchKMeans(
+                    n_clusters=n_micro_eff,
+                    batch_size=4096,
+                    max_iter=200,
+                    random_state=int(random_state + 17 * b + 3 * gate_idx),
+                    init="k-means++",
+                    n_init="auto",
+                ).fit(X_fit)
+
+                # Build discrete trajectories for MSM estimation from segments
+                dtrajs = []
+                for seg in segments:
+                    Xs = scaler.transform(seg) if scaler is not None else seg
+                    d = kmeans_est.predict(Xs).astype(np.int32, copy=False)  # discrete states, shape (L,)
+                    d = np.asarray(d, dtype=np.int32)
+                    if d.shape[0] >= lagtime + 2:
+                        dtrajs.append(d)
+
+                if len(dtrajs) == 0:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                # Estimate transition counts and MSM
+                # sliding count_mode uses all t->t+τ pairs
+                counts_est = TransitionCountEstimator(lagtime=int(lagtime), count_mode="sliding").fit(dtrajs)
+                count_model = counts_est.fetch_model()
+
+                msm_est = MaximumLikelihoodMSM(reversible=True).fit(count_model)
+                msm = msm_est.fetch_model()
+
+                # PCCA memberships for macrostates
+                try:
+                    chi = _pcca_memberships(msm, int(K_pose))  # (n_active_micro, K_pose) typically
+                except Exception:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                # Map from global microstate index -> row in chi (active set handling)
+                # Many deeptime MSMs are defined only on an "active set" of states.
+                active = None
+                if hasattr(count_model, "active_set"):
+                    active = np.asarray(count_model.active_set, dtype=np.int32)
+                elif hasattr(msm, "active_set"):
+                    active = np.asarray(msm.active_set, dtype=np.int32)
+
+                models[gate].append(
+                    dict(
+                        scaler=scaler,
+                        kmeans=kmeans_est,
+                        chi=np.asarray(chi, dtype=np.float32),
+                        active_set=active,  # can be None
+                        n_micro=n_micro_eff,
+                    )
+                )
+                pbar.update(1)
+
+    # ---- Decode per key ----
+    K_total = int(M_bins) * int(K_pose) * len(gates)
+    soft_counts_out = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
+    for key in tqdm.tqdm(keys, desc=f"{desc_loading_final:<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z0 = Z_by_key[key] if Z_by_key is not None else np.asarray(get_dt(embeddings, key), dtype=np.float32)
+        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
+
+        for gate_idx, gate in enumerate(gates):
+            base = gate_idx * (M_bins * K_pose)
+
+            for b in range(M_bins):
+                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
+                mask = gate_masks[gate][b][key]
+                model = models[gate][b]
+
+                if model is None:
+                    if np.any(mask):
+                        P[mask, block] = 1.0 / float(K_pose)
+                    continue
+
+                scaler = model["scaler"]
+                kmeans_est = model["kmeans"]  
+                chi = model["chi"]
+                active = model["active_set"]
+
+                # Precompute mapping from microstate -> membership row
+                # If active is None, assume chi rows correspond to 0..n_micro-1
+                # If active exists, chi rows correspond to active microstates.
+                if active is None:
+                    # decode contiguous runs
+                    for s, e in _mask_to_runs(mask, min_len=2):
+                        seg = Z0[s:e, :]
+                        Xs = scaler.transform(seg) if scaler is not None else seg
+                        d = np.asarray(kmeans_est.predict(Xs), dtype=np.int32)
+                        P[s:e, block] = chi[d, :]
+                else:
+                    # build lookup table: global micro -> row index in chi, else -1
+                    lut = -np.ones((int(np.max(active)) + 1,), dtype=np.int32)
+                    lut[active] = np.arange(active.shape[0], dtype=np.int32)
+
+                    for s, e in _mask_to_runs(mask, min_len=2):
+                        seg = Z0[s:e, :]
+                        Xs = scaler.transform(seg) if scaler is not None else seg
+                        d = np.asarray(kmeans_est.predict(Xs), dtype=np.int32)
+
+                        ridx = lut[np.clip(d, 0, lut.shape[0] - 1)]
+                        out = np.empty((d.shape[0], K_pose), dtype=np.float32)
+
+                        bad = (ridx < 0)
+                        if np.any(bad):
+                            out[bad, :] = 1.0 / float(K_pose)
+                        if np.any(~bad):
+                            out[~bad, :] = chi[ridx[~bad], :]
+
+                        P[s:e, block] = out
+
+        P = P / P.sum(axis=1, keepdims=True)
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts")
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
+
+    return deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+    
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
     """Convert boolean mask (T,) into list of contiguous (start, end) runs where mask==True."""
     mask = np.asarray(mask, dtype=bool)
     idx = np.flatnonzero(mask)
