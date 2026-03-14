@@ -13,6 +13,9 @@ from collections import Counter, defaultdict
 from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
+from sklearn.cluster import MiniBatchKMeans
+from deeptime.markov import TransitionCountEstimator
+from deeptime.markov.msm import MaximumLikelihoodMSM
 
 import numpy as np
 import ot
