@@ -1090,7 +1090,7 @@ def plot_enrichment(
         )
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
     enrichment["cluster"] = enrichment["cluster"].astype(str)
-
+    bar_order=enrichment["cluster"].unique().tolist()
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
@@ -1257,6 +1257,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             ax=ax,
@@ -1265,6 +1266,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             color="black",
