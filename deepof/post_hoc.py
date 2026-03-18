@@ -359,8 +359,8 @@ def get_contrastive_soft_counts(
             log_emiss = log_emiss + float(prior_weight) * np.log(np.maximum(P.astype(np.float64), eps))
 
         cur_soft_counts = _forward_backward(log_emiss, log_A, log_pi)
-        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts")
-        soft_counts_out[key] = deepof.utils.save_dt(cur_soft_counts, table_path_key, coordinates._very_large_project)
+        table_path_key = os.path.join(table_path, str(key), f"{str(key)}_soft_counts")
+        soft_counts_out[str(key)] = deepof.utils.save_dt(cur_soft_counts, table_path_key, coordinates._very_large_project)
 
     soft_counts_out = deepof.data.TableDict(
         soft_counts_out,

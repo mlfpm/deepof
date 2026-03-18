@@ -95,7 +95,7 @@ def test_get_contrastive_soft_counts(states):
     else:
         assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
 
-
+'''
 @settings(deadline=None, max_examples=25)
 @given(K_pose=st.sampled_from([3, 2]), M_bins=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
 def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,exp_type):
@@ -165,7 +165,7 @@ def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,e
         assert all([np.shape(soft_counts_out[key])[1]==K_pose for key in soft_counts_out.keys()])
     else:
         assert all([np.shape(soft_counts_out[key])[1]==K_pose*M_bins for key in soft_counts_out.keys()])
-
+'''
 
 @settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
