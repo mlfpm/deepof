@@ -4190,13 +4190,43 @@ def return_mouse_roi_interaction(
     hide_time_bins: list[bool] = None,
     experiment_ids: list = None,  
     exp_condition: str = None, 
-    condition_values: str = None,
-    smoothing_factor: float = 0,
+    condition_values: Union[str, List[str]] = None,
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    get_raw_data: bool = False,
 ):
+    """Return binned statistics and effect sizes for mouse-ROI interaction over time.
+
+    Computes either the distance of selected bodyparts to a ROI/arena boundary or the
+    fraction of time a ROI/arena falls within a mouse's field of view, aggregated into
+    time bins.  When ``get_raw_data=True`` the raw per-frame interaction values are
+    returned instead.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        get_raw_data (bool): If True, returns the raw per-frame interaction DataFrame instead of binned statistics. Defaults to False.
+
+    Returns:
+        If ``get_raw_data=True``: a DataFrame with raw per-frame interaction values per experiment.
+        Otherwise: a tuple of (binned_effect_sizes_df, binned_group_df) containing binned statistics, means, error values and effect sizes.
+
+    """
 
     mean_dist, std_dist, binned_group_df, binned_effect_sizes_df, hide_time_bins = deepof.visuals_utils._preprocess_mouse_roi_interaction(
         coordinates=coordinates,
@@ -4212,12 +4242,14 @@ def return_mouse_roi_interaction(
         experiment_ids = experiment_ids,  
         exp_condition = exp_condition, 
         condition_values = condition_values,
-        smoothing_factor = smoothing_factor,
         add_stats=add_stats,
         error_bars=error_bars,
         mode = mode,
         unit_distance = unit_distance,
+        get_raw_data = get_raw_data,
     )
+    if get_raw_data:
+        return binned_group_df
 
 
     # Remove otherwise confusing condition columns
@@ -4248,8 +4280,7 @@ def plot_mouse_roi_interaction(
     hide_time_bins: list[bool] = None,
     experiment_ids: list = None,  
     exp_condition: str = None, 
-    condition_values: str = None,
-    smoothing_factor: float = 0,
+    condition_values: Union[str, List[str]] = None,
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
@@ -4258,8 +4289,37 @@ def plot_mouse_roi_interaction(
     polar_depiction: bool = False,    
     show_histogram: bool = False,     
 ):
-    if roi_number == 0:
-        roi_number=None
+    """Plot mouse-ROI interaction over time as a polar plot or line chart with optional effect-size histogram.
+
+    Visualises either the distance of selected bodyparts to a ROI/arena boundary or the
+    fraction of time a ROI/arena falls within a mouse's field of view, aggregated into
+    time bins.  Supports statistical annotations and effect-size overlays when exactly
+    two experimental conditions are compared.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
+        polar_depiction (bool): If True, display as polar plot. Defaults to False.
+        show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to False.
+
+    Returns:
+        ax: The Matplotlib axis containing the plot.
+
+    """    
     mean_dist, std_dist, binned_group_df, binned_effect_sizes_df, hide_time_bins = deepof.visuals_utils._preprocess_mouse_roi_interaction(
         coordinates=coordinates,
         bodyparts=bodyparts,
@@ -4274,7 +4334,6 @@ def plot_mouse_roi_interaction(
         experiment_ids = experiment_ids,  
         exp_condition = exp_condition, 
         condition_values = condition_values,
-        smoothing_factor = smoothing_factor,
         add_stats=add_stats,
         error_bars=error_bars,
         mode = mode,

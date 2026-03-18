@@ -2035,13 +2035,44 @@ def _preprocess_mouse_roi_interaction(
     hide_time_bins: list[bool] = None,
     experiment_ids: list = None,  
     exp_condition: str = None, 
-    condition_values: str = None,
-    smoothing_factor: float = 0,
+    condition_values: Union[str, List[str]] = None,
     mode: str = "distance",
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    get_raw_data: bool = False,
 ):
+    """Preprocess mouse-ROI interaction data for plotting and statistical analysis.
+
+    Computes per-frame interaction signals (distance or field-of-view) for every
+    experiment, bins them into time windows, and derives group-level statistics
+    and effect sizes.  Called internally by ``plot_mouse_roi_interaction`` and
+    ``return_mouse_roi_interaction``.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        get_raw_data (bool): If True, skips binning and returns raw per-frame interaction values. Defaults to False.
+
+    Returns:
+        tuple: (mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins).
+            When ``get_raw_data=True``, mean_values, error_values, binned_effect_sizes_df
+            and hide_time_bins are None and df contains the raw per-frame data.
+
+    """
 
     if roi_number==0:
         roi_number=None
@@ -2057,9 +2088,9 @@ def _preprocess_mouse_roi_interaction(
     )
     # Check if correct inputs for modes are present
     if mode == "fov" and animal_id is not None:
-        bodyparts=["Left_ear","Nose","Right_ear"]
-        if animal_id is not None and animal_id !="":
-            bodyparts=[animal_id + "_" + bp for bp in bodyparts]
+        bodyparts = ["Left_ear", "Nose", "Right_ear"]
+        if animal_id != "":
+            bodyparts = [animal_id + "_" + bp for bp in bodyparts]
     elif mode == "distance" and bodyparts is not None:
         if isinstance(bodyparts, str):
             bodyparts=[bodyparts]  
@@ -2099,7 +2130,7 @@ def _preprocess_mouse_roi_interaction(
     )
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
     multi_bin_info={}
@@ -2142,7 +2173,7 @@ def _preprocess_mouse_roi_interaction(
     # Collect minimum interaction measure for all sets of experiments and all bins
     interaction_dict = {}
     rows = []  # accumulate for final df
-
+    raw_cols = {}
     for exp_cond, exp_polys in roi_dict.items():
         for exp_id, polygon in exp_polys.items():
 
@@ -2161,9 +2192,6 @@ def _preprocess_mouse_roi_interaction(
                 # bps: (T, 3*2) -> (T, 3, 2)
                 pts = bps.to_numpy().reshape(-1, 3, 2)
                 polygon = np.asarray(polygon, dtype=np.float64)
-                # Remove possible double points at beginning / end
-                if polygon.shape[0] >= 2 and np.allclose(polygon[0], polygon[-1]):
-                    polygon = polygon[:-1]
                 interaction_full = deepof.utils.in_field_of_view_numba(
                     np.asarray(pts, dtype=np.float64), float(90), polygon
                 )  # shape (T,)
@@ -2187,7 +2215,6 @@ def _preprocess_mouse_roi_interaction(
 
                 min_dist = np.nanmin(dists, axis=1)
                 min_dist[~valid] = np.nan
-                min_dist[min_dist == 0] = np.nan  # keep your original behavior
 
                 interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
 
@@ -2199,17 +2226,31 @@ def _preprocess_mouse_roi_interaction(
             # ---------------------------------------------------------------------
             # Bin by slicing precomputed per-frame result
             # ---------------------------------------------------------------------
-            for bin_id, bin_info in multi_bin_info.items():
-                frames = bin_info[exp_id]              # frame indices for this exp_id and bin
-                value = np.nanmean(interaction_full[frames])
-                rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value})
+            if not get_raw_data:
+                for bin_id, bin_info in multi_bin_info.items():
+                    frames = bin_info[exp_id]              # frame indices for this exp_id and bin
+                    value = np.nanmean(interaction_full[frames])
+                    rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value})
+            else:
+                raw_cols[exp_id] = pd.Series(interaction_full)
 
-    df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
+
+
+    if not get_raw_data:
+        df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
 
   
-    df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+        df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
 
-    mean_values, error_values, binned_effect_sizes_df = process_df(df, error_bars=error_bars)
+        mean_values, error_values, binned_effect_sizes_df = process_df(df, error_bars=error_bars)
+    
+    else:
+        df = pd.DataFrame(raw_cols)
+        last_valid = df.last_valid_index()
+        if last_valid is not None:
+            df = df.loc[:last_valid]
+        mean_values, error_values, binned_effect_sizes_df, hide_time_bins = None, None, None, None
+
 
     return mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins
 
