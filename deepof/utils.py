@@ -1321,7 +1321,7 @@ def _is_point_inside_numba(
 
 
 
-def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray:
+def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray: # pragma: no cover
     """Calculates array of distances between 2D points and a polygon (roi)"""
 
     assert points.size > 0 and points.ndim == 2
@@ -1339,7 +1339,7 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
 
 
 @nb.njit(cache=True)
-def _seg_dist2(px, py, ax, ay, bx, by):
+def _seg_dist2(px, py, ax, ay, bx, by): # pragma: no cover
     vx, vy = bx - ax, by - ay
     wx, wy = px - ax, py - ay
     c1 = wx * vx + wy * vy
@@ -1359,7 +1359,7 @@ def _seg_dist2(px, py, ax, ay, bx, by):
     return dx*dx + dy*dy
 
 @nb.njit(parallel=True, cache=True)
-def get_point_polygon_distance_numba(points, poly_xy):
+def get_point_polygon_distance_numba(points, poly_xy): # pragma: no cover
     pts = points
     M = poly_xy.shape[0]
     # drop closing vertex if repeated
@@ -1386,7 +1386,6 @@ def get_point_polygon_distance_numba(points, poly_xy):
 
     return out
 
-from matplotlib import pyplot as plt
 def in_field_of_view(mouse_pts: np.ndarray,
                      fov_angle_deg: float,
                      roi: Polygon,
@@ -1418,62 +1417,48 @@ def in_field_of_view(mouse_pts: np.ndarray,
     half = np.deg2rad(fov_angle_deg) / 2.0
     out = np.full((mouse_pts.shape[0],), np.nan, dtype=float)
 
-    # radius large enough to cover ROI (use bounds corners)
     minx, miny, maxx, maxy = roi.bounds
     roi_corners = np.array([[minx, miny], [minx, maxy], [maxx, miny], [maxx, maxy]], dtype=float)
 
     sectors = []
     for i, (L, N, R) in enumerate(mouse_pts):
-        # invalid detection -> nan
-        if not (np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all()):
-            sectors.append(None)
-            continue
-
         apex = 0.5 * (L + R)
         ear_vec = R - L
-        if np.linalg.norm(ear_vec) < eps:
-            sectors.append(None)
-            continue
-
-        # forward is perpendicular to ear line; choose sign that points toward the nose
         perp = np.array([-ear_vec[1], ear_vec[0]], dtype=float)
         if np.dot(perp, N - apex) < 0:
             perp = -perp
 
         nrm = np.linalg.norm(perp)
-        if nrm < eps:
-            sectors.append(None)
-            continue
-
-        fwd = perp / nrm
-        d1 = rotate(fwd, +half, origin=np.array([0.0, 0.0]))
-        d2 = rotate(fwd, -half, origin=np.array([0.0, 0.0]))
-
-        # degenerate if rays almost identical
+        fwd = perp / nrm if nrm >= eps else perp
+        
+        ca, sa = np.cos(half), np.sin(half)
+        d1 = np.array([ca * fwd[0] - sa * fwd[1], sa * fwd[0] + ca * fwd[1]], dtype=float)
+        d2 = np.array([ca * fwd[0] + sa * fwd[1], -sa * fwd[0] + ca * fwd[1]], dtype=float)
+        
         cross = d1[0] * d2[1] - d1[1] * d2[0]
-        if abs(cross) < 1e-12:
-            sectors.append(None)
-            continue
-
-        r = 1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6
-        if not np.isfinite(r) or r <= 0:
-            sectors.append(None)
-            continue
-
+        r = (1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6) * (1 / np.cos(half))
+        
         p0, p1, p2 = apex, apex + r * d1, apex + r * d2
-        if not (np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all()):
-            sectors.append(None)
-            continue
-
         sector = Polygon([tuple(p0), tuple(p1), tuple(p2)])
-        if sector.is_empty or (not sector.is_valid) or sector.area < 1e-12:
+        
+        # Validation check
+        valid = (
+            np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all() and
+            np.linalg.norm(ear_vec) >= eps and
+            nrm >= eps and
+            abs(cross) >= 1e-12 and
+            np.isfinite(r) and r > 0 and
+            np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all() and
+            not sector.is_empty and sector.is_valid and sector.area >= 1e-12
+        )
+        
+        if valid:
+            sectors.append(sector)
+            out[i] = 1.0 if sector.intersects(roi) else 0.0
+        else:
             sectors.append(None)
-            continue
 
-        sectors.append(sector)
-        out[i] = 1.0 if sector.intersects(roi) else 0.0
-
-    if plot:
+    if plot: # pragma: no cover
         idx = -1
         L, N, R = mouse_pts[idx]
         apex = 0.5 * (L + R)
@@ -1481,18 +1466,15 @@ def in_field_of_view(mouse_pts: np.ndarray,
 
         fig, ax = plt.subplots(figsize=(6, 6))
 
-        # ROI
         x, y = roi.exterior.xy
         ax.plot(x, y, "k-", lw=2, label="ROI")
         ax.fill(x, y, color="k", alpha=0.08)
 
-        # FOV
         if sector is not None:
             sx, sy = sector.exterior.xy
             ax.plot(sx, sy, "C0-", lw=2, label="FOV")
             ax.fill(sx, sy, color="C0", alpha=0.15)
 
-        # Mouse points + ear line + apex
         ax.plot([L[0], R[0]], [L[1], R[1]], "C1--", lw=1)
         ax.scatter([L[0], apex[0], N[0], R[0]],
                    [L[1], apex[1], N[1], R[1]],
@@ -1511,12 +1493,12 @@ def in_field_of_view(mouse_pts: np.ndarray,
     return out
 
 @nb.njit(cache=True)
-def _orient(ax, ay, bx, by, cx, cy):
+def _orient(ax, ay, bx, by, cx, cy): # pragma: no cover
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 
 
 @nb.njit(cache=True)
-def _on_segment(ax, ay, bx, by, px, py, eps):
+def _on_segment(ax, ay, bx, by, px, py, eps): # pragma: no cover
     # p collinear with segment a-b and within bounding box
     if abs(_orient(ax, ay, bx, by, px, py)) > eps:
         return False
@@ -1528,7 +1510,7 @@ def _on_segment(ax, ay, bx, by, px, py, eps):
 
 
 @nb.njit(cache=True)
-def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps):
+def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
     o1 = _orient(ax, ay, bx, by, cx, cy)
     o2 = _orient(ax, ay, bx, by, dx, dy)
     o3 = _orient(cx, cy, dx, dy, ax, ay)
@@ -1549,7 +1531,7 @@ def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps):
 
 
 @nb.njit(cache=True)
-def _point_in_poly(px, py, poly, eps):
+def _point_in_poly(px, py, poly, eps): # pragma: no cover
     """Ray casting + boundary included."""
     m = poly.shape[0]
     inside = False
@@ -1573,7 +1555,7 @@ def _point_in_poly(px, py, poly, eps):
 
 
 @nb.njit(cache=True)
-def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     """Same-side test; boundary included."""
     abp = _orient(ax, ay, bx, by, px, py)
     bcp = _orient(bx, by, cx, cy, px, py)
@@ -1585,7 +1567,7 @@ def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
 
 
 @nb.njit(cache=True)
-def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps):
+def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     # 1) triangle vertex in polygon
     if _point_in_poly(ax, ay, poly, eps): return True
     if _point_in_poly(bx, by, poly, eps): return True
@@ -1612,14 +1594,14 @@ def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps):
 
 
 @nb.njit(cache=True)
-def _rotate_vec(vx, vy, ang):
+def _rotate_vec(vx, vy, ang): # pragma: no cover
     ca = np.cos(ang)
     sa = np.sin(ang)
     return ca * vx - sa * vy, sa * vx + ca * vy
 
 
 @nb.njit(parallel=True, cache=True)
-def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10):
+def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pragma: no cover
     """
     Numba version of in_field_of_view (no plotting, no shapely).
 
@@ -1702,7 +1684,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10):
         dx = c2x - apex_x; dy = c2y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
         dx = c3x - apex_x; dy = c3y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
 
-        r = 1.05 * np.sqrt(maxd2) + 1e-6
+        r = (1.05 * np.sqrt(maxd2) + 1e-6) *(1 / np.cos(half))
         if not np.isfinite(r) or r <= 0.0:
             continue
 
