@@ -2329,6 +2329,8 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        dist_standardize: str = "per_column",
+        speed_standardize: str = "per_column",
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2345,6 +2347,8 @@ class Coordinates:
             polar (bool) States whether the coordinates should be converted to polar values.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
+            dist_standardize (str): standardize distance columns individually (per_column) or as a group (groupwise)
+            speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
 
         Returns:
@@ -2514,6 +2518,8 @@ class Coordinates:
                 samples_max=samples_max,
                 save_as_paths=return_as_paths,
                 quality_to_load=None, #quality_to_load,
+                dist_standardize=dist_standardize,
+                speed_standardize=speed_standardize,
                 **kwargs,
                 )
    
@@ -3466,7 +3472,7 @@ class TableDict(dict):
             """Load table, apply binning, and optionally replace speeds with quality scores."""
             tab = get_dt(self, key).iloc[bin_indices]
             
-            if quality_to_load is not None:
+            if quality_to_load is not None: # pragma: no cover
                 quality = get_dt(quality_to_load.filter_videos([key]), key)
                 # Speed columns that exist in both tables
                 shared_cols = list(set(tab.columns) & set(quality.columns))
@@ -3498,7 +3504,7 @@ class TableDict(dict):
         # Create empty output container
         try:
             table_temp = type(self)({}, self._type, self._table_path)
-        except Exception:
+        except Exception: # pragma: no cover
             table_temp = copy.deepcopy(self)
             for k in list(table_temp.keys()):
                 del table_temp[k]

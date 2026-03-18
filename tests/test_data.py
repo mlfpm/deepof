@@ -625,8 +625,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     full_nan_table=st.booleans(),
+    dist_standardize_groups=st.booleans(),
+    speed_standardize_groups=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
+def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standardize_groups,speed_standardize_groups):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -634,6 +636,12 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
         animal_ids = ["mouse_black_tail", "mouse_white_tail"]
     else:
         animal_ids = [""]
+    dist_standardize="per_column"
+    if dist_standardize_groups:
+        dist_standardize="groupwise"
+    speed_standardize="per_column"
+    if speed_standardize_groups:
+        speed_standardize="groupwise"
 
     prun = deepof.data.Project(
         project_path=os.path.join(
@@ -671,6 +679,8 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
             )
         ),
         test_videos=1,
+        dist_standardize=dist_standardize,
+        speed_standardize=speed_standardize,
     )
 
     rmtree(
