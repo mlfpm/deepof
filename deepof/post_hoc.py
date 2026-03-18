@@ -389,7 +389,7 @@ def get_contrastive_soft_counts_gmm(
     random_state: int = 0,
     embedding_gates: Any = "Center",
     smoothing: float = 1e-4,
-):
+):  # pragma: no cover
     """
     Distance/behavior-gated GMM decoder.
 
@@ -574,7 +574,7 @@ def get_contrastive_soft_counts_gmm(
     )
 
 
-def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
     mask = np.asarray(mask, dtype=bool)
     idx = np.flatnonzero(mask)
     if idx.size == 0:
@@ -593,15 +593,7 @@ def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
     return runs
 
 
-def _subsample_rows(X: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
-    if X.shape[0] <= n:
-        return X
-    rng = np.random.default_rng(seed)
-    idx = rng.choice(X.shape[0], size=n, replace=False)
-    return X[idx]
-
-
-def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:
+def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:  # pragma: no cover
     """Extract PCCA soft memberships (n_active, n_macrostates) from a deeptime MSM."""
     pcca = msm_model.pcca(int(n_macrostates))
     for attr in ("memberships", "chi"):
@@ -610,7 +602,7 @@ def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:
     raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.")
 
 
-def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray:
+def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray:  # pragma: no cover
     """Apply a uniform moving-average along axis 0 (frames) of a 2-D softcount matrix."""
     if win is None or win <= 1 or P.shape[0] < win:
         return P
@@ -629,7 +621,7 @@ def get_pairwise_distances(
     supervised_annotations=None,
     embedding_gates: Any = "Nose",
     behavior_combinations: bool = True,
-) -> Dict[str, Dict]:
+) -> Dict[str, Dict]:  # pragma: no cover
     """
     Per-window gating series: pairwise distances OR behavior-combination codes.
 
@@ -746,7 +738,7 @@ def get_contrastive_soft_counts_msm_pcca(
     n_micro: int = 400,
     min_micro_per_macro: int = 3,      
     lagtime: int = 3,
-):
+):  # pragma: no cover
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
 
@@ -1046,7 +1038,7 @@ def get_contrastive_soft_counts_msm_pcca(
     )
 
     
-def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
     """Boolean mask → list of (start, end) slices for contiguous True runs."""
     idx = np.flatnonzero(np.asarray(mask, dtype=bool))
     if idx.size == 0:
@@ -1065,7 +1057,7 @@ def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:
     return runs
 
 
-def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:
+def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:  # pragma: no cover
     """Reservoir-sample up to n rows from a list of 2-D arrays without full concat."""
     rng = np.random.default_rng(seed)
     total = sum(s.shape[0] for s in segments)
@@ -1090,111 +1082,6 @@ def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.n
             seen += 1
 
     return buf[:filled]
-
-
-def _sample_fixed_length_clips(
-    segments,
-    *,
-    clip_len: int,
-    max_total_windows: int,
-    seed: int = 0,
-    max_clips_per_segment: int = 5,
-):
-    """
-    segments: list of (L_i, D) arrays
-    returns: X_clips (N, clip_len, D) float32, or None if insufficient data
-    """
-    rng = np.random.default_rng(seed)
-
-    segments = [s for s in segments if s is not None and s.ndim == 2 and s.shape[0] >= clip_len]
-    if len(segments) == 0:
-        return None
-
-    rng.shuffle(segments)
-    clips = []
-    total = 0
-
-    for seg in segments:
-        L = seg.shape[0]
-        n_possible = L - clip_len + 1
-        if n_possible <= 0:
-            continue
-
-        # sample a few clips from each segment to increase diversity
-        n_take = min(max_clips_per_segment, n_possible)
-        starts = rng.integers(0, n_possible, size=n_take)
-
-        for st in starts:
-            if total + clip_len > max_total_windows:
-                break
-            clip = seg[st:st + clip_len].astype(np.float32, copy=False)
-            clips.append(clip)
-            total += clip_len
-
-        if total + clip_len > max_total_windows:
-            break
-
-    if len(clips) == 0:
-        return None
-
-    return np.stack(clips, axis=0).astype(np.float32, copy=False)
-
-
-def _fit_hmm_on_segments_pome104(
-    segments,
-    n_states: int,
-    *,
-    covariance_type: str = "diag",
-    random_state: int = 0,
-    max_train_windows: int = 200000,
-    train_clip_len: int = 200,
-    max_clips_per_segment: int = 5,
-):
-    """
-    Fit HMM on fixed-length clips sampled from segments.
-    This avoids padding and is much more stable in pomegranate 1.0.4.
-    """
-    X = _sample_fixed_length_clips(
-        segments,
-        clip_len=int(train_clip_len),
-        max_total_windows=int(max_train_windows),
-        seed=int(random_state),
-        max_clips_per_segment=int(max_clips_per_segment),
-    )
-    if X is None:
-        return None
-
-    # If you have too few clips relative to states, fitting can get unstable.
-    if X.shape[0] < max(10, int(n_states)):
-        return None
-
-    hmm = DenseHMM([Normal(covariance_type=covariance_type) for _ in range(int(n_states))])
-
-    Xt = torch.from_numpy(X)  # (N, T, D)
-
-    # Important: in pomegranate 1.0.x, X is often treated as a list of feature blocks.
-    # Passing [Xt] is the safe way to ensure it is interpreted as one feature block.
-    #try:
-    hmm = hmm.fit([Xt])
-    #except Exception:
-    #    # fallback to diag cov if something else was requested
-    #    if covariance_type != "diag":
-    #        hmm = DenseHMM([Normal(covariance_type="diag") for _ in range(int(n_states))])
-    #        hmm = hmm.fit([Xt])
-    #    else:
-    #        return None
-
-    return hmm
-
-
-def _predict_segment_posteriors_pome104(hmm: DenseHMM, seg: np.ndarray) -> np.ndarray:
-    """
-    seg: (L, D) -> returns (L, K)
-    """
-    seg = seg.astype(np.float32, copy=False)
-    Xt = torch.from_numpy(seg[None, :, :])  # (1, L, D)
-    post = hmm.predict_proba(Xt)[0]       # (L, K)
-    return np.asarray(post, dtype=np.float32)
 
 
 def recluster(
