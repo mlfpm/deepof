@@ -1994,7 +1994,6 @@ def infer_column_types(df):
 def scale_table(
     df: pd.DataFrame,
     scale: str = "standard",
-    global_scaler=None,           # sklearn scaler fitted on ALL scalar columns (per-column behavior)
     animal_ids=None,
     size_ref=("Nose", "Tail_base"),
     inter_scale: str = "mean",    # {"mean","geom","global"}
@@ -2037,37 +2036,6 @@ def scale_table(
     inner_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) == bp_to_aid.get(d[1])]
     intra_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) != bp_to_aid.get(d[1])]
 
-    # If applying a global scaler: do NOT touch coords/distances by size again; just transform scalars
-    if global_scaler is not None:
-
-        def _apply_1d(cols, scaler):
-            if not cols or scaler is None:
-                return
-            arr = out[cols].to_numpy(float)
-            out.loc[:, cols] = scaler.transform(arr.reshape(-1, 1)).reshape(arr.shape)
-
-        def _apply_2d(cols, scaler):
-            if not cols or scaler is None:
-                return
-            out.loc[:, cols] = scaler.transform(out[cols].to_numpy(float))
-
-        if isinstance(global_scaler, dict):
-            if speed_standardize == "per_column":
-                _apply_2d(speed_cols, global_scaler.get("speed"))
-            elif speed_standardize == "groupwise":
-                _apply_1d(speed_cols, global_scaler.get("speed"))
-
-            if dist_standardize == "per_column":
-                _apply_2d(dist_cols, global_scaler.get("dist"))
-            elif dist_standardize == "groupwise":
-                _apply_1d(inner_dist_cols, global_scaler.get("dist_inner"))
-                _apply_1d(intra_dist_cols, global_scaler.get("dist_intra"))
-            return out
-        
-        scalar_cols = speed_cols + dist_cols
-        if scalar_cols:
-            out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
-        return out
 
     bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 

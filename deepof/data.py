@@ -3530,7 +3530,6 @@ class TableDict(dict):
                     tab_local = deepof.utils.scale_table(
                         tab,
                         scale=scale,
-                        global_scaler=None,
                         animal_ids=animal_ids,
                         standardize=True,   # size-normalize only
                         dist_standardize=dist_standardize,
@@ -3673,7 +3672,6 @@ class TableDict(dict):
                     tab_local = deepof.utils.scale_table(
                         tab,
                         scale=scale,
-                        global_scaler=None,
                         animal_ids=animal_ids,
                         standardize=True,  
                         dist_standardize=dist_standardize,
