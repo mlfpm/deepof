@@ -1483,6 +1483,7 @@ class Coordinates:
         align: str = False,
         align_group: bool = False,
         align_inplace: bool = True,
+        to_video: bool = False,
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
@@ -1498,6 +1499,7 @@ class Coordinates:
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
+            to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
             animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
@@ -1529,6 +1531,7 @@ class Coordinates:
                 align = align,
                 align_group = align_group,
                 align_inplace = align_inplace,
+                to_video = to_video,
                 selected_id = selected_id,
                 roi_number = roi_number,
                 animals_in_roi = animals_in_roi,

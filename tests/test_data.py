@@ -445,8 +445,9 @@ def test_supervised_parameters():
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+    to_video=st.booleans()
 )
-def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba, to_video):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
@@ -519,6 +520,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
         selected_id=selected_id,
+        to_video = to_video,
         roi_number = rois,
         animals_in_roi = animals_in_roi,
     )
@@ -612,6 +614,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     assert isinstance(merged, deepof.data.TableDict)
     assert isinstance(prun.get_videos(), dict)
     assert prun.get_exp_conditions is not None
+    assert prun.get_condition_values("CSDS") is not None
     assert isinstance(prun.get_quality(), deepof.data.TableDict)
     assert isinstance(prun.get_arenas, tuple)
 
