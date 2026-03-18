@@ -14,8 +14,8 @@ from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 from sklearn.cluster import MiniBatchKMeans
-from deeptime.markov import TransitionCountEstimator
-from deeptime.markov.msm import MaximumLikelihoodMSM
+#from deeptime.markov import TransitionCountEstimator
+#from deeptime.markov.msm import MaximumLikelihoodMSM
 
 import numpy as np
 import ot
@@ -25,12 +25,12 @@ import tqdm
 import umap
 from catboost import CatBoostClassifier
 from unittest.mock import MagicMock, patch
-with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
-    import SMOTE
-    import Pipeline
+#with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
+#    import SMOTE
+#    import Pipeline
 
-#from imblearn.over_sampling import SMOTE
-#from imblearn.pipeline import Pipeline
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 
 
 from joblib import Parallel, delayed
