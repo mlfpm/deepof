@@ -4287,7 +4287,7 @@ def plot_mouse_roi_interaction(
     unit_distance: str = "m",
     ax: Any = None, 
     polar_depiction: bool = False,    
-    show_histogram: bool = False,     
+    show_histogram: bool = True,     
 ):
     """Plot mouse-ROI interaction over time as a polar plot or line chart with optional effect-size histogram.
 
@@ -4435,10 +4435,6 @@ def plot_mouse_roi_interaction(
     else:
         ylabel = mode
 
-    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
-    if mode == "fov" and not polar_depiction:
-        ax.set_ylim([0, 1])
-
     # --- axis formatting (ticks/labels/limits; now uses radians geometry) ---
     hist_bottom = deepof.visuals_utils.format_time_binned_axis(
         ax=ax,
@@ -4505,6 +4501,10 @@ def plot_mouse_roi_interaction(
                     loc="upper left",
                     fontsize=8,
                 )
+
+    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
+    if mode == "fov" and not polar_depiction:
+        ax.set_ylim([0, 1])
 
     # reset cohend warning
     deepof.visuals_utils.cohend._warning_issued = False
