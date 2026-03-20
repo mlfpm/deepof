@@ -906,7 +906,8 @@ def extract_polygonal_arena_coordinates(
         )
         # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer) and go to next roi     
         if exit_flag_rois == Arena_GUI_exit_flag.NEXT:
-            cur_roi_corners=simplify_polygon(cur_roi_corners,None,0.001,True)
+            #if simplify:
+            #cur_roi_corners=simplify_polygon(cur_roi_corners,None,0.001,True)
             roi=list(np.array(cur_roi_corners).astype(int))
         # Take roi k from the previous video and propagate 
         elif exit_flag_rois == Arena_GUI_exit_flag.PROPAGATE:

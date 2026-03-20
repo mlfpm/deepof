@@ -358,7 +358,7 @@ class Project:
         max_diff = max_val - min_val
 
         
-        # Verify that edits make sense
+        # If sampling rates deviate, confirm continued setup.
         if max_diff>0.01:
             continue_init=deepof.arena_utils.confirm_action(
                 f"The sampling rates of your videos deviate significantly!\n" 
