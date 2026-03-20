@@ -4195,6 +4195,7 @@ def return_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    fov_angle_deg: int = 90,
     get_raw_data: bool = False,
 ):
     """Return binned statistics and effect sizes for mouse-ROI interaction over time.
@@ -4220,6 +4221,7 @@ def return_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
         get_raw_data (bool): If True, returns the raw per-frame interaction DataFrame instead of binned statistics. Defaults to False.
 
     Returns:
@@ -4246,6 +4248,7 @@ def return_mouse_roi_interaction(
         error_bars=error_bars,
         mode = mode,
         unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
         get_raw_data = get_raw_data,
     )
     if get_raw_data:
@@ -4285,6 +4288,7 @@ def plot_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    fov_angle_deg: int = 90,
     ax: Any = None, 
     polar_depiction: bool = False,    
     show_histogram: bool = True,     
@@ -4312,6 +4316,7 @@ def plot_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
         ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
         polar_depiction (bool): If True, display as polar plot. Defaults to False.
         show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to False.
@@ -4338,6 +4343,7 @@ def plot_mouse_roi_interaction(
         error_bars=error_bars,
         mode = mode,
         unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
     )
 
     condition_values = sorted(binned_group_df["exp_condition"].astype(str).unique().tolist())

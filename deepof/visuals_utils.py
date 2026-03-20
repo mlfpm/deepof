@@ -2040,6 +2040,7 @@ def _preprocess_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    fov_angle_deg: int = 90,
     get_raw_data: bool = False,
 ):
     """Preprocess mouse-ROI interaction data for plotting and statistical analysis.
@@ -2065,6 +2066,7 @@ def _preprocess_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
         get_raw_data (bool): If True, skips binning and returns raw per-frame interaction values. Defaults to False.
 
     Returns:
@@ -2074,6 +2076,8 @@ def _preprocess_mouse_roi_interaction(
 
     """
 
+    if fov_angle_deg > 179 or fov_angle_deg < 1:
+        raise ValueError("Error! \"fov_angle_deg\" needs to be within a range of 1 to 179 degrees!")
     if roi_number==0:
         roi_number=None
     # Checks and init preprocessing
@@ -2193,7 +2197,7 @@ def _preprocess_mouse_roi_interaction(
                 pts = bps.to_numpy().reshape(-1, 3, 2)
                 polygon = np.asarray(polygon, dtype=np.float64)
                 interaction_full = deepof.utils.in_field_of_view_numba(
-                    np.asarray(pts, dtype=np.float64), float(90), polygon
+                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon
                 )  # shape (T,)
 
             elif mode == "distance":

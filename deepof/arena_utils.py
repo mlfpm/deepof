@@ -1140,7 +1140,7 @@ def extract_corners_from_arena(
 
     Args:
         params (Union[Tuple, np.ndarray]):
-            - For a circular arena: A tuple containing ((center_x, center_y), (diameter_x, diameter_y), angle_degrees).
+            - For a circular arena: A tuple containing ((center_x, center_y), (radius_x, radius_y), angle_degrees).
             - For a polygonal arena: A NumPy array of shape (N, 2) with vertex coordinates.
         num_points (int): Number of vertices for the ellipse. Defaults to 100.
 
@@ -1221,6 +1221,51 @@ def extract_corners_from_arena(
 # Custom GUI elements to avoid having to use PyQt5
 ##################################################
 
+
+def confirm_action(message: str, window_name: str = "Confirm"):
+    """
+    Displays a confirmation dialog using OpenCV with multi-line support.
+    
+    Args:
+        message: The message to display (use '\\n' for line breaks).
+        window_name: Name of the OpenCV window.
+    
+    Returns:
+        bool: True if 'y' pressed, False if 'n' pressed.
+    """
+    lines = message.split('\n')
+    
+    # Calculate image height based on number of lines
+    line_height = 40
+    padding = 100
+    img_height = len(lines) * line_height + padding
+    img_width = 800
+    
+    # Create black image
+    img = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+    
+    # Add message lines
+    y_pos = 50
+    for line in lines:
+        cv2.putText(img, line, (30, y_pos),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        y_pos += line_height
+    
+    # Add instruction text at bottom
+    cv2.putText(img, "Press 'y' to confirm, 'n' to cancel", (30, y_pos + 20),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+    
+    cv2.imshow(window_name, img)
+    
+    while True:
+        key = cv2.waitKey(0) & 0xFF
+        if key == ord('y'):
+            cv2.destroyWindow(window_name)
+            return True
+        elif key == ord('n'):
+            cv2.destroyWindow(window_name)
+            return False
+        
 
 @dataclass
 class DropdownConfig:

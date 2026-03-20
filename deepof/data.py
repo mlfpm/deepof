@@ -357,7 +357,18 @@ class Project:
         max_key, max_val = max(fpses.items(), key=lambda item: item[1])
         max_diff = max_val - min_val
 
-        assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (e.g. {min_key}: {min_val} fps and {max_key}: {max_val} fps)"
+        
+        # Verify that edits make sense
+        if max_diff>0.01:
+            continue_init=deepof.arena_utils.confirm_action(
+                f"The sampling rates of your videos deviate significantly!\n" 
+                f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
+                f"If this is unexpected, we recommend to investigate this issue!\n"
+                f"Do you want to continue the project definition regardless?",
+                "Sampling Rate deviations detected!"
+                    )
+        if not continue_init:
+            assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (from {min_key}: {min_val} fps to {max_key}: {max_val} fps)"
 
         if max_diff>0:
             warnings.warn(
@@ -2247,6 +2258,19 @@ class Coordinates:
         if arena_type is None:
             arena_type = self._arena
 
+        
+        # arena detection should not be repeated for editing, only existing arenas should be loaded
+        arena_type=arena_type.replace('autodetect','manual')
+        
+        # Convert all arenas to now standard polygon format to prevent mixed types
+        first_detection=True
+        for key in self._videos:
+            if isinstance(self._arena_params[key], Tuple):
+                if first_detection:
+                    print('\033[33mInfo! Old arena format detected. Converting...\033[0m')
+                    first_detection = False
+                self._arena_params[key] = deepof.arena_utils.extract_corners_from_arena(self._arena_params[key])
+
         #create dictionary based on entered keys if keys actually exist in videos
         videos_to_update={key: self._videos[key] for key in video_keys if key in self._videos.keys()}
 
@@ -2275,14 +2299,28 @@ class Coordinates:
             scales = scales_to_edit,            
         )
 
-        # update the scales and arena parameters
+        # Verify that edits make sense
+        first_detection=True
         for key in video_keys:
-            self._roi_dicts[key] = edited_roi_dicts[key]
-            self._arena_params[key] = edited_arena_params[key]
-            self._scales[key] = edited_scales[key]
+            scale_ratio = self._scales[key][2]/edited_scales[key][2]
+            if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection:
+                overwrite_old=deepof.arena_utils.confirm_action(
+                    f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
+                    f"This can indicate that the wrong \"arena_type\" was used.\n"
+                    f"Do you still want to overwrite the old data with the edited arenas?",
+                    "Overwrite old arenas/ROIs?"
+                    )
+                first_detection = False
+
+        # update the scales and arena parameters
+        if overwrite_old:
+            for key in video_keys:
+                self._roi_dicts[key] = edited_roi_dicts[key]
+                self._arena_params[key] = edited_arena_params[key]
+                self._scales[key] = edited_scales[key]
 
 
-        self.save(timestamp=False)
+            self.save(timestamp=False)
 
         if verbose:
             print("Done!")
