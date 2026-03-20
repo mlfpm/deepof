@@ -1364,6 +1364,10 @@ def retrieve_corners_from_image(
     """
     roi_colors=ROI_COLORS
 
+    # Turn to list if not already (happens when loading as it is saved as a numpy array)
+    if isinstance(corners,np.ndarray):
+        corners=corners.tolist()
+
     #early return of set of square corners
     if test:
         return [(111, 49), (541, 31), (553, 438), (126, 452)]
