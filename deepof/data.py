@@ -2267,7 +2267,7 @@ class Coordinates:
         # Convert all arenas to now standard polygon format to prevent mixed types
         first_detection=True
         for key in self._videos:
-            if isinstance(self._arena_params[key], Tuple):
+            if isinstance(self._arena_params[key], Tuple) and is_display_available():
                 if first_detection:
                     print('\033[33mInfo! Old arena format detected. Converting...\033[0m')
                     first_detection = False
