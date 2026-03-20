@@ -1,6 +1,86 @@
 Changelog
 =========
 
+[0.8.5] - 2026-03-20
+====================
+
+Added
+-------
+- New supervised annotations: per-frame `distance` and cumulative `cum-distance` alongside speed, computed from body-part positions
+- New `DistanceUnit`, `TimeUnit`, and `Speed_Unit` enums in config for automatic unit conversion (mm, cm, m, km, inch, foot, … / frames, s, min, h)
+- New plotting functions `plot_mouse_roi_interaction` and `return_mouse_roi_interaction` for mouse-to-ROI/arena distance or field-of-view overlap over time (polar and cartesian)
+- New `return_supervised_summary` function exporting a summary table of supervised annotations with configurable time/distance units, optionally saved as CSV
+- New `unit_time` and `unit_distance` parameters in `plot_enrichment` and `plot_behavior_trends` for on-the-fly unit conversion
+- New field-of-view (`in_field_of_view`, `in_field_of_view_numba`) and point-to-polygon-distance (`get_point_polygon_distance`, `get_point_polygon_distance_numba`) utility functions
+- `get_contrastive_soft_counts` now supports optional soft-count priors (`soft_counts`, `min_confidence`, `prior_weight`)
+- New `align_group` parameter in `get_coords` to align all animals to one reference animal's body part
+- New `extrapolate_heatmap` parameter in `plot_heatmaps` to control KDE extrapolation beyond data bounds
+- Arena detection GUI: navigation back to previous video (`b` key), reset propagation, toggleable help overlay (`h`) and mesh grid overlay (`m` with 10 mm spacing), and automatic export of arena/ROI detection images
+- `edit_arenas` now verifies edits and warns when scales deviate significantly from originals; all arenas converted to polygon format on load
+- New `get_condition_values` method on `Coordinates` for retrieving unique condition values
+- `plot_behavior_trends` now supports multiple `behaviors_to_plot` in a grid layout and accepts animal IDs (auto-expanded to behavior combinations)
+
+Changed
+-------
+- `video_scale` in `Project` requires a string with units (`"380 mm"`) instead of a bare integer; raises `ValueError` otherwise
+- Arena parameters uniformly stored as polygon arrays (`np.ndarray`); old circular ellipse tuples auto-converted
+- Arena type detection throughout codebase changed from string-based (`arena_type.startswith("circular")`) to type-based for stability (`isinstance(arena, Tuple)` / `isinstance(arena, np.ndarray)`)
+- `automatically_recognize_arena` simplified: removed `coordinates` and `debug` parameters; arena images now always exported
+- `get_arenas` refactored to better support editing existing arenas (uses pre-existing `roi_dicts`, `arena_params`, `scales`) and accepts both `Project` and `Coordinates` objects
+- `preprocess` completely rewritten with a two-pass architecture (size-normalize → collect samples → apply global scaling → save), supports per-column vs. groupwise standardization and optional log-transform for distances; old `preprocess_old` removed
+- `scale_table` rewritten with per-animal body-size normalization, configurable standardization modes, and log-distance option; old `scale_animal` removed
+- `get_graph_dataset` returns a `metainfo` dict (with `shape_train`, `shape_test`, column metadata) instead of a bare `shapes` tuple
+- `supervised_tagging`: `overall_speed` renamed to `get_continuous_measures`, now also returns `distance` and `cum-distance`
+- `plot_enrichment` bar order explicitly preserved; speed/duration units handled via `DistanceUnit`/`TimeUnit` enums
+- `generate_behavior_combinations` now accepts boolean or list inputs per behavior type and handles continuous behaviors separately
+- `count_transitions` drops only exact-suffix continuous behavior columns instead of substring matches
+- `simplify_polygon` rewritten to support fixed-number vertex output aligned with dominant polygon sides
+- Parameter validation (`_validate_parameter`, `_check_enum_inputs`) moved and extended: supports dict-type inputs, validates `distance_unit`, recognises animal IDs as valid behavior inputs
+- GUI windows set to topmost where supported
+- `save_dt` only writes to DuckDB when `return_path=True`
+
+Deprecated
+----------
+- During the rework of the unsupervised pipeline we plan to replace all old tensorflow code with updated Pytorch implementations
+
+Removed
+-------
+- Old `preprocess_old` method, `scale_animal` function, and `debug` parameter from `automatically_recognize_arena`
+- `arena_type` parameter from `sniff_object`; `tables` parameter from `get_arenas`; `coordinates` parameter from `automatically_recognize_arena`
+- Old `_validate_parameter` in `visuals_utils` (moved to `utils.validate_parameter`)
+
+Bug Fixes
+---------
+- Fixed `calculate_average_arena` not correcting polygon orientation before averaging
+- Fixed `get_time_on_cluster` crash on all-NaN soft-count rows (new `row_nanargmax`)
+- Fixed `count_transitions` dropping columns containing substring "speed" instead of matching exact suffixes
+- Fixed Gantt plot signal overlay axis issues; fixed NaN values in gantt matrix before rendering
+- Fixed `plot_behavior_trends` statistics/effect sizes dispalyx for edge cases
+- Fixed `enrichment_across_conditions` losing per-experiment identity in melted DataFrame
+- Fixed `plot_enrichment` inconsistent bar order across conditions
+- Fixed `calculate_average_arena` wrong results when polygon orientations differed
+- Fixed `simplify_polygon` inconsistent vertex counts across auto-detected arenas
+- Fixed `export_annotated_video` not validating behaviors before processing
+- Various `isinstance` checks replacing fragile string-based arena type detection throughout the codebase
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+- Current tensorflow models cannot access the GPU on windows systems and are hence very slow. They will be replaced with pytorch models in the next major update
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2026-03-20
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.8.5/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
 [0.8.4] - 2025-12-22
 ====================
 
