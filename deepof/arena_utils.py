@@ -773,6 +773,10 @@ def display_message(message: List[str]): # pragma: no cover
     
     # Display the image in a window
     cv2.imshow(window_name, image)
+    try:
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
+    except cv2.error:
+        pass  # Silently ignore if not supported
     
     try:
         # Wait for a key press or until the window is closed
@@ -1255,7 +1259,12 @@ def confirm_action(message: str, window_name: str = "Confirm"):
     cv2.putText(img, "Press 'y' to confirm, 'n' to cancel", (30, y_pos + 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
     
+    
     cv2.imshow(window_name, img)
+    try:
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
+    except cv2.error:
+        pass  # Silently ignore if not supported
     
     while True:
         key = cv2.waitKey(0) & 0xFF
@@ -1264,6 +1273,8 @@ def confirm_action(message: str, window_name: str = "Confirm"):
             return True
         elif key == ord('n'):
             cv2.destroyWindow(window_name)
+            return False
+        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
             return False
         
 
@@ -1532,6 +1543,7 @@ def retrieve_corners_from_image(
     show_help = False
     show_grid= False
     alpha=0.3
+    just_started=True
     while True:
         try:
             frame_copy = frame.copy()
@@ -1656,6 +1668,12 @@ def retrieve_corners_from_image(
                 display_text,
                 frame_copy,
             )
+            if just_started:
+                just_started=False
+                try:
+                    cv2.setWindowProperty(display_text, cv2.WND_PROP_TOPMOST, 1)
+                except cv2.error:
+                    pass  # Silently ignore if not supported
 
             key = cv2.waitKey(1) & 0xFF
 
