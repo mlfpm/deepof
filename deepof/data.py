@@ -359,7 +359,8 @@ class Project:
 
         
         # If sampling rates deviate, confirm continued setup.
-        if max_diff>0.01:
+        continue_init=True
+        if max_diff>=0.01:
             continue_init=deepof.arena_utils.confirm_action(
                 f"The sampling rates of your videos deviate significantly!\n" 
                 f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
