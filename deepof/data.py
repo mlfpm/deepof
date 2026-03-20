@@ -361,13 +361,14 @@ class Project:
         # If sampling rates deviate, confirm continued setup.
         continue_init=True
         if max_diff>=0.01:
-            continue_init=deepof.arena_utils.confirm_action(
-                f"The sampling rates of your videos deviate significantly!\n" 
-                f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
-                f"If this is unexpected, we recommend to investigate this issue!\n"
-                f"Do you want to continue the project definition regardless?",
-                "Sampling Rate deviations detected!"
-                    )
+            if is_display_available():
+                continue_init=deepof.arena_utils.confirm_action(
+                    f"The sampling rates of your videos deviate significantly!\n" 
+                    f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
+                    f"If this is unexpected, we recommend to investigate this issue!\n"
+                    f"Do you want to continue the project definition regardless?",
+                    "Sampling Rate deviations detected!"
+                        )
         if not continue_init:
             assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (from {min_key}: {min_val} fps to {max_key}: {max_val} fps)"
 
@@ -2302,16 +2303,18 @@ class Coordinates:
 
         # Verify that edits make sense
         first_detection=True
+        overwrite_old=True
         for key in video_keys:
             scale_ratio = self._scales[key][2]/edited_scales[key][2]
             if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection:
-                overwrite_old=deepof.arena_utils.confirm_action(
-                    f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
-                    f"This can indicate that the wrong \"arena_type\" was used.\n"
-                    f"Do you still want to overwrite the old data with the edited arenas?",
-                    "Overwrite old arenas/ROIs?"
-                    )
-                first_detection = False
+                if is_display_available():
+                    overwrite_old=deepof.arena_utils.confirm_action(
+                        f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
+                        f"This can indicate that the wrong \"arena_type\" was used.\n"
+                        f"Do you still want to overwrite the old data with the edited arenas?",
+                        "Overwrite old arenas/ROIs?"
+                        )
+                    first_detection = False
 
         # update the scales and arena parameters
         if overwrite_old:
