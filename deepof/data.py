@@ -46,7 +46,8 @@ exit(0)
     except:
         return False
 
-if is_display_available():
+DISPLAY_AVAILABLE = is_display_available()
+if DISPLAY_AVAILABLE:
     cv2.imshow("test",1)
     cv2.waitKey(1)
     cv2.destroyAllWindows()
@@ -361,7 +362,7 @@ class Project:
         # If sampling rates deviate, confirm continued setup.
         continue_init=True
         if max_diff>=0.01:
-            if is_display_available():
+            if DISPLAY_AVAILABLE:
                 continue_init=deepof.arena_utils.confirm_action(
                     f"The sampling rates of your videos deviate significantly!\n" 
                     f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
@@ -2267,7 +2268,7 @@ class Coordinates:
         # Convert all arenas to now standard polygon format to prevent mixed types
         first_detection=True
         for key in self._videos:
-            if isinstance(self._arena_params[key], Tuple) and is_display_available():
+            if isinstance(self._arena_params[key], Tuple) and DISPLAY_AVAILABLE:
                 if first_detection:
                     print('\033[33mInfo! Old arena format detected. Converting...\033[0m')
                     first_detection = False
@@ -2288,33 +2289,36 @@ class Coordinates:
             scales_to_edit[key] = self._scales[key]
 
 
-        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
-            coordinates=self,
-            arena=arena_type,
-            arena_dims=self._arena_dims,
-            number_of_rois=self._number_of_rois,
-            segmentation_model_path=None,
-            video_path=self._video_path,
-            videos=videos_to_update,
-            roi_dicts = roi_dicts_to_edit,
-            arena_params = arena_params_to_edit,
-            scales = scales_to_edit,            
-        )
+        if DISPLAY_AVAILABLE:
+            edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
+                coordinates=self,
+                arena=arena_type,
+                arena_dims=self._arena_dims,
+                number_of_rois=self._number_of_rois,
+                segmentation_model_path=None,
+                video_path=self._video_path,
+                videos=videos_to_update,
+                roi_dicts = roi_dicts_to_edit,
+                arena_params = arena_params_to_edit,
+                scales = scales_to_edit,            
+            )
+        else:
+            edited_scales, edited_arena_params, edited_roi_dicts = scales_to_edit, arena_params_to_edit, roi_dicts_to_edit
+
 
         # Verify that edits make sense
         first_detection=True
         overwrite_old=True
         for key in video_keys:
             scale_ratio = self._scales[key][2]/edited_scales[key][2]
-            if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection:
-                if is_display_available():
-                    overwrite_old=deepof.arena_utils.confirm_action(
-                        f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
-                        f"This can indicate that the wrong \"arena_type\" was used.\n"
-                        f"Do you still want to overwrite the old data with the edited arenas?",
-                        "Overwrite old arenas/ROIs?"
-                        )
-                    first_detection = False
+            if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection and DISPLAY_AVAILABLE:
+                overwrite_old=deepof.arena_utils.confirm_action(
+                    f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
+                    f"This can indicate that the wrong \"arena_type\" was used.\n"
+                    f"Do you still want to overwrite the old data with the edited arenas?",
+                    "Overwrite old arenas/ROIs?"
+                    )
+                first_detection = False
 
         # update the scales and arena parameters
         if overwrite_old:
