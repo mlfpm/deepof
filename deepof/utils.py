@@ -1325,7 +1325,7 @@ def _is_point_inside_numba(
 
 
 
-def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray:
+def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray: # pragma: no cover
     """Calculates array of distances between 2D points and a polygon (roi)"""
 
     assert points.size > 0 and points.ndim == 2
