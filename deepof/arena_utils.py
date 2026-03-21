@@ -262,7 +262,7 @@ def get_arenas(
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
                 cur_arena_params_1 = extract_corners_from_arena(((200, 195), (167, 169), 14.071887016296387))
-                cur_arena_params_2 = extract_corners_from_arena(((200, 195), (167, 169), 14.071887016296387))
+                cur_arena_params_2 = ((200, 195), (167, 169), 14.071887016296387) #keep one circular arena to also test legacy code
                 arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2}
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
@@ -773,6 +773,10 @@ def display_message(message: List[str]): # pragma: no cover
     
     # Display the image in a window
     cv2.imshow(window_name, image)
+    try:
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
+    except cv2.error:
+        pass  # Silently ignore if not supported
     
     try:
         # Wait for a key press or until the window is closed
@@ -902,7 +906,8 @@ def extract_polygonal_arena_coordinates(
         )
         # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer) and go to next roi     
         if exit_flag_rois == Arena_GUI_exit_flag.NEXT:
-            cur_roi_corners=simplify_polygon(cur_roi_corners,None,0.001,True)
+            #if simplify:
+            #cur_roi_corners=simplify_polygon(cur_roi_corners,None,0.001,True)
             roi=list(np.array(cur_roi_corners).astype(int))
         # Take roi k from the previous video and propagate 
         elif exit_flag_rois == Arena_GUI_exit_flag.PROPAGATE:
@@ -1140,7 +1145,7 @@ def extract_corners_from_arena(
 
     Args:
         params (Union[Tuple, np.ndarray]):
-            - For a circular arena: A tuple containing ((center_x, center_y), (diameter_x, diameter_y), angle_degrees).
+            - For a circular arena: A tuple containing ((center_x, center_y), (radius_x, radius_y), angle_degrees).
             - For a polygonal arena: A NumPy array of shape (N, 2) with vertex coordinates.
         num_points (int): Number of vertices for the ellipse. Defaults to 100.
 
@@ -1221,6 +1226,58 @@ def extract_corners_from_arena(
 # Custom GUI elements to avoid having to use PyQt5
 ##################################################
 
+
+def confirm_action(message: str, window_name: str = "Confirm"):
+    """
+    Displays a confirmation dialog using OpenCV with multi-line support.
+    
+    Args:
+        message: The message to display (use '\\n' for line breaks).
+        window_name: Name of the OpenCV window.
+    
+    Returns:
+        bool: True if 'y' pressed, False if 'n' pressed.
+    """
+    lines = message.split('\n')
+    
+    # Calculate image height based on number of lines
+    line_height = 40
+    padding = 100
+    img_height = len(lines) * line_height + padding
+    img_width = 800
+    
+    # Create black image
+    img = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+    
+    # Add message lines
+    y_pos = 50
+    for line in lines:
+        cv2.putText(img, line, (30, y_pos),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        y_pos += line_height
+    
+    # Add instruction text at bottom
+    cv2.putText(img, "Press 'y' to confirm, 'n' to cancel", (30, y_pos + 20),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+    
+    
+    cv2.imshow(window_name, img)
+    try:
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
+    except cv2.error:
+        pass  # Silently ignore if not supported
+    
+    while True:
+        key = cv2.waitKey(0) & 0xFF
+        if key == ord('y'):
+            cv2.destroyWindow(window_name)
+            return True
+        elif key == ord('n'):
+            cv2.destroyWindow(window_name)
+            return False
+        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+            return False
+        
 
 @dataclass
 class DropdownConfig:
@@ -1364,6 +1421,10 @@ def retrieve_corners_from_image(
     """
     roi_colors=ROI_COLORS
 
+    # Turn to list if not already (happens when loading as it is saved as a numpy array)
+    if isinstance(corners,np.ndarray):
+        corners=corners.tolist()
+
     #early return of set of square corners
     if test:
         return [(111, 49), (541, 31), (553, 438), (126, 452)]
@@ -1483,6 +1544,7 @@ def retrieve_corners_from_image(
     show_help = False
     show_grid= False
     alpha=0.3
+    just_started=True
     while True:
         try:
             frame_copy = frame.copy()
@@ -1607,6 +1669,12 @@ def retrieve_corners_from_image(
                 display_text,
                 frame_copy,
             )
+            if just_started:
+                just_started=False
+                try:
+                    cv2.setWindowProperty(display_text, cv2.WND_PROP_TOPMOST, 1)
+                except cv2.error:
+                    pass  # Silently ignore if not supported
 
             key = cv2.waitKey(1) & 0xFF
 

@@ -107,7 +107,7 @@ def test_model_embedding_fitting(
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
     ).create(force=True, test=True)
 

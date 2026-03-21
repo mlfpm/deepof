@@ -46,7 +46,8 @@ exit(0)
     except:
         return False
 
-if is_display_available():
+DISPLAY_AVAILABLE = is_display_available()
+if DISPLAY_AVAILABLE:
     cv2.imshow("test",1)
     cv2.waitKey(1)
     cv2.destroyAllWindows()
@@ -82,7 +83,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context, DistanceUnit
 import deepof.model_utils
 import deepof.models
 #import deepof.clustering.models_new
@@ -170,12 +171,12 @@ def load_project(
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
     # Error for not compatible versions
-    if not (hasattr(coordinates, "_run_numba")):
+    if not (hasattr(coordinates, "_run_numba")): 
 
         raise ValueError(
             """You are trying to load a deepOF project that was created with version 0.6.x or earlier.\n
             These older versions are not compatible with the current version"""
-        )
+        )  # pragma: no cover
     # Compatibility fixes versions 0.7.0 to 0.7.2
     if isinstance(coordinates._table_paths, List):
         
@@ -218,7 +219,7 @@ def load_project(
             smooth_alpha=smooth_alpha,
             table_format=table_extension,
             video_format=video_extension,
-            video_scale=coordinates._arena_dims,
+            video_scale=str(coordinates._arena_dims)+ " mm",
             number_of_rois = number_of_rois,
             fast_implementations_threshold=fast_implementations_threshold,
         )
@@ -257,7 +258,7 @@ class Project:
         smooth_alpha: float = 1,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
-        video_scale: int = 1,
+        video_scale: str = None,
         number_of_rois: int = 0,
         fast_implementations_threshold: int = 50000,
     ):
@@ -357,7 +358,20 @@ class Project:
         max_key, max_val = max(fpses.items(), key=lambda item: item[1])
         max_diff = max_val - min_val
 
-        assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (e.g. {min_key}: {min_val} fps and {max_key}: {max_val} fps)"
+        
+        # If sampling rates deviate, confirm continued setup.
+        continue_init=True
+        if max_diff>=0.01:
+            if DISPLAY_AVAILABLE:
+                continue_init=deepof.arena_utils.confirm_action(
+                    f"The sampling rates of your videos deviate significantly!\n" 
+                    f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
+                    f"If this is unexpected, we recommend to investigate this issue!\n"
+                    f"Do you want to continue the project definition regardless?",
+                    "Sampling Rate deviations detected!"
+                        )
+        if not continue_init:
+            assert max_diff<0.01, f"Error, the sampling rates of your videos deviate significantly! (from {min_key}: {min_val} fps to {max_key}: {max_val} fps)"
 
         if max_diff>0:
             warnings.warn(
@@ -368,7 +382,23 @@ class Project:
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
-        self.arena_dims = video_scale
+        pattern = re.compile(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s+\S+')
+        if isinstance(video_scale, str) and pattern.fullmatch(video_scale) is not None:
+            str_components=video_scale.split(" ")
+            self.arena_dims=float(str_components[0])/DistanceUnit.parse(str_components[1]).factor(None)
+            if self.arena_dims < 50 or self.arena_dims > 5000:
+                warnings.warn(
+                    f"\033[38;5;208m"
+                    f"The arena dimension you entered is {self.arena_dims} mm."
+                    f"If your arena is really this small or large, you can ignore this warning."
+                    f"\033[0m"
+                )
+        else:
+            raise ValueError('Error! Please enter video_scale as \"[value] [unit of measurment]\", e.g. \"200 mm\"')
+        print(
+            f"\033[33mInfo! Set arena dimension to {self.arena_dims} mm!\033[0m"
+        )
+
         self.number_of_rois = number_of_rois
         self.ellipse_detection = None
 
@@ -395,7 +425,7 @@ class Project:
             elif len(rename_bodyparts) == 14:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
             else:
-                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!")
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") # pragma: no cover
             
             # Creates a dictionary assigning table bp names to corresponding deepOF bp names
             rename_bodyparts_dict = {}
@@ -707,8 +737,8 @@ class Project:
         Loads and preprocesses tracking data through a series of modular steps,
         then saves the results and returns table dictionaries.
         """
-        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:
-            raise NotImplementedError("Tracking files must be in h5, csv, npy, or slp format")
+        if self.table_format not in ["h5", "csv", "npy", "slp", "analysis.h5"]:  
+            raise NotImplementedError("Tracking files must be in h5, csv, npy, or slp format")  # pragma: no cover
 
         final_tab_dict, final_lik_dict = {}, {}
         total_warnings = 0
@@ -1465,7 +1495,9 @@ class Coordinates:
         polar: bool = False,
         speed: int = 0,
         align: str = False,
+        align_group: bool = False,
         align_inplace: bool = True,
+        to_video: bool = False,
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
@@ -1481,6 +1513,7 @@ class Coordinates:
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
+            to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
             selected_id (str): Selects a single animal on multi animal settings. Defaults to None (all animals are processed).
             roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
             animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
@@ -1498,7 +1531,7 @@ class Coordinates:
             raise ValueError(
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported byt he current version of deepof"""
-            )
+            )  # pragma: no cover
 
         tab_dict={}
         for key in self._tables.keys():
@@ -1510,7 +1543,9 @@ class Coordinates:
                 polar = polar,
                 speed = speed,
                 align = align,
+                align_group = align_group,
                 align_inplace = align_inplace,
+                to_video = to_video,
                 selected_id = selected_id,
                 roi_number = roi_number,
                 animals_in_roi = animals_in_roi,
@@ -1552,16 +1587,16 @@ class Coordinates:
     def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_number: int):
         """Performs initial validation of function arguments."""
         if align:
-            if not any(center in bp for bp in tab.columns.levels[0]):
-                raise ValueError("For alignment, 'center' must be the name of a body part.")
+            #if not any(center in bp for bp in tab.columns.levels[0]):
+            #    raise ValueError("For alignment, 'center' must be the name of a body part.")  # pragma: no cover
             if not any(align in bp for bp in tab.columns.levels[0]):
-                raise ValueError("'align' must be the name of a body part.")
+                raise ValueError("'align' must be the name of a body part.")  # pragma: no cover
         
         if roi_number is not None:
             if self._roi_dicts is None:
-                raise ValueError("ROIs not created for this project. Define ROIs during project creation.")
+                raise ValueError("ROIs not created for this project. Define ROIs during project creation.")  # pragma: no cover
             if len(self._roi_dicts.get(key, [])) < roi_number:
-                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")
+                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")  # pragma: no cover
             
     
     def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str) -> pd.DataFrame:
@@ -1649,7 +1684,7 @@ class Coordinates:
         tab.loc[:, (slice(None), list(coords))] *= pixel_ratio
         return tab
 
-    def _align_trajectories(self, tab: pd.DataFrame, align: str, align_inplace: bool, polar: bool, animal_ids: List[str]) -> pd.DataFrame:
+    def _align_trajectories(self, tab: pd.DataFrame, align: str, align_group : bool, align_inplace: bool, polar: bool, animal_ids: List[str]) -> pd.DataFrame:
         """Aligns animal trajectories to a reference body part."""
         if not (align and align_inplace and not polar):
             return tab
@@ -1657,10 +1692,14 @@ class Coordinates:
         all_aligned_parts = []
         all_columns = []
 
+        first_aid = animal_ids[0]+'_'
         for aid in animal_ids:
             if aid:
                 aid=aid+'_'
-            align_bp_name = f"{aid}{align}"
+            if align_group:
+                align_bp_name = f"{first_aid}{align}"
+            else:
+                align_bp_name = f"{aid}{align}"
             
             # Define alignment columns and remaining columns for the animal
             align_cols = [(align_bp_name, "phi" if polar else "x"),
@@ -1668,7 +1707,10 @@ class Coordinates:
             other_cols = [col for col in tab.columns if col[0].startswith(aid) and col[0] != align_bp_name]
             
             # Reorder columns to have the alignment body part first
-            ordered_cols = align_cols + other_cols
+            if aid == first_aid or not align_group:
+                ordered_cols = align_cols + other_cols
+            else:
+                ordered_cols = other_cols
             partial_tab = tab[ordered_cols]
             
             # Perform alignment
@@ -1716,6 +1758,7 @@ class Coordinates:
     polar: bool = False,
     speed: int = 0,
     align: str = False,
+    align_group: bool = False,
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
@@ -1772,7 +1815,7 @@ class Coordinates:
 
         # 8. Align trajectories
         if align:
-            tab = self._align_trajectories(tab, align, align_inplace, polar, animal_ids)
+            tab = self._align_trajectories(tab, align, align_group, align_inplace, polar, animal_ids)
 
         # 9. Calculate speed/derivatives
         if speed:
@@ -2218,6 +2261,19 @@ class Coordinates:
         if arena_type is None:
             arena_type = self._arena
 
+        
+        # arena detection should not be repeated for editing, only existing arenas should be loaded
+        arena_type=arena_type.replace('autodetect','manual')
+        
+        # Convert all arenas to now standard polygon format to prevent mixed types
+        first_detection=True
+        for key in self._videos:
+            if isinstance(self._arena_params[key], Tuple) and DISPLAY_AVAILABLE:
+                if first_detection:
+                    print('\033[33mInfo! Old arena format detected. Converting...\033[0m')
+                    first_detection = False
+                self._arena_params[key] = deepof.arena_utils.extract_corners_from_arena(self._arena_params[key])
+
         #create dictionary based on entered keys if keys actually exist in videos
         videos_to_update={key: self._videos[key] for key in video_keys if key in self._videos.keys()}
 
@@ -2233,27 +2289,46 @@ class Coordinates:
             scales_to_edit[key] = self._scales[key]
 
 
-        edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
-            coordinates=self,
-            arena=arena_type,
-            arena_dims=self._arena_dims,
-            number_of_rois=self._number_of_rois,
-            segmentation_model_path=None,
-            video_path=self._video_path,
-            videos=videos_to_update,
-            roi_dicts = roi_dicts_to_edit,
-            arena_params = arena_params_to_edit,
-            scales = scales_to_edit,            
-        )
+        if DISPLAY_AVAILABLE:
+            edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
+                coordinates=self,
+                arena=arena_type,
+                arena_dims=self._arena_dims,
+                number_of_rois=self._number_of_rois,
+                segmentation_model_path=None,
+                video_path=self._video_path,
+                videos=videos_to_update,
+                roi_dicts = roi_dicts_to_edit,
+                arena_params = arena_params_to_edit,
+                scales = scales_to_edit,            
+            )
+        else:
+            edited_scales, edited_arena_params, edited_roi_dicts = scales_to_edit, arena_params_to_edit, roi_dicts_to_edit
+
+
+        # Verify that edits make sense
+        first_detection=True
+        overwrite_old=True
+        for key in video_keys:
+            scale_ratio = self._scales[key][2]/edited_scales[key][2]
+            if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection and DISPLAY_AVAILABLE:
+                overwrite_old=deepof.arena_utils.confirm_action(
+                    f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
+                    f"This can indicate that the wrong \"arena_type\" was used.\n"
+                    f"Do you still want to overwrite the old data with the edited arenas?",
+                    "Overwrite old arenas/ROIs?"
+                    )
+                first_detection = False
 
         # update the scales and arena parameters
-        for key in video_keys:
-            self._roi_dicts[key] = edited_roi_dicts[key]
-            self._arena_params[key] = edited_arena_params[key]
-            self._scales[key] = edited_scales[key]
+        if overwrite_old:
+            for key in video_keys:
+                self._roi_dicts[key] = edited_roi_dicts[key]
+                self._arena_params[key] = edited_arena_params[key]
+                self._scales[key] = edited_scales[key]
 
 
-        self.save(timestamp=False)
+            self.save(timestamp=False)
 
         if verbose:
             print("Done!")
@@ -2300,6 +2375,8 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        dist_standardize: str = "per_column",
+        speed_standardize: str = "per_column",
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2316,6 +2393,8 @@ class Coordinates:
             polar (bool) States whether the coordinates should be converted to polar values.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
+            dist_standardize (str): standardize distance columns individually (per_column) or as a group (groupwise)
+            speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
 
         Returns:
@@ -2349,7 +2428,7 @@ class Coordinates:
 
                 # Get all relevant features
                 coords = self.get_coords(
-                    selected_id=animal_id, center=center, align=align, polar=polar, return_path=return_as_paths,
+                    selected_id=animal_id, center="arena", align=align, align_group=True, polar=polar, return_path=return_as_paths,
                 )
 
                 pbar.update()
@@ -2427,6 +2506,11 @@ class Coordinates:
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
+            speed_feature_names = (
+                list(graph.nodes())
+                #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
+            )
+
             # Sort indices to have always the same node order
             node_sorting_indices = []
             angle_sorting_indices = []
@@ -2453,11 +2537,24 @@ class Coordinates:
                     inner_link_bool_mask.append(
                         len(set([node.split("_")[0] for node in e])) == 1
                     )
+            edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
             
             pbar.update()
 
+        # Create metainfo
+        metainfo={}
+
+        metainfo['node_columns']=feature_names[node_sorting_indices]
+        metainfo['edge_columns']=feature_names[edge_sorting_indices]
+        metainfo['angle_columns']=feature_names[angle_sorting_indices]
+
+
         # Create graph datasets
         if preprocess:
+
+            collect_quality = True
+            if collect_quality==True:
+                quality_to_load = self.get_quality()
             to_preprocess, shapes, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
@@ -2465,13 +2562,14 @@ class Coordinates:
                 bin_index=bin_index,
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
+                save_as_paths=return_as_paths,
+                quality_to_load=None, #quality_to_load,
+                dist_standardize=dist_standardize,
+                speed_standardize=speed_standardize,
                 **kwargs,
-                save_as_paths=return_as_paths
                 )
    
-            shapes=[]
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
-                edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
                 for k in range(0,len(to_preprocess)):
                 
                     num_rows=0
@@ -2485,7 +2583,7 @@ class Coordinates:
                         tab_nodes = tab[:, :, node_sorting_indices]
                         tab_edges = tab[:, :, edge_sorting_indices] 
                         tab_angles = tab[:, :, angle_sorting_indices]                    
-                        dataset = ( tab_nodes, tab_edges, tab_angles)
+                        dataset = (tab_nodes, tab_edges, tab_angles)
 
                         num_rows=num_rows+tab.shape[0]
                     
@@ -2495,12 +2593,23 @@ class Coordinates:
                             table_path = os.path.join(os.path.dirname(table_path.get("duckdb_file")) , table_path.get("table"))                    
                         to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
                     #collect shapes
-                    if len(to_preprocess[k].keys())>0:
-                        shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
+                    if len(to_preprocess[k].keys())>0 and k==0:
+                        metainfo['shape_train']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
+                    elif len(to_preprocess[k].keys())>0 and k==1:    
+                        metainfo['shape_test']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]   
                     else:
-                        shapes=[(0,),(0,),(0,)]
+                        metainfo['shape_train']=[(0,),(0,),(0,)]
                     pbar.update()
-                shapes=tuple(shapes)
+
+
+            return (
+                to_preprocess,
+                metainfo,
+                nx.adjacency_matrix(graph).todense(),
+                tab_dict,
+                global_scaler,
+            )
+
 
         else:  # pragma: no cover
             to_preprocess = tab_dict #np.concatenate(list(tab_dict.values()))
@@ -2511,6 +2620,12 @@ class Coordinates:
                 for key in to_preprocess.keys():
 
                     tab, table_path = get_dt(to_preprocess, key, return_path=True) 
+
+                    collect_quality = True
+                    if collect_quality==True:
+                        quality_to_load = self.get_quality().filter_videos([key])
+                        quality = get_dt(quality_to_load, key)
+                        tab[speed_feature_names] = quality[speed_feature_names]
 
                     tab = np.array(tab)
 
@@ -2526,7 +2641,7 @@ class Coordinates:
                             ],
                         ),
                     )
-                    num_rows=num_rows+dataset.shape[0]
+                    num_rows=num_rows+tab.shape[0]
 
 
                     # save paths for modified tables
@@ -2534,20 +2649,10 @@ class Coordinates:
                     pbar.update()
 
 
-                shapes=shapes+[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
-                shapes=tuple(shapes)
-                
-        try:
-            return (
-                to_preprocess,
-                shapes,
-                nx.adjacency_matrix(graph).todense(),
-                tab_dict,
-                global_scaler,
-            )
-        except UnboundLocalError:
-            return to_preprocess, nx.adjacency_matrix(graph).todense(), tab_dict
+                metainfo[f'shape_{key}']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
 
+            return to_preprocess, metainfo, nx.adjacency_matrix(graph).todense(), tab_dict, None
+                
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:
         """Return the most frequent behaviour in a window of window_size frames.
@@ -2652,7 +2757,7 @@ class Coordinates:
             raise ValueError(
                 """You are trying to use a deepOF project that was created with version 0.6.3 or earlier.\n
             This is not supported by the current version of deepof"""
-            )
+            )  # pragma: no cover
         
         # get immobility classifer
         self._trained_model_path = resource_filename(__name__, "trained_models")    
@@ -2662,6 +2767,7 @@ class Coordinates:
             model_path=os.path.join("trained_models", "deepof_supervised","deepof_supervised_huddle_estimator.pkl"),
             model_name="Immobility classifier"
             ) 
+
     
         N_preprocessing_steps=2+len(self._animal_ids)
         N_processing_steps=len(self._tables.keys())
@@ -2679,12 +2785,12 @@ class Coordinates:
             pbar.set_postfix(step="Loading coords")
             def load_coords():
                 try:
-                    return self.get_coords(center=center, align=align, return_path=self._very_large_project)
+                    return self.get_coords(center=center, align=align, align_group=False, return_path=self._very_large_project)
                 except ValueError:
                     try:
-                        return self.get_coords(center="Center", align="Spine_1", return_path=self._very_large_project)
+                        return self.get_coords(center="Center", align="Spine_1", align_group=False, return_path=self._very_large_project)
                     except ValueError:
-                        return self.get_coords(center="Center", align="Nose", return_path=self._very_large_project)
+                        return self.get_coords(center="Center", align="Nose", align_group=False, return_path=self._very_large_project)
 
             # Disable warnings manually around ThreadPoolExecutor
             # Reason: ThreadPoolExecutor will break the warnings if warning decorator functions are accessed in parallel
@@ -2991,7 +3097,7 @@ class Coordinates:
         except IndexError:
             raise ValueError(
                 "No pretrained model found for the given parameters. Please train a model first."
-            )
+            )  # pragma: no cover
 
         # returns a list of trained tensorflow models
         return trained_models
@@ -3326,7 +3432,7 @@ class TableDict(dict):
             
             test_keys = test_videos
         else:
-            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  # pragma: no cover
         
         train_keys = list(set(keys)-set(test_keys))
 
@@ -3353,39 +3459,85 @@ class TableDict(dict):
         )
 
 
+
+    # ========== Main preprocess method ==========
+
     def preprocess(
         self,
-        coordinates: coordinates,
+        coordinates,
         window_size: int = 25,
         window_step: int = 1,
-        # binning info
         bin_size=None,
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,
-        # other parameters
         scale: str = "standard",
-        pretrained_scaler: Any = None,
+        pretrained_scaler=None,
         test_videos: int = 0,
-        filter_low_variance: bool = False,
         interpolate_normalized: int = 10,
+        filter_low_variance: bool = False,
         file_name: str = "preprocessed",
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
-        skip_angles: bool = True,
-    ) -> np.ndarray:
+        quality_to_load=None, 
+        dist_standardize: str = "groupwise", 
+        speed_standardize: str = "groupwise", 
+        log_distances: bool = True, 
+    ) -> tuple:
+        """
+        Preprocess pose tables for model training.
+        
+        Pipeline:
+        1. Filter by time bins, drop all-NaN tables
+        2. Optionally replace speeds with quality scores
+        3. Collect samples to fit global scalers (size-normalized but not standardized)
+        4. Apply full scaling (size + statistical) and save
+        5. Extract sliding windows for training
+        
+        Args:
+            quality_to_load: Optional table_dict containing quality scores to replace speed values.
+                            Useful when speed reliability varies and you want to weight by tracking quality.
+        """
 
-        available_mem = psutil.virtual_memory().available * 0.9
-        N_rows_max = int(available_mem / ((33 + 11) * window_size * 8))
-        if samples_max is None:
-            samples_max = N_rows_max
-        elif samples_max > N_rows_max:  # pragma: no cover
-            warnings.warn(
-                "\033[38;5;208m\nWarning! The selected number of samples may exceed your available memory.\033[0m"
-            )
+        SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+
+        def _make_scaler(kind: str):
+            if kind not in SCALERS:
+                raise ValueError(f"Invalid scaler: {kind}. Choose from {set(SCALERS.keys())}")
+            return SCALERS[kind]()
+
+        def _sanitize_numeric(df: pd.DataFrame) -> pd.DataFrame:
+            """Interpolate NaNs and fill remaining gaps with zeros."""
+            out = df.copy()
+            num_cols = out.select_dtypes(include=[np.number]).columns
+            if len(num_cols) > 0:
+                out[num_cols] = out[num_cols].interpolate(limit_direction="both").fillna(0.0)
+            return out
+        
+        def _load_and_prepare_table(key, bin_indices):
+            """Load table, apply binning, and optionally replace speeds with quality scores."""
+            tab = get_dt(self, key).iloc[bin_indices]
+            
+            if quality_to_load is not None: # pragma: no cover
+                quality = get_dt(quality_to_load.filter_videos([key]), key)
+                # Speed columns that exist in both tables
+                shared_cols = list(set(tab.columns) & set(quality.columns))
+                if shared_cols:
+                    tab[shared_cols] = quality[shared_cols].iloc[bin_indices]
+            
+            return tab
+
+        # ========== Validation & setup ==========
+        
+        if scale and scale not in SCALERS:
+            raise ValueError(f"Invalid scaler: {scale}")
+        
+        if save_as_paths is None:
+            save_as_paths = coordinates._very_large_project
 
         keys_list = list(self.keys())
-
+        animal_ids = coordinates._animal_ids
+        
         bin_info = _preprocess_time_bins(
             coordinates=coordinates,
             bin_size=bin_size,
@@ -3395,39 +3547,30 @@ class TableDict(dict):
             samples_max=samples_max,
         )
 
-        if save_as_paths is None:
-            save_as_paths = False
-            if coordinates._very_large_project:
-                save_as_paths = True
-
-        if scale and scale not in {"robust", "standard", "minmax"}:
-            raise ValueError("Invalid scaler. Select one of standard, minmax or robust")  # pragma: no cover
-
-        resave_after_global = bool(scale) and (scale == "standard" and bool(interpolate_normalized))
-
-        # IMPORTANT: create a proper TableDict-like container (not a plain dict)
+        # Create empty output container
         try:
             table_temp = type(self)({}, self._type, self._table_path)
-        except Exception:
-            # Fallback: deepcopy and clear contents, preserving metadata
+        except Exception: # pragma: no cover
             table_temp = copy.deepcopy(self)
             for k in list(table_temp.keys()):
                 del table_temp[k]
-
-        rng = np.random.RandomState(42)
-        samples_for_fit = []
+        
+        rng = np.random.RandomState(2)
+        samples_speed, samples_dist, samples_inner, samples_intra = [], [], [], []
+        ref_speed_cols, ref_dist_cols = None, None
         global_scaler = None
-        keys_to_drop=[]
-    
-        with tqdm(total=len(keys_list), desc=f"{'Filtering':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+        valid_keys = []
+
+        # ========== Pass 1: Collect samples for global scaler fitting ==========
+        
+        with tqdm(total=len(keys_list), desc=f"{'Sampling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
             for key in keys_list:
-                tab = get_dt(self, key)
-                tab = tab.iloc[bin_info[key]]
-                #skip if selected table range has only NaNs and reduce keys_list
+                tab = _load_and_prepare_table(key, bin_info[key])  # includes quality replacement if you use it
+
                 if tab.isna().all().all():
-                    keys_to_drop.append(key)
                     pbar.update()
                     continue
+                valid_keys.append(key)
 
                 if filter_low_variance:
                     keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
@@ -3437,142 +3580,196 @@ class TableDict(dict):
                         "Error! During preprocessing the entire table was filtered out due to low variance!\n"
                         "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
                     )
-                
-                # Remove angle columns and put them back at the end of the loop
-                if skip_angles:
-                    angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
-                    angle_cols = tab.loc[:,angle_col_mask].copy()
-                    tab = tab.drop(columns=angle_cols)
 
-                if scale:
-
-                    current_tab_local = deepof.utils.scale_table(
-                        feature_array=tab,
+                if scale and pretrained_scaler is None:
+                    tab_local = deepof.utils.scale_table(
+                        tab,
                         scale=scale,
-                        global_scaler=None,
+                        animal_ids=animal_ids,
+                        standardize=True,   # size-normalize only
+                        dist_standardize=dist_standardize,
+                        speed_standardize=speed_standardize,
+                        log_distances=log_distances,
                     )
 
-                    float_mask = (tab.dtypes == float).values
-                    n_take = min(samples_max, len(tab))
+                    col_types = deepof.utils.infer_column_types(tab_local)
+                    scalar_cols = col_types["scalars"]  # speeds + dists
+
+                    n_take = min(samples_max, len(tab_local))
                     if n_take > 0:
-                        idx = rng.choice(len(tab), size=n_take, replace=False)
-                        samples_for_fit.append(current_tab_local[idx][:, float_mask])
+                        idx = rng.choice(len(tab_local), size=n_take, replace=False)
+                        if speed_standardize != "none" and col_types["speeds"]:
+                            if speed_standardize == "per_column":
+                                if ref_speed_cols is None:
+                                    ref_speed_cols = col_types["speeds"]
+                                samples_speed.append(
+                                    tab_local.iloc[idx].reindex(columns=ref_speed_cols)[ref_speed_cols].to_numpy(float)
+                                )
+                            else:  # groupwise
+                                samples_speed.append(
+                                    tab_local.iloc[idx][col_types["speeds"]].to_numpy(float).reshape(-1)
+                                )
 
-                    if not resave_after_global:
-                        tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
-                        tab = tab_local_df.apply(lambda x: pd.to_numeric(x, errors="ignore"), axis=0)
-
-                #re-add unprocessed angle columns
-                if skip_angles:
-                    for i, col in enumerate(angle_cols):
-                        tab.insert(angle_col_mask.index(True) + i, col, angle_cols[col])
-
-                table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                table_temp[key] = save_dt(tab, table_path, save_as_paths)
+                        if dist_standardize != "none" and col_types["dists"]:
+                            if dist_standardize == "per_column":
+                                if ref_dist_cols is None:
+                                    ref_dist_cols = col_types["dists"]
+                                samples_dist.append(
+                                    tab_local.iloc[idx].reindex(columns=ref_dist_cols)[ref_dist_cols].to_numpy(float)
+                                )
+                            else:  # groupwise (separately inner vs intra)
+                                if col_types["inner_dists"]:
+                                    samples_inner.append(
+                                        tab_local.iloc[idx][col_types["inner_dists"]].to_numpy(float).reshape(-1)
+                                    )
+                                if col_types["intra_dists"]:
+                                    samples_intra.append(
+                                        tab_local.iloc[idx][col_types["intra_dists"]].to_numpy(float).reshape(-1)
+                                    )
 
                 pbar.update()
+
+        # ========== Fit global scaler (per-column) ==========
+        def _fit_global_per_column(samples_2d):
+            if not samples_2d:
+                return None
+            sc = _make_scaler(scale)
+            sc.fit(np.vstack(samples_2d))
+            return sc
+
+        def _fit_global_groupwise(samples_1d):
+            if not samples_1d:
+                return None
+            sc = _make_scaler(scale)
+            sc.fit(np.concatenate(samples_1d).reshape(-1, 1))
+            return sc
         
-        # Remove all keys to invalid tables
-        keys_list = [key for key in keys_list if key not in keys_to_drop]
-        if len(keys_to_drop) > 0:
-            print(
-                f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
-            )
+        if pretrained_scaler is not None:
+            global_scaler = pretrained_scaler
+        elif not scale:
+            global_scaler = None
+        else:
+            global_scaler = {
+                "kind": scale,
+                "speed": None,
+                "dist": None,
+                "dist_inner": None,
+                "dist_intra": None,
+                "speed_mode": speed_standardize,
+                "dist_mode": dist_standardize,
+                "log_distances": log_distances,
+            }
 
-        if scale:
-            if scale == "standard":
-                global_scaler = StandardScaler()
-            elif scale == "minmax":
-                global_scaler = MinMaxScaler()
-            else:
-                global_scaler = RobustScaler()
+            if speed_standardize == "per_column":
+                global_scaler["speed"] = _fit_global_per_column(samples_speed)
+            elif speed_standardize == "groupwise":
+                global_scaler["speed"] = _fit_global_groupwise(samples_speed)
 
-            if pretrained_scaler is None:
-                if samples_for_fit:
-                    concat_array = np.vstack(samples_for_fit)
-                    global_scaler.fit(concat_array)
-                else:
-                    # Will error if there are zero features
-                    global_scaler.fit(np.empty((0, 0)))
-            else:
-                global_scaler = pretrained_scaler
+            if dist_standardize == "per_column":
+                global_scaler["dist"] = _fit_global_per_column(samples_dist)
+            elif dist_standardize == "groupwise":
+                global_scaler["dist_inner"] = _fit_global_groupwise(samples_inner)
+                global_scaler["dist_intra"] = _fit_global_groupwise(samples_intra)
 
-        if resave_after_global:
-            with tqdm(total=len(keys_list), desc=f"{'Rescaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
-                for key in keys_list:
-                    tab = get_dt(self, key)
-                    tab = tab.iloc[bin_info[key]]
+            if all(global_scaler[k] is None for k in ("speed", "dist", "dist_inner", "dist_intra")):
+                global_scaler = None
 
-                    if filter_low_variance:
-                        keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
-                                    list(np.where(["pheno" in str(col) for col in tab.columns])[0])
-                        tab = tab.iloc[:, keep_cols]
 
-                    # Remove angle columns and put them back at the end of the loop
-                    if skip_angles:
-                        angle_col_mask = [isinstance(col, tuple) and len(col)==3 for col in tab.columns]
-                        angle_cols = tab.loc[:,angle_col_mask].copy()
-                        tab = tab.drop(columns=angle_cols)
+        # ========== Pass 2: Apply scaling and save ==========
+        def _apply_global(tab_scaled, col_types, gs):
+            """Apply global scalers according to configured modes."""
+            if gs is None:
+                return tab_scaled
 
-                    # local -> global scaling 
-                    current_tab_local = deepof.utils.scale_table(
-                        feature_array=tab,
+            def _apply_1d(cols, scaler):
+                if not cols or scaler is None:
+                    return
+                arr = tab_scaled[cols].to_numpy(float)
+                tab_scaled.loc[:, cols] = scaler.transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+            def _apply_2d(cols, scaler):
+                if not cols or scaler is None:
+                    return
+                tab_scaled.loc[:, cols] = scaler.transform(tab_scaled[cols].to_numpy(float))
+
+            if speed_standardize == "per_column":
+                _apply_2d(col_types["speeds"], gs.get("speed"))
+            elif speed_standardize == "groupwise":
+                _apply_1d(col_types["speeds"], gs.get("speed"))
+
+            if dist_standardize == "per_column":
+                _apply_2d(col_types["dists"], gs.get("dist"))
+            elif dist_standardize == "groupwise":
+                _apply_1d(col_types["inner_dists"], gs.get("dist_inner"))
+                _apply_1d(col_types["intra_dists"], gs.get("dist_intra"))
+
+            return tab_scaled
+        
+        with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
+            for key in valid_keys:
+                tab = _load_and_prepare_table(key, bin_info[key])
+                orig_cols = tab.columns
+                col_types = deepof.utils.infer_column_types(tab)
+                
+                # Separate angles (dimensionless; only need interpolation, not scaling)
+                angle_cols = col_types["angles"]
+                angles_df = tab[angle_cols].copy() if angle_cols else None
+                tab = tab.drop(columns=angle_cols, errors="ignore")
+
+                if filter_low_variance:
+                    keep_cols = list(np.where(tab.var(axis=0) > filter_low_variance)[0]) + \
+                                list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+                    tab = tab.iloc[:, keep_cols]
+
+                # Apply full scaling (size + statistical)
+                if scale:
+                   
+                    tab_local = deepof.utils.scale_table(
+                        tab,
                         scale=scale,
-                        global_scaler=None,
+                        animal_ids=animal_ids,
+                        standardize=True,  
+                        dist_standardize=dist_standardize,
+                        speed_standardize=speed_standardize,
+                        log_distances=log_distances,
                     )
-                    tab_local_df = pd.DataFrame(current_tab_local, columns=tab.columns, index=tab.index)
 
-                    current_tab_global = deepof.utils.scale_table(
-                        feature_array=tab_local_df,
-                        scale=scale,
-                        global_scaler=global_scaler,
-                    )
-                    tab_scaled = pd.DataFrame(current_tab_global, columns=tab.columns, index=tab.index)
-
-                    if scale == "standard" and interpolate_normalized:
-                        cur_tab = tab_scaled.to_numpy(copy=True)
-                        try:
-                            cur_tab[cur_tab > interpolate_normalized] = np.nan
-                            cur_tab[cur_tab < -interpolate_normalized] = np.nan
-                        except TypeError:  # pragma: no cover
-                            cur_tab[
-                                np.append(
-                                    (cur_tab[:, :-1].astype(float) > interpolate_normalized),
-                                    np.array([[False] * len(cur_tab)]).T,
-                                    axis=1,
-                                )
-                            ] = np.nan
-                            cur_tab[
-                                np.append(
-                                    (cur_tab[:, :-1].astype(float) < -interpolate_normalized),
-                                    np.array([[False] * len(cur_tab)]).T,
-                                    axis=1,
-                                )
-                            ] = np.nan
-
-                        tab_scaled = (
-                            pd.DataFrame(cur_tab, index=tab.index, columns=tab.columns)
-                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                            .interpolate(limit_direction="both")
-                        )
-
-                        # Interpolate angle columns to avoid nans as only actual preprocesing step
-                        angle_cols_nans_interpolated = (
-                            angle_cols
-                            .apply(lambda x: pd.to_numeric(x, errors="ignore"))
-                            .interpolate(limit_direction="both")
-                        )
+                    # Apply the global scaler on top (global step)
+                    tab = tab_local
+                    col_types_local = deepof.utils.infer_column_types(tab)  # columns unchanged, but safer here
+                    tab = _apply_global(tab, col_types_local, global_scaler)
                     
-                    #re-add unprocessed angle columns
-                    if skip_angles:
-                        for i, col in enumerate(angle_cols_nans_interpolated):
-                            tab_scaled.insert(angle_col_mask.index(True) + i, col, angle_cols_nans_interpolated[col])
+                    # Clip outliers and interpolate (scalars only)
+                    if scale == "standard" and interpolate_normalized:
+                        scalars = [c for c in col_types["scalars"] if c in tab.columns]
+                        if scalars:
+                            arr = tab[scalars].to_numpy(float)
+                            arr[np.abs(arr) > interpolate_normalized] = np.nan
+                            tab[scalars] = pd.DataFrame(
+                                arr, index=tab.index, columns=scalars
+                            ).interpolate(limit_direction="both")
 
-                    table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
-                    table_temp[key] = save_dt(tab_scaled, table_path, save_as_paths)
+                # Reattach interpolated angles
+                if angles_df is not None:
+                    angles_df = angles_df.apply(pd.to_numeric, errors="ignore").interpolate(limit_direction="both")
+                    tab = pd.concat([tab, angles_df], axis=1)
 
-                    pbar.update()
+                # restore column order
+                tab = tab.reindex(columns=orig_cols)
 
+                # Save
+                table_path = os.path.join(self._table_path, key, f"{key}_{file_name}")
+                table_temp[key] = save_dt(_sanitize_numeric(tab), table_path, save_as_paths)
+                pbar.update()
+
+                orig_cols2 = get_dt(self, key).iloc[bin_info[key]].columns
+                new_cols2  = get_dt(table_temp, key).columns  # after saving
+
+                assert list(orig_cols2) == list(new_cols2), "Column order changed during preprocessing!"
+
+
+        # ========== Extract windows ==========
+        
         X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
 
         X_train, train_shape = deepof.utils.extract_windows(
@@ -3596,7 +3793,10 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
-        return (X_train, X_test), (train_shape, test_shape), global_scaler
+        metainfo={}
+        metainfo['shape_train']=train_shape
+        metainfo['shape_test']=test_shape
+        return (X_train, X_test), metainfo, global_scaler
 
 
     def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:

@@ -34,15 +34,13 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
+from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS, DistanceUnit, TimeUnit
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
     output_videos_per_cluster, 
 )
 from deepof.visuals_utils import (
-    DistanceUnit,
-    TimeUnit,
     _check_enum_inputs,
     plot_arena,
     heatmap,
@@ -1092,7 +1090,7 @@ def plot_enrichment(
         )
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
     enrichment["cluster"] = enrichment["cluster"].astype(str)
-
+    bar_order=enrichment["cluster"].unique().tolist()
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
@@ -1259,6 +1257,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             ax=ax,
@@ -1267,6 +1266,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             color="black",
@@ -4195,6 +4195,7 @@ def return_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    fov_angle_deg: int = 90,
     get_raw_data: bool = False,
 ):
     """Return binned statistics and effect sizes for mouse-ROI interaction over time.
@@ -4220,6 +4221,7 @@ def return_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
         get_raw_data (bool): If True, returns the raw per-frame interaction DataFrame instead of binned statistics. Defaults to False.
 
     Returns:
@@ -4246,6 +4248,7 @@ def return_mouse_roi_interaction(
         error_bars=error_bars,
         mode = mode,
         unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
         get_raw_data = get_raw_data,
     )
     if get_raw_data:
@@ -4285,9 +4288,10 @@ def plot_mouse_roi_interaction(
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
     unit_distance: str = "m",
+    fov_angle_deg: int = 90,
     ax: Any = None, 
     polar_depiction: bool = False,    
-    show_histogram: bool = False,     
+    show_histogram: bool = True,     
 ):
     """Plot mouse-ROI interaction over time as a polar plot or line chart with optional effect-size histogram.
 
@@ -4312,6 +4316,7 @@ def plot_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
         ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
         polar_depiction (bool): If True, display as polar plot. Defaults to False.
         show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to False.
@@ -4338,6 +4343,7 @@ def plot_mouse_roi_interaction(
         error_bars=error_bars,
         mode = mode,
         unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
     )
 
     condition_values = sorted(binned_group_df["exp_condition"].astype(str).unique().tolist())
@@ -4435,10 +4441,6 @@ def plot_mouse_roi_interaction(
     else:
         ylabel = mode
 
-    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
-    if mode == "fov" and not polar_depiction:
-        ax.set_ylim([0, 1])
-
     # --- axis formatting (ticks/labels/limits; now uses radians geometry) ---
     hist_bottom = deepof.visuals_utils.format_time_binned_axis(
         ax=ax,
@@ -4505,6 +4507,10 @@ def plot_mouse_roi_interaction(
                     loc="upper left",
                     fontsize=8,
                 )
+
+    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
+    if mode == "fov" and not polar_depiction:
+        ax.set_ylim([0, 1])
 
     # reset cohend warning
     deepof.visuals_utils.cohend._warning_issued = False

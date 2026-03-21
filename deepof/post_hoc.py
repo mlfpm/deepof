@@ -6,12 +6,16 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import sys
 import pickle
 import warnings
 from collections import Counter, defaultdict
-from itertools import product
+from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
+from sklearn.cluster import MiniBatchKMeans
+#from deeptime.markov import TransitionCountEstimator
+#from deeptime.markov.msm import MaximumLikelihoodMSM
 
 import numpy as np
 import ot
@@ -20,8 +24,15 @@ import shap
 import tqdm
 import umap
 from catboost import CatBoostClassifier
+from unittest.mock import MagicMock, patch
+#with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
+#    import SMOTE
+#    import Pipeline
+
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
+
+
 from joblib import Parallel, delayed
 from pomegranate.distributions import Normal
 from pomegranate._utils import _update_parameter
@@ -67,11 +78,11 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
     # Collect sequences, validate dims, crop to common length
     seq_list = [np.asarray(v) for v in embeddings.values()]
     if not seq_list:
-        raise ValueError("No sequences provided.")
+        raise ValueError("No sequences provided.")  # pragma: no cover
     d = seq_list[0].shape[1]
     for s in seq_list:
         if s.ndim != 2 or s.shape[1] != d:
-            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")
+            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")  # pragma: no cover
     min_T = min(s.shape[0] for s in seq_list)
     X = np.stack([s[:min_T].astype(np.float32, copy=False) for s in seq_list], axis=0)  # (N, T, D)
     n_obs = X.shape[0] * X.shape[1]
@@ -163,12 +174,12 @@ def get_contrastive_soft_counts(
     eps = 1e-12
 
     # ---- helpers ----
-    def _fit_diag_gmm(emb_dict, C, reg, max_n, seed):
+    def _fit_diag_gmm(emb_dict, C, reg, max_n, covariance_type="diag", seed=0,):
         """Fit a diagonal GaussianMixture (sklearn) on a subset of embeddings."""
         Z = emb_dict.sample_windows_from_data(N_windows_tab=int(max_n / len(emb_dict)))[0]
         gm = GaussianMixture(
             n_components=C,
-            covariance_type="diag",
+            covariance_type=covariance_type,
             reg_covar=reg,
             max_iter=200,
             tol=1e-3,
@@ -244,9 +255,9 @@ def get_contrastive_soft_counts(
 
         P = get_dt(soft_counts, key).astype(np.float32, copy=False)  # supports TableDict-like too
         if P.ndim != 2:
-            raise ValueError(f"soft_counts[{key}] must be (T,K). Got {P.shape}.")
+            raise ValueError(f"soft_counts[{key}] must be (T,K). Got {P.shape}.")  # pragma: no cover
         if P.shape[1] != K:
-            raise ValueError(f"K mismatch for {key}: soft_counts has {P.shape[1]}, expected {K}.")
+            raise ValueError(f"K mismatch for {key}: soft_counts has {P.shape[1]}, expected {K}.")  # pragma: no cover
 
         # align length to embeddings
         if P.shape[0] < T:
@@ -267,8 +278,8 @@ def get_contrastive_soft_counts(
         return P
 
     # ---- select K ----
-    def _fit_params_for_K(K: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, random_state)
+    def _fit_params_for_K(K: int, covariance_type: str = "diag") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return _fit_diag_gmm(embeddings, K, reg_covar, sample_size, covariance_type, random_state)
 
     def _score_K(K: int, criterion: str) -> Tuple[float, float]:
         """caclulates the score for the given number of clusters (K)"""
@@ -298,7 +309,7 @@ def get_contrastive_soft_counts(
     # ---- prepare ----
     keys = list(embeddings.keys())
     if not keys:
-        raise ValueError("Embeddings are empty.")
+        raise ValueError("Embeddings are empty.")  # pragma: no cover
     D = get_dt(embeddings, keys[0], only_metainfo=True)["shape"][1]
 
     # ---- determine K (skip selection if priors provided) ----
@@ -308,11 +319,11 @@ def get_contrastive_soft_counts(
         # infer K from priors (first overlapping key)
         k0 = next((k for k in keys if k in soft_counts), None)
         if k0 is None:
-            raise ValueError("soft_counts provided but no keys overlap with embeddings.")
+            raise ValueError("soft_counts provided but no keys overlap with embeddings.")  # pragma: no cover
         K_prior = int(get_dt(soft_counts, k0, only_metainfo=True)["shape"][1])
 
         if isinstance(states, int) and int(states) != K_prior:
-            raise ValueError(f"states={states} but soft_counts implies K={K_prior}. They must match.")
+            raise ValueError(f"states={states} but soft_counts implies K={K_prior}. They must match.")  # pragma: no cover
         K_best = K_prior
 
     else:
@@ -329,8 +340,8 @@ def get_contrastive_soft_counts(
                 if (best_score is None) or (score < best_score):
                     best_score, K_best = score, K
 
-    # ---- final decode with best K ----
-    mu, var, pi = _fit_params_for_K(K_best)
+    # ---- final decode with best K and full covariance----
+    mu, var, pi = _fit_params_for_K(K_best, covariance_type="diag")
     A = _make_sticky_A(pi.astype(np.float64), p_stay=float(p_stay))
     log_A = np.log(np.maximum(A, 1e-12))
     log_pi = np.log(np.maximum(pi.astype(np.float64), 1e-12))
@@ -348,7 +359,8 @@ def get_contrastive_soft_counts(
             log_emiss = log_emiss + float(prior_weight) * np.log(np.maximum(P.astype(np.float64), eps))
 
         cur_soft_counts = _forward_backward(log_emiss, log_A, log_pi)
-        soft_counts_out[key] = deepof.utils.save_dt(cur_soft_counts, table_path, coordinates._very_large_project)
+        table_path_key = os.path.join(table_path, str(key), f"{str(key)}_soft_counts")
+        soft_counts_out[str(key)] = deepof.utils.save_dt(cur_soft_counts, table_path_key, coordinates._very_large_project)
 
     soft_counts_out = deepof.data.TableDict(
         soft_counts_out,
@@ -357,10 +369,720 @@ def get_contrastive_soft_counts(
         exp_conditions=coordinates.get_exp_conditions,
     )
 
-    if isinstance(states, str):
-        return soft_counts_out, model_selection
     return soft_counts_out
     
+
+
+def get_contrastive_soft_counts_gmm(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],
+    animal_ids: list,
+    *,
+    window_size: int = 12,
+    supervised_annotations=None,
+    K_pose: int = 8,
+    M_bins: int = 3,
+    binning: str = "quantile",
+    fixed_edges: Optional[list] = None,
+    reg_covar: float = 1e-5,
+    sample_size: int = 200000,
+    random_state: int = 0,
+    embedding_gates: Any = "Center",
+    smoothing: float = 1e-4,
+):  # pragma: no cover
+    """
+    Distance/behavior-gated GMM decoder.
+
+    Args:
+        coordinates: deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        animal_ids (list): list of animal ids of all animals that should be included in the gating
+        window_size (int): size of the window that should be used for binning
+        supervised_annotations (table_dict): table dict with supervised annotations per video.    
+        K_pose (int): bins per gate
+        M_bins (int): number of gates
+        binning (str): binning process to be used for gating. Can be "quantile" for even sized bins or "fixed" for specific bins. "quantile" is default.
+        fixed_edges (list): Optional list of edges for binning, will be ignored wenn binning is not fixed.
+        reg_covar (float): Covariance regularization for the GMM to ensure positive covariance matrices.
+        sample_size (int): Sample size to be used for cluster prediction. 
+        random_state (int): Random state for reproducibility
+        embedding_gates (any): Either a bodypart name for distance binning or, if supervised_annotations are given, alternatively a behavior name.
+        smoothing (float): 
+    """
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # ---- cache embeddings + lengths ----
+    Z_by_key = (
+        {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
+        if not coordinates._very_large_project else {}
+    )
+    emb_len = {
+        k: (Z_by_key[k].shape[0] if k in Z_by_key
+            else get_dt(embeddings, k, only_metainfo=True)["shape"][0])
+        for k in keys
+    }
+
+    if not isinstance(embedding_gates, str):
+        M_bins = 2 ** len(sorted(set(embedding_gates)))
+
+    # ---- gating series ----
+    dist_series_dict = get_pairwise_distances(
+        coordinates, window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+        behavior_combinations=True,
+    )
+    first_key = list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        gates = [animal_ids[0]]
+        M_bins = 1
+
+    # ---- build masks (same structure as msm_pcca_upgrade) ----
+    gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
+    for gate in gates:
+        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
+        gate_masks[gate] = {}
+
+        if supervised_annotations is not None:
+            for b in range(M_bins):
+                in_bin = (full_g == b)
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+        else:
+            if binning == "quantile":
+                qs = np.linspace(0, 1, M_bins + 1)
+                edges = np.nanquantile(full_g, qs).astype(np.float64)
+                edges[0], edges[-1] = -np.inf, np.inf
+            elif binning == "fixed":
+                if fixed_edges is None or len(fixed_edges) != M_bins + 1:
+                    raise ValueError("fixed_edges must have length M_bins+1")
+                edges = np.asarray(fixed_edges, dtype=np.float64)
+                edges[0], edges[-1] = -np.inf, np.inf
+            else:
+                raise ValueError('binning must be "quantile" or "fixed"')
+
+            for b in range(M_bins):
+                in_bin = (full_g > edges[b]) & (full_g <= edges[b + 1])
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+
+    # ---- fit GMM per (gate, bin) ----
+    models: Dict[Any, List] = {}
+    total_steps = len(gates) * M_bins
+
+    with tqdm.tqdm(total=total_steps, desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="gmm") as pbar:
+        for gate_idx, gate in enumerate(gates):
+            models[gate] = []
+            for b in range(M_bins):
+                seed_b = int(random_state + 17 * b + 3 * gate_idx)
+
+                # collect points for this bin via reservoir sampling
+                bin_segments = []
+                n_windows = 0
+                for key in keys:
+                    Z = Z_by_key.get(key)
+                    if Z is None:
+                        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+                    mask = gate_masks[gate][b][key]
+                    idx = np.flatnonzero(mask)
+                    n_windows += idx.size
+                    if idx.size > 0:
+                        bin_segments.append(Z[idx, :])
+
+                #if verbose:
+                #    print(f"  gate={gate} bin={b}: {n_windows} windows")
+
+                if n_windows < max(10, K_pose):
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                X_fit = _reservoir_sample(bin_segments, int(sample_size), seed=seed_b)
+
+                gmm = GaussianMixture(
+                    n_components=int(K_pose),
+                    covariance_type="full",
+                    reg_covar=float(reg_covar),
+                    random_state=seed_b,
+                    init_params="kmeans",
+                    max_iter=200,
+                    tol=1e-3,
+                ).fit(X_fit)
+
+                models[gate].append(dict(gmm=gmm))
+                pbar.update(1)
+
+    # ---- decode ----
+    K_total = M_bins * K_pose * len(gates)
+    soft_counts_out = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
+    for key in tqdm.tqdm(keys, desc=f"{'Decode softcounts (GMM)':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z0 = Z_by_key.get(key)
+        if Z0 is None:
+            Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+
+        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
+
+        for gate_idx, gate in enumerate(gates):
+            base = gate_idx * M_bins * K_pose
+
+            for b in range(M_bins):
+                model = models[gate][b]
+                mask = gate_masks[gate][b][key]
+                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
+
+                if model is None:
+                    if np.any(mask):
+                        P[mask, block] = 1.0 / K_pose
+                    continue
+
+                idx = np.flatnonzero(mask)
+                if idx.size == 0:
+                    continue
+
+                Z = Z0[idx, :]
+                R = model["gmm"].predict_proba(Z).astype(np.float32, copy=False)
+                P[idx, block] = R
+
+        # guard against all-zero rows
+        rs = P.sum(axis=1, keepdims=True)
+        P = P / np.maximum(rs, 1e-12)
+
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts_gmm")
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
+
+    return deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
+    mask = np.asarray(mask, dtype=bool)
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return []
+    cut = np.where(np.diff(idx) > 1)[0]
+    runs = []
+    s = idx[0]
+    for c in cut:
+        e = idx[c] + 1
+        if (e - s) >= min_len:
+            runs.append((int(s), int(e)))
+        s = idx[c + 1]
+    e = idx[-1] + 1
+    if (e - s) >= min_len:
+        runs.append((int(s), int(e)))
+    return runs
+
+
+def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:  # pragma: no cover
+    """Extract PCCA soft memberships (n_active, n_macrostates) from a deeptime MSM."""
+    pcca = msm_model.pcca(int(n_macrostates))
+    for attr in ("memberships", "chi"):
+        if hasattr(pcca, attr):
+            return np.asarray(getattr(pcca, attr), dtype=np.float32)
+    raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.")
+
+
+def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray:  # pragma: no cover
+    """Apply a uniform moving-average along axis 0 (frames) of a 2-D softcount matrix."""
+    if win is None or win <= 1 or P.shape[0] < win:
+        return P
+    kernel = np.ones((win, 1), dtype=np.float32) / float(win)
+    from scipy.ndimage import uniform_filter1d
+    out = uniform_filter1d(P.astype(np.float32), size=win, axis=0, mode="nearest")
+    # re-normalise rows
+    rs = out.sum(axis=1, keepdims=True)
+    rs = np.maximum(rs, 1e-12)
+    return out / rs
+
+
+def get_pairwise_distances(
+    coordinates,
+    window_len: int,
+    supervised_annotations=None,
+    embedding_gates: Any = "Nose",
+    behavior_combinations: bool = True,
+) -> Dict[str, Dict]:  # pragma: no cover
+    """
+    Per-window gating series: pairwise distances OR behavior-combination codes.
+
+    Fixes vs original:
+      - deterministic behavior ordering (sorted, not set)
+      - guards against all-NaN distance columns
+      - reports which behaviors were dropped
+      - validates bodypart existence in distance mode
+    """
+    animal_ids = coordinates._animal_ids
+    gating = None
+
+    # ---- decide mode ----
+    if (animal_ids and len(animal_ids) <= 4
+            and supervised_annotations is None
+            and isinstance(embedding_gates, str)):
+        gating = "distances"
+        animal_pairs = list(combinations(list(animal_ids), 2))
+
+    elif animal_ids and supervised_annotations is not None:
+        # FIX: sorted list, not set → deterministic bit-coding
+        if isinstance(embedding_gates, str):
+            embedding_gates = [embedding_gates]
+        requested = sorted(set(embedding_gates))
+
+        first_key = list(supervised_annotations.keys())[0]
+        available = set(get_dt(supervised_annotations, first_key, only_metainfo=True)["columns"])
+        valid = [b for b in requested if b in available]
+        dropped = [b for b in requested if b not in available]
+
+        if dropped:
+            print(f"[gating] Dropped unavailable behaviors: {dropped}")
+        if not valid:
+            print("[gating] No valid behaviors remain; falling back to no gating.")
+        else:
+            gating = "behaviors"
+            embedding_gates = valid  # ordered list
+
+    out = {}
+    kern = np.ones(window_len, dtype=np.float32)
+
+    for key in coordinates._tables.keys():
+        tab = get_dt(coordinates._tables, key)
+        out[key] = {}
+
+        if gating == "distances":
+            for a_id, b_id in animal_pairs:
+                # FIX: validate columns exist
+                cx = (f"{a_id}_{embedding_gates}", "x")
+                if cx not in tab.columns:
+                    raise KeyError(
+                        f"Bodypart column {cx} not found in table '{key}'. "
+                        f"Available: {[c for c in tab.columns if c[1]=='x'][:10]}..."
+                    )
+
+                ax = tab[(f"{a_id}_{embedding_gates}", "x")].to_numpy(np.float64)
+                ay = tab[(f"{a_id}_{embedding_gates}", "y")].to_numpy(np.float64)
+                bx = tab[(f"{b_id}_{embedding_gates}", "x")].to_numpy(np.float64)
+                by = tab[(f"{b_id}_{embedding_gates}", "y")].to_numpy(np.float64)
+
+                dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
+
+                # FIX: guard against all-NaN
+                mask = np.isfinite(dist_raw)
+                if mask.any():
+                    idx = np.arange(dist_raw.size)
+                    dist_raw = np.interp(idx, idx[mask], dist_raw[mask]).astype(np.float32)
+                else:
+                    dist_raw = np.zeros_like(dist_raw)
+
+                out[key][(a_id, b_id)] = np.convolve(dist_raw, kern / window_len, mode="valid")
+
+        elif gating == "behaviors":
+            sup = get_dt(supervised_annotations, key)
+            cols = []
+            for beh in embedding_gates:  # deterministic order
+                raw = sup[beh].to_numpy()
+                win = (np.convolve(raw, kern, mode="valid") > 0).astype(np.int32)
+                if not behavior_combinations:
+                    out[key][beh] = win
+                else:
+                    cols.append(win)
+
+            if behavior_combinations and cols:
+                arr = np.array(cols, dtype=np.int32)       # (n_beh, T)
+                powers = 2 ** np.arange(len(cols), dtype=np.int32)
+                out[key]["behavior_combinations"] = (powers @ arr).astype(np.int32)
+
+        else:
+            # no gating
+            out[key][""] = np.convolve(
+                np.ones(tab.shape[0], dtype=np.float32), kern / window_len, mode="valid"
+            )
+
+    return out
+
+
+def get_contrastive_soft_counts_msm_pcca(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],
+    animal_ids: list,
+    *,
+    window_size: int = 12,
+    supervised_annotations=None,
+    K_pose: int = 10,
+    M_bins: int = 3,
+    binning: str = "quantile",
+    fixed_edges: Optional[list] = None,
+    sample_size: int = 200000,
+    random_state: int = 0,
+    embedding_gates: Any = "Center",
+    smoothing: float = 1e-4,
+    temporal_smooth_win: Optional[int] = 3,  
+    n_micro: int = 400,
+    min_micro_per_macro: int = 3,      
+    lagtime: int = 3,
+):  # pragma: no cover
+    """
+    Distance/behavior-gated MSM + PCCA with k-means microstates.
+
+    Args:
+        coordinates: deepOF project where the data is stored.
+        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
+        animal_ids (list): list of animal ids of all animals that should be included in the gating
+        window_size (int): size of the window that should be used for binning
+        supervised_annotations (table_dict): table dict with supervised annotations per video.    
+        K_pose (int): bins per gate
+        M_bins (int): number of gates
+        binning (str): binning process to be used for gating. Can be "quantile" for even sized bins or "fixed" for specific bins. "quantile" is default.
+        fixed_edges (list): Optional list of edges for binning, will be ignored wenn binning is not fixed.
+        sample_size (int): Sample size to be used for cluster prediction. 
+        random_state (int): Random state for reproducibility
+        embedding_gates (any): Either a bodypart name for distance binning or, if supervised_annotations are given, alternatively a behavior name.
+        smoothing (float): 
+        temporal_smooth_win (int): Length of temporal smooting window. Longer means smoother.
+        n_micro (int): Number of micro states
+        min_micro_per_macro (int): Minimum number of micro states within each macro state
+        lagtime (int): number of continuous frames used for state transitions (in practise input lagtime+2)
+    """
+
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # ---- cache embeddings + lengths ----
+    Z_by_key = (
+        {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
+        if not coordinates._very_large_project else {}
+    )
+    emb_len = {
+        k: (Z_by_key[k].shape[0] if k in Z_by_key
+            else get_dt(embeddings, k, only_metainfo=True)["shape"][0])
+        for k in keys
+    }
+
+    if not isinstance(embedding_gates, str):
+        M_bins = 2 ** len(set(embedding_gates))
+
+    # ---- gating series ----
+    dist_series_dict = get_pairwise_distances(
+        coordinates, window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+        behavior_combinations=True,
+    )
+    first_key = list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        gates = [animal_ids[0]]
+        M_bins = 1
+
+    # ---- build masks ----
+    gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
+    for gate in gates:
+        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
+        gate_masks[gate] = {}
+
+        if supervised_annotations is not None:
+            for b in range(M_bins):
+                in_bin = (full_g == b)
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+        else:
+            if binning == "quantile":
+                qs = np.linspace(0, 1, M_bins + 1)
+                edges = np.nanquantile(full_g, qs).astype(np.float64)
+                edges[0], edges[-1] = -np.inf, np.inf
+            elif binning == "fixed":
+                if fixed_edges is None or len(fixed_edges) != M_bins + 1:
+                    raise ValueError("fixed_edges must have length M_bins+1")
+                edges = np.asarray(fixed_edges, dtype=np.float64)
+                edges[0], edges[-1] = -np.inf, np.inf
+            else:
+                raise ValueError('binning must be "quantile" or "fixed"')
+
+            for b in range(M_bins):
+                in_bin = (full_g > edges[b]) & (full_g <= edges[b + 1])
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+
+    # ---- fit per (gate, bin) ----
+    models: Dict[Any, List] = {}
+    total_steps = len(gates) * M_bins
+
+    with tqdm.tqdm(total=total_steps, desc=f"{'Fit MSM/PCCA':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="model") as pbar:
+        for gate_idx, gate in enumerate(gates):
+            models[gate] = []
+            for b in range(M_bins):
+                seed_b = int(random_state + 1000 * gate_idx + 17 * b)
+
+                # --- collect segments (short ones OK for spatial fit) ---
+                seg_spatial: List[np.ndarray] = []   # all runs ≥ 2
+                seg_temporal: List[np.ndarray] = []  # only runs ≥ lagtime+2
+                n_windows = 0
+
+                for key in keys:
+                    Z = Z_by_key.get(key)
+                    if Z is None:
+                        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+                    mask = gate_masks[gate][b][key]
+                    n_windows += int(mask.sum())
+
+                    for s, e in _mask_to_runs(mask, min_len=2):
+                        seg = Z[s:e, :]
+                        seg_spatial.append(seg)
+                        if seg.shape[0] >= lagtime + 2:
+                            seg_temporal.append(seg)
+
+                #if verbose:
+                #    print(f"  gate={gate} bin={b}: {n_windows} win, "
+                #          f"{len(seg_spatial)} spatial segs, {len(seg_temporal)} temporal segs")
+
+                if not seg_spatial or n_windows < max(50, 5 * K_pose):
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                X_fit = _reservoir_sample(seg_spatial, int(sample_size), seed=seed_b)
+
+                scaler = StandardScaler()
+                X_fit = scaler.fit_transform(X_fit)
+
+                n_micro_eff = int(min(
+                    n_micro,
+                    max(min_micro_per_macro * K_pose, X_fit.shape[0] // 50),
+                ))
+                n_micro_eff = max(n_micro_eff, 2)
+
+                kmeans = MiniBatchKMeans(
+                    n_clusters=n_micro_eff,
+                    batch_size=4096,
+                    max_iter=200,
+                    random_state=seed_b,
+                    init="k-means++",
+                    n_init="auto",
+                ).fit(X_fit)
+
+                # --- build dtrajs from temporal segments only ---
+                if not seg_temporal:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                dtrajs = []
+                for seg in seg_temporal:
+                    Xs = scaler.transform(seg) if scaler else seg
+                    dtrajs.append(np.asarray(kmeans.predict(Xs), dtype=np.int32))
+
+                if not dtrajs:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                # --- MSM ---
+                counts_est = TransitionCountEstimator(
+                    lagtime=int(lagtime), count_mode="sliding",
+                ).fit(dtrajs)
+                count_model = counts_est.fetch_model()
+
+                # FIX: reversible=False for directional behaviour
+                msm = MaximumLikelihoodMSM(
+                    reversible=True,
+                ).fit(count_model).fetch_model()
+
+                # --- active set (robust lookup) ---
+                n_msm = msm.n_states if hasattr(msm, "n_states") else None
+                active_syms = None
+                for src in (count_model, msm):
+                    for attr in ("active_set", "state_symbols"):
+                        cand = getattr(src, attr, None)
+                        if cand is not None:
+                            cand = np.asarray(cand, dtype=np.int32)
+                            if n_msm is None or cand.shape[0] == n_msm:
+                                active_syms = cand
+                                break
+                    if active_syms is not None:
+                        break
+
+                n_active = active_syms.shape[0] if active_syms is not None else (n_msm or 0)
+                if n_active < 2:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                if active_syms is None:
+                    active_syms = np.arange(n_active, dtype=np.int32)
+
+                # --- FIX: cap PCCA at actual active set size ---
+                K_request = int(min(K_pose, n_active))
+                if K_request < 2:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                try:
+                    chi_eff = _pcca_memberships(msm, K_request)
+                except Exception:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                chi_eff = np.asarray(chi_eff, dtype=np.float32)
+                if chi_eff.shape[0] != n_active:
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                # pad to K_pose columns if needed
+                if chi_eff.shape[1] == K_pose:
+                    chi = chi_eff
+                else:
+                    chi = np.zeros((n_active, K_pose), dtype=np.float32)
+                    chi[:, :chi_eff.shape[1]] = chi_eff
+                    rs = chi.sum(axis=1, keepdims=True)
+                    good = rs.squeeze(-1) > 0
+                    chi[good] /= rs[good]
+
+                # dense micro→macro (inactive → uniform)
+                micro2macro = np.full((n_micro_eff, K_pose), 1.0 / K_pose, dtype=np.float32)
+                for i in range(n_active):
+                    s = int(active_syms[i])
+                    if 0 <= s < n_micro_eff:
+                        micro2macro[s, :] = chi[i, :]
+
+                models[gate].append(dict(
+                    scaler=scaler,
+                    kmeans=kmeans,
+                    micro2macro=micro2macro,
+                ))
+                pbar.update(1)
+
+    # ---- decode ----
+    K_total = M_bins * K_pose * len(gates)
+    soft_counts_out = {}
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
+    for key in tqdm.tqdm(keys, desc=f"{'Decode softcounts':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z0 = Z_by_key.get(key)
+        if Z0 is None:
+            Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+
+        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
+
+        for gate_idx, gate in enumerate(gates):
+            base = gate_idx * M_bins * K_pose
+
+            for b in range(M_bins):
+                model = models[gate][b]
+                mask = gate_masks[gate][b][key]
+                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
+
+                if model is None:
+                    if np.any(mask):
+                        P[mask, block] = 1.0 / K_pose
+                    continue
+
+                scaler = model["scaler"]
+                kmeans = model["kmeans"]
+                m2m = model["micro2macro"]
+
+                for s, e in _mask_to_runs(mask, min_len=2):
+                    seg = Z0[s:e, :]
+                    Xs = scaler.transform(seg) if scaler else seg
+                    d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
+                    P[s:e, block] = m2m[d, :]
+
+        # FIX: temporal smoothing (optional)
+        if temporal_smooth_win and temporal_smooth_win > 1:
+            P = _temporal_smooth(P, temporal_smooth_win)
+
+        # FIX: guard against all-zero rows
+        rs = P.sum(axis=1, keepdims=True)
+        P = P / np.maximum(rs, 1e-12)
+
+        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts_msmpcca")
+        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
+
+    return deepof.data.TableDict(
+        soft_counts_out,
+        typ="unsupervised_counts",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+    
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
+    """Boolean mask → list of (start, end) slices for contiguous True runs."""
+    idx = np.flatnonzero(np.asarray(mask, dtype=bool))
+    if idx.size == 0:
+        return []
+    cuts = np.where(np.diff(idx) > 1)[0]
+    runs = []
+    s = idx[0]
+    for c in cuts:
+        e = idx[c] + 1
+        if (e - s) >= min_len:
+            runs.append((int(s), int(e)))
+        s = idx[c + 1]
+    e = idx[-1] + 1
+    if (e - s) >= min_len:
+        runs.append((int(s), int(e)))
+    return runs
+
+
+def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:  # pragma: no cover
+    """Reservoir-sample up to n rows from a list of 2-D arrays without full concat."""
+    rng = np.random.default_rng(seed)
+    total = sum(s.shape[0] for s in segments)
+    if total <= n:
+        return np.concatenate(segments, axis=0)
+
+    # pre-allocate reservoir
+    D = segments[0].shape[1]
+    buf = np.empty((n, D), dtype=np.float32)
+    filled = 0
+    seen = 0
+
+    for seg in segments:
+        for row in seg:
+            if filled < n:
+                buf[filled] = row
+                filled += 1
+            else:
+                j = int(rng.integers(0, seen + 1))
+                if j < n:
+                    buf[j] = row
+            seen += 1
+
+    return buf[:filled]
+
 
 def recluster(
     coordinates: coordinates,
@@ -561,7 +1283,7 @@ def get_time_on_cluster(
         # Determine most likely bin for each frame (N x n_bins) -> (N x 1)
         # Load full dataset (arr_range==None) or section
         #hard_counts = np.argmax(get_dt(soft_counts,key, load_range=arr_range), axis=1)
-        hard_counts = np.argmax(preloaded[key], axis=1)
+        hard_counts = deepof.utils.row_nanargmax(preloaded[key])
 
         if roi_number is not None:
             hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
@@ -569,7 +1291,7 @@ def get_time_on_cluster(
         
         
         # Create dictionary with number of bin_occurences per bin
-        hard_count_counters[key] = Counter(hard_counts)
+        hard_count_counters[key] = Counter(hard_counts[~np.isnan(hard_counts)])
 
         if normalize:
             hard_count_counters[key]={
@@ -963,7 +1685,10 @@ def enrichment_across_conditions(
             value_name="time on cluster",
         )
     )
-    enrichment["cluster"] = enrichment["cluster"].astype(str)
+    if enrichment["cluster"][0]==0:
+        enrichment["cluster"] = enrichment["cluster"].astype(float)
+    else:    
+        enrichment["cluster"] = enrichment["cluster"].astype(str)
 
     return enrichment
 

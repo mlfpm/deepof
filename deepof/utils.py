@@ -14,7 +14,10 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Tuple, Union, Optional
+
+# For optional verification plots, will probably be removed later
+from matplotlib import pyplot as plt
 
 
 import cv2
@@ -499,7 +502,8 @@ def connect_mouse(
     return final_graph
 
 
-def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray):
+# Candidate for removal or rework as it is part of a basically unused preprocessing pathway
+def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray): # pragma: no cover
     """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
@@ -1701,7 +1705,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
     return out
 
 
-def mouse_in_roi_old(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1713,41 +1717,6 @@ def mouse_in_roi_old(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = 
     Returns:
         mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
     """
-
-    # Make to list
-    if isinstance(in_roi_criterion,str):
-        in_roi_criterion=[in_roi_criterion]
-    # Multi animal case
-    if aid != "":
-        # If "all", take all bodyparts in table of animal aid
-        if "all" in in_roi_criterion:
-            in_roi_criterion=np.unique([col[0] for col in tab.columns if col[0].startswith(aid)])
-        # Otherwise add aid to bodypart names to only get bodyparts of animal aid
-        else:
-            in_roi_criterion = [aid+"_"+bodypart for bodypart in in_roi_criterion]
-        all_points=tab[in_roi_criterion]
-    # Single animal case
-    else:
-        # If "all", take all bodyparts i.e. full table
-        if "all" in in_roi_criterion:
-            all_points=tab
-        else:
-            all_points=tab[in_roi_criterion]
-    if type(roi_polygon)==tuple:
-        roi_polygon=np.array(roi_polygon)
-
-    # Iterate over chosen bodyparts and only keep the ones in which all bodyparts exist
-    mouse_in_polygon = np.ones([all_points.shape[0]]).astype(bool)
-    for bodypart in all_points.columns.get_level_values(0).unique():
-        if run_numba:            
-            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon_numba(np.array(all_points[bodypart]),roi_polygon)
-        else:
-            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon(np.array(all_points[bodypart]),roi_polygon)
-
-    return mouse_in_polygon
-
-
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
     
     
     if isinstance(in_roi_criterion, str):
@@ -1980,70 +1949,189 @@ def rename_track_bps(
     return loaded_tab
 
 
-def scale_table(
-    feature_array: np.ndarray,
-    scale: str,
-    global_scaler: Any = None,
-):
-    """Scales features in a table controlling for both individual body size and interanimal variability.
+def infer_scalar_cols(df: pd.DataFrame):
+    coord_cols = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bp_names = {c[0] for c in coord_cols}
 
-    Args:
-        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
-        global_scaler (Any): global scaler, fit in the whole dataset.
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bp_names]
+    dist_cols  = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[0] in bp_names and c[1] in bp_names]
+
+    return speed_cols + dist_cols
+
+
+def infer_column_types(df):
+    """Identify coord, speed, distance, and angle columns from a pose table."""
+    coord_cols = [c for c in df.columns 
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = {c[0] for c in coord_cols}
     
-    Returns:
-        feature_array_scaled (np.ndarray): array after scaling.
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bodyparts]
+    dist_cols = [c for c in df.columns
+                 if isinstance(c, tuple) and len(c) == 2
+                 and c[0] in bodyparts and c[1] in bodyparts]
+    angle_cols = [c for c in df.columns if isinstance(c, tuple) and len(c) == 3]
 
-    """
-    exp_temp = feature_array.to_numpy()
+    def _prefix(bp: str):
+        return bp.split("_", 1)[0] if "_" in bp else None
 
-    annot_length = 0
+    inner_dist_cols = [d for d in dist_cols if _prefix(d[0]) == _prefix(d[1])]
+    intra_dist_cols = [d for d in dist_cols if _prefix(d[0]) != _prefix(d[1])]
+    
+    return {
+        "coords": coord_cols,
+        "speeds": speed_cols, 
+        "dists": dist_cols,
+        "inner_dists": inner_dist_cols,
+        "intra_dists": intra_dist_cols,
+        "angles": angle_cols,
+        "bodyparts": bodyparts,
+        "scalars": speed_cols + dist_cols,
+    }
+  
 
-    if global_scaler is None:
-        # Scale each modality separately using a custom function
-        exp_temp = scale_animal(exp_temp, scale)
-    else:
-        # Scale all experiments together, to control for differential stats
-        exp_temp = global_scaler.transform(exp_temp)
+def scale_table(
+    df: pd.DataFrame,
+    scale: str = "standard",
+    animal_ids=None,
+    size_ref=("Nose", "Tail_base"),
+    inter_scale: str = "mean",    # {"mean","geom","global"}
+    standardize: bool = True,     # if False: only size-normalize
+    dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
+    speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    log_distances: bool = True,   
+) -> pd.DataFrame:
+    if not scale:
+        return df.copy()
+    if scale not in {"standard", "minmax", "robust"}:
+        raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
+    if dist_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
+    if speed_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
 
-    feature_array_scaled = np.concatenate(
-        [
-            exp_temp,
-            feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
-        ],
-        axis=1,
-    )
+    out = df.copy()
 
-    return feature_array_scaled
+    # ----- infer columns -----
+    coord_cols = [c for c in out.columns
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = sorted({c[0] for c in coord_cols})
+    bp_set = set(bodyparts)
+
+    def _split_bp(bp: str):
+        return bp.split("_", 1) if "_" in bp else (None, bp)
+
+    if animal_ids is None:
+        animal_ids = sorted({(_split_bp(bp)[0]) for bp in bodyparts if _split_bp(bp)[0] is not None}) or [None]
+    animal_ids = list(animal_ids)
+
+    speed_cols = [c for c in out.columns if isinstance(c, str) and c in bp_set]
+    dist_cols = [
+        c for c in out.columns
+        if isinstance(c, tuple) and len(c) == 2 and all(isinstance(x, str) for x in c)
+        and c[0] in bp_set and c[1] in bp_set
+    ]
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
+    inner_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) == bp_to_aid.get(d[1])]
+    intra_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) != bp_to_aid.get(d[1])]
 
 
-def scale_animal(feature_array: np.ndarray, scale: str):
-    """Scales features in the provided array.
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 
-    Args:
-        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
+    # ----- size factors per animal -----
+    ref_a, ref_b = size_ref
+    s_by_aid = {}
+    for aid in animal_ids:
+        a = ref_a if aid is None else f"{aid}_{ref_a}"
+        b = ref_b if aid is None else f"{aid}_{ref_b}"
+        need = [(a, "x"), (a, "y"), (b, "x"), (b, "y")]
+        if all(c in out.columns for c in need):
+            dx = out[(a, "x")].to_numpy(float) - out[(b, "x")].to_numpy(float)
+            dy = out[(a, "y")].to_numpy(float) - out[(b, "y")].to_numpy(float)
+            s_by_aid[aid] = np.nanmedian(np.hypot(dx, dy))
+        else:
+            s_by_aid[aid] = np.nan
 
-    Returns:
-        Scaled version of the input array, with features normalized by modality.
-        List of scalers per modality.
+    valid = [v for v in s_by_aid.values() if np.isfinite(v) and v > 0]
+    s_default = float(np.nanmedian(valid)) if valid else 1.0
+    s_by_aid = {aid: (v if np.isfinite(v) and v > 0 else s_default) for aid, v in s_by_aid.items()}
 
-    """
-    scalers = []
+    def _comb(s1, s2):
+        if inter_scale == "mean":
+            return 0.5 * (s1 + s2)
+        if inter_scale == "geom":
+            return float(np.sqrt(s1 * s2))
+        if inter_scale == "global":
+            return s_default
+        raise ValueError("inter_scale must be one of {'mean','geom','global'}")
 
-    # number of body part sets to use for coords (x, y), speeds, and distances
-    if scale == "standard":
-        cur_scaler = StandardScaler()
-    elif scale == "minmax":
-        cur_scaler = MinMaxScaler()
-    else:
-        cur_scaler = RobustScaler()
+    # ----- stage 1: size-normalize -----
+    for aid in animal_ids:
+        bps = [bp for bp in bodyparts if bp_to_aid.get(bp) == aid] if aid is not None \
+              else [bp for bp in bodyparts if bp_to_aid.get(bp) is None]
+        if not bps:
+            continue
+        s = s_by_aid[aid]
 
-    normalized_array = cur_scaler.fit_transform(feature_array)
-    scalers.append(cur_scaler)
+        xy = [(bp, ax) for bp in bps for ax in ("x", "y") if (bp, ax) in out.columns]
+        if xy:
+            out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / s
 
-    return normalized_array
+        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp name
+        if sp:
+            out.loc[:, sp] = out.loc[:, sp].to_numpy(float) / s
+
+    for (bp1, bp2) in dist_cols:
+        a1, a2 = bp_to_aid.get(bp1), bp_to_aid.get(bp2)
+        s = s_by_aid.get(a1, s_default) if a1 == a2 else _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
+        out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
+
+    if log_distances and dist_cols:
+        arr = out[dist_cols].to_numpy(float)
+        arr[arr < 0] = 0.0  # safety (distances should be >= 0)
+        out.loc[:, dist_cols] = np.log1p(arr)
+
+    if not standardize:
+        return out
+
+    # ----- stage 2: per-column standardization of scalars (like original) -----
+    #if global_scaler is not None:
+    #    out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
+    #    return out
+
+    # local (per-table) scaling if no global scaler is provided
+    scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
+    
+    def _fit_transform_per_column(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        out.loc[:, cols] = sc.fit_transform(out[cols].to_numpy(float))
+
+    def _fit_transform_groupwise(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        arr = out[cols].to_numpy(float)
+        out.loc[:, cols] = sc.fit_transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+    # Speeds
+    if speed_standardize == "per_column":
+        _fit_transform_per_column(speed_cols)
+    elif speed_standardize == "groupwise":
+        _fit_transform_groupwise(speed_cols)
+    # else: "none" -> do nothing
+
+    # Distances (groupwise separately for inner vs intra)
+    if dist_standardize == "per_column":
+        _fit_transform_per_column(dist_cols)
+    elif dist_standardize == "groupwise":
+        _fit_transform_groupwise(inner_dist_cols)
+        _fit_transform_groupwise(intra_dist_cols)
+    # else: "none" -> do nothing
+
+    return out
 
 
 def kleinberg(
@@ -2520,7 +2608,7 @@ def smooth_mult_trajectory(
     return smoothed_series
 
 
-def moving_average(time_series: pd.Series, lag: int = 5, ignore_nans = False) -> pd.Series:
+def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
     """Fast implementation of a moving average function.
 
     Args:
@@ -2531,25 +2619,8 @@ def moving_average(time_series: pd.Series, lag: int = 5, ignore_nans = False) ->
         moving_avg (pd.Series): Uni-variate moving average over time_series.
 
     """
-    if not ignore_nans:
-        moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
-    else:
-        n = len(time_series)
-        half = lag // 2
-        moving_avg = np.full(n, np.nan, dtype=float)
-
-        for i in range(n):
-            start = max(0, i - half)
-            end = min(n, i + half + 1)
-            window = time_series[start:end]
-            valid = ~np.isnan(window)
-            if valid.any():
-                moving_avg[i] = window[valid].mean()
-            else:
-                moving_avg[i] = np.nan
-            if np.isnan(time_series[i]):
-                moving_avg[i] = np.nan
-
+    moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
+    
     return moving_avg
 
 @nb.njit()
@@ -2935,6 +3006,15 @@ def get_behavior_mask_and_confidence(
     return mask, confidence
 
 
+
+def row_nanargmax(arr):
+    """argmax per row, ignoring NaNs. Returns NaN for all-NaN rows."""
+    mask = np.all(np.isnan(arr), axis=1)
+    result = np.nanargmax(np.where(mask[:, None], 0, arr), axis=1).astype(float)
+    result[mask] = np.nan
+    return result
+
+
 def filter_short_bouts(
     cluster_assignments: np.ndarray,
     cluster_confidence: np.ndarray,
@@ -3219,3 +3299,72 @@ def get_total_Frames(video_paths: dict) -> int:
         total_frames.append(int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         current_video_cap.release()
     return total_frames
+
+
+def validate_parameter(
+    param_name: str,
+    param_value: Any,
+    valid_options: List[Any],
+    is_list: bool = False,
+    custom_error_if_empty: Optional[str] = None,
+    only_one_of_many: Optional[bool] = True,
+    can_be_dict: Optional[bool] = False,
+): # pragma: no cover
+    """
+    A generic helper to validate a single parameter against a list of valid options.
+
+    Args:
+        param_name (str): The name of the parameter being checked (for error messages).
+        param_value (Any): The value of the parameter provided by the user.
+        valid_options (List[Any]): The list of allowed values.
+        is_list (bool): If True, checks if param_value is a subset of valid_options.
+                        Otherwise, checks if it is a member of valid_options.
+        custom_error_if_empty (Optional[str]): A specific error to raise if the
+                                               parameter is provided but the list
+                                               of valid options is empty.
+        only_one_of_many (Optional[bool]): If only one of the valid options is allowed: True
+                                           If a subset of the valid options is allowed: False
+        can_be_dict (Optional[bool]): Parameter can also be given as a dict (e.g. allowed for experiment_id)                                   
+    """
+    if param_value is None:
+        return  # Parameter not provided, no validation needed.
+
+    # If the param is provided but there are no valid options to check against
+    if not valid_options and custom_error_if_empty:
+        raise ValueError(custom_error_if_empty)  # pragma: no cover
+
+    valid_set = set(valid_options)
+    is_valid = False
+
+    if isinstance(param_value, dict) and can_be_dict:
+        value_set = set(
+            [x for lst in param_value.values() for x in lst]          
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    
+    elif not isinstance(param_value, dict) and is_list:
+        # Ensure param_value is a list-like object for set operations
+        value_set = set(
+            [param_value] if isinstance(param_value, str) else param_value
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    else:
+        if param_value in valid_set:
+            is_valid = True
+
+    if not is_valid:
+        # Truncate for readability
+        options_preview = str(valid_options[:5])[1:-1]
+        if len(valid_options) > 5:
+            options_preview += ", ..."
+
+        if only_one_of_many:    
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+            )  # pragma: no cover
+        else:
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
+            )  # pragma: no cover

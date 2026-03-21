@@ -117,7 +117,7 @@ def test_climb_wall(center, axes, angle, tol, mouse_len):
                 ".", "tests", "test_examples", "test_single_topview", "Tables"
             ),
             arena="circular-autodetect",
-            video_scale=int(arena[2]),
+            video_scale=str(int(arena[2])) + " mm",
             video_format=".mp4",
             table_format=".h5",
         )
@@ -169,7 +169,7 @@ def test_single_animal_traits(animal_id):
         ),
         arena="circular-autodetect",
         animal_ids=["B", "W"],
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
@@ -307,7 +307,7 @@ def test_get_hparameters():
     ),
     arena="circular-autodetect",
     animal_ids=["B", "W"],
-    video_scale=380,
+    video_scale="380 mm",
     video_format=".mp4",
     table_format=".h5",
     exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
