@@ -797,7 +797,7 @@ def test_mouse_roi_interaction():
     # Distance mode with custom bins
     effect_dist, group_dist = deepof.visuals.return_mouse_roi_interaction(
         prun, bodyparts="B_Nose", mode="distance",
-        custom_time_bins=[[0, 2], [3, 6], [7, 20], [21, 99]],
+        custom_time_bins=[[0, 2], [3, 6], [7, 22], [21, 99]],
         hide_time_bins=[False, True, False, True],
         exp_condition="CSDS" ,condition_values=["test_cond1","test_cond2"],
         experiment_ids="test",
