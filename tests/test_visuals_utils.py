@@ -813,6 +813,20 @@ def test_mouse_roi_interaction():
     # Output data matches reference (distance mode)
     pd.testing.assert_frame_equal(effect_dist, pd.read_csv(ref_dist_e), atol=1e-9, check_like=True, check_dtype=False)
     pd.testing.assert_frame_equal(group_dist, pd.read_csv(ref_dist_g), atol=1e-9, check_like=True, check_dtype=False)
+ 
+    #Test raw data extraction
+    raw_data_fov = deepof.visuals.return_mouse_roi_interaction(
+        prun, animal_id="B", roi_number=1, mode="fov",
+        experiment_ids={"a": ["test"], "b": ["test2"]}, error_bars="sem", unit_distance="m", get_raw_data=True, fov_angle_deg=150,
+    )
+
+    ref_raw_e = os.path.join(ref_path, "raw_data.csv")
+
+    if not os.path.exists(ref_raw_e):
+        raw_data_fov.to_csv(ref_raw_e, index=False)
+
+    pd.testing.assert_frame_equal(raw_data_fov, pd.read_csv(ref_raw_e), atol=1e-9, check_like=True, check_dtype=False)
+
 
     rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
 
