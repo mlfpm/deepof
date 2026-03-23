@@ -425,6 +425,8 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+        else:
+            raise ValueError("Could not scale arena to mm!")
     return arena_params
 
 
@@ -438,6 +440,8 @@ def _scale_arenas_to_pixel(arena_params, scales, arena):
         elif isinstance(arena_params[key], Tuple): # circular
             arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
             arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+        else:
+            raise ValueError("Could not scale arena to pixel!")
     return arena_params
 
 

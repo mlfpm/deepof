@@ -2284,9 +2284,9 @@ class Coordinates:
 
         roi_dicts_to_edit, arena_params_to_edit, scales_to_edit = {}, {}, {}
         for key in video_keys:
-            roi_dicts_to_edit[key] = self._roi_dicts[key]
-            arena_params_to_edit[key] = self._arena_params[key]
-            scales_to_edit[key] = self._scales[key]
+            roi_dicts_to_edit[key] = copy.deepcopy(self._roi_dicts[key])
+            arena_params_to_edit[key] =  copy.deepcopy(self._arena_params[key])
+            scales_to_edit[key] =  copy.deepcopy(self._scales[key])
 
         edit_tag="_edited"
         if DISPLAY_AVAILABLE:
