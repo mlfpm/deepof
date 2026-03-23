@@ -1691,6 +1691,8 @@ class Coordinates:
 
         all_aligned_parts = []
         all_columns = []
+        if not isinstance(animal_ids, List) or len(animal_ids) == 1:
+            align_group=False
 
         first_aid = animal_ids[0]+'_'
         for aid in animal_ids:
