@@ -1386,7 +1386,7 @@ def get_aggregated_embedding(
             current_embedding = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
 
         # currently suboptimal, will be improved in a future version 
-        if type(current_embedding) == np.ndarray:  
+        if not type(current_embedding) == pd.DataFrame:  
             current_embedding = pd.DataFrame(current_embedding)
 
         if agg == "mean":
