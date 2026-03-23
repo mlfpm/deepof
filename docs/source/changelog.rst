@@ -1,7 +1,7 @@
 Changelog
 =========
 
-[0.8.5] - 2026-03-23
+[0.8.5] - 2026-03-24
 ====================
 
 Added
@@ -75,7 +75,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2026-03-23
+- Release Date: 2026-03-24
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.8.5/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
