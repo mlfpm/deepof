@@ -1,7 +1,7 @@
 Changelog
 =========
 
-[0.8.5] - 2026-03-20
+[0.8.5] - 2026-03-24
 ====================
 
 Added
@@ -18,7 +18,7 @@ Added
 - Arena detection GUI: navigation back to previous video (`b` key), reset propagation, toggleable help overlay (`h`) and mesh grid overlay (`m` with 10 mm spacing), and automatic export of arena/ROI detection images
 - `edit_arenas` now verifies edits and warns when scales deviate significantly from originals; all arenas converted to polygon format on load
 - New `get_condition_values` method on `Coordinates` for retrieving unique condition values
-- `plot_behavior_trends` now supports multiple `behaviors_to_plot` in a grid layout and accepts animal IDs (auto-expanded to behavior combinations)
+- `plot_behavior_trends` and `plot_heatmaps` now support multiple `behaviors_to_plot` in a grid layout and `plot_behavior_trends` accepts animal IDs (auto-expanded to behavior combinations)
 
 Changed
 -------
@@ -37,7 +37,6 @@ Changed
 - `simplify_polygon` rewritten to support fixed-number vertex output aligned with dominant polygon sides
 - Parameter validation (`_validate_parameter`, `_check_enum_inputs`) moved and extended: supports dict-type inputs, validates `distance_unit`, recognises animal IDs as valid behavior inputs
 - GUI windows set to topmost where supported
-- `save_dt` only writes to DuckDB when `return_path=True`
 
 Deprecated
 ----------
@@ -62,6 +61,8 @@ Bug Fixes
 - Fixed `simplify_polygon` inconsistent vertex counts across auto-detected arenas
 - Fixed `export_annotated_video` not validating behaviors before processing
 - Various `isinstance` checks replacing fragile string-based arena type detection throughout the codebase
+- Various added Value errors for better user feedback and to avoid silent failures
+- `save_dt` now only writes to DuckDB when `return_path=True` as originally intended
 
 Known Issues
 ------------
@@ -74,7 +75,7 @@ Compatibility
 
 Additional Information
 ----------------------
-- Release Date: 2026-03-20
+- Release Date: 2026-03-24
 - Supported Platforms: Windows, Linux, MacOS
 - Download Link: https://pypi.org/project/deepof/0.8.5/
 - Full Documentation: https://deepof.readthedocs.io/en/latest/index.html

@@ -56,6 +56,7 @@ def get_arenas(
     test: bool = False,
     roi_dicts: dict = None,
     arena_params: dict = None,
+    edit_tag: str = "",
     scales: dict = None,
 ):
     """Extract arena parameters from a project or coordinates object.
@@ -70,6 +71,7 @@ def get_arenas(
         video_path (str): Path to folder with videos.
         videos (dict): Dictionary of videos to extract arena parameters from. Defaults to None (all videos are used).
         debug (bool): If True, a frame per video with the detected arena is saved. Defaults to False.
+        edit_tag (str): optional affix for arena or roi name to prevent overwriting of existing images.
         test (bool): If True, the function is run in test mode. This means that instead of waiting for user-inputs fixed artifical user-inputs are used. Defaults to False.
 
     Returns:
@@ -173,6 +175,7 @@ def get_arenas(
                     arena_dims=arena_dims,
                     norm_dist=arena_dist,
                     image_export_path=image_export_path,
+                    edit_tag=edit_tag,
                     test=test,
                 )
                 if exit_flag_arena == Arena_GUI_exit_flag.PREVIOUS or exit_flag_rois == Arena_GUI_exit_flag.PREVIOUS:
@@ -301,6 +304,7 @@ def get_arenas(
                     arena_dims=arena_dims,
                     norm_dist=None,
                     image_export_path=image_export_path,
+                    edit_tag=edit_tag,
                     test=test,
                 )
                 get_arena=False
@@ -369,6 +373,7 @@ def get_arenas(
                         arena_dims=arena_dims,
                         norm_dist=arena_dists[key],
                         image_export_path=image_export_path,
+                        edit_tag=edit_tag,
                         test=test,
                     )
                     if exit_flag_arena == Arena_GUI_exit_flag.PREVIOUS or exit_flag_rois == Arena_GUI_exit_flag.PREVIOUS:
@@ -420,6 +425,8 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
             arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
             arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+        else:
+            raise ValueError("Could not scale arena to mm!")
     return arena_params
 
 
@@ -433,6 +440,8 @@ def _scale_arenas_to_pixel(arena_params, scales, arena):
         elif isinstance(arena_params[key], Tuple): # circular
             arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
             arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+        else:
+            raise ValueError("Could not scale arena to pixel!")
     return arena_params
 
 
@@ -732,7 +741,7 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
     cv2.imwrite(
         os.path.join(
             image_export_path,
-            f"{name}_detection.png",
+            f"{name}.png",
         ),
         frame_with_arena,
     )
@@ -809,6 +818,7 @@ def extract_polygonal_arena_coordinates(
     arena_dims: float = 1.0, 
     norm_dist: float = None,
     image_export_path: str = None,
+    edit_tag: str = "",
     test: bool = False, 
 ):  # pragma: no cover
     """Read a random frame from the selected video, and opens an interactive GUI to let the user delineate the arena manually.
@@ -823,6 +833,7 @@ def extract_polygonal_arena_coordinates(
         arena_dims (float): Distance as taken from video in pixels
         norm_dist (float): Same distance as arena_dims for normalization in mm
         arena_params (np.ndarray): nx2 array containing the x-y coordinates of all n corners of the polygonal arena.
+        edit_tag (str): optional affix for arena or roi name to prevent overwriting of existing images.
         test (bool): Runs project in test mode and bypasses manual inputs, defaults to false
 
 
@@ -878,12 +889,12 @@ def extract_polygonal_arena_coordinates(
        
     # Export current image with current arena
     if image_export_path is not None and arena_corners is not None and get_arena:
-        save_arena_image(numpy_im, arena_corners, image_export_path, list(videos)[video_index]+"_arena", arena_reference=arena_reference)
+        save_arena_image(numpy_im, arena_corners, image_export_path, list(videos)[video_index]+"_arena"+edit_tag, arena_reference=arena_reference)
     # Export current image with last arena (for propagate)
     elif image_export_path is not None and arena_dict is not None:
         # get arena for active key or last available arena
         arena_propagate=arena_dict.get(key_current,list(arena_dict.values())[-1])
-        save_arena_image(numpy_im, arena_propagate, image_export_path, list(videos)[video_index]+"_arena", arena_reference=arena_reference)
+        save_arena_image(numpy_im, arena_propagate, image_export_path, list(videos)[video_index]+"_arena"+edit_tag, arena_reference=arena_reference)
 
     #let user pick corners for rois
     roi_corners= {}
@@ -921,7 +932,7 @@ def extract_polygonal_arena_coordinates(
 
         # Export current image with current roi
         if image_export_path is not None:
-            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k), color=ROI_COLORS[k-1])
+            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k)+edit_tag, color=ROI_COLORS[k-1])
 
 
         # Collect corners
@@ -932,7 +943,7 @@ def extract_polygonal_arena_coordinates(
         for k in rois_to_propagate:
             # Export current image with last roi (for propagate)
             roi=np.array(roi_dicts[list(roi_dicts.keys())[-1]][k]).astype(int)
-            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k), color=ROI_COLORS[k-1])
+            save_arena_image(numpy_im, roi, image_export_path, list(videos)[video_index]+"_roi"+str(k)+edit_tag, color=ROI_COLORS[k-1])
         
 
     return arena_corners, roi_corners, norm_dist_new, numpy_im.shape[0], numpy_im.shape[1], exit_flag_arena, exit_flag_rois

@@ -3897,12 +3897,13 @@ def plot_behavior_trends(
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin
+    warned = set()
     for j, (bin_start, bin_end) in enumerate(custom_time_bins):
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
         coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
-        tab_dict_for_binning=table_dicts, given_in_frames=True,
+        tab_dict_for_binning=table_dicts, given_in_frames=True, warned=warned,
         )
 
         # Create ROI bins
@@ -4655,12 +4656,13 @@ def return_supervised_summary(
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin
+    warned = set()
     for j, (bin_start, bin_end) in enumerate(custom_time_bins):
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
         coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
-        tab_dict_for_binning=supervised_annotations, given_in_frames=True,
+        tab_dict_for_binning=supervised_annotations, given_in_frames=True, warned=warned,
         )
 
         # Create ROI bins

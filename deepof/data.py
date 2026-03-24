@@ -97,7 +97,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.8.4"
+current_deepof_version="0.8.5"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -1691,6 +1691,8 @@ class Coordinates:
 
         all_aligned_parts = []
         all_columns = []
+        if not isinstance(animal_ids, List) or len(animal_ids) == 1:
+            align_group=False
 
         first_aid = animal_ids[0]+'_'
         for aid in animal_ids:
@@ -2284,11 +2286,11 @@ class Coordinates:
 
         roi_dicts_to_edit, arena_params_to_edit, scales_to_edit = {}, {}, {}
         for key in video_keys:
-            roi_dicts_to_edit[key] = self._roi_dicts[key]
-            arena_params_to_edit[key] = self._arena_params[key]
-            scales_to_edit[key] = self._scales[key]
+            roi_dicts_to_edit[key] = copy.deepcopy(self._roi_dicts[key])
+            arena_params_to_edit[key] = copy.deepcopy(self._arena_params[key])
+            scales_to_edit[key] = copy.deepcopy(self._scales[key])
 
-
+        edit_tag="_edited"
         if DISPLAY_AVAILABLE:
             edited_scales, edited_arena_params, edited_roi_dicts, _ = deepof.arena_utils.get_arenas(
                 coordinates=self,
@@ -2300,6 +2302,7 @@ class Coordinates:
                 videos=videos_to_update,
                 roi_dicts = roi_dicts_to_edit,
                 arena_params = arena_params_to_edit,
+                edit_tag=edit_tag,
                 scales = scales_to_edit,            
             )
         else:
@@ -2321,11 +2324,24 @@ class Coordinates:
                 first_detection = False
 
         # update the scales and arena parameters
+        image_export_path=os.path.join(self._project_path, self._project_name, "Arena_detection")
+        pathlist= [os.path.join(".",image_export_path,file) for file in os.listdir(image_export_path) if file.endswith(edit_tag+'.png')]         
+
         if overwrite_old:
             for key in video_keys:
                 self._roi_dicts[key] = edited_roi_dicts[key]
                 self._arena_params[key] = edited_arena_params[key]
                 self._scales[key] = edited_scales[key]
+                # Overwrite old extracted arena images with new ones
+                for path in pathlist:
+                    path_no_tag = path.replace(edit_tag + '.png', '.png')
+                    if os.path.isfile(path):
+                        os.replace(path, path_no_tag)
+        else:
+            for path in pathlist:
+                if os.path.isfile(path):
+                    os.remove(path)
+
 
 
             self.save(timestamp=False)
@@ -3763,7 +3779,7 @@ class TableDict(dict):
                 pbar.update()
 
                 orig_cols2 = get_dt(self, key).iloc[bin_info[key]].columns
-                new_cols2  = get_dt(table_temp, key).columns  # after saving
+                new_cols2 = get_dt(table_temp, key).columns  # after saving
 
                 assert list(orig_cols2) == list(new_cols2), "Column order changed during preprocessing!"
 

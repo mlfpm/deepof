@@ -1325,7 +1325,7 @@ def _is_point_inside_numba(
 
 
 
-def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray:
+def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray: # pragma: no cover
     """Calculates array of distances between 2D points and a polygon (roi)"""
 
     assert points.size > 0 and points.ndim == 2
@@ -1626,10 +1626,13 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
     half = (fov_angle_deg * np.pi / 180.0) * 0.5
 
     # ROI bbox corners (constant across frames)
-    minx = roi_poly[0, 0]; maxx = roi_poly[0, 0]
-    miny = roi_poly[0, 1]; maxy = roi_poly[0, 1]
+    minx = roi_poly[0, 0]
+    maxx = roi_poly[0, 0]
+    miny = roi_poly[0, 1]
+    maxy = roi_poly[0, 1]
     for i in range(1, roi_poly.shape[0]):
-        x = roi_poly[i, 0]; y = roi_poly[i, 1]
+        x = roi_poly[i, 0]
+        y = roi_poly[i, 1]
         if x < minx: minx = x
         if x > maxx: maxx = x
         if y < miny: miny = y
@@ -1683,10 +1686,22 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
 
         # radius to cover ROI bbox corners (same spirit as shapely version)
         maxd2 = 0.0
-        dx = c0x - apex_x; dy = c0y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
-        dx = c1x - apex_x; dy = c1y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
-        dx = c2x - apex_x; dy = c2y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
-        dx = c3x - apex_x; dy = c3y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c0x - apex_x
+        dy = c0y - apex_y
+        d2 = dx*dx + dy*dy
+        maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c1x - apex_x
+        dy = c1y - apex_y
+        d2 = dx*dx + dy*dy
+        maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c2x - apex_x
+        dy = c2y - apex_y
+        d2 = dx*dx + dy*dy
+        maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c3x - apex_x
+        dy = c3y - apex_y
+        d2 = dx*dx + dy*dy
+        maxd2 = d2 if d2 > maxd2 else maxd2
 
         r = (1.05 * np.sqrt(maxd2) + 1e-6) *(1 / np.cos(half))
         if not np.isfinite(r) or r <= 0.0:
@@ -1955,7 +1970,7 @@ def infer_scalar_cols(df: pd.DataFrame):
     bp_names = {c[0] for c in coord_cols}
 
     speed_cols = [c for c in df.columns if isinstance(c, str) and c in bp_names]
-    dist_cols  = [c for c in df.columns
+    dist_cols = [c for c in df.columns
                 if isinstance(c, tuple) and len(c) == 2 and c[0] in bp_names and c[1] in bp_names]
 
     return speed_cols + dist_cols

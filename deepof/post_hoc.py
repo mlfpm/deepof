@@ -1352,6 +1352,7 @@ def get_aggregated_embedding(
     # Aggregate the provided embeddings and cast to a dataframe
     agg_embedding={}
     preloaded = {}
+    redundant_sets = []
 
     def load_single_key(key):
         arr_range = None
@@ -1360,7 +1361,13 @@ def get_aggregated_embedding(
         else:
             arr_range = bin_info
         return key, get_dt(embedding, key, load_range=arr_range)
-
+    
+    # Not yet used
+    #def collect_redundant(current_embedding: pd.DataFrame, corr_threshold: float = 0.90, min_obs: int = 10) -> set:
+    #    """Collect columns with absolute correlation above threshold."""
+    #    corr = current_embedding.corr(min_periods=min_obs).abs()
+    #    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+    #    return {c for c in upper.columns if any(upper[c] > corr_threshold)}
 
     max_workers = min(32, (cpu_count() or 1) + 4) 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1372,20 +1379,28 @@ def get_aggregated_embedding(
 
     for key in embedding.keys():
         
-        # Load full dataset (arr_range==None) or section
-        #current_embedding=get_dt(embedding,key,load_range=arr_range)
-        current_embedding=preloaded[key]
-        if roi_number is not None and type(current_embedding)==pd.DataFrame:
-            current_embedding=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
-        elif roi_number is not None and type(current_embedding)==np.ndarray:
-            current_embedding=deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
+        current_embedding = preloaded[key]
+        if roi_number is not None and type(current_embedding) == pd.DataFrame:
+            current_embedding = deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
+        elif roi_number is not None and type(current_embedding) == np.ndarray:
+            current_embedding = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
+
+        # currently suboptimal, will be improved in a future version 
+        if not type(current_embedding) == pd.DataFrame:  
+            current_embedding = pd.DataFrame(current_embedding)
 
         if agg == "mean":
-            agg_embedding[key]=np.nanmean(current_embedding, axis=0)
+            agg_embedding[key] = np.nanmean(current_embedding, axis=0)
         elif agg == "median":
-            agg_embedding[key]=np.nanmedian(current_embedding, axis=0)
+            agg_embedding[key] = np.nanmedian(current_embedding, axis=0)
     
-    agg_embedding=pd.DataFrame(agg_embedding).T
+    agg_embedding = pd.DataFrame(agg_embedding, index=current_embedding.columns).T
+
+    # Drop columns that were redundant in ALL keys
+    if True: #redundant_sets:
+        cols_to_drop = [s for s in current_embedding.columns if 'distance' in str(s)] #set.intersection(*redundant_sets) & set(agg_embedding.columns)
+        agg_embedding = agg_embedding.drop(columns=cols_to_drop)
+
     n_rows=agg_embedding.shape[0]
 
     if agg_embedding.isnull().any().any():

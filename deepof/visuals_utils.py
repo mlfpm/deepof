@@ -177,7 +177,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         color_map = ONE_ANIMAL_COLOR_MAP
     elif len(animal_ids)==1:
         supervised = single_behaviors
-        supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
+        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
@@ -908,8 +908,20 @@ def _get_full_range_bins(table_lengths: dict[str, int]) -> _BinningResult:
     return _BinningResult(bin_info, {}, {}, {})
 
 
-def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
-    """Downsamples bin indices if they exceed the maximum allowed samples."""
+def _downsample_bins(
+    bin_info: Any, samples_max: int, down_sample: bool, warned: Optional[set] = None
+) -> Any:
+    """Downsamples bin indices if they exceed the maximum allowed samples.
+
+    Args:
+        bin_info: Dictionary mapping experiment IDs to arrays of frame indices.
+        samples_max: Maximum number of samples allowed per experiment.
+        down_sample: If True, use uniform downsampling. If False, cut at samples_max.
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked key: "downsampled".
+    """
     downsampled_info = {}
     downsampled_at_all = False
     
@@ -925,7 +937,7 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
         else:
             downsampled_info[key] = indices
 
-    if downsampled_at_all:
+    if downsampled_at_all and (warned is None or "downsampled" not in warned):
         print(
             "\033[33m\n"
             f"Info! Selected range exceeds {samples_max} samples and has been "
@@ -933,6 +945,8 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
             "To avoid this, increase 'samples_max'. This will also result in increased computation time"
             "\033[0m"
         )
+        if warned is not None:
+            warned.add("downsampled")
 
     return downsampled_info
 
@@ -942,9 +956,21 @@ def _validate_and_warn(
     table_lengths: dict[str, int],
     frame_rate: float,
     bin_size_orig: Union[int, str],
+    warned: Optional[set] = None,
 ):
-    """Handles all final validation checks and user warnings."""
-    if result.pre_start_warnings:
+    """Handles all final validation checks and user warnings.
+
+    Args:
+        result: A _BinningResult containing bin info and boundary-check flags.
+        table_lengths: Dictionary mapping experiment IDs to their frame counts.
+        frame_rate: Frame rate of the recordings.
+        bin_size_orig: Original bin_size as provided by the user (for error messages).
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked keys: "pre_start", "truncated_bin".
+    """
+    if result.pre_start_warnings and (warned is None or "pre_start" not in warned):
         warn_str = ", ".join(f"{k}: {v}" for k, v in result.pre_start_warnings.items())
         warnings.warn(
             "\033[38;5;208m\n"
@@ -952,11 +978,13 @@ def _validate_and_warn(
             f"one experiment. Truncated bin lengths are: {warn_str}"
             "\033[0m"
         )
+        if warned is not None:
+            warned.add("pre_start")
 
     for key, is_late in result.start_too_late.items():
         if is_late:
             max_time = seconds_to_time(table_lengths[key] / frame_rate, False)
-            max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) -1
+            max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 1
             raise ValueError(
                 f"[Error in {key}]: bin_index is out of range. "
                 f"It must be less than {max_time} or index < {max_index} for a "
@@ -966,24 +994,27 @@ def _validate_and_warn(
     warned_once = False
     for key, is_truncated in result.end_too_late.items():
         if is_truncated and not warned_once:
-            truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
-            message = (
-                "\033[38;5;208m\n"
-                f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
-                f"Bin size was truncated to {truncated_len}."
-                "\033[0m"
-            )
-            # Add helpful suggestion only if applicable
-            if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
-                max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
-                max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
-                message += (
+            if warned is None or "truncated_bin" not in warned:
+                truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
+                message = (
                     "\033[38;5;208m\n"
-                    f"\nFor full bins, choose start time <= {max_start_time} or "
-                    f"index <= {max_index} for a bin_size of {bin_size_orig}."
+                    f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
+                    f"Bin size was truncated to {truncated_len}."
                     "\033[0m"
                 )
-            warnings.warn(message)
+                # Add helpful suggestion only if applicable
+                if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
+                    max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
+                    max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
+                    message += (
+                        "\033[38;5;208m\n"
+                        f"\nFor full bins, choose start time <= {max_start_time} or "
+                        f"index <= {max_index} for a bin_size of {bin_size_orig}."
+                        "\033[0m"
+                    )
+                warnings.warn(message)
+                if warned is not None:
+                    warned.add("truncated_bin")
             warned_once = True
 
 
@@ -997,6 +1028,7 @@ def _preprocess_time_bins(
     samples_max: int = 20000,
     down_sample: bool = True,
     given_in_frames=False,
+    warned: Optional[set] = None,
 ):
     """
     Preprocesses various time-bin formats into a consistent dictionary of indices.
@@ -1020,7 +1052,14 @@ def _preprocess_time_bins(
                      downsampled or cut if the selection is larger.
         down_sample: If True, use uniform downsampling. If False, cut the data
                      at `samples_max`.
-        given_in_frames: bin_index and size are directly given in frames with no conversions being necessary
+        given_in_frames: bin_index and size are directly given in frames with no
+                         conversions being necessary.
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked keys: "precomputed_ignores_args", "invalid_format_default",
+            and all keys from _validate_and_warn and _downsample_bins
+            ("pre_start", "truncated_bin", "downsampled").
 
     Returns:
         A dictionary mapping each experiment ID to a numpy array of frame indices.
@@ -1031,11 +1070,14 @@ def _preprocess_time_bins(
     """
     # --- 1. Initial Setup and Data Preparation ---
     if precomputed_bins is not None and (bin_size is not None or bin_index is not None):
-        warnings.warn(
-            "\033[38;5;208m\n"
-            "precomputed_bins is provided. Ignoring bin_size and bin_index."
-            "\033[0m"
-        )
+        if warned is None or "precomputed_ignores_args" not in warned:
+            warnings.warn(
+                "\033[38;5;208m\n"
+                "precomputed_bins is provided. Ignoring bin_size and bin_index."
+                "\033[0m"
+            )
+            if warned is not None:
+                warned.add("precomputed_ignores_args")
 
     start_times = coordinates.get_start_times()
     if tab_dict_for_binning:
@@ -1079,23 +1121,27 @@ def _preprocess_time_bins(
         result = _get_full_range_bins(table_lengths)
 
     else:
-        warnings.warn(
-            "\033[38;5;208m\n"
-            "Invalid or mismatched bin_size/bin_index format. "
-            "Expected two integers, or two 'HH:MM:SS' strings. "
-            "Defaulting to a 60-second bin starting at 0.\033[0m"
-        )
+        if warned is None or "invalid_format_default" not in warned:
+            warnings.warn(
+                "\033[38;5;208m\n"
+                "Invalid or mismatched bin_size/bin_index format. "
+                "Expected two integers, or two 'HH:MM:SS' strings. "
+                "Defaulting to a 60-second bin starting at 0.\033[0m"
+            )
+            if warned is not None:
+                warned.add("invalid_format_default")
         # Recurse with default values for simplicity.
         return _preprocess_time_bins(
-            coordinates=coordinates, bin_size=60, bin_index=0, 
+            coordinates=coordinates, bin_size=60, bin_index=0,
             tab_dict_for_binning=tab_dict_for_binning, experiment_id=experiment_id,
-            samples_max=samples_max, down_sample=down_sample
+            samples_max=samples_max, down_sample=down_sample,
+            warned=warned,
         )
 
     # --- 3. Post-processing: Validation and Downsampling ---
-    _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size)
+    _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)
 
-    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample)
+    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
 
     return final_bins
 
@@ -2139,14 +2185,15 @@ def _preprocess_mouse_roi_interaction(
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin
+    warned = set()
     for j, (bin_start, bin_end) in enumerate(custom_time_bins):
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
         coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
-        given_in_frames=True,
+        given_in_frames=True, warned=warned,
         )
-        
+                
         multi_bin_info[j]=bin_info_time
 
 
@@ -2205,12 +2252,12 @@ def _preprocess_mouse_roi_interaction(
                 B = len(bodyparts)
 
                 inside = np.empty((T, B), dtype=bool)
-                dists  = np.empty((T, B), dtype=float)
+                dists = np.empty((T, B), dtype=float)
 
                 for k, bp in enumerate(bodyparts):
                     pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
                     inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
-                    dists[:, k]  = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
+                    dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
 
                 # Match old semantics:
                 # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
