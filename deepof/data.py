@@ -2380,6 +2380,7 @@ class Coordinates:
     def get_graph_dataset(
         self,
         animal_id: str = None,
+        window_size: int = None,
         #binning info
         bin_size=None,
         bin_index=None,
@@ -2420,6 +2421,9 @@ class Coordinates:
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
+        # Defaults to 1 second windows if no window size is given
+        if window_size is None:
+            window_size= int(np.round(self._frame_rate))
         
         N_steps=5
         if precomputed_tab_dict is not None:           
@@ -3481,7 +3485,7 @@ class TableDict(dict):
     def preprocess(
         self,
         coordinates,
-        window_size: int = 25,
+        window_size: int = None,
         window_step: int = 1,
         bin_size=None,
         bin_index=None,
@@ -3516,6 +3520,9 @@ class TableDict(dict):
         """
 
         SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+        # If no window size is given, defaults to 1 second windows
+        if window_size is None:
+            window_size= int(np.round(self._frame_rate))
 
         def _make_scaler(kind: str):
             if kind not in SCALERS:
