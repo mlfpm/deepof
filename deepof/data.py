@@ -2586,6 +2586,7 @@ class Coordinates:
                 quality_to_load=None, #quality_to_load,
                 dist_standardize=dist_standardize,
                 speed_standardize=speed_standardize,
+                window_size=window_size,
                 **kwargs,
                 )
    
@@ -3522,7 +3523,7 @@ class TableDict(dict):
         SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
         # If no window size is given, defaults to 1 second windows
         if window_size is None:
-            window_size= int(np.round(self._frame_rate))
+            window_size= int(np.round(coordinates._frame_rate))
 
         def _make_scaler(kind: str):
             if kind not in SCALERS:
