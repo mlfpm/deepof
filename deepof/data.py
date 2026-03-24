@@ -2287,8 +2287,8 @@ class Coordinates:
         roi_dicts_to_edit, arena_params_to_edit, scales_to_edit = {}, {}, {}
         for key in video_keys:
             roi_dicts_to_edit[key] = copy.deepcopy(self._roi_dicts[key])
-            arena_params_to_edit[key] =  copy.deepcopy(self._arena_params[key])
-            scales_to_edit[key] =  copy.deepcopy(self._scales[key])
+            arena_params_to_edit[key] = copy.deepcopy(self._arena_params[key])
+            scales_to_edit[key] = copy.deepcopy(self._scales[key])
 
         edit_tag="_edited"
         if DISPLAY_AVAILABLE:
@@ -3779,7 +3779,7 @@ class TableDict(dict):
                 pbar.update()
 
                 orig_cols2 = get_dt(self, key).iloc[bin_info[key]].columns
-                new_cols2  = get_dt(table_temp, key).columns  # after saving
+                new_cols2 = get_dt(table_temp, key).columns  # after saving
 
                 assert list(orig_cols2) == list(new_cols2), "Column order changed during preprocessing!"
 

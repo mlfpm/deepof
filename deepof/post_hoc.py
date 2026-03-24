@@ -1398,7 +1398,7 @@ def get_aggregated_embedding(
 
     # Drop columns that were redundant in ALL keys
     if True: #redundant_sets:
-        cols_to_drop =  [s for s in current_embedding.columns if 'distance' in str(s)]     #set.intersection(*redundant_sets) & set(agg_embedding.columns)
+        cols_to_drop = [s for s in current_embedding.columns if 'distance' in str(s)] #set.intersection(*redundant_sets) & set(agg_embedding.columns)
         agg_embedding = agg_embedding.drop(columns=cols_to_drop)
 
     n_rows=agg_embedding.shape[0]
