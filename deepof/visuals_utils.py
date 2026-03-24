@@ -177,7 +177,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         color_map = ONE_ANIMAL_COLOR_MAP
     elif len(animal_ids)==1:
         supervised = single_behaviors
-        supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
+        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
         supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
@@ -2252,12 +2252,12 @@ def _preprocess_mouse_roi_interaction(
                 B = len(bodyparts)
 
                 inside = np.empty((T, B), dtype=bool)
-                dists  = np.empty((T, B), dtype=float)
+                dists = np.empty((T, B), dtype=float)
 
                 for k, bp in enumerate(bodyparts):
                     pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
                     inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
-                    dists[:, k]  = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
+                    dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
 
                 # Match old semantics:
                 # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
