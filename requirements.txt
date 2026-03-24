@@ -56,6 +56,6 @@ umap_learn==0.5.4
 pyarrow>=17.0.0
 xgboost==2.1.4
 duckdb==1.2.2
-av==14.4.0
+av==12.3.0
 numba==0.59.1
 psutil==6.1.1
