@@ -2427,10 +2427,12 @@ class Coordinates:
         
         N_steps=5
         if precomputed_tab_dict is not None:           
-            N_steps=1
+            N_steps=2
         with tqdm(total=N_steps, desc=f"{'Loading tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
                             
             if precomputed_tab_dict is not None:  # pragma: no cover
+                pbar.set_postfix(step="Loading data")
+
                 tab_dict = precomputed_tab_dict 
                 
                 
