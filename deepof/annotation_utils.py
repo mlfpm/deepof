@@ -9,7 +9,7 @@ import copy
 import pickle
 import warnings
 from itertools import combinations
-from typing import Any, List, NewType, Union
+from typing import Any, List, NewType, Union, Tuple
 
 import numba as nb
 import numpy as np
@@ -192,7 +192,7 @@ def climb_arena(
     inplace=True,
     )
 
-    if arena_type.startswith("circular"):
+    if isinstance(arena, Tuple): # Circular (legacy) arena_type.startswith("circular"):
         center = np.zeros(2) if centered_data else np.array(arena[0])
         axes = arena[1]
         angle = arena[2]
@@ -205,7 +205,7 @@ def climb_arena(
             threshold=tol,
         ).to_numpy()
 
-    elif arena_type.startswith("polygon"):
+    elif isinstance(arena, np.ndarray): #polygonal arena_type.startswith("polygon"):
 
         # intermediary for testing, will be replaced with length-based condition
         if run_numba:
@@ -226,7 +226,7 @@ def climb_arena(
 
     else:
         raise NotImplementedError(
-            "Supported values for arena_type are ['polygonal-manual', 'circular-manual', 'circular-autodetect']"
+            "Supported values for arena_type are ['polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect']"
         )
 
     return climbing
@@ -234,7 +234,6 @@ def climb_arena(
 
 def sniff_object(
     speed_dframe: pd.DataFrame,
-    arena_type: str,
     arena: np.array,
     pos_dict: pd.DataFrame,
     tol: float,
@@ -250,7 +249,6 @@ def sniff_object(
 
     Args:
         speed_dframe (pandas.DataFrame): speed of body parts over time.
-        arena_type (str): arena type; must be one of ['polygonal-manual', 'circular-autodetect'].
         arena (np.array): contains arena location and shape details.
         pos_dict (table_dict): position over time for all videos in a project.
         tol (float): minimum tolerance to report a hit.
@@ -272,7 +270,7 @@ def sniff_object(
         animal_id += "_"
 
     if s_object == "arena":
-        if arena_type.startswith("circular"):
+        if isinstance(arena, Tuple): # Circular (legacy)   arena_type.startswith("circular"):
             center = np.zeros(2) if centered_data else np.array(arena[0])
             axes = arena[1]
             angle = arena[2]
@@ -294,7 +292,7 @@ def sniff_object(
                 threshold=tol,
             )
 
-        elif arena_type.startswith("polygon"):
+        elif isinstance(arena, np.ndarray): # Polygonal   arena_type.startswith("polygon"):
 
             # intermediary for testing, will be replaced with length-based condition
             if run_numba:
@@ -411,6 +409,7 @@ def immobility(
     y_huddle = huddle_estimator.predict(
         StandardScaler().fit_transform(np.nan_to_num(X_huddle))
     ).astype(float)
+    #y_huddle = np.zeros(len(X_mask))
     y_huddle[X_mask] = False#np.nan
     y_huddle = deepof.utils.binary_moving_median_numba(y_huddle, lag=median_filter_width)
     y_huddle = deepof.utils.filter_short_true_segments_numba(y_huddle, min_length=min_immobility)
@@ -965,6 +964,7 @@ def supervised_tagging(
     # Extract arena information from coordinates object
     arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
     arena_type = coord_object._arena
+    frame_rate = coord_object._frame_rate
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
@@ -1081,8 +1081,8 @@ def supervised_tagging(
         
 
     @_suppress_warning(warn_messages=["All-NaN slice encountered"])
-    def overall_speed(ovr_speeds, _id, ucond):
-        """Return the overall speed of a mouse."""
+    def get_continuous_measures(ovr_speeds, _id, ucond, frame_rate):
+        """Return the overall speed and cumulative distance of each mouse."""
         bparts = [
             "Center",
             "Spine_1",
@@ -1104,7 +1104,16 @@ def supervised_tagging(
         ]
         array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
         avg_speed = np.nanmedian(array[1:], axis=1)
-        return np.insert(avg_speed, 0, np.nan, axis=0)
+        # mm per s 
+        avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
+
+        # convert from mm per second to mm
+        avg_distance = avg_speed * 1/frame_rate 
+
+        # in mm
+        cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
+
+        return avg_distance, cum_distance, avg_speed
 
     # Get all animal ID combinations
     animal_pairs = list(combinations(animal_ids, 2))
@@ -1211,7 +1220,6 @@ def supervised_tagging(
         tag_dict[_id + undercond + "sniff-arena"] = deepof.utils.binary_moving_median_numba(
             sniff_object(
                 speed_dframe=speeds,
-                arena_type=arena_type,
                 arena=arena_params_scaled,
                 pos_dict=raw_coords,
                 tol=params["sniff_arena_tol"],
@@ -1280,7 +1288,7 @@ def supervised_tagging(
         )
         # NOTE: It's important that speeds remain the last columns.
         # Preprocessing for weakly supervised autoencoders relies on this
-        tag_dict[_id + undercond + "speed"] = overall_speed(speeds, _id, undercond)
+        tag_dict[_id + undercond + "distance"], tag_dict[_id + undercond + "cum-distance"], tag_dict[_id + undercond + "speed"] = get_continuous_measures(speeds, _id, undercond, frame_rate)
 
 
 

@@ -14,7 +14,10 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
-from typing import Any, List, NewType, Tuple, Union
+from typing import Any, List, NewType, Tuple, Union, Optional
+
+# For optional verification plots, will probably be removed later
+from matplotlib import pyplot as plt
 
 
 import cv2
@@ -37,7 +40,7 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.utils
@@ -499,7 +502,8 @@ def connect_mouse(
     return final_graph
 
 
-def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray):
+# Candidate for removal or rework as it is part of a basically unused preprocessing pathway
+def edges_to_weighted_adj(adj: np.ndarray, edges: np.ndarray): # pragma: no cover
     """Convert an edge feature matrix to a weighted adjacency matrix.
 
     Args:
@@ -1035,9 +1039,9 @@ def count_transitions(
         else:
             columns = tab.columns
         
-        # Drop non-binary columns (speed column in supervised)
+        # Drop non-binary columns (e.g. speed column in supervised)
         for col in columns:
-            if col.endswith('_speed') or col == 'speed':
+            if col.endswith(tuple(CONTINUOUS_BEHAVIORS)):
                 tab=tab.drop(columns=[col])
 
         # Update columns
@@ -1320,7 +1324,388 @@ def _is_point_inside_numba(
     return inside
 
 
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = False):
+
+def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarray: # pragma: no cover
+    """Calculates array of distances between 2D points and a polygon (roi)"""
+
+    assert points.size > 0 and points.ndim == 2
+    
+    if not isinstance(polygon, Polygon):
+        polygon = Polygon(polygon)
+        
+    # Shapely repeats the start point at the end, so a triangle has 4 coords
+    assert not polygon.is_empty and len(polygon.exterior.coords) >= 4
+
+    boundary = polygon.boundary
+    distances = np.array([boundary.distance(Point(p)) for p in points])
+    
+    return distances
+
+
+@nb.njit(cache=True)
+def _seg_dist2(px, py, ax, ay, bx, by): # pragma: no cover
+    vx, vy = bx - ax, by - ay
+    wx, wy = px - ax, py - ay
+    c1 = wx * vx + wy * vy
+    if c1 <= 0.0:
+        dx, dy = px - ax, py - ay
+        return dx*dx + dy*dy
+    c2 = vx*vx + vy*vy
+    if c2 <= 0.0:
+        dx, dy = px - ax, py - ay
+        return dx*dx + dy*dy
+    t = c1 / c2
+    if t >= 1.0:
+        dx, dy = px - bx, py - by
+        return dx*dx + dy*dy
+    qx, qy = ax + t * vx, ay + t * vy
+    dx, dy = px - qx, py - qy
+    return dx*dx + dy*dy
+
+@nb.njit(parallel=True, cache=True)
+def get_point_polygon_distance_numba(points, poly_xy): # pragma: no cover
+    pts = points
+    M = poly_xy.shape[0]
+    # drop closing vertex if repeated
+    if M >= 2 and poly_xy[0,0] == poly_xy[M-1,0] and poly_xy[0,1] == poly_xy[M-1,1]:
+        M -= 1
+
+    out = np.empty(pts.shape[0], np.float64)
+    out[:] = np.nan
+
+    for i in nb.prange(pts.shape[0]):
+        px, py = pts[i, 0], pts[i, 1]
+        if not (np.isfinite(px) and np.isfinite(py)):
+            continue
+
+        best2 = 1e308
+        for k in range(M):
+            j = 0 if (k + 1 == M) else (k + 1)
+            ax, ay = poly_xy[k, 0], poly_xy[k, 1]
+            bx, by = poly_xy[j, 0], poly_xy[j, 1]
+            d2 = _seg_dist2(px, py, ax, ay, bx, by)
+            if d2 < best2:
+                best2 = d2
+        out[i] = np.sqrt(best2)
+
+    return out
+
+def in_field_of_view(mouse_pts: np.ndarray,
+                     fov_angle_deg: float,
+                     roi: Polygon,
+                     plot: bool = True,
+                     eps: float = 1e-10) -> np.ndarray:
+    """
+    mouse_pts: (N, 3, 2) or (3, 2), order [left_ear, nose, right_ear]
+    Returns float array of shape (N,):
+        1.0  -> ROI intersects FOV
+        0.0  -> ROI does not intersect FOV
+        np.nan -> cannot be calculated (invalid/degenerate geometry or non-finite points)
+    Apex of FOV triangle is midpoint between ears.
+    """
+    mouse_pts = np.asarray(mouse_pts, dtype=float)
+    if mouse_pts.ndim == 2:
+        mouse_pts = mouse_pts[None, ...]
+    assert mouse_pts.ndim == 3 and mouse_pts.shape[1:] == (3, 2)
+
+    if not isinstance(roi, Polygon):
+        roi = Polygon(roi)
+    assert not roi.is_empty
+
+    fov_angle_deg = float(fov_angle_deg)
+    if not (0.0 < fov_angle_deg < 180.0):
+        raise ValueError("fov_angle_deg must be in (0, 180).")
+    if fov_angle_deg < 1e-6:
+        return np.full((mouse_pts.shape[0],), np.nan, dtype=float)
+
+    half = np.deg2rad(fov_angle_deg) / 2.0
+    out = np.full((mouse_pts.shape[0],), np.nan, dtype=float)
+
+    minx, miny, maxx, maxy = roi.bounds
+    roi_corners = np.array([[minx, miny], [minx, maxy], [maxx, miny], [maxx, maxy]], dtype=float)
+
+    sectors = []
+    for i, (L, N, R) in enumerate(mouse_pts):
+        apex = 0.5 * (L + R)
+        ear_vec = R - L
+        perp = np.array([-ear_vec[1], ear_vec[0]], dtype=float)
+        if np.dot(perp, N - apex) < 0:
+            perp = -perp
+
+        nrm = np.linalg.norm(perp)
+        fwd = perp / nrm if nrm >= eps else perp
+        
+        ca, sa = np.cos(half), np.sin(half)
+        d1 = np.array([ca * fwd[0] - sa * fwd[1], sa * fwd[0] + ca * fwd[1]], dtype=float)
+        d2 = np.array([ca * fwd[0] + sa * fwd[1], -sa * fwd[0] + ca * fwd[1]], dtype=float)
+        
+        cross = d1[0] * d2[1] - d1[1] * d2[0]
+        r = (1.05 * np.max(np.linalg.norm(roi_corners - apex[None, :], axis=1)) + 1e-6) * (1 / np.cos(half))
+        
+        p0, p1, p2 = apex, apex + r * d1, apex + r * d2
+        sector = Polygon([tuple(p0), tuple(p1), tuple(p2)])
+        
+        # Validation check
+        valid = (
+            np.isfinite(L).all() and np.isfinite(N).all() and np.isfinite(R).all() and
+            np.linalg.norm(ear_vec) >= eps and
+            nrm >= eps and
+            abs(cross) >= 1e-12 and
+            np.isfinite(r) and r > 0 and
+            np.isfinite(p0).all() and np.isfinite(p1).all() and np.isfinite(p2).all() and
+            not sector.is_empty and sector.is_valid and sector.area >= 1e-12
+        )
+        
+        if valid:
+            sectors.append(sector)
+            out[i] = 1.0 if sector.intersects(roi) else 0.0
+        else:
+            sectors.append(None)
+
+    if plot: # pragma: no cover
+        idx = -1
+        L, N, R = mouse_pts[idx]
+        apex = 0.5 * (L + R)
+        sector = sectors[idx]
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        x, y = roi.exterior.xy
+        ax.plot(x, y, "k-", lw=2, label="ROI")
+        ax.fill(x, y, color="k", alpha=0.08)
+
+        if sector is not None:
+            sx, sy = sector.exterior.xy
+            ax.plot(sx, sy, "C0-", lw=2, label="FOV")
+            ax.fill(sx, sy, color="C0", alpha=0.15)
+
+        ax.plot([L[0], R[0]], [L[1], R[1]], "C1--", lw=1)
+        ax.scatter([L[0], apex[0], N[0], R[0]],
+                   [L[1], apex[1], N[1], R[1]],
+                   c=["C1", "C3", "C2", "C1"], s=60)
+        ax.text(L[0], L[1], "L")
+        ax.text(apex[0], apex[1], "Apex")
+        ax.text(N[0], N[1], "N")
+        ax.text(R[0], R[1], "R")
+
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_title(f"ROI in FOV (last frame): {out[idx]}")
+        ax.legend(loc="best")
+        ax.grid(True, alpha=0.2)
+        plt.show()
+
+    return out
+
+@nb.njit(cache=True)
+def _orient(ax, ay, bx, by, cx, cy): # pragma: no cover
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+
+@nb.njit(cache=True)
+def _on_segment(ax, ay, bx, by, px, py, eps): # pragma: no cover
+    # p collinear with segment a-b and within bounding box
+    if abs(_orient(ax, ay, bx, by, px, py)) > eps:
+        return False
+    if px < min(ax, bx) - eps or px > max(ax, bx) + eps:
+        return False
+    if py < min(ay, by) - eps or py > max(ay, by) + eps:
+        return False
+    return True
+
+
+@nb.njit(cache=True)
+def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
+    o1 = _orient(ax, ay, bx, by, cx, cy)
+    o2 = _orient(ax, ay, bx, by, dx, dy)
+    o3 = _orient(cx, cy, dx, dy, ax, ay)
+    o4 = _orient(cx, cy, dx, dy, bx, by)
+
+    # proper intersection
+    if ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and \
+       ((o3 > eps and o4 < -eps) or (o3 < -eps and o4 > eps)):
+        return True
+
+    # collinear/touching
+    if abs(o1) <= eps and _on_segment(ax, ay, bx, by, cx, cy, eps): return True
+    if abs(o2) <= eps and _on_segment(ax, ay, bx, by, dx, dy, eps): return True
+    if abs(o3) <= eps and _on_segment(cx, cy, dx, dy, ax, ay, eps): return True
+    if abs(o4) <= eps and _on_segment(cx, cy, dx, dy, bx, by, eps): return True
+
+    return False
+
+
+@nb.njit(cache=True)
+def _point_in_poly(px, py, poly, eps): # pragma: no cover
+    """Ray casting + boundary included."""
+    m = poly.shape[0]
+    inside = False
+
+    xj, yj = poly[m - 1, 0], poly[m - 1, 1]
+    for i in range(m):
+        xi, yi = poly[i, 0], poly[i, 1]
+
+        if _on_segment(xj, yj, xi, yi, px, py, eps):
+            return True
+
+        # crossing test
+        if (yi > py) != (yj > py):
+            xint = (xj - xi) * (py - yi) / (yj - yi + 0.0) + xi
+            if px < xint:
+                inside = not inside
+
+        xj, yj = xi, yi
+
+    return inside
+
+
+@nb.njit(cache=True)
+def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
+    """Same-side test; boundary included."""
+    abp = _orient(ax, ay, bx, by, px, py)
+    bcp = _orient(bx, by, cx, cy, px, py)
+    cap = _orient(cx, cy, ax, ay, px, py)
+
+    has_neg = (abp < -eps) or (bcp < -eps) or (cap < -eps)
+    has_pos = (abp > eps) or (bcp > eps) or (cap > eps)
+    return not (has_neg and has_pos)
+
+
+@nb.njit(cache=True)
+def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
+    # 1) triangle vertex in polygon
+    if _point_in_poly(ax, ay, poly, eps): return True
+    if _point_in_poly(bx, by, poly, eps): return True
+    if _point_in_poly(cx, cy, poly, eps): return True
+
+    # 2) polygon vertex in triangle
+    m = poly.shape[0]
+    for i in range(m):
+        px, py = poly[i, 0], poly[i, 1]
+        if _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+            return True
+
+    # 3) any edge intersection
+    for i in range(m):
+        j = (i + 1) % m
+        p1x, p1y = poly[i, 0], poly[i, 1]
+        p2x, p2y = poly[j, 0], poly[j, 1]
+
+        if _segments_intersect(ax, ay, bx, by, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect(bx, by, cx, cy, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect(cx, cy, ax, ay, p1x, p1y, p2x, p2y, eps): return True
+
+    return False
+
+
+@nb.njit(cache=True)
+def _rotate_vec(vx, vy, ang): # pragma: no cover
+    ca = np.cos(ang)
+    sa = np.sin(ang)
+    return ca * vx - sa * vy, sa * vx + ca * vy
+
+
+@nb.njit(parallel=True, cache=True)
+def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pragma: no cover
+    """
+    Numba version of in_field_of_view (no plotting, no shapely).
+
+    mouse_pts: (N,3,2) float64
+    roi_poly:  (M,2) float64 (not closed)
+    returns:   (N,) float64 in {1.0, 0.0, nan}
+    """
+    n = mouse_pts.shape[0]
+    out = np.empty(n, dtype=np.float64)
+    out[:] = np.nan
+
+    # validate angle (numba-friendly: just produce all-nan for invalid)
+    if not (fov_angle_deg > 0.0 and fov_angle_deg < 180.0):
+        return out
+    if fov_angle_deg < 1e-6:
+        return out
+
+    half = (fov_angle_deg * np.pi / 180.0) * 0.5
+
+    # ROI bbox corners (constant across frames)
+    minx = roi_poly[0, 0]; maxx = roi_poly[0, 0]
+    miny = roi_poly[0, 1]; maxy = roi_poly[0, 1]
+    for i in range(1, roi_poly.shape[0]):
+        x = roi_poly[i, 0]; y = roi_poly[i, 1]
+        if x < minx: minx = x
+        if x > maxx: maxx = x
+        if y < miny: miny = y
+        if y > maxy: maxy = y
+
+    c0x, c0y = minx, miny
+    c1x, c1y = minx, maxy
+    c2x, c2y = maxx, miny
+    c3x, c3y = maxx, maxy
+
+    for t in nb.prange(n):
+        Lx, Ly = mouse_pts[t, 0, 0], mouse_pts[t, 0, 1]
+        Nx, Ny = mouse_pts[t, 1, 0], mouse_pts[t, 1, 1]
+        Rx, Ry = mouse_pts[t, 2, 0], mouse_pts[t, 2, 1]
+
+        if not (np.isfinite(Lx) and np.isfinite(Ly) and np.isfinite(Nx) and np.isfinite(Ny) and np.isfinite(Rx) and np.isfinite(Ry)):
+            continue
+
+        apex_x = 0.5 * (Lx + Rx)
+        apex_y = 0.5 * (Ly + Ry)
+
+        ear_x = Rx - Lx
+        ear_y = Ry - Ly
+        if ear_x * ear_x + ear_y * ear_y < eps * eps:
+            continue
+
+        # perpendicular vector
+        perp_x = -ear_y
+        perp_y = ear_x
+
+        # flip toward nose
+        if perp_x * (Nx - apex_x) + perp_y * (Ny - apex_y) < 0.0:
+            perp_x = -perp_x
+            perp_y = -perp_y
+
+        perp_norm2 = perp_x * perp_x + perp_y * perp_y
+        if perp_norm2 < eps * eps:
+            continue
+
+        invn = 1.0 / np.sqrt(perp_norm2)
+        fwd_x = perp_x * invn
+        fwd_y = perp_y * invn
+
+        d1x, d1y = _rotate_vec(fwd_x, fwd_y, +half)
+        d2x, d2y = _rotate_vec(fwd_x, fwd_y, -half)
+
+        # degenerate rays
+        cross = d1x * d2y - d1y * d2x
+        if abs(cross) < 1e-12:
+            continue
+
+        # radius to cover ROI bbox corners (same spirit as shapely version)
+        maxd2 = 0.0
+        dx = c0x - apex_x; dy = c0y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c1x - apex_x; dy = c1y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c2x - apex_x; dy = c2y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+        dx = c3x - apex_x; dy = c3y - apex_y; d2 = dx*dx + dy*dy;  maxd2 = d2 if d2 > maxd2 else maxd2
+
+        r = (1.05 * np.sqrt(maxd2) + 1e-6) *(1 / np.cos(half))
+        if not np.isfinite(r) or r <= 0.0:
+            continue
+
+        ax, ay = apex_x, apex_y
+        bx, by = apex_x + r * d1x, apex_y + r * d1y
+        cx, cy = apex_x + r * d2x, apex_y + r * d2y
+
+        # triangle area check
+        if abs(_orient(ax, ay, bx, by, cx, cy)) < 1e-12:
+            continue
+
+        out[t] = 1.0 if _tri_poly_intersects(roi_poly, ax, ay, bx, by, cx, cy, eps) else 0.0
+
+    return out
+
+
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1332,38 +1717,33 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba: bool = Fals
     Returns:
         mouse_in_polygon (np.ndarray): A boolean array indicating whether the mouse is inside the ROI.
     """
+    
+    
+    if isinstance(in_roi_criterion, str):
+        in_roi_criterion = [in_roi_criterion]
 
-    # Make to list
-    if isinstance(in_roi_criterion,str):
-        in_roi_criterion=[in_roi_criterion]
-    # Multi animal case
-    if aid != "":
-        # If "all", take all bodyparts in table of animal aid
+    if aid:
         if "all" in in_roi_criterion:
-            in_roi_criterion=np.unique([col[0] for col in tab.columns if col[0].startswith(aid)])
-        # Otherwise add aid to bodypart names to only get bodyparts of animal aid
+            bodyparts = [c for c in tab.columns.get_level_values(0).unique() if c.startswith(aid)]
         else:
-            in_roi_criterion = [aid+"_"+bodypart for bodypart in in_roi_criterion]
-        all_points=tab[in_roi_criterion]
-    # Single animal case
+            bodyparts = [f"{aid}_{bp}" for bp in in_roi_criterion]
     else:
-        # If "all", take all bodyparts i.e. full table
-        if "all" in in_roi_criterion:
-            all_points=tab
-        else:
-            all_points=tab[in_roi_criterion]
-    if type(roi_polygon)==tuple:
-        roi_polygon=np.array(roi_polygon)
+        bodyparts = tab.columns.get_level_values(0).unique() if "all" in in_roi_criterion else in_roi_criterion
 
-    # Iterate over chosen bodyparts and only keep the ones in which all bodyparts exist
-    mouse_in_polygon = np.ones([all_points.shape[0]]).astype(bool)
-    for bodypart in all_points.columns.get_level_values(0).unique():
-        if run_numba:            
-            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon_numba(np.array(all_points[bodypart]),roi_polygon)
-        else:
-            mouse_in_polygon=mouse_in_polygon & deepof.utils.point_in_polygon(np.array(all_points[bodypart]),roi_polygon)
+    roi_polygon = np.asarray(roi_polygon)
 
-    return mouse_in_polygon
+    mask = np.ones(len(tab), dtype=bool)
+    for bp in bodyparts:
+        # select only x,y for that bodypart and immediately go to numpy
+        pts = tab.loc[:, pd.IndexSlice[bp, ["x", "y"]]].to_numpy(copy=False)
+        pts = np.ascontiguousarray(pts)  # good for numba
+
+        if run_numba:
+            mask &= deepof.utils.point_in_polygon_numba(pts, roi_polygon)
+        else:
+            mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
+
+    return mask
 
 
 # noinspection PyArgumentList
@@ -1569,70 +1949,189 @@ def rename_track_bps(
     return loaded_tab
 
 
-def scale_table(
-    feature_array: np.ndarray,
-    scale: str,
-    global_scaler: Any = None,
-):
-    """Scales features in a table controlling for both individual body size and interanimal variability.
+def infer_scalar_cols(df: pd.DataFrame):
+    coord_cols = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bp_names = {c[0] for c in coord_cols}
 
-    Args:
-        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
-        global_scaler (Any): global scaler, fit in the whole dataset.
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bp_names]
+    dist_cols  = [c for c in df.columns
+                if isinstance(c, tuple) and len(c) == 2 and c[0] in bp_names and c[1] in bp_names]
+
+    return speed_cols + dist_cols
+
+
+def infer_column_types(df):
+    """Identify coord, speed, distance, and angle columns from a pose table."""
+    coord_cols = [c for c in df.columns 
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = {c[0] for c in coord_cols}
     
-    Returns:
-        feature_array_scaled (np.ndarray): array after scaling.
+    speed_cols = [c for c in df.columns if isinstance(c, str) and c in bodyparts]
+    dist_cols = [c for c in df.columns
+                 if isinstance(c, tuple) and len(c) == 2
+                 and c[0] in bodyparts and c[1] in bodyparts]
+    angle_cols = [c for c in df.columns if isinstance(c, tuple) and len(c) == 3]
 
-    """
-    exp_temp = feature_array.to_numpy()
+    def _prefix(bp: str):
+        return bp.split("_", 1)[0] if "_" in bp else None
 
-    annot_length = 0
+    inner_dist_cols = [d for d in dist_cols if _prefix(d[0]) == _prefix(d[1])]
+    intra_dist_cols = [d for d in dist_cols if _prefix(d[0]) != _prefix(d[1])]
+    
+    return {
+        "coords": coord_cols,
+        "speeds": speed_cols, 
+        "dists": dist_cols,
+        "inner_dists": inner_dist_cols,
+        "intra_dists": intra_dist_cols,
+        "angles": angle_cols,
+        "bodyparts": bodyparts,
+        "scalars": speed_cols + dist_cols,
+    }
+  
 
-    if global_scaler is None:
-        # Scale each modality separately using a custom function
-        exp_temp = scale_animal(exp_temp, scale)
-    else:
-        # Scale all experiments together, to control for differential stats
-        exp_temp = global_scaler.transform(exp_temp)
+def scale_table(
+    df: pd.DataFrame,
+    scale: str = "standard",
+    animal_ids=None,
+    size_ref=("Nose", "Tail_base"),
+    inter_scale: str = "mean",    # {"mean","geom","global"}
+    standardize: bool = True,     # if False: only size-normalize
+    dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
+    speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    log_distances: bool = True,   
+) -> pd.DataFrame:
+    if not scale:
+        return df.copy()
+    if scale not in {"standard", "minmax", "robust"}:
+        raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
+    if dist_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
+    if speed_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
 
-    feature_array_scaled = np.concatenate(
-        [
-            exp_temp,
-            feature_array.copy().to_numpy()[:, feature_array.shape[1] - annot_length :],
-        ],
-        axis=1,
-    )
+    out = df.copy()
 
-    return feature_array_scaled
+    # ----- infer columns -----
+    coord_cols = [c for c in out.columns
+                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
+    bodyparts = sorted({c[0] for c in coord_cols})
+    bp_set = set(bodyparts)
+
+    def _split_bp(bp: str):
+        return bp.split("_", 1) if "_" in bp else (None, bp)
+
+    if animal_ids is None:
+        animal_ids = sorted({(_split_bp(bp)[0]) for bp in bodyparts if _split_bp(bp)[0] is not None}) or [None]
+    animal_ids = list(animal_ids)
+
+    speed_cols = [c for c in out.columns if isinstance(c, str) and c in bp_set]
+    dist_cols = [
+        c for c in out.columns
+        if isinstance(c, tuple) and len(c) == 2 and all(isinstance(x, str) for x in c)
+        and c[0] in bp_set and c[1] in bp_set
+    ]
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
+    inner_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) == bp_to_aid.get(d[1])]
+    intra_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) != bp_to_aid.get(d[1])]
 
 
-def scale_animal(feature_array: np.ndarray, scale: str):
-    """Scales features in the provided array.
+    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 
-    Args:
-        feature_array (np.ndarray): array to scale. Should be shape (instances x features).
-        scale (str): Data scaling method. Must be one of 'standard', 'robust' (default; recommended) and 'minmax'.
+    # ----- size factors per animal -----
+    ref_a, ref_b = size_ref
+    s_by_aid = {}
+    for aid in animal_ids:
+        a = ref_a if aid is None else f"{aid}_{ref_a}"
+        b = ref_b if aid is None else f"{aid}_{ref_b}"
+        need = [(a, "x"), (a, "y"), (b, "x"), (b, "y")]
+        if all(c in out.columns for c in need):
+            dx = out[(a, "x")].to_numpy(float) - out[(b, "x")].to_numpy(float)
+            dy = out[(a, "y")].to_numpy(float) - out[(b, "y")].to_numpy(float)
+            s_by_aid[aid] = np.nanmedian(np.hypot(dx, dy))
+        else:
+            s_by_aid[aid] = np.nan
 
-    Returns:
-        Scaled version of the input array, with features normalized by modality.
-        List of scalers per modality.
+    valid = [v for v in s_by_aid.values() if np.isfinite(v) and v > 0]
+    s_default = float(np.nanmedian(valid)) if valid else 1.0
+    s_by_aid = {aid: (v if np.isfinite(v) and v > 0 else s_default) for aid, v in s_by_aid.items()}
 
-    """
-    scalers = []
+    def _comb(s1, s2):
+        if inter_scale == "mean":
+            return 0.5 * (s1 + s2)
+        if inter_scale == "geom":
+            return float(np.sqrt(s1 * s2))
+        if inter_scale == "global":
+            return s_default
+        raise ValueError("inter_scale must be one of {'mean','geom','global'}")
 
-    # number of body part sets to use for coords (x, y), speeds, and distances
-    if scale == "standard":
-        cur_scaler = StandardScaler()
-    elif scale == "minmax":
-        cur_scaler = MinMaxScaler()
-    else:
-        cur_scaler = RobustScaler()
+    # ----- stage 1: size-normalize -----
+    for aid in animal_ids:
+        bps = [bp for bp in bodyparts if bp_to_aid.get(bp) == aid] if aid is not None \
+              else [bp for bp in bodyparts if bp_to_aid.get(bp) is None]
+        if not bps:
+            continue
+        s = s_by_aid[aid]
 
-    normalized_array = cur_scaler.fit_transform(feature_array)
-    scalers.append(cur_scaler)
+        xy = [(bp, ax) for bp in bps for ax in ("x", "y") if (bp, ax) in out.columns]
+        if xy:
+            out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / s
 
-    return normalized_array
+        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp name
+        if sp:
+            out.loc[:, sp] = out.loc[:, sp].to_numpy(float) / s
+
+    for (bp1, bp2) in dist_cols:
+        a1, a2 = bp_to_aid.get(bp1), bp_to_aid.get(bp2)
+        s = s_by_aid.get(a1, s_default) if a1 == a2 else _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
+        out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
+
+    if log_distances and dist_cols:
+        arr = out[dist_cols].to_numpy(float)
+        arr[arr < 0] = 0.0  # safety (distances should be >= 0)
+        out.loc[:, dist_cols] = np.log1p(arr)
+
+    if not standardize:
+        return out
+
+    # ----- stage 2: per-column standardization of scalars (like original) -----
+    #if global_scaler is not None:
+    #    out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
+    #    return out
+
+    # local (per-table) scaling if no global scaler is provided
+    scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
+    
+    def _fit_transform_per_column(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        out.loc[:, cols] = sc.fit_transform(out[cols].to_numpy(float))
+
+    def _fit_transform_groupwise(cols):
+        if not cols:
+            return
+        sc = scaler_cls()
+        arr = out[cols].to_numpy(float)
+        out.loc[:, cols] = sc.fit_transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+    # Speeds
+    if speed_standardize == "per_column":
+        _fit_transform_per_column(speed_cols)
+    elif speed_standardize == "groupwise":
+        _fit_transform_groupwise(speed_cols)
+    # else: "none" -> do nothing
+
+    # Distances (groupwise separately for inner vs intra)
+    if dist_standardize == "per_column":
+        _fit_transform_per_column(dist_cols)
+    elif dist_standardize == "groupwise":
+        _fit_transform_groupwise(inner_dist_cols)
+        _fit_transform_groupwise(intra_dist_cols)
+    # else: "none" -> do nothing
+
+    return out
 
 
 def kleinberg(
@@ -2083,7 +2582,7 @@ def extract_windows(
 
 
 def smooth_mult_trajectory(
-    series: np.array, alpha: int = 0, w_length: int = 11
+    series: np.array, alpha: int = 0, w_length: int = 15
 ) -> np.ndarray:
     """Return a smoothed a trajectory using a Savitzky-Golay 1D filter.
 
@@ -2121,7 +2620,7 @@ def moving_average(time_series: pd.Series, lag: int = 5) -> pd.Series:
 
     """
     moving_avg = np.convolve(time_series, np.ones(lag) / lag, mode="same")
-
+    
     return moving_avg
 
 @nb.njit()
@@ -2403,7 +2902,7 @@ def rolling_speed(
     shift: int = 2,
     typ: str = "coords",
 ) -> pd.DataFrame:
-    """Return the average speed over n frames in pixels per frame.
+    """Return the average speed over n frames in millimeters per second.
 
     Args:
         dframe (pandas.DataFrame): Position over time dataframe.
@@ -2505,6 +3004,15 @@ def get_behavior_mask_and_confidence(
         )
         confidence = df[behaviors]
     return mask, confidence
+
+
+
+def row_nanargmax(arr):
+    """argmax per row, ignoring NaNs. Returns NaN for all-NaN rows."""
+    mask = np.all(np.isnan(arr), axis=1)
+    result = np.nanargmax(np.where(mask[:, None], 0, arr), axis=1).astype(float)
+    result[mask] = np.nan
+    return result
 
 
 def filter_short_bouts(
@@ -2791,3 +3299,72 @@ def get_total_Frames(video_paths: dict) -> int:
         total_frames.append(int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         current_video_cap.release()
     return total_frames
+
+
+def validate_parameter(
+    param_name: str,
+    param_value: Any,
+    valid_options: List[Any],
+    is_list: bool = False,
+    custom_error_if_empty: Optional[str] = None,
+    only_one_of_many: Optional[bool] = True,
+    can_be_dict: Optional[bool] = False,
+): # pragma: no cover
+    """
+    A generic helper to validate a single parameter against a list of valid options.
+
+    Args:
+        param_name (str): The name of the parameter being checked (for error messages).
+        param_value (Any): The value of the parameter provided by the user.
+        valid_options (List[Any]): The list of allowed values.
+        is_list (bool): If True, checks if param_value is a subset of valid_options.
+                        Otherwise, checks if it is a member of valid_options.
+        custom_error_if_empty (Optional[str]): A specific error to raise if the
+                                               parameter is provided but the list
+                                               of valid options is empty.
+        only_one_of_many (Optional[bool]): If only one of the valid options is allowed: True
+                                           If a subset of the valid options is allowed: False
+        can_be_dict (Optional[bool]): Parameter can also be given as a dict (e.g. allowed for experiment_id)                                   
+    """
+    if param_value is None:
+        return  # Parameter not provided, no validation needed.
+
+    # If the param is provided but there are no valid options to check against
+    if not valid_options and custom_error_if_empty:
+        raise ValueError(custom_error_if_empty)  # pragma: no cover
+
+    valid_set = set(valid_options)
+    is_valid = False
+
+    if isinstance(param_value, dict) and can_be_dict:
+        value_set = set(
+            [x for lst in param_value.values() for x in lst]          
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    
+    elif not isinstance(param_value, dict) and is_list:
+        # Ensure param_value is a list-like object for set operations
+        value_set = set(
+            [param_value] if isinstance(param_value, str) else param_value
+        )
+        if value_set.issubset(valid_set):
+            is_valid = True
+    else:
+        if param_value in valid_set:
+            is_valid = True
+
+    if not is_valid:
+        # Truncate for readability
+        options_preview = str(valid_options[:5])[1:-1]
+        if len(valid_options) > 5:
+            options_preview += ", ..."
+
+        if only_one_of_many:    
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
+            )  # pragma: no cover
+        else:
+            raise ValueError(
+                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
+            )  # pragma: no cover

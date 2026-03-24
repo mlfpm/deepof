@@ -26,7 +26,6 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 from matplotlib.patches import Patch
 from natsort import os_sorted
 from scipy.cluster.hierarchy import dendrogram, linkage
-from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
@@ -35,7 +34,7 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS
+from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS, DistanceUnit, TimeUnit
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
@@ -98,6 +97,7 @@ def plot_heatmaps(
     display_arena: bool = True,
     xlim: float = None,
     ylim: float = None,
+    extrapolate_heatmap: bool = True,
     save: bool = False,
     dpi: int = 100,
     ax: Any = None,
@@ -125,6 +125,7 @@ def plot_heatmaps(
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
+        extrapolate_heatmap (bool): show full heatmap including extrapolated parts (default=True)
         save (str):  if provided, the figure is saved to the specified path.
         dpi (int): resolution of the figure.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, a new figure will be created.
@@ -212,6 +213,7 @@ def plot_heatmaps(
         xlim=xlim,
         ylim=ylim,
         title=title_suffix,
+        extrapolate_heatmap=extrapolate_heatmap,
         save=save,
         dpi=dpi,
         ax=ax,
@@ -219,11 +221,11 @@ def plot_heatmaps(
     )
     
     if display_arena:
-        for hmap in heatmaps:
+        for hmap in heatmaps.ravel():
             plot_arena(coordinates, center, "#ec5628", hmap, experiment_id)
 
     if coordinates._roi_dicts is not None and roi_number is not None and display_rois:
-        for hmap in heatmaps:
+        for hmap in heatmaps.ravel():
             color = BGR_to_hex(ROI_COLORS[roi_number-1])
             plot_arena(coordinates, center, color, hmap, experiment_id, roi_number)
 
@@ -388,6 +390,11 @@ def _plot_experiment_gantt(
         roi_mode = roi_mode,
         in_roi_bodyparts=in_roi_criterion,
     )
+    if isinstance(behaviors_to_plot, str):
+        behaviors_to_plot=[behaviors_to_plot]
+    if  behaviors_to_plot is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
+        behaviors_to_plot = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot)
+
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -452,7 +459,7 @@ def _plot_experiment_gantt(
         behavior_ids = [
             col
             for col in data_frame.columns
-            if "speed" not in col
+            if not col.endswith(tuple(CONTINUOUS_BEHAVIORS))
         ]
 
     # only keep valid ids
@@ -582,6 +589,11 @@ def _plot_behavior_gantt(
 
     """
 
+    # extra check for special situation
+    if any([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in [behavior_id]]):
+        raise ValueError(
+            f'Invalid value "{behavior_id}". The Gantt plot can only compare one behavior accross conditions in behavior mode!'
+        )
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -767,6 +779,7 @@ def gantt_plotter(
     """
   
     #only add "white" as base color if there are frames with no behaviors
+    gantt_matrix[np.isnan(gantt_matrix)] = 0
     if (gantt_matrix==0).any():
         colors=colors=['#FFFFFF'] + colors
     
@@ -786,6 +799,7 @@ def gantt_plotter(
         N_colors=int(np.nanmax(gantt_matrix))
     #col_indices=col_indices[np.invert(np.isnan(col_indices))].astype(int)
     #N_colors=len(col_indices)
+    
     sns.heatmap(
         data=gantt_matrix,
         cbar=False,
@@ -805,9 +819,9 @@ def gantt_plotter(
             )
             # mirror on x axis as it get's mirrored again during plotting
             standard_signal=-(standard_signal-1)
-            sns.lineplot(
-                x=signal_overlay.index[0 : len(bin_indices)],
-                y=standard_signal[bin_indices] + rows,
+            plt.plot(
+                signal_overlay.index[0 : len(bin_indices)],
+                standard_signal[bin_indices] + rows,
                 color="black",
             )
 
@@ -953,6 +967,8 @@ def plot_enrichment(
     exp_condition_order: list = None,
     normalize: bool = False,
     verbose: bool = False,
+    unit_time: str = "s",
+    unit_distance: str = "m",
     ax: Any = None,
     save: bool = False,
 ):
@@ -978,6 +994,8 @@ def plot_enrichment(
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
+        unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
+        unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -1046,7 +1064,7 @@ def plot_enrichment(
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
-    # Get cluster enrichment across conditions for the desired settings
+    # Get cluster enrichment across conditions for the desired settings (still in default unit)
     enrichment = deepof.post_hoc.enrichment_across_conditions(
         soft_counts = soft_counts,
         supervised_annotations = supervised_annotations,
@@ -1072,23 +1090,38 @@ def plot_enrichment(
         )
     enrichment.sort_values(by=["exp condition", "cluster"], inplace=True)
     enrichment["cluster"] = enrichment["cluster"].astype(str)
-
+    bar_order=enrichment["cluster"].unique().tolist()
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(12, 6))
 
     # Adjust label and y-axis scaling to meaningful units
     if plot_speed and supervised_annotations is not None:
-        y_axis_label = "average speed [mm/s]"
+        y_axis_label = f"average speed [{unit_distance}/{unit_time}]"
+        # speed is saved as mm/s, to apply Enums first convert to mm/frames
+        enrichment["time on cluster"] = enrichment["time on cluster"]/coordinates._frame_rate
+
+        mm_to_pix = enrichment["exp_id"].map(
+            lambda exp_id: coordinates._scales[exp_id][2] / coordinates._scales[exp_id][3]
+        ).to_numpy()
+
+        fps = coordinates._frame_rate
+        tu = TimeUnit.parse(unit_time)
+        du = DistanceUnit.parse(unit_distance)
+
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"].to_numpy()
+            / tu.factor(fps)                 # mm/frame -> mm/<time unit>
+            * du.factor(mm_to_pix)           # mm -> chosen distance unit (scalar or per-row for px)
+        )
+
     elif normalize:
         y_axis_label = "time on cluster in %"
         enrichment["time on cluster"] = enrichment["time on cluster"] * 100
-    elif coordinates._frame_rate is not None:
-        y_axis_label = "time on cluster [s]"
-        enrichment["time on cluster"] = (
-            enrichment["time on cluster"] / coordinates._frame_rate
-        )
     else:
-        y_axis_label = "time on cluster in frames"
+        y_axis_label = f"time on cluster [{unit_time}]"
+        enrichment["time on cluster"] = (
+            enrichment["time on cluster"]*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
+        )
 
     
     # More inits
@@ -1224,6 +1257,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             ax=ax,
@@ -1232,6 +1266,7 @@ def plot_enrichment(
             data=enrichment,
             x="cluster",
             y="time on cluster",
+            order=bar_order,
             hue="exp condition",
             hue_order=all_exp_conditions,
             color="black",
@@ -1865,9 +1900,10 @@ def plot_associations(
     elif not exclude_given_behaviors:
         behaviors = list(set(available_behaviors)-set(behaviors))
     # Always exclude
-    always_exclude=["speed"]
+    always_exclude=CONTINUOUS_BEHAVIORS
     if coordinates._animal_ids is not None:
-        always_exclude = [id + "_" + "speed" for id in coordinates._animal_ids]
+        for con_behavior in CONTINUOUS_BEHAVIORS:
+            always_exclude = [id + "_" + con_behavior for id in coordinates._animal_ids]
     behaviors = behaviors + always_exclude
 
     if experiment_id is not None:
@@ -3399,18 +3435,22 @@ def export_annotated_video(
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
-    if isinstance(behaviors,str):
-        behaviors=[behaviors]
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         experiment_ids=experiment_id,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
         in_roi_bodyparts=in_roi_criterion,
-        #behaviors=behaviors,
+        behaviors=behaviors,
     )
+    if isinstance(behaviors, str):
+        behaviors=[behaviors]
+    if  behaviors is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors]) and len(np.unique(behaviors))==len(behaviors):
+        behaviors = deepof.visuals_utils.generate_behavior_combinations(behaviors)
     # Create video config
     video_export_config = VideoExportConfig(
         display_time=display_time,
@@ -3482,7 +3522,7 @@ def export_annotated_video(
             )
         elif "all" in behaviors and supervised_annotations is not None:
             behaviors = list(cur_tab.columns) 
-            behaviors = [behavior for behavior in behaviors if not "speed" in behavior]
+            behaviors = [behavior for behavior in behaviors if not behavior.endswith(tuple(CONTINUOUS_BEHAVIORS))]
             cluster_names = behaviors
         elif behaviors is None:
             behaviors = list(cur_tab.columns)
@@ -3722,7 +3762,7 @@ def plot_behavior_trends(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
-    samples_max=20000,
+    samples_max=2000000,
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
@@ -3734,10 +3774,11 @@ def plot_behavior_trends(
     show_histogram: bool = True,
     exp_condition: str = None,
     condition_values: list = None,
-    behavior_to_plot: str = None,
+    behaviors_to_plot: str = None,
     normalize: bool = False,
     add_stats: str = "Mann-Whitney",
     error_bars: str = "sem",
+    unit_time: str = "s",
     ax: Any = None,
     save: bool = False,
 ):
@@ -3764,6 +3805,7 @@ def plot_behavior_trends(
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
     error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in 
     ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
     save (bool): If True, saves the plot to a file. Defaults to False.
     """
@@ -3776,18 +3818,27 @@ def plot_behavior_trends(
         soft_counts=soft_counts,
         exp_condition=exp_condition,
         condition_values=condition_values,
-        behaviors=behavior_to_plot,
+        behaviors=behaviors_to_plot,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
         in_roi_bodyparts=in_roi_criterion,
     )
+    if isinstance(behaviors_to_plot, str):
+        behaviors_to_plot=[behaviors_to_plot]
+    if  all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
+        behaviors_to_plot = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot)
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
     elif roi_number is None:
         print(
         '\033[33mInfo! For this plot animal_id is only relevant if a ROI was selected!\033[0m'
         )
+    if add_stats and len(behaviors_to_plot)>1:
+        print(
+        '\033[33mInfo! No statistics are calculated for explorative multi-behavior plot setting.\033[0m'
+        )
+        add_stats=False  
 
     #####
     # Set defaults based on inputs
@@ -3820,698 +3871,288 @@ def plot_behavior_trends(
         warnings.warn(warning_message)
 
     # Init plot type based on inputs
-    if (
-        any([embeddings is None, soft_counts is None])
-        and supervised_annotations is not None
-    ):
+    if supervised_annotations is not None:
+        table_dicts = supervised_annotations
         plot_type = "supervised"
-        L_shortest = min(
-            get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
-        )
-    elif (
-        embeddings is not None
-        and soft_counts is not None
-        and supervised_annotations is None
-    ):
-        plot_type = "unsupervised"
-        L_shortest = min(
-            get_dt(soft_counts,key,only_metainfo=True)['num_rows']  for key in soft_counts.keys()
-        )
+    elif soft_counts is not None:
+        table_dicts = soft_counts 
+        plot_type = "unsupervised"  
     else:
         raise ValueError(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
+    L_shortest = min(
+        get_dt(table_dicts,key,only_metainfo=True)['num_rows'] for key in table_dicts.keys()
+    )
+
     #####
     # Get ROI bin info
     ##### 
 
-    #create full time bins covering entire signal
-    if supervised_annotations is not None:
+    # preprocess time bin info
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    n_time_bins=len(custom_time_bins)
+    bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    warned = set()
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, None, None, None, samples_max=samples_max,
-        tab_dict_for_binning=supervised_annotations,
-        )
-    else:            
-        bin_info_time = _preprocess_time_bins(
-            coordinates, None, None, None, samples_max=samples_max, 
-            tab_dict_for_binning=soft_counts,
-        )
-    # Create ROI bins
-    roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
-
-    # Init bin ranges if not given
-    if not custom_time_bins:
-        custom_time_bins = deepof.visuals_utils.create_bin_pairs(
-            L_shortest, N_time_bins
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        tab_dict_for_binning=table_dicts, given_in_frames=True, warned=warned,
         )
 
-    # Init hidden bins if not given
-    if not hide_time_bins:
-        hide_time_bins = np.array([False] * len(custom_time_bins))
-    elif not len(hide_time_bins) == len(custom_time_bins):
-        raise ValueError(
-            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
-        )
-    else:
-       hide_time_bins= np.array(hide_time_bins)
-
-    # Set behavior ids
-    if plot_type == "unsupervised":
-        keys=list(soft_counts.keys())
-        num_clusters=get_dt(soft_counts,keys[0],only_metainfo=True)['num_cols']
-        behavior_ids = [f"Cluster {str(k)}" for k in range(0, num_clusters)]
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+ 
         
-    elif plot_type == "supervised":
-        keys=list(supervised_annotations.keys())
-        behavior_ids = get_dt(supervised_annotations,keys[0],only_metainfo=True)['columns']
+        multi_bin_info[j]=roi_bin_info
 
-    #####
-    # Some validity checks and more formatting
-    #####
+    keys=list(table_dicts.keys())
 
-    # Check validity of id
-    if not (behavior_to_plot is not None and behavior_to_plot in behavior_ids):
-        raise ValueError(
-            f"The selected behavior '{behavior_to_plot}' is not valid! Please select one of the following:\n {behavior_ids}"
-        )
-
-    # Check custom_time_bin validity
-    if len(
-        custom_time_bins
-    ) > 3 and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
-        isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
-    ):  # List has shape Nx2
-
-        # Convert time string elements to integers
-        custom_time_bins = [
-            [
-                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
-                if type(sublist[k]) == str
-                else sublist[k]
-                for k in range(len(sublist))
-            ]
-            for sublist in custom_time_bins
-        ]
-
-        # Further checks
-        if not all(
-            all(isinstance(x, int) and x >= 0 for x in sublist)
-            for sublist in custom_time_bins
-        ) or not all(  # Lists consist of positive integers
-            sublist[0] <= sublist[1] for sublist in custom_time_bins
-        ):  # List elements increase
-            raise ValueError(
-                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
-                "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
-            )
-        elif np.max(custom_time_bins) >= L_shortest:
-            raise ValueError(
-                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
-            )
-        # Warn in case of overlapping elements
-        elif not (
-            list(chain(*custom_time_bins)) == sorted(list(chain(*custom_time_bins)))
-        ):
-            warning_message = (
-                "\033[38;5;208m\n"
-                'Warning! Your "custom_time_bins" list contains overlapping elements!\n'
-                f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
-                "\033[0m"
-            )
-            warnings.warn(warning_message)
-    else:
-        raise ValueError(
-            f'At least 4 bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
-        )
-    
 
     #####
     # Collect data for plotting
     #####
 
-    # Initialize table
-    columns = ["time_bin", "exp_condition", behavior_to_plot]
-    df = pd.DataFrame(columns=columns)
+    # Collect data for plotting
+    created_figure = (ax is None)
 
-    # Iterate over all experiments via keys
-    for key in keys:
+    if ax is None:
+        n_rows, n_cols = deepof.visuals_utils.get_square_shape_for_gridlike_plot(len(behaviors_to_plot))
 
-        cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
-        #skip excluded experiment condition values
-        if cond not in condition_values:
-            continue
-
-        if plot_type == "unsupervised":
-            data_set=get_dt(soft_counts,key,load_range=roi_bin_info[key]['time'])
-            if roi_number is not None:
-                data_set=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi)
-            index_dict_fn = lambda x: x[
-                :, int(re.search(r"\d+", behavior_to_plot).group())
-            ]
-        elif plot_type == "supervised":
-            data_set=get_dt(supervised_annotations,key,load_range=roi_bin_info[key]['time'])
-            if roi_number is not None:
-                data_set=get_supervised_behaviors_in_roi(cur_supervised=data_set, local_bin_info=roi_bin_info[key],animal_ids=animals_in_roi, roi_mode=roi_mode)
-            index_dict_fn = lambda x: x[
-                behavior_to_plot
-            ]  # Specialized index functions to handle differing data_snippet formatting
-
-        # time vector aligned with loaded data_set
-        t = np.asarray(roi_bin_info[key]["time"])
-
-        # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
-        for i, (bin_start, bin_end) in enumerate(custom_time_bins):
-
-            # Inclusive end to mimic the original semantics
-            in_bin = (t >= bin_start) & (t <= bin_end)
-
-            if not np.any(in_bin):
-                behavior_timebin = np.nan
-            else:
-                data_snippet = data_set[in_bin]
-                vals = index_dict_fn(data_snippet)
-                vals = np.asarray(vals)
-
-                if behavior_to_plot == "speed":
-                    # time-weighted average speed
-                    val_mask = ~np.isnan(vals)
-                    behavior_timebin = (
-                        np.average(vals[val_mask])
-                        if np.any(val_mask)
-                        else np.nan
-                    )
-
-                elif normalize:
-                    # fraction of time (or prob.) within bin
-                    val_mask = ~np.isnan(vals)
-                    behavior_timebin = (
-                        np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
-                        if np.any(val_mask)
-                        else np.nan
-                    )
-                else: #don't normalize
-                    val_mask = ~np.isnan(vals)
-                    behavior_timebin = (
-                        np.nansum(vals[val_mask])/coordinates._frame_rate
-                        if np.any(val_mask)
-                        else np.nan
-                    )
-
-
-            new_row = pd.DataFrame(
-                [
-                    {
-                        "time_bin": i,
-                        "exp_condition": str(cond),
-                        behavior_to_plot: behavior_timebin,
-                    }
-                ]
-            )
-            df = pd.concat([df, new_row], ignore_index=True)
-    get_unsupervised_behaviors_in_roi._warning_issued = False
-
-    #Remove missing values (less than 20% of values remainign per group) 
-    min_frac = 0.05 #20
-    num_bins = len(custom_time_bins)
-
-    # Create table denoting teh nan percentage for each group and bin
-    coverage = df.pivot_table(
-        index="time_bin", columns="exp_condition", values=behavior_to_plot,
-        aggfunc=lambda s: s.notna().mean()
-    ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
-
-    enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
-    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
-    if not all(enough_data_per_bin):
-        warning_message = (
-            "\033[38;5;208m\n"
-            f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
-            f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
-            "\033[0m"
-        )
-        print(warning_message)    
-
-    # exclude time bins that are always NaN (which will also exclude them from statistics)
-    mask = df.groupby(['time_bin'])[behavior_to_plot].transform(lambda x: x.notna().any())
-    df = df[mask].copy()
-
-    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!"    
-
-    # Calculate mean values and errors accross samples
-    time_bin_means = (
-        df.groupby(["time_bin", "exp_condition"]).mean(numeric_only=True).reset_index()
-    )
-    if error_bars == "sem":
-        time_bin_err = (
-            df.groupby(["time_bin", "exp_condition"])
-            .sem(numeric_only=True)
-            .reset_index()
-        )
-    else:
-        time_bin_err = (
-            df.groupby(["time_bin", "exp_condition"])
-            .std(numeric_only=True)
-            .reset_index()
-        )
-
-    # Estimate effect sizes based on cohens d
-    hourly_effect_sizes_df = pd.DataFrame(
-        columns=["time_bin", "Absolute_Cohens_d", "Effect_Size_Category"]
-    )
-    for k in range(0, len(custom_time_bins)):
-        # Extract arrays for both exp conditions and time bins
-        array_a = df.loc[
-            (df["exp_condition"] == condition_values[0]) & (df["time_bin"] == k),
-            behavior_to_plot,
-        ].values
-        array_b = df.loc[
-            (df["exp_condition"] == condition_values[1]) & (df["time_bin"] == k),
-            behavior_to_plot,
-        ].values
-        d = abs(deepof.visuals_utils.cohend(array_a[~np.isnan(array_a)], array_b[~np.isnan(array_b)]))  # Calc d
-        d_effect_size = deepof.visuals_utils.cohend_effect_size(d)  # Est. effect size
-        # Collect data
-        new_row = pd.DataFrame(
-            [
-                {
-                    "time_bin": k,
-                    "Absolute_Cohens_d": d,
-                    "Effect_Size_Category": d_effect_size,
-                }
-            ]
-        )
-        hourly_effect_sizes_df = pd.concat(
-            [hourly_effect_sizes_df, new_row], ignore_index=True
-        )
-
-    # Extract mean and error values for chosen behavior
-    mean_values = [
-        time_bin_means[time_bin_means["exp_condition"] == condition_values[0]][
-            behavior_to_plot
-        ].values,
-        time_bin_means[time_bin_means["exp_condition"] == condition_values[1]][
-            behavior_to_plot
-        ].values,
-    ]
-    error_values = [
-        time_bin_err[time_bin_err["exp_condition"] == condition_values[0]][
-            behavior_to_plot
-        ].values,
-        time_bin_err[time_bin_err["exp_condition"] == condition_values[1]][
-            behavior_to_plot
-        ].values,
-    ]
-
-    #####
-    # Handle present or absent axes of different types
-    #####
-
-    show = False
-    # Update active axes, if axes are given
-    if ax and polar_depiction:
-        # Switch out the input axes object with a polar axis
-        fig = ax.figure
-        position = ax.get_position()
-        fig.delaxes(ax)
-        new_ax = fig.add_axes(position, projection="polar")
-        # Update the original ax reference to point to the new axis
-        ax.__dict__.clear()
-        ax.__dict__.update(new_ax.__dict__)
-        ax.__class__ = new_ax.__class__
-        # Replace the new_ax with ax in the figure's axes list
-        fig.axes[fig.axes.index(new_ax)] = ax
-        del new_ax
-
-    elif ax and not polar_depiction:
-        plt.sca(ax)
-
-    elif polar_depiction:
-        fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(8, 8))
-        show = True
-
-    else:
-        fig, ax = plt.subplots(figsize=(12, 4))
-        show = True
-
-    #####
-    # Stats
-    #####
-
-    # Get stats annotations if required
-    if add_stats:
-
-        # Initialize a set to keep track of seen pairs
-        pairs = df.groupby("time_bin").apply(
-            lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
-        )
-        # Exclude hidden bins and convert to list
-        pairs = pairs[np.invert(hide_time_bins)].tolist()
-        # Do actual testing with annotator package
-        annotator = Annotator(
-            ax,
-            pairs=pairs,
-            data=df,
-            x="time_bin",
-            y=behavior_to_plot,
-            hue="exp_condition",
-            hide_non_significant=True,
-        )
-        annotator.configure(
-            test=add_stats,
-            text_format="star",
-            loc="inside",
-            comparisons_correction="fdr_bh",
-            verbose=False,
-        )
-        # Automatic annotiation to plots does not work with polar plots
-        # Hence test results get extracted manually and collected in a dict
-        test_dict = {}
-        anni = annotator.apply_test()
-        for annotation in anni.annotations:
-            test_dict[annotation.structs[0]["group"][0]] = annotation.text
-
-    #####
-    # Line plot
-    #####
-
-    sns.set_style("whitegrid")
-    num_bins = len(custom_time_bins)
-
-    # Define the angles and mid_angles (angle in the middle of two angles) for each bin
-    lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
-    cumsum_lengths = np.cumsum([0] + lengths)
-    angles = cumsum_lengths[:-1] / cumsum_lengths[-1] * 2 * np.pi
-    rotation = angles[0]
-    # Ensure that no angle exceeds 2 pi
-    angles = np.mod(angles + rotation, 2 * np.pi)
-    mid_angles = np.mod(
-        angles + np.diff(np.concatenate((angles, [angles[0] + 2 * np.pi]))) / 2,
-        2 * np.pi,
-    )
-
-    # Define colors for each group
-    colors = ["#1f77b4", "#ff7f0e"]
-
-    # Init boolean mask to hide data segments based on hide_time_bins input
-    mask = np.full(
-        ((len(mid_angles) - 1) * 10 - len(mid_angles) + 2), False, dtype=bool
-    )
-    smooth_mean_angles = np.linspace(
-        mid_angles[0], mid_angles[-1], (len(mid_angles) - 1) * 10 - len(mid_angles) + 2
-    )
-    int_pos = np.argmin(np.abs(smooth_mean_angles[:, np.newaxis] - mid_angles), axis=0)
-    # Iterate over all bins
-    for i in range(0, len(hide_time_bins)):
-        if hide_time_bins[i]:
-            if i < len(hide_time_bins) - 1:
-                mask[int_pos[i] : int_pos[i + 1] - 1] = True
-            if i > 0:
-                mask[int_pos[i - 1] + 1 : int_pos[i]] = True
-
-    # --- Plot means, markers and errors for each group ---------------------------------
-    marker_handles = [None, None]
-    smooth_err_values = [None, None]
-
-    for i in range(2):
-        y_mean = mean_values[i]
-        y_err = error_values[i]
-        color = colors[i]
-        label = condition_values[i]  
-
-        # -------------------------------------------------------------------------
-        # 1) Smooth mean value lines over contiguous non-NaN segments
-        # -------------------------------------------------------------------------
-        valid_mean = ~np.isnan(y_mean)
-        first_segment = True
-
-        for sl in deepof.visuals_utils.contiguous_segments(valid_mean):
-            x_seg = mid_angles[sl]
-            y_seg = y_mean[sl]
-
-            # Interpolate only within this contiguous segment
-            interp_func = interp1d(x_seg, y_seg, kind="cubic")
-
-            # Take only the part of smooth_mean_angles that lies inside this segment
-            seg_mask = (
-                (smooth_mean_angles >= x_seg[0])
-                & (smooth_mean_angles <= x_seg[-1])
-            )
-            x_smooth_seg = smooth_mean_angles[seg_mask]
-            y_smooth_seg = interp_func(x_smooth_seg)
-
-            # Apply the external mask on the smooth grid
-            x_masked = np.ma.masked_array(x_smooth_seg, mask[seg_mask])
-            y_masked = np.ma.masked_array(y_smooth_seg, mask[seg_mask])
-
-            ax.plot(
-                x_masked,
-                y_masked,
-                linewidth=3,
-                label=label if first_segment else None,  # avoid repeated legend entries
-                color=color,
-                linestyle="-",
-                alpha=0.8,
-            )
-            first_segment = False
-
-        # -------------------------------------------------------------------------
-        # 2) Markers at original mid_angles (also hide NaNs)
-        # -------------------------------------------------------------------------
-        point_mask = hide_time_bins | np.isnan(y_mean)
-
-        masked_mid_angles = np.ma.masked_array(mid_angles, point_mask)
-        masked_mean_values = np.ma.masked_array(y_mean, point_mask)
-
-        marker_handles[i] = ax.plot(
-            masked_mid_angles,
-            masked_mean_values,
-            marker="o",
-            linestyle="",
-            color=color,
-            linewidth=2,
-        )[0]
-
-        # -------------------------------------------------------------------------
-        # 3) Error interpolation over contiguous non-NaN segments
-        #    (use original mid_angles grid, but avoid NaNs for interp1d)
-        # -------------------------------------------------------------------------
-        smooth_err = np.full_like(y_err, np.nan, dtype=float)
-
-        valid_err = (~np.isnan(y_err)) & (~np.isnan(y_mean))
-        for sl in deepof.visuals_utils.contiguous_segments(valid_err):
-            x_seg = mid_angles[sl]
-            err_seg = y_err[sl]
-
-            interp_sem_func = interp1d(x_seg, err_seg, kind="cubic")
-            # still evaluate on the original grid within this segment
-            smooth_err[sl] = interp_sem_func(x_seg)
-
-        smooth_err_values[i] = smooth_err
-
-        # -------------------------------------------------------------------------
-        # 4) Plot error lines and shaded error band
-        # -------------------------------------------------------------------------
-        err_mask = point_mask | np.isnan(smooth_err)
-
-        x_err = np.ma.masked_array(mid_angles, err_mask)
-        upper = np.ma.masked_array(y_mean + smooth_err, err_mask)
-        lower = np.ma.masked_array(y_mean - smooth_err, err_mask)
-
-        # Error lines above and below the mean
-        ax.plot(
-            x_err,
-            upper,
-            linestyle="--",
-            color=color,
-            alpha=0.8,
-            linewidth=1,
-        )
-        ax.plot(
-            x_err,
-            lower,
-            linestyle="--",
-            color=color,
-            alpha=0.8,
-            linewidth=1,
-        )
-
-        # Shaded error band
-        ax.fill_between(
-            x_err,
-            lower,
-            upper,
-            color=color,
-            alpha=0.15,
-        )
-
-    # Set custom ticks and labels for the y axes
-    ax.set_title(f"DeepOF - {behavior_to_plot}", fontsize=18, y=1.15)
-    max_value = np.nanmax(mean_values)
-    y_ticks = np.arange(0, max_value * 1.5, max_value * 1.5 / 6)
-    ax.set_yticks(y_ticks)
-
-    # Set custom xticklabels
-    xticklabels = [str(i) for i in range(1, num_bins + 1)]
-
-    # Special modifications for the polar plot
-    if polar_depiction:
-
-        # Set xticks to angles and hide labels
-        ax.set_xticks(angles)
-        ax.set_xticklabels([])
-        # Set the direction of angle 0 and labels to the top
-        ax.set_theta_zero_location("N")
-        ax.set_rlabel_position(0)
-        # Set the direction to clockwise
-        ax.set_theta_direction(-1)
-        # Start position of histograms on y axis
-        top = max_value * 1.5  # change inside circle size
-
-        # Add legend of first part of plot
-        legend_1 = ax.legend(
-            handles=[marker_handles[0], marker_handles[1]],
-            labels=[condition_values[0], condition_values[1]],
-            fontsize=12,
-            loc="upper right",
-            bbox_to_anchor=(1.0, 1.1),
-        )
-    else:
-        # Set xticks to mid_angles and display labels
-        ax.set_xticks(mid_angles)
-        ax.set_xticklabels(xticklabels)
-        # Start position of histograms on y axis
-        top = ax.get_ylim()[0]
-
-        # Add axis labels
-        ax.set_xlabel("Time Bins", fontsize=12)
-
-        if behavior_to_plot == "speed":
-            ax.set_ylabel(f"{behavior_to_plot} [avg. speed]", fontsize=12)
-        elif normalize:
-            ax.set_ylabel(f"{behavior_to_plot} [%]", fontsize=12)
+        if polar_depiction:
+            x_scale, y_scale = 8, 8
+            subplot_kw = {"projection": "polar"}
+            sharex = False
         else:
-            ax.set_ylabel(f"{behavior_to_plot} [s]", fontsize=12)
+            x_scale, y_scale = 12, 4
+            subplot_kw = None
+            sharex = True
 
-        # Add legend
-        legend_1 = ax.legend(
-            handles=[marker_handles[0], marker_handles[1]],
-            labels=[condition_values[0], condition_values[1]],
-            fontsize=12,
-            loc="upper right",
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            sharex=sharex,
+            sharey=False,
+            figsize=(x_scale * n_cols, y_scale * n_rows),
+            subplot_kw=subplot_kw,
+        )
+        axes = np.array(axes)
+    else:
+        fig = np.array(ax).ravel()[0].figure
+        axes = np.array(ax)
+
+    # iterate over all behaviors (1 plot per behavior)
+    z_run=0
+    for ax, behavior_to_plot in zip(axes.ravel(), behaviors_to_plot):
+
+        # Initialize table
+        columns = ["time_bin", "exp_condition", behavior_to_plot]
+        df = pd.DataFrame(columns=columns)
+
+
+        # Precompute unsupervised cluster index once per behavior
+        if plot_type == "unsupervised":
+            cluster_idx = int(re.search(r"\d+", behavior_to_plot).group())
+
+        for i, key in enumerate(keys):
+
+            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+            #skip excluded experiment condition values
+            if cond not in condition_values:
+                continue
+
+            # load entire dataset for current key once
+            data_set=get_dt(table_dicts,key)
+
+            # Iterate over all time bins and collect average behavior data for all bins over all exp conditions
+            for j, bin_info in enumerate(multi_bin_info.values()):
+
+                local_bin_info = bin_info[key]
+
+                if len(local_bin_info["time"])==0:
+                    behavior_timebin = np.nan
+                else:
+                    data_snippet=data_set.iloc[local_bin_info["time"]]
+                    if plot_type == "unsupervised":
+                        if roi_number is not None:
+                            data_snippet=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi)
+                        vals = data_snippet[:, cluster_idx]  
+
+                    elif plot_type == "supervised":
+                        if roi_number is not None:
+                            data_snippet=get_supervised_behaviors_in_roi(cur_supervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi, roi_mode=roi_mode)    
+                        vals = data_snippet[behavior_to_plot]
+
+                    vals = np.asarray(vals)
+                    val_mask = ~np.isnan(vals)
+
+                    # continuous behaviors get normalized based on the sum of all behavior
+                    if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+                        # time-weighted average speed
+                        behavior_timebin = (
+                            np.average(vals[val_mask])
+                            if np.any(val_mask)
+                            else np.nan
+                        )
+                        if z_run == 0 and i==0 and j==0:
+                            print(
+                            '\033[33mInfo! Continuous behaviors (such as speed, distance etc.) do not get normalized as they are already averaged per bin.\033[0m'
+                            )
+                    
+                    # present-or-absent behaviors get normalized based on the length of their bin (i.e. percentage of bin that is behavior)        
+                    elif normalize:
+                        # fraction of time (or prob.) within bin
+                        behavior_timebin = (
+                            np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
+                            if np.any(val_mask)
+                            else np.nan
+                        )
+                    else: #don't normalize
+                        behavior_timebin = (
+                            np.nansum(vals[val_mask])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
+                            if np.any(val_mask)
+                            else np.nan
+                        )
+
+
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "time_bin": j,
+                            "exp_condition": str(cond),
+                            behavior_to_plot: behavior_timebin,
+                        }
+                    ]
+                )
+                df = pd.concat([df, new_row], ignore_index=True)
+        
+
+        get_unsupervised_behaviors_in_roi._warning_issued = False
+
+        df, hide_time_bins = deepof.visuals_utils.postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+
+        mean_values, error_values, binned_effect_sizes_df = deepof.visuals_utils.process_df(df, error_bars=error_bars) 
+
+        #####
+        # Handle present or absent axes of different types
+        #####
+
+        _, ax, _ = deepof.visuals_utils.ensure_axis(
+            ax=ax,
+            polar_depiction=polar_depiction,
+            figsize=(8, 8) if polar_depiction else (12, 4),
         )
 
-    ax.add_artist(legend_1)
-
-    #####
-    # Histogram
-    #####
-
-    # Some inits
-    ax.grid(True)
-    values = hourly_effect_sizes_df["Effect_Size_Category"] * max_value * 0.1
-    num_bins = len(values)
-    # Calculate widths of histogram bars
-    widths = lengths / np.sum(lengths) * (2 * np.pi)
-
-    # Set colors
-    cmap = [
-        "#9370DB",
-        "#6A5ACD",
-        "#4B0082",
-    ]  # 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
-    colors = [
-        cmap[val]
-        for val in hourly_effect_sizes_df["Effect_Size_Category"].astype(int).values - 1
-    ]
-    for k in range(0, len(colors)):
-        if hide_time_bins[k]:
-            colors[k] = "#C0C0C0"
-            values[k] = 1 * max_value * 0.1
-
-    # Plot histogram if required
-    stat_text_col = "k"
-    if show_histogram:
-        bars = ax.bar(mid_angles, values, width=widths, bottom=top)
-        # Change color of text of stat annotations for better contrast
-        stat_text_col = "#FFFF00"
-
-        # Use custom colors and opacity
-        for color, bar in zip(colors, bars):
-            bar.set_facecolor(color)
-            bar.set_alpha(0.8)
-
-        # create legend for hist with color patches
-        bar_handles = [0, 0, 0]
-        legend_labels = ["large", "medium", "small"]
-        legend_colors = cmap[::-1]
-        for i, label in enumerate(legend_labels):
-            bar_handles[i] = Patch(color=legend_colors[i], label=label)
-
-    # Special modifications for the polar plot
-    if polar_depiction:
-
-        # Add xticklabels manually for each circle segment in the middle between ticks
-        for midangle, label in zip(mid_angles, xticklabels):
-            ax.text(midangle, ax.get_rmax() * 1.05, label, ha="center", va="center")
-
-        # Add stat annotations as text in plot
+        # --- stats (your existing logic; unchanged) ---
+        test_dict = {}
         if add_stats:
-            z = 0
-            # Add annotation for each circle segment
-            for label in test_dict:
-                ax.text(
-                    mid_angles[int(label)] + 0.02,
-                    ax.get_yticks()[-1]
-                    + (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 1.166,
-                    test_dict[label],
-                    ha="center",
-                    va="center",
-                    fontsize="small",
-                    color=stat_text_col,
-                    rotation=-np.flip(mid_angles[int(label)] * 180 / np.pi),
-                )
-                z += 1
-        # Update limits
-        lower_lim = ax.get_ylim()[0]
-        ax.set_rlim(lower_lim, ax.get_rmax())
-
-        # Only show histogram legend if required
-        if show_histogram:
-            legend_2 = ax.legend(
-                handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
-                title="Effect Size",
-                loc="upper left",
-                bbox_to_anchor=(0.0, 1.1),
-                fontsize=8,
+            pairs = df.groupby("time_bin").apply(
+                lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
             )
-            ax.add_artist(legend_2)
-    else:
+            pairs = pairs[np.invert(hide_time_bins)].tolist()
 
-        # Add stat annotations as text in plot
-        if add_stats:
-            z = 0
-            # Add annotation for each plot segment
-            for label in test_dict:
-                ax.text(
-                    mid_angles[int(label)],
-                    (ax.get_yticks()[-1] - ax.get_yticks()[-2]) * 0.166,
-                    test_dict[label],
-                    ha="center",
-                    va="center",
-                    color=stat_text_col,
-                    fontsize="small",
-                )
-                z += 1
+            annotator = Annotator(
+                ax,
+                pairs=pairs,
+                data=df,
+                x="time_bin",
+                y=behavior_to_plot,
+                hue="exp_condition",
+                hide_non_significant=True,
+            )
+            annotator.configure(
+                test=add_stats,
+                text_format="star",
+                loc="inside",
+                comparisons_correction="fdr_bh",
+                verbose=False,
+            )
+            anni = annotator.apply_test()
+            for annotation in anni.annotations:
+                test_dict[annotation.structs[0]["group"][0]] = annotation.text
 
-        # Only show histogram legend if required
-        if show_histogram:
-            ax.legend(
-                handles=[bar_handles[0], bar_handles[1], bar_handles[2]],
-                title="Effect Size",
-                loc="upper left",
-                fontsize=8,
-            )  # , bbox_to_anchor=(1.3, 0.65), fontsize=8)
+        # --- geometry in radians (use df's bin_length so it's consistent after postprocess) ---
+        bin_lengths_plot = df.groupby("time_bin")["bin_length"].first().values
+        geom = deepof.visuals_utils.get_binned_geometry(bin_lengths_plot)
+
+        # --- line plot ---
+        colors = ["#1f77b4", "#ff7f0e"]
+        marker_handles, max_value = deepof.visuals_utils.plot_binned_groups(
+            ax=ax,
+            x_radians=geom["centers"],
+            mean_values=mean_values,
+            error_values=error_values,
+            condition_values=condition_values,
+            hide_time_bins=hide_time_bins,
+            colors=colors,
+            plot_binned_line_func=deepof.visuals_utils.plot_binned_line,
+        )
+
+        # --- axis labels ---
+        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+            candidates = [s for s in CONTINUOUS_BEHAVIORS if behavior_to_plot.endswith(s)]
+            closest_suffix = max(candidates, key=len)
+            ylabel = f"{behavior_to_plot} [avg. {closest_suffix}]"
+        elif normalize:
+            ylabel = f"{behavior_to_plot} [%]"
+        else:
+            ylabel = f"{behavior_to_plot} [s]"
+
+        hist_bottom = deepof.visuals_utils.format_time_binned_axis(
+            ax=ax,
+            geom=geom,
+            polar_depiction=polar_depiction,
+            max_value=max_value,
+            title=f"DeepOF - {behavior_to_plot}",
+            xlabel=None if polar_depiction else "Time Bins",
+            ylabel=None if polar_depiction else ylabel,
+        )
+
+        # --- histogram ---
+        effect_handles, stat_text_col = deepof.visuals_utils.plot_effectsize_histogram(
+            ax=ax,
+            geom=geom,
+            effect_size_categories=binned_effect_sizes_df["Effect_Size_Category"].astype(int).values,
+            hide_time_bins=hide_time_bins,
+            max_value=max_value,
+            bottom=hist_bottom,
+            show_histogram=show_histogram,
+        )
+
+        if polar_depiction:
+            deepof.visuals_utils.add_polar_bin_labels(ax, geom)
+
+        # --- stats text ---
+        if add_stats and test_dict:
+            deepof.visuals_utils.annotate_binwise_stats(
+                ax=ax,
+                test_dict=test_dict,
+                geom=geom,
+                polar_depiction=polar_depiction,
+                text_color=stat_text_col,
+            )
+
+        # --- unified legends (only on first subplot) ---
+        deepof.visuals_utils.add_binned_legends(
+            ax=ax,
+            condition_handles=marker_handles,
+            condition_labels=condition_values,
+            effect_handles=effect_handles,
+            polar_depiction=polar_depiction,
+            show_histogram=show_histogram,
+            first_plot=(z_run == 0),
+        )
+
+        z_run += 1
+
+    # reset cohend warning
+    deepof.visuals_utils.cohend._warning_issued = False
 
     # Save plot if required
     if save:
@@ -4531,8 +4172,354 @@ def plot_behavior_trends(
         )
 
     # If no axes are given, show plot
+    if created_figure:
+        plt.show()
+
+
+
+def return_mouse_roi_interaction(
+    coordinates: coordinates,
+    bodyparts: list = None,  
+    animal_id: str = None,         
+    # Time selection parameters
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    hide_time_bins: list[bool] = None,
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: Union[str, List[str]] = None,
+    mode: str = "distance",
+    add_stats: str = "Mann-Whitney",
+    error_bars: str = "sem",
+    unit_distance: str = "m",
+    fov_angle_deg: int = 90,
+    get_raw_data: bool = False,
+):
+    """Return binned statistics and effect sizes for mouse-ROI interaction over time.
+
+    Computes either the distance of selected bodyparts to a ROI/arena boundary or the
+    fraction of time a ROI/arena falls within a mouse's field of view, aggregated into
+    time bins.  When ``get_raw_data=True`` the raw per-frame interaction values are
+    returned instead.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        get_raw_data (bool): If True, returns the raw per-frame interaction DataFrame instead of binned statistics. Defaults to False.
+
+    Returns:
+        If ``get_raw_data=True``: a DataFrame with raw per-frame interaction values per experiment.
+        Otherwise: a tuple of (binned_effect_sizes_df, binned_group_df) containing binned statistics, means, error values and effect sizes.
+
+    """
+
+    mean_dist, std_dist, binned_group_df, binned_effect_sizes_df, hide_time_bins = deepof.visuals_utils._preprocess_mouse_roi_interaction(
+        coordinates=coordinates,
+        bodyparts=bodyparts,
+        animal_id=animal_id,
+        N_time_bins = N_time_bins,
+        custom_time_bins = custom_time_bins,
+        samples_max = samples_max,
+        # ROI functionality
+        roi_number = roi_number,
+        # Visualization parameters
+        hide_time_bins = hide_time_bins,
+        experiment_ids = experiment_ids,  
+        exp_condition = exp_condition, 
+        condition_values = condition_values,
+        add_stats=add_stats,
+        error_bars=error_bars,
+        mode = mode,
+        unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
+        get_raw_data = get_raw_data,
+    )
+    if get_raw_data:
+        return binned_group_df
+
+
+    # Remove otherwise confusing condition columns
+    start_col, end_col = "time_bin", "Absolute_Cohens_d"
+    i, j = binned_effect_sizes_df.columns.get_loc(start_col), binned_effect_sizes_df.columns.get_loc(end_col)
+    binned_effect_sizes_df.drop(columns=binned_effect_sizes_df.columns[min(i, j) + 1 : max(i, j)], inplace=True)
+
+    # Add means and error columns for all conditions
+    for cond in mean_dist.keys():
+        binned_effect_sizes_df["bin_means_"+cond]=mean_dist[cond]
+        binned_effect_sizes_df["bin_"+error_bars+"_"+cond]=std_dist[cond]
+
+
+    return binned_effect_sizes_df, binned_group_df
+
+
+def plot_mouse_roi_interaction(
+    coordinates: coordinates,
+    bodyparts: list = None,  
+    animal_id: str = None,      
+    # Time selection parameters
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    hide_time_bins: list[bool] = None,
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: Union[str, List[str]] = None,
+    mode: str = "distance",
+    add_stats: str = "Mann-Whitney",
+    error_bars: str = "sem",
+    unit_distance: str = "m",
+    fov_angle_deg: int = 90,
+    ax: Any = None, 
+    polar_depiction: bool = False,    
+    show_histogram: bool = True,     
+):
+    """Plot mouse-ROI interaction over time as a polar plot or line chart with optional effect-size histogram.
+
+    Visualises either the distance of selected bodyparts to a ROI/arena boundary or the
+    fraction of time a ROI/arena falls within a mouse's field of view, aggregated into
+    time bins.  Supports statistical annotations and effect-size overlays when exactly
+    two experimental conditions are compared.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
+        polar_depiction (bool): If True, display as polar plot. Defaults to False.
+        show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to False.
+
+    Returns:
+        ax: The Matplotlib axis containing the plot.
+
+    """    
+    mean_dist, std_dist, binned_group_df, binned_effect_sizes_df, hide_time_bins = deepof.visuals_utils._preprocess_mouse_roi_interaction(
+        coordinates=coordinates,
+        bodyparts=bodyparts,
+        animal_id=animal_id,
+        N_time_bins = N_time_bins,
+        custom_time_bins = custom_time_bins,
+        samples_max = samples_max,
+        # ROI functionality
+        roi_number = roi_number,
+        # Visualization parameters
+        hide_time_bins = hide_time_bins,
+        experiment_ids = experiment_ids,  
+        exp_condition = exp_condition, 
+        condition_values = condition_values,
+        add_stats=add_stats,
+        error_bars=error_bars,
+        mode = mode,
+        unit_distance = unit_distance,
+        fov_angle_deg = fov_angle_deg,
+    )
+
+    condition_values = sorted(binned_group_df["exp_condition"].astype(str).unique().tolist())
+
+    sns.set_style("whitegrid")
+
+    # --- axis (now supports polar) ---
+    _, ax, show = deepof.visuals_utils.ensure_axis(
+        ax=ax,
+        polar_depiction=polar_depiction,
+        figsize=(8, 8) if polar_depiction else (12, 4),
+    )
+
+    # --- stats (unchanged; only computes test_dict, no auto-drawing) ---
+    test_dict = {}
+    if add_stats and len(condition_values) == 2:
+        pairs = binned_group_df.groupby("time_bin").apply(
+            lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
+        )
+        pairs = pairs[np.invert(hide_time_bins)].tolist()
+
+        annotator = Annotator(
+            ax,
+            pairs=pairs,
+            data=binned_group_df,
+            x="time_bin",
+            y=mode,
+            hue="exp_condition",
+            hide_non_significant=True,
+        )
+        annotator.configure(
+            test=add_stats,
+            text_format="star",
+            loc="inside",
+            comparisons_correction="fdr_bh",
+            verbose=False,
+        )
+        anni = annotator.apply_test()
+        for annotation in anni.annotations:
+            test_dict[annotation.structs[0]["group"][0]] = annotation.text
+
+    elif (add_stats and len(condition_values) != 2) or (show_histogram and len(condition_values) != 2):
+        warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! Stats and effect sizes can currently only be added for compairing 2 conditions!"
+            "\033[0m"
+        )
+        warnings.warn(warning_message)
+        show_histogram = False
+
+    # --- geometry in radians (standardized) ---
+    bin_lengths = binned_group_df.groupby("time_bin")["bin_length"].first().values
+    geom = deepof.visuals_utils.get_binned_geometry(bin_lengths)
+
+    # --- colors (unchanged logic) ---
+    marker_handles = [None] * len(condition_values)
+    colors = [None] * len(condition_values)
+
+    color_map = plt.get_cmap("tab10", lut=len(condition_values))
+    for k, exp_cond in enumerate(condition_values):
+
+        if len(condition_values) < 4:
+            base_color = ARENA_COLOR
+            if roi_number is not None:
+                base_color = ROI_COLORS[roi_number - 1]
+            if k == 1:
+                base_color = (np.array(base_color) * 0.6).astype(int)
+            elif k == 2:
+                base_color = (np.array(base_color) * 0.2).astype(int)
+        else:
+            base_color = (color_map.colors[k][0:3] * 255).astype(int)
+
+        colors[k] = BGR_to_hex(base_color)
+
+    # --- line plot (x now in radians) ---
+    marker_handles, max_value = deepof.visuals_utils.plot_binned_groups(
+        ax=ax,
+        x_radians=geom["centers"],
+        mean_values=mean_dist,
+        error_values=std_dist,
+        condition_values=condition_values,
+        hide_time_bins=hide_time_bins,
+        colors=colors,
+        plot_binned_line_func=deepof.visuals_utils.plot_binned_line,
+    )
+
+    # --- y-label text (same as before, but only on cartesian) ---
+    if mode == "distance":
+        ylabel = "distance from {} in {}".format(
+            "arena" if roi_number is None else "roi " + str(roi_number),
+            DistanceUnit[unit_distance].name,
+        )
+    elif mode == "fov":
+        ylabel = f"{'arena' if roi_number is None else 'roi ' + str(roi_number)} is in view in % of mouse {animal_id}"
+    else:
+        ylabel = mode
+
+    # --- axis formatting (ticks/labels/limits; now uses radians geometry) ---
+    hist_bottom = deepof.visuals_utils.format_time_binned_axis(
+        ax=ax,
+        geom=geom,
+        polar_depiction=polar_depiction,
+        max_value=max_value,
+        title="deepOF - {}-plot for roi {}".format(mode, roi_number),
+        xlabel=None if polar_depiction else "Time Bins",
+        ylabel=None if polar_depiction else ylabel,
+    )
+
+    # --- histogram ---
+    effect_handles, stat_text_col = deepof.visuals_utils.plot_effectsize_histogram(
+        ax=ax,
+        geom=geom,
+        effect_size_categories=binned_effect_sizes_df["Effect_Size_Category"].astype(int).values,
+        hide_time_bins=hide_time_bins,
+        max_value=max_value,
+        bottom=hist_bottom,
+        show_histogram=show_histogram,
+    )
+
+    # polar bin labels (1..N) around the ring
+    if polar_depiction:
+        deepof.visuals_utils.add_polar_bin_labels(ax, geom)
+
+    # --- stats text (manual placement; works for both cartesian and polar) ---
+    if add_stats and test_dict:
+        deepof.visuals_utils.annotate_binwise_stats(
+            ax=ax,
+            test_dict=test_dict,
+            geom=geom,
+            polar_depiction=polar_depiction,
+            text_color=stat_text_col,
+        )
+
+    # --- legends (unified placement; single plot => first_plot=True) ---
+    if len(condition_values) > 1:
+        deepof.visuals_utils.add_binned_legends(
+            ax=ax,
+            condition_handles=marker_handles,
+            condition_labels=condition_values,
+            effect_handles=effect_handles,
+            polar_depiction=polar_depiction,
+            show_histogram=show_histogram,
+            first_plot=True,
+        )
+    else:
+        # still add effect size legend if only 1 condition (optional; matches prior behavior loosely)
+        if show_histogram and effect_handles is not None:
+            if polar_depiction:
+                leg2 = ax.legend(
+                    handles=effect_handles,
+                    title="Effect Size",
+                    loc="upper left",
+                    bbox_to_anchor=(0.0, 1.1),
+                    fontsize=8,
+                )
+                ax.add_artist(leg2)
+            else:
+                ax.legend(
+                    handles=effect_handles,
+                    title="Effect Size",
+                    loc="upper left",
+                    fontsize=8,
+                )
+
+    # Keep old behavior for cartesian fov (do NOT clamp polar rmax, or histogram would be clipped)
+    if mode == "fov" and not polar_depiction:
+        ax.set_ylim([0, 1])
+
+    # reset cohend warning
+    deepof.visuals_utils.cohend._warning_issued = False
+
     if show:
         plt.show()
+
+    return ax
 
 
 def get_roi_data(
@@ -4622,3 +4609,132 @@ def get_roi_data(
     get_unsupervised_behaviors_in_roi._warning_issued = False
 
     return object_out
+
+
+
+def return_supervised_summary(
+    coordinates: coordinates,
+    supervised_annotations: table_dict,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center", 
+    # Time selection parameters
+    N_time_bins: int = 10,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    hide_time_bins: List[bool] = None,
+    samples_max=20000,
+    unit_time: str = "s",
+    unit_distance: str = "m",
+
+    save_table = True,
+    ): 
+    """ 
+    Returns summary of supervised information
+
+    Args: 
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
+    unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
+    """
+
+    _check_enum_inputs(
+        coordinates,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
+    )
+    L_shortest = min(
+        get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
+    )
+
+    # Prepare bin info
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    warned = set()
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
+        bin_info_time = _preprocess_time_bins(
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        tab_dict_for_binning=supervised_annotations, given_in_frames=True, warned=warned,
+        )
+
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+ 
+        
+        multi_bin_info[j]=roi_bin_info
+
+    animal_ids = coordinates._animal_ids
+    frame_rate=coordinates._frame_rate
+
+    experiment_ids=list(supervised_annotations.keys())
+
+    for i, exp_id in enumerate(experiment_ids):
+   
+        supervised_exp=get_dt(supervised_annotations,exp_id)
+        for bin in multi_bin_info.keys():
+
+            conditions=coordinates.get_exp_conditions[exp_id].copy()
+            frame_row_info=conditions.reset_index(drop=True)
+            frame_row_info.insert(0, 'experiment_id', exp_id)
+            if len(multi_bin_info) > 1:
+                frame_row_info.insert(0, 'bin_number', bin)
+
+            supervised_binned=supervised_exp.iloc[multi_bin_info[bin][exp_id]['time']]
+
+            if roi_number is not None:
+                supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode)
+
+            supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
+
+            # behaviors in seconds
+            frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
+            df_row=[frame_row_info, frame_row_behavior_1]
+
+            for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
+                supervised_behavior = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior])
+
+                continuous_mean, converted_unit=deepof.visuals_utils.scale_units(
+                    coordinates, 
+                    exp_id, 
+                    supervised_binned[supervised_behavior].mean(), 
+                    unit, 
+                    unit_distance, 
+                    unit_time
+                    )
+                continuous_mean=continuous_mean.to_frame().T.add_suffix('_mean ' + f'[{converted_unit}]')
+                
+                continuous_std, converted_unit=deepof.visuals_utils.scale_units(
+                    coordinates, 
+                    exp_id, 
+                    supervised_binned[supervised_behavior].std(), 
+                    unit, 
+                    unit_distance, 
+                    unit_time
+                    )
+                continuous_std=continuous_std.to_frame().T.add_suffix('_std ' + f'[{converted_unit}]')
+
+                df_row=df_row+[continuous_mean, continuous_std]
+
+
+
+            df_row = pd.concat(df_row, axis=1)
+
+            if bin == 0 and i==0:
+                df = df_row
+            else:   
+                df = pd.concat([df, df_row], ignore_index=True)
+
+    if save_table:
+        out_path = os.path.join(coordinates._project_path, coordinates._project_name, "./Out_tables")
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
+        df.to_csv(path_or_buf=os.path.join(out_path, "supervised_summary.csv"), sep=',', na_rep='')
+    return df

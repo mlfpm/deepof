@@ -64,7 +64,7 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
             else {table_bodyparts[0]: table_bodyparts[1:]}
         ),
         arena=arena_detection,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=table_type,
     )
@@ -117,7 +117,7 @@ def test_project_extend():
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format="h5",
     )
@@ -135,7 +135,7 @@ def test_project_extend():
         project_name=f"test_extend",
         rename_bodyparts=None,
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format="h5",
     )
@@ -178,7 +178,7 @@ def test_project_properties():
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -207,7 +207,7 @@ def test_project_filters():
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     ).create(force=True, test=True)
@@ -251,7 +251,7 @@ def test_get_distances(nodes, ego):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -293,7 +293,7 @@ def test_get_angles(nodes, ego):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     )
@@ -328,7 +328,7 @@ def test_run(nodes, ego, use_numba):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".csv",
         iterative_imputation="full",
@@ -379,7 +379,7 @@ def test_get_supervised_annotation(use_numba,detection_mode,bodypart_graph):
         arena=detection_mode,
         bodypart_graph=bodypart_graph,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
@@ -409,7 +409,7 @@ def test_supervised_parameters():
         ),
         arena="circular-autodetect",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
     ).create(force=True, test=True)
@@ -445,8 +445,9 @@ def test_supervised_parameters():
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+    to_video=st.booleans()
 )
-def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba, to_video):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
@@ -474,7 +475,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         ),
         project_name=f"deepof_project_{random_id}",
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
@@ -519,6 +520,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         polar=polar,
         align=(algn if center == "Center" and not polar else False),
         selected_id=selected_id,
+        to_video = to_video,
         roi_number = rois,
         animals_in_roi = animals_in_roi,
     )
@@ -562,7 +564,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
                 st.one_of(st.just("standard"), st.just("minmax"), st.just("robust"))
             ),
             test_videos=1,
-            verbose=2,
             filter_low_variance=1e-3,
             interpolate_normalized=5,
             shuffle=sampler.draw(st.booleans()),
@@ -613,6 +614,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     assert isinstance(merged, deepof.data.TableDict)
     assert isinstance(prun.get_videos(), dict)
     assert prun.get_exp_conditions is not None
+    assert prun.get_condition_values("CSDS") is not None
     assert isinstance(prun.get_quality(), deepof.data.TableDict)
     assert isinstance(prun.get_arenas, tuple)
 
@@ -623,8 +625,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     full_nan_table=st.booleans(),
+    dist_standardize_groups=st.booleans(),
+    speed_standardize_groups=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
+def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standardize_groups,speed_standardize_groups):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -632,6 +636,12 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
         animal_ids = ["mouse_black_tail", "mouse_white_tail"]
     else:
         animal_ids = [""]
+    dist_standardize="per_column"
+    if dist_standardize_groups:
+        dist_standardize="groupwise"
+    speed_standardize="per_column"
+    if speed_standardize_groups:
+        speed_standardize="groupwise"
 
     prun = deepof.data.Project(
         project_path=os.path.join(
@@ -645,7 +655,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
         ),
         project_name=f"deepof_project_{random_id}",
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
@@ -658,7 +668,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
        prun._distances[key_with_nans].iloc[::]=np.nan 
        prun._angles[key_with_nans].iloc[::]=np.nan
 
-    graph_dset, shapes, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
+    graph_dset, meta_info, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
         scale=sampler.draw(
             st.one_of(
@@ -669,6 +679,8 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
             )
         ),
         test_videos=1,
+        dist_standardize=dist_standardize,
+        speed_standardize=speed_standardize,
     )
 
     rmtree(
@@ -688,7 +700,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table):
     # data from nan table was removed
     if full_nan_table:
         assert len(graph_dset[0])==0
-        assert len(shapes[0])==1 and len(shapes[3])==3
+        assert isinstance(meta_info, dict) and len(meta_info['shape_train'])==3
 
 
 @settings(deadline=None)
@@ -766,7 +778,7 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
             animal_ids=["B","W"],
             bodypart_graph="deepof_11",
             arena="circular-autodetect",
-            video_scale=380,
+            video_scale="380 mm",
             video_format=".mp4",
             table_format=table_type,
         )

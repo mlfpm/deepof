@@ -455,7 +455,7 @@ def _draw_arena(
     params: VideoExportProps
 ):
     """Draws the arena boundaries on the frame."""
-    if arena_type.startswith("circular"):
+    if isinstance(arena_params, Tuple): #Circular (legacy)  arena_type.startswith("circular"):
         cv2.ellipse(
             img=frame,
             center=np.round(arena_params[0]).astype(int),
@@ -466,7 +466,7 @@ def _draw_arena(
             color=params.arena_color,
             thickness=params.arena_thickness,
         )
-    elif arena_type.startswith("polygonal"):
+    elif isinstance(arena_params, np.ndarray): #Polygonal
         cv2.polylines(
             img=frame,
             pts=[np.array(arena_params, dtype=np.int32)],
@@ -671,9 +671,9 @@ def output_annotated_video(
     scaling_ratio = coordinates._scales[experiment_id][2] / coordinates._scales[experiment_id][3]
     if video_export_config.display_arena:
         arena_params = coordinates._arena_params[experiment_id]
-        if "polygonal" in coordinates._arena:
+        if isinstance(arena_params, np.ndarray): # "polygonal" in coordinates._arena:
             scaled_arena_params = np.array(arena_params) * scaling_ratio
-        elif "circular" in coordinates._arena:
+        elif isinstance(arena_params, Tuple):
             scaled_arena_params = (
                 tuple(np.array(arena_params[0]) * scaling_ratio),
                 tuple(np.array(arena_params[1]) * scaling_ratio),
@@ -854,9 +854,9 @@ def output_annotated_video_old(
         arena_params = coordinates._arena_params[experiment_id]
         # scale arena_params back o video res
         scaling_ratio = coordinates._scales[experiment_id][2]/coordinates._scales[experiment_id][3]
-        if "polygonal" in coordinates._arena:
+        if isinstance(arena_params, np.ndarray):
             arena_params=np.array(arena_params)*scaling_ratio
-        elif "circular" in coordinates._arena:
+        elif isinstance(arena_params, Tuple):
             # scale from mm to original pixel resolution
             arena_params=(tuple(np.array(arena_params[0])*scaling_ratio),tuple(np.array(arena_params[1])*scaling_ratio),arena_params[2])
     if display_markers or display_mouse_labels:

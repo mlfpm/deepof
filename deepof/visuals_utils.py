@@ -19,9 +19,12 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from IPython.display import clear_output
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Patch
 from natsort import os_sorted
+from scipy.interpolate import interp1d
 
+
+import deepof.annotation_utils
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
@@ -36,6 +39,11 @@ from deepof.config import (
     SINGLE_BEHAVIORS,
     SYMMETRIC_BEHAVIORS,
     ASYMMETRIC_BEHAVIORS,
+    CONTINUOUS_BEHAVIORS,
+    ARENA_COLOR,
+    ROI_COLORS,
+    DistanceUnit,
+    TimeUnit,
 )
 
 
@@ -44,7 +52,7 @@ project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
- 
+
 def time_to_seconds(time_string: str) -> float:
     """Compute seconds as float based on a time string.
 
@@ -172,7 +180,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         supervised =  [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
         color_map = ONE_ANIMAL_COLOR_MAP
     else:
-        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors)
+        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
         color_map = TWO_ANIMALS_COLOR_MAP
 
     supervised_max = 1
@@ -197,7 +205,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     return colors
 
 
-def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_behaviors, single_behaviors):
+def generate_behavior_combinations(animal_ids, symmetric_behaviors=True, asymmetric_behaviors=True, single_behaviors=True, continuous_behaviors=True):
     """
     Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
 
@@ -211,34 +219,57 @@ def generate_behavior_combinations(animal_ids, symmetric_behaviors, asymmetric_b
         list: A list of strings with the combined animal IDs and behaviors.
     """
     result = []
+    # Defaults for boolean true false inputs if no list of names is given
+    if symmetric_behaviors==True:
+        symmetric_behaviors = SYMMETRIC_BEHAVIORS
+    elif symmetric_behaviors==False:
+        symmetric_behaviors=[]
+    if asymmetric_behaviors==True:
+        asymmetric_behaviors = ASYMMETRIC_BEHAVIORS
+    elif asymmetric_behaviors==False:
+        asymmetric_behaviors=[]
+    if single_behaviors==True:
+        single_behaviors = SINGLE_BEHAVIORS
+    elif single_behaviors==False:
+        single_behaviors=[]
+    if continuous_behaviors==True:   
+        continuous_behaviors=CONTINUOUS_BEHAVIORS
+    elif continuous_behaviors==False:
+        continuous_behaviors=[]
+
+    if animal_ids is None:
+        animal_ids=[""]
+    else:
+        animal_ids=[id + "_" for id in animal_ids]
+
     
     # Process symmetric paired behaviors
     for behavior in symmetric_behaviors:
         for pair in itertools.combinations(animal_ids, 2):
             # Sort the pair to ensure consistent order and avoid duplicates
             sorted_pair = sorted(pair)
-            combined = f"{sorted_pair[0]}_{sorted_pair[1]}_{behavior}"
+            combined = f"{sorted_pair[0]}{sorted_pair[1]}{behavior}"
             result.append(combined)
     
     # Process asymmetric paired behaviors
     for behavior in asymmetric_behaviors:
         for pair in itertools.permutations(animal_ids, 2):
-            combined = f"{pair[0]}_{pair[1]}_{behavior}"
+            combined = f"{pair[0]}{pair[1]}{behavior}"
             result.append(combined)
     
     # Process single mouse behaviors
     for animal_id in animal_ids:
         for behavior in single_behaviors:
-            if behavior != "missing" and behavior != "speed":
-                combined = f"{animal_id}_{behavior}"
+            if behavior != "missing" and behavior not in CONTINUOUS_BEHAVIORS:
+                combined = f"{animal_id}{behavior}"
                 result.append(combined)
     
     # Add missing
     if "missing" in single_behaviors:            
-        result = result + [id + "_missing" for id in animal_ids] 
-    # Add speed
-    if "speed" in single_behaviors:            
-        result = result + [id + "_speed" for id in animal_ids]           
+        result = result + [id + "missing" for id in animal_ids] 
+    # Add continuous behaviors
+    for cont_behavior in continuous_behaviors:
+        result = result + [id + cont_behavior for id in animal_ids]           
     
     return result
 
@@ -305,11 +336,17 @@ def calculate_average_arena(
             intp_points[Cumsum_points[j] : Cumsum_points[j + 1], 1] = np.linspace(
                 start_point[1], end_point[1], interp_points
             )
-
+ 
+        # check orientation to correct for clockwise / counterclockwise differences with signed area
+        s = np.sign(0.5 * np.sum(intp_points[:,0] * np.roll(intp_points[:,1], -1) - np.roll(intp_points[:,0], -1) * intp_points[:,1]))
+        if s <= 0:
+            intp_points = intp_points[::-1].copy()
+        
         # reorganize points so that array starts at top left corner and sum to average
         min_pos = np.argmin(np.sum(intp_points, 1))
         avg_points[0 : (num_points - min_pos)] += intp_points[min_pos:]
         avg_points[(num_points - min_pos) :] += intp_points[:min_pos]
+        first_arena = False
 
     avg_points = avg_points / len(all_vertices)
 
@@ -328,7 +365,7 @@ def _filter_embeddings(
     if embeddings is None and supervised_annotations is None:
         raise ValueError(
             "Either embeddings and soft_counts or supervised_annotations must be provided."
-        )
+        )  # pragma: no cover
 
     try:
         if exp_condition is None:
@@ -409,7 +446,7 @@ def _get_polygon_coords(data, animal_id=""):
                       f"{animal_id}Tail_base"]
         tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_tip"]
     else:
-        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")
+        raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")  # pragma: no cover
 
     # Helper function to safely extract body parts
     def extract_parts(names):
@@ -565,6 +602,111 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
+def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
+
+    # Init bin ranges if not given
+    if not custom_time_bins:
+        custom_time_bins = create_bin_pairs(
+            L_shortest, N_time_bins
+        )
+    
+    # Init hidden bins if not given
+    if not hide_time_bins:
+        hide_time_bins = np.array([False] * len(custom_time_bins))
+    elif not len(hide_time_bins) == len(custom_time_bins):
+        raise ValueError(
+            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
+        )  # pragma: no cover
+    else:
+       hide_time_bins= np.array(hide_time_bins)
+
+    # Check custom_time_bin validity
+    if len(
+        custom_time_bins
+    ) >= min_bins_required and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+        isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
+    ):  # List has shape Nx2
+
+        # Convert time string elements to integers
+        custom_time_bins = [
+            [
+                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                if type(sublist[k]) == str
+                else sublist[k]
+                for k in range(len(sublist))
+            ]
+            for sublist in custom_time_bins
+        ]
+
+        # Further checks
+        if not all(
+            all(isinstance(x, int) and x >= 0 for x in sublist)
+            for sublist in custom_time_bins
+        ) or not all(  # Lists consist of positive integers
+            sublist[0] <= sublist[1] for sublist in custom_time_bins
+        ):  # List elements increase
+            raise ValueError(
+                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
+                "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
+            )  # pragma: no cover
+        elif np.max(custom_time_bins) >= L_shortest:
+            raise ValueError(
+                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
+            )  # pragma: no cover
+        # Warn in case of overlapping elements
+        elif not (
+            list(itertools.chain(*custom_time_bins)) == sorted(list(itertools.chain(*custom_time_bins)))
+        ):
+            warning_message = (
+                "\033[38;5;208m\n"
+                'Warning! Your "custom_time_bins" list contains overlapping elements!\n'
+                f"Ignore this warning if providing overlapping or repeating bins was your intention.\n"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+    else:
+        raise ValueError(
+            f'At least {min_bins_required} bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
+        )  # pragma: no cover
+    
+    return custom_time_bins, hide_time_bins
+
+
+def postprocess_df_bins(df: pd.DataFrame, bin_lengths, hide_time_bins):
+
+    #Remove missing values (less than 20% of values remaining per group) 
+    min_frac = 0.05 #20
+    num_bins = len(bin_lengths)
+    condition_values = sorted(df["exp_condition"].astype(str).unique().tolist())
+    behavior_to_plot = df.columns[2]
+
+    # Add bin length column
+    time_bin_idx = df.columns.get_loc('time_bin')
+    df.insert(time_bin_idx + 1, 'bin_length', np.array(bin_lengths)[df['time_bin'].astype(int)])
+    
+    # Create table denoting the nan percentage for each group and bin
+    coverage = df.pivot_table(
+        index="time_bin", columns="exp_condition", values=behavior_to_plot,
+        aggfunc=lambda s: s.notna().mean()
+    ).reindex(index=range(num_bins), columns=list(condition_values)).fillna(0.0)
+
+    enough_data_per_bin = coverage.ge(min_frac).all(axis=1).to_numpy()
+    hide_time_bins = hide_time_bins | ~enough_data_per_bin # hide additonal bins if groups in these bins only have little data
+    if not all(enough_data_per_bin):
+        warning_message = (
+            "\033[38;5;208m\n"
+            f'Warning! The time bins {np.where(~enough_data_per_bin)[0]+1}\n'
+            f"are empty in more than {100-min_frac*100}% of your tables and hence were excluded!\n"
+            "\033[0m"
+        )
+        print(warning_message)    
+
+    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!" 
+
+    return df, hide_time_bins
+
+
+
 def cohend(array_a: np.array, array_b: np.array):
     """
     calculate Cohen's d effect size. Does not assume equal population standard deviations, and can still be used for unequal sample sizes
@@ -587,6 +729,9 @@ def cohend(array_a: np.array, array_b: np.array):
         Medium Effect Size: d=0.50
         Large Effect Size: d=0.80.
     """
+    if not hasattr(cohend, '_warning_issued'):
+        cohend._warning_issued = False
+
     if len(array_a)<2 or len(array_b) < 2:
         warnings.warn(
             '\033[33mInfo! At least one of the selected groups has only one element!\n Setting cohens D to 0!\033[0m'
@@ -606,7 +751,9 @@ def cohend(array_a: np.array, array_b: np.array):
     # Check if the pooled standard deviation is 0
     if s < 1e-10:
         # Handle the case when the standard deviation is 0 by setting effect size to 0
-        print("Standard deviation is close to 0 (std < 1e-10). Setting Cohen's d to 0.")
+        if not cohend._warning_issued:
+            print("Standard deviation is close to 0 (std < 1e-10). Setting Cohen's d to 0.")
+            cohend._warning_issued = True
         return 0
     else:
         # Calculate the effect size (Cohen's d)
@@ -661,13 +808,41 @@ def _get_bins_from_precomputed(
     return _BinningResult(bin_info, {}, end_too_late, {})
 
 
+def _get_bins_from_frames(
+    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+) -> _BinningResult:
+    """Strategy for when bin size/index are given as integers."""
+    bin_size_frames = bin_size
+    if bin_size_frames <= 0:
+        raise ValueError("bin_size must result in a frame count greater than 0.")  # pragma: no cover
+
+    bin_info = {}
+    start_too_late = {key: False for key in table_lengths}
+    end_too_late = {key: False for key in table_lengths}
+
+    for key, length in table_lengths.items():
+        start_frame = bin_index
+        end_frame = start_frame + bin_size_frames
+
+        if start_frame >= length:
+            start_too_late[key] = True
+        if end_frame > length:
+            end_too_late[key] = True
+
+        bin_start = min(length, start_frame)
+        bin_end = min(length, end_frame)
+        bin_info[key] = np.arange(bin_start, bin_end)
+
+    return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
+
+
 def _get_bins_from_integers(
     bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = int(round(bin_size * frame_rate))
     if bin_size_frames <= 0:
-        raise ValueError("bin_size must result in a frame count greater than 0.")
+        raise ValueError("bin_size must result in a frame count greater than 0.")  # pragma: no cover
 
     bin_info = {}
     start_too_late = {key: False for key in table_lengths}
@@ -696,7 +871,7 @@ def _get_bins_from_strings(
     """Strategy for when bin size/index are given as time strings."""
     bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
     if bin_size_frames <= 0:
-        raise ValueError("bin_size string must represent a duration > 0.")
+        raise ValueError("bin_size string must represent a duration > 0.")  # pragma: no cover
 
     bin_info = {}
     start_too_late = {key: False for key in table_lengths}
@@ -733,8 +908,20 @@ def _get_full_range_bins(table_lengths: dict[str, int]) -> _BinningResult:
     return _BinningResult(bin_info, {}, {}, {})
 
 
-def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
-    """Downsamples bin indices if they exceed the maximum allowed samples."""
+def _downsample_bins(
+    bin_info: Any, samples_max: int, down_sample: bool, warned: Optional[set] = None
+) -> Any:
+    """Downsamples bin indices if they exceed the maximum allowed samples.
+
+    Args:
+        bin_info: Dictionary mapping experiment IDs to arrays of frame indices.
+        samples_max: Maximum number of samples allowed per experiment.
+        down_sample: If True, use uniform downsampling. If False, cut at samples_max.
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked key: "downsampled".
+    """
     downsampled_info = {}
     downsampled_at_all = False
     
@@ -750,7 +937,7 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
         else:
             downsampled_info[key] = indices
 
-    if downsampled_at_all:
+    if downsampled_at_all and (warned is None or "downsampled" not in warned):
         print(
             "\033[33m\n"
             f"Info! Selected range exceeds {samples_max} samples and has been "
@@ -758,6 +945,8 @@ def _downsample_bins(bin_info: Any, samples_max: int, down_sample: bool) -> Any:
             "To avoid this, increase 'samples_max'. This will also result in increased computation time"
             "\033[0m"
         )
+        if warned is not None:
+            warned.add("downsampled")
 
     return downsampled_info
 
@@ -767,9 +956,21 @@ def _validate_and_warn(
     table_lengths: dict[str, int],
     frame_rate: float,
     bin_size_orig: Union[int, str],
+    warned: Optional[set] = None,
 ):
-    """Handles all final validation checks and user warnings."""
-    if result.pre_start_warnings:
+    """Handles all final validation checks and user warnings.
+
+    Args:
+        result: A _BinningResult containing bin info and boundary-check flags.
+        table_lengths: Dictionary mapping experiment IDs to their frame counts.
+        frame_rate: Frame rate of the recordings.
+        bin_size_orig: Original bin_size as provided by the user (for error messages).
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked keys: "pre_start", "truncated_bin".
+    """
+    if result.pre_start_warnings and (warned is None or "pre_start" not in warned):
         warn_str = ", ".join(f"{k}: {v}" for k, v in result.pre_start_warnings.items())
         warnings.warn(
             "\033[38;5;208m\n"
@@ -777,38 +978,43 @@ def _validate_and_warn(
             f"one experiment. Truncated bin lengths are: {warn_str}"
             "\033[0m"
         )
+        if warned is not None:
+            warned.add("pre_start")
 
     for key, is_late in result.start_too_late.items():
         if is_late:
             max_time = seconds_to_time(table_lengths[key] / frame_rate, False)
-            max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) -1
+            max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 1
             raise ValueError(
                 f"[Error in {key}]: bin_index is out of range. "
                 f"It must be less than {max_time} or index < {max_index} for a "
                 f"bin_size of {bin_size_orig}."
-            )
+            )  # pragma: no cover
 
     warned_once = False
     for key, is_truncated in result.end_too_late.items():
         if is_truncated and not warned_once:
-            truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
-            message = (
-                "\033[38;5;208m\n"
-                f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
-                f"Bin size was truncated to {truncated_len}."
-                "\033[0m"
-            )
-            # Add helpful suggestion only if applicable
-            if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
-                max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
-                max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
-                message += (
+            if warned is None or "truncated_bin" not in warned:
+                truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
+                message = (
                     "\033[38;5;208m\n"
-                    f"\nFor full bins, choose start time <= {max_start_time} or "
-                    f"index <= {max_index} for a bin_size of {bin_size_orig}."
+                    f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
+                    f"Bin size was truncated to {truncated_len}."
                     "\033[0m"
                 )
-            warnings.warn(message)
+                # Add helpful suggestion only if applicable
+                if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
+                    max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
+                    max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
+                    message += (
+                        "\033[38;5;208m\n"
+                        f"\nFor full bins, choose start time <= {max_start_time} or "
+                        f"index <= {max_index} for a bin_size of {bin_size_orig}."
+                        "\033[0m"
+                    )
+                warnings.warn(message)
+                if warned is not None:
+                    warned.add("truncated_bin")
             warned_once = True
 
 
@@ -821,6 +1027,8 @@ def _preprocess_time_bins(
     experiment_id: Optional[str] = None,
     samples_max: int = 20000,
     down_sample: bool = True,
+    given_in_frames=False,
+    warned: Optional[set] = None,
 ):
     """
     Preprocesses various time-bin formats into a consistent dictionary of indices.
@@ -844,6 +1052,14 @@ def _preprocess_time_bins(
                      downsampled or cut if the selection is larger.
         down_sample: If True, use uniform downsampling. If False, cut the data
                      at `samples_max`.
+        given_in_frames: bin_index and size are directly given in frames with no
+                         conversions being necessary.
+        warned (set, optional): Mutable set tracking which warnings have already
+            been issued. If None, warnings are always shown. If provided, each
+            warning is shown at most once and its key is added to the set.
+            Tracked keys: "precomputed_ignores_args", "invalid_format_default",
+            and all keys from _validate_and_warn and _downsample_bins
+            ("pre_start", "truncated_bin", "downsampled").
 
     Returns:
         A dictionary mapping each experiment ID to a numpy array of frame indices.
@@ -854,11 +1070,14 @@ def _preprocess_time_bins(
     """
     # --- 1. Initial Setup and Data Preparation ---
     if precomputed_bins is not None and (bin_size is not None or bin_index is not None):
-        warnings.warn(
-            "\033[38;5;208m\n"
-            "precomputed_bins is provided. Ignoring bin_size and bin_index."
-            "\033[0m"
-        )
+        if warned is None or "precomputed_ignores_args" not in warned:
+            warnings.warn(
+                "\033[38;5;208m\n"
+                "precomputed_bins is provided. Ignoring bin_size and bin_index."
+                "\033[0m"
+            )
+            if warned is not None:
+                warned.add("precomputed_ignores_args")
 
     start_times = coordinates.get_start_times()
     if tab_dict_for_binning:
@@ -881,6 +1100,11 @@ def _preprocess_time_bins(
 
     if precomputed_bins is not None:
         result = _get_bins_from_precomputed(precomputed_bins, table_lengths)
+    
+    elif isinstance(bin_size, int) and isinstance(bin_index, int) and given_in_frames:
+        result = _get_bins_from_frames(
+            bin_size, bin_index, table_lengths, coordinates._frame_rate
+        )
 
     elif isinstance(bin_size, int) and isinstance(bin_index, int):
         result = _get_bins_from_integers(
@@ -897,23 +1121,27 @@ def _preprocess_time_bins(
         result = _get_full_range_bins(table_lengths)
 
     else:
-        warnings.warn(
-            "\033[38;5;208m\n"
-            "Invalid or mismatched bin_size/bin_index format. "
-            "Expected two integers, or two 'HH:MM:SS' strings. "
-            "Defaulting to a 60-second bin starting at 0.\033[0m"
-        )
+        if warned is None or "invalid_format_default" not in warned:
+            warnings.warn(
+                "\033[38;5;208m\n"
+                "Invalid or mismatched bin_size/bin_index format. "
+                "Expected two integers, or two 'HH:MM:SS' strings. "
+                "Defaulting to a 60-second bin starting at 0.\033[0m"
+            )
+            if warned is not None:
+                warned.add("invalid_format_default")
         # Recurse with default values for simplicity.
         return _preprocess_time_bins(
-            coordinates=coordinates, bin_size=60, bin_index=0, 
+            coordinates=coordinates, bin_size=60, bin_index=0,
             tab_dict_for_binning=tab_dict_for_binning, experiment_id=experiment_id,
-            samples_max=samples_max, down_sample=down_sample
+            samples_max=samples_max, down_sample=down_sample,
+            warned=warned,
         )
 
     # --- 3. Post-processing: Validation and Downsampling ---
-    _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size)
+    _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)
 
-    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample)
+    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
 
     return final_bins
 
@@ -1065,7 +1293,7 @@ def get_supervised_behaviors_in_roi(
     elif roi_mode == "behaviorwise":
         cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
     else:
-        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
             
     return cur_supervised
 
@@ -1232,67 +1460,83 @@ def contiguous_segments(mask: np.ndarray):
     return [slice(s, e) for s, e in edges]
 
 
+def scale_units(coordinates, key, data, unit: str, target_distance: str = None, target_time: str = None):
+    """
+    Scale `data` from `unit` to requested target units and return (scaled, new_unit).
+    `unit` can be "<u>" or "<u_num>/<u_den>", where each u is in TimeUnit or DistanceUnit.
+    """
+    if unit is None:
+        return data, None
+
+    fps = float(coordinates._frame_rate)
+    mm_to_px = coordinates._scales[key][2] / coordinates._scales[key][3]  # px per mm (per exp_id)
+
+    def sec_per(u: str) -> float:
+        tu = TimeUnit.parse(u)
+        return (1.0 / fps) if tu.name == "frames" or tu.name == "fr" else float(tu.value)
+
+    def dist_factor(u_from: str, u_to: str) -> float:
+        return DistanceUnit.parse(u_to).factor(mm_to_px) / DistanceUnit.parse(u_from).factor(mm_to_px)
+
+    def time_factor(u_from: str, u_to: str) -> float:
+        return sec_per(u_from) / sec_per(u_to)
+
+    def convert_component(u: str, invert: bool):
+        # distance?
+        try:
+            DistanceUnit.parse(u)
+            u2 = u if target_distance is None else target_distance
+            f = 1.0 if u2 == u else dist_factor(u, u2)
+            if invert: f = 1.0 / f
+            return f, u2
+        except ValueError:
+            pass
+
+        # time?
+        try:
+            TimeUnit.parse(u)
+            u2 = u if target_time is None else target_time
+            f = 1.0 if u2 == u else time_factor(u, u2)
+            if invert: f = 1.0 / f
+            return f, u2
+        except ValueError as e:
+            raise ValueError(f'Invalid unit component "{u}". Must be in TimeUnit or DistanceUnit.') from e  # pragma: no cover
+
+    # remove white space and brackets
+    u = unit.strip().strip("[]")
+    parts = u.split("/", 1)
+    num = parts[0]
+    den = parts[1] if len(parts) == 2 else None
+
+    f_num, num_out = convert_component(num, invert=False)
+    factor = f_num
+    unit_out = num_out
+
+    if den is not None:
+        f_den, den_out = convert_component(den, invert=True)
+        factor *= f_den
+        unit_out = f"{num_out}/{den_out}"
+
+    return data * factor, unit_out
+
+def get_square_shape_for_gridlike_plot(N):
+    """get best number of rows and columns for grid like plots"""
+    assert N > 0
+    assert isinstance(N, int)
+    
+    sqrt_n = np.sqrt(N)
+    # Find divisor closest to sqrt(N)
+    n_cols = min(
+        (d for d in range(int(sqrt_n), 0, -1) if N % d == 0),
+        key=lambda d: abs(d - sqrt_n)
+    )
+    n_rows = N // n_cols
+    return n_rows, n_cols
+
+
 ######
 #Functions not included in property based testing for not having a clean return
 ######
-
-
-def _validate_parameter(
-    param_name: str,
-    param_value: Any,
-    valid_options: List[Any],
-    is_list: bool = False,
-    custom_error_if_empty: Optional[str] = None,
-    only_one_of_many: Optional[bool] = True
-): # pragma: no cover
-    """
-    A generic helper to validate a single parameter against a list of valid options.
-
-    Args:
-        param_name (str): The name of the parameter being checked (for error messages).
-        param_value (Any): The value of the parameter provided by the user.
-        valid_options (List[Any]): The list of allowed values.
-        is_list (bool): If True, checks if param_value is a subset of valid_options.
-                        Otherwise, checks if it is a member of valid_options.
-        custom_error_if_empty (Optional[str]): A specific error to raise if the
-                                               parameter is provided but the list
-                                               of valid options is empty.
-    """
-    if param_value is None:
-        return  # Parameter not provided, no validation needed.
-
-    # If the param is provided but there are no valid options to check against
-    if not valid_options and custom_error_if_empty:
-        raise ValueError(custom_error_if_empty)
-
-    valid_set = set(valid_options)
-    is_valid = False
-    
-    if is_list:
-        # Ensure param_value is a list-like object for set operations
-        value_set = set(
-            [param_value] if isinstance(param_value, str) else param_value
-        )
-        if value_set.issubset(valid_set):
-            is_valid = True
-    else:
-        if param_value in valid_set:
-            is_valid = True
-
-    if not is_valid:
-        # Truncate for readability
-        options_preview = str(valid_options[:5])[1:-1]
-        if len(valid_options) > 5:
-            options_preview += ", ..."
-
-        if only_one_of_many:    
-            raise ValueError(
-                f'Invalid value for "{param_name}". Must be one of: [{options_preview}]'
-            )
-        else:
-            raise ValueError(
-                f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
-            )
 
 
 #not covered by testing as the only purpose of this function is to throw specific exceptions
@@ -1301,7 +1545,7 @@ def _check_enum_inputs(
     supervised_annotations: Optional[table_dict] = None,
     soft_counts: Optional[table_dict] = None,
     origin: Optional[str] = None,
-    experiment_ids: Optional[List[str]] = None,
+    experiment_ids: Optional[Union[List[str],dict[List[str]]]] = None,
     exp_condition: Optional[str] = None,
     exp_condition_order: Optional[List[str]] = None,
     condition_values: Optional[List[str]] = None,
@@ -1317,6 +1561,7 @@ def _check_enum_inputs(
     roi_number: Optional[int] = None,
     animals_in_roi: Optional[List[str]] = None,
     roi_mode: str = "mousewise",
+    distance_unit: str = None,
 ):  # pragma: no cover
     """
     Checks and validates enum-like input parameters for various plot functions.
@@ -1345,6 +1590,7 @@ def _check_enum_inputs(
         roi_number (Optional[int]): ROI number to use for filtering.
         animals_in_roi (Optional[List[str]]): Animals that must be inside the ROI.
         roi_mode (str): Mode for ROI filtering ('mousewise' or 'behaviorwise').
+        distance_unit (str): Unit for measuring distance
     """
     # Activate warnings for immediate user feedback
     # warnings.simplefilter("always", UserWarning)
@@ -1377,6 +1623,7 @@ def _check_enum_inputs(
     if supervised_annotations:
         first_key = list(supervised_annotations.keys())[0]
         behavior_opts.extend(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
+        behavior_opts.extend(coordinates._animal_ids)
     if soft_counts:
         first_key = list(soft_counts.keys())[0]
         n_clusters = get_dt(soft_counts, first_key, only_metainfo=True)['num_cols']
@@ -1426,26 +1673,27 @@ def _check_enum_inputs(
     # Format: (param_name, param_value, valid_options, is_list, custom_error)
     # =========================================================================
     validation_checks = [
-        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True),
-        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True),
-        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False),
-        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True),
-        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True),
-        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", True),
-        ("bodyparts", bodyparts, bodypart_opts, True, None, False),
-        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False),
-        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True),
-        ("animal_id", animal_id, animal_id_opts, False, None, True),
-        ("center", center, center_opts, False, None, True),
-        ("visualization", visualization, vis_opts, False, None, True),
-        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True),
-        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False),
-        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True),
-        ("roi_mode", roi_mode, roi_mode_opts, False, None, True),
+        ("experiment_ids", experiment_ids, exp_id_opts, True, None, True, True),
+        ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True, False),
+        ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False, False),
+        ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True, False),
+        ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True, False),
+        ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False, False),
+        ("bodyparts", bodyparts, bodypart_opts, True, None, False, False),
+        ("bodyparts", in_roi_bodyparts, in_roi_bodypart_opts, True, None, False, False),
+        ("animals_in_roi", animals_in_roi, animal_id_opts, True, None, True, False),
+        ("animal_id", animal_id, animal_id_opts, False, None, True, False),
+        ("center", center, center_opts, False, None, True, False),
+        ("visualization", visualization, vis_opts, False, None, True, False),
+        ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True, False),
+        ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False, False),
+        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True, False),
+        ("roi_mode", roi_mode, roi_mode_opts, False, None, True, False),
+        ("distance_unit", distance_unit, DistanceUnit._member_names_, False, None, False, False)
     ]
 
-    for name, value, options, is_list, error_msg, only_one_of_many in validation_checks:
-        _validate_parameter(name, value, options, is_list, error_msg, only_one_of_many)
+    for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
+        deepof.utils.validate_parameter(name, value, options, is_list, error_msg, only_one_of_many, can_be_dict)
 
     # =========================================================================
     # 4. HANDLE SPECIAL CASES AND WARNINGS
@@ -1475,7 +1723,7 @@ def plot_arena(
     elif key != "average":
         arena = copy.copy(coordinates._roi_dicts[key][roi_number])
 
-    if "circular" in coordinates._arena and roi_number is None:
+    if isinstance(coordinates._arena_params[list(coordinates._arena_params.keys())[0]], Tuple) and roi_number is None:
 
         if key == "average":
             arena = [
@@ -1497,7 +1745,7 @@ def plot_arena(
             )
         )
 
-    elif "polygonal" in coordinates._arena or roi_number is not None:
+    elif isinstance(coordinates._arena_params[list(coordinates._arena_params.keys())[0]], np.ndarray) or roi_number is not None:
 
         if center == "arena" and key == "average":
 
@@ -1527,7 +1775,6 @@ def plot_arena(
             lw=3,
             ls="--",
         )
-        
 
 def heatmap(
     dframe: pd.DataFrame,
@@ -1536,6 +1783,7 @@ def heatmap(
     ylim: tuple = None,
     title: str = None,
     mask: np.ndarray = None,
+    extrapolate_heatmap: bool = True,
     save: str = False,
     dpi: int = 200,
     ax: Any = None,
@@ -1552,6 +1800,7 @@ def heatmap(
         ylim (float): limits of the y-axis.
         title (str): title of the figure.
         mask (np.ndarray): mask to apply to the heatmap across time.
+        extrapolate_heatmap (bool): Show full heatmap including extrapolated parts (default = True)
         save (str): if provided, saves the figure to the specified file.
         dpi (int): dots per inch of the figure to create.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
@@ -1562,14 +1811,20 @@ def heatmap(
     """
     # noinspection PyTypeChecker
     if ax is None:
+
+        n_rows,n_cols=get_square_shape_for_gridlike_plot(len(bodyparts))
+
         heatmaps, ax = plt.subplots(
-            1,
-            len(bodyparts),
+            n_rows, 
+            n_cols,
             sharex=True,
             sharey=True,
             dpi=dpi,
-            figsize=(8 * len(bodyparts), 8),
+            figsize=(8 * n_cols, 8 * n_rows),
         )
+    # Turn into array for streamlined processing
+    if not isinstance(ax,np.ndarray):    
+        ax = np.array([ax])
 
     if isinstance(dframe, dict):
 
@@ -1599,36 +1854,27 @@ def heatmap(
             mask, (0, len(dframe) - len(mask)), "constant", constant_values=False
         )
 
-    for i, bpart in enumerate(bodyparts):
+    for x, bpart in zip(ax.ravel(),bodyparts):
         heatmap = dframe[bpart].loc[mask].dropna()
 
-        if len(bodyparts) > 1:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                #cut=0,
-                #bw_adjust=0.5,
-                alpha=1,
-                ax=ax[i],
-                **kwargs,
-            )
-        else:
-            sns.kdeplot(
-                x=heatmap.x,
-                y=heatmap.y,
-                cmap="magma",
-                fill=True,
-                #cut=0,
-                #bw_adjust=0.5,
-                alpha=1,
-                ax=ax,
-                **kwargs,
-            )
+        cut=0
+        if extrapolate_heatmap:
+            cut=3
+        sns.kdeplot(
+            x=heatmap.x,
+            y=heatmap.y,
+            cmap="magma",
+            fill=True,
+            cut=cut,
+            #bw_adjust=0.5,
+            alpha=1,
+            ax=x,
+            **kwargs,
+        )
+        if len(bodyparts) <= 1:
             ax = np.array([ax])
 
-    for x, bp in zip(ax, bodyparts):
+    for x, bp in zip(ax.ravel(), bodyparts):
         if xlim is not None:
             x.set_xlim(xlim)
         if ylim is not None:
@@ -1648,6 +1894,7 @@ def heatmap(
                 ),
             )
         )
+
 
     return ax
 
@@ -1759,12 +2006,12 @@ def _preprocess_transitions(
         raise ValueError(
             '"diagonal_behavior_counting" needs to be one of the following: {}'.format(
                 str(diagonal_behavior_counting_options)[1:-1]
-            )
+            )  # pragma: no cover
         )
     if (supervised_annotations is None and soft_counts is None) or (supervised_annotations is not None and soft_counts is not None):
         raise ValueError(
             "Eet either supervised_annotations or soft_counts, not both or neither!"
-        )
+        )  # pragma: no cover
     elif supervised_annotations is not None:
         tab_dict=supervised_annotations
     else:
@@ -1810,3 +2057,784 @@ def _preprocess_transitions(
     )
 
     return grouped_transitions, columns, combined_columns, exp_conditions, normalize
+
+
+# Thrown for slice averageing if only one value is present
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Mean of empty slice",
+        "Degrees of freedom <= 0 for slice.",
+        "All-NaN slice encountered",
+    ]
+)
+def _preprocess_mouse_roi_interaction(
+    coordinates: coordinates,
+    bodyparts: list,  
+    animal_id: str,      
+    # Time selection parameters
+    N_time_bins: int = 24,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    samples_max=20000,
+    # ROI functionality
+    roi_number: int = None,
+    # Visualization parameters
+    hide_time_bins: list[bool] = None,
+    experiment_ids: list = None,  
+    exp_condition: str = None, 
+    condition_values: Union[str, List[str]] = None,
+    mode: str = "distance",
+    add_stats: str = "Mann-Whitney",
+    error_bars: str = "sem",
+    unit_distance: str = "m",
+    fov_angle_deg: int = 90,
+    get_raw_data: bool = False,
+):
+    """Preprocess mouse-ROI interaction data for plotting and statistical analysis.
+
+    Computes per-frame interaction signals (distance or field-of-view) for every
+    experiment, bins them into time windows, and derives group-level statistics
+    and effect sizes.  Called internally by ``plot_mouse_roi_interaction`` and
+    ``return_mouse_roi_interaction``.
+
+    Args:
+        coordinates (coordinates): deepOF project containing the stored data.
+        bodyparts (list): List of bodyparts whose distance to the ROI/arena is measured. Used in "distance" mode.
+        animal_id (str): ID of the animal to use. Used in "fov" mode to construct the required bodypart triplet (Left_ear, Nose, Right_ear).
+        N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+        custom_time_bins (List[List[Union[int, str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
+        samples_max (int): Maximum number of samples taken per bin to avoid excessive computation times. Defaults to 20000.
+        roi_number (int): Number of the ROI to measure interaction with. If None, the arena boundary is used.
+        hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
+        experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
+        exp_condition (str): Experimental condition to compare.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
+        add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
+        error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
+        unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
+        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        get_raw_data (bool): If True, skips binning and returns raw per-frame interaction values. Defaults to False.
+
+    Returns:
+        tuple: (mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins).
+            When ``get_raw_data=True``, mean_values, error_values, binned_effect_sizes_df
+            and hide_time_bins are None and df contains the raw per-frame data.
+
+    """
+
+    if fov_angle_deg > 179 or fov_angle_deg < 1:
+        raise ValueError("Error! \"fov_angle_deg\" needs to be within a range of 1 to 179 degrees!")
+    if roi_number==0:
+        roi_number=None
+    # Checks and init preprocessing
+    _check_enum_inputs(
+        coordinates,
+        roi_number=roi_number,
+        bodyparts=bodyparts,
+        experiment_ids=experiment_ids,
+        exp_condition=exp_condition,
+        condition_values=condition_values,
+        animal_id=animal_id,
+    )
+    # Check if correct inputs for modes are present
+    if mode == "fov" and animal_id is not None:
+        bodyparts = ["Left_ear", "Nose", "Right_ear"]
+        if animal_id != "":
+            bodyparts = [animal_id + "_" + bp for bp in bodyparts]
+    elif mode == "distance" and bodyparts is not None:
+        if isinstance(bodyparts, str):
+            bodyparts=[bodyparts]  
+    else: # pragma: no cover
+        raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")  # pragma: no cover
+   
+    exp_ids_given=True
+    if experiment_ids is None:
+        exp_ids_given=False
+        experiment_ids={'all':list(coordinates._tables.keys())}
+    elif isinstance(experiment_ids, str):
+        experiment_ids={'selection':[experiment_ids]}
+    if isinstance(condition_values, str):
+        condition_values=[condition_values]
+    if exp_condition is not None and condition_values is None:
+        condition_values=coordinates.get_condition_values(exp_condition)
+
+    # Select experiment ids by conditions
+    if exp_condition is not None and condition_values is not None:
+        experiment_ids={}
+        for condition_value in condition_values:
+            experiment_ids[condition_value]=[
+                    k
+                    for k, v in coordinates.get_exp_conditions.items()
+                    if v[exp_condition].values.astype(str) == condition_value
+                ]
+        if exp_ids_given:
+            warning_message = (
+                "\033[38;5;208m\n"  # Set text color to orange
+                "Warning! Since a valid exp_condition / condition_value combination was selected, the experiment_ids will be ignored!"
+                "\033[0m"  # Reset text color
+            )
+            warnings.warn(warning_message)
+
+    L_shortest = min(
+        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows'] for key in coordinates._tables.keys()
+    )
+
+    # preprocess time bin info
+    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
+    bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
+
+    multi_bin_info={}
+    # Create bin_info objects for each custom time bin
+    warned = set()
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        #create full time bins covering entire signal
+        bin_info_time = _preprocess_time_bins(
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        given_in_frames=True, warned=warned,
+        )
+                
+        multi_bin_info[j]=bin_info_time
+
+
+    # Prepare dict of rois (one per video) to measure distance from
+    roi_dict = {}
+    # if no roi number is given, take the arena as default "roi"
+    if roi_number is None:
+        for exp_cond in experiment_ids:
+            roi_dict[exp_cond]={}
+            for exp_id in experiment_ids[exp_cond]:
+            
+                params = coordinates._arena_params[exp_id]
+                # Legacy, transform cicular arenas to polygons 
+                if isinstance(params,tuple):
+                    polygon = deepof.arena_utils.extract_corners_from_arena(params)
+                else:
+                    polygon = params
+                roi_dict[exp_cond][exp_id] = polygon
+    else:
+        for exp_cond in experiment_ids:
+            roi_dict[exp_cond]={}
+            for exp_id in experiment_ids[exp_cond]:
+        
+                rois= coordinates._roi_dicts[exp_id]
+                polygon = rois[roi_number]
+                roi_dict[exp_cond][exp_id] = polygon
+
+    # Collect minimum interaction measure for all sets of experiments and all bins
+    interaction_dict = {}
+    rows = []  # accumulate for final df
+    raw_cols = {}
+    for exp_cond, exp_polys in roi_dict.items():
+        for exp_id, polygon in exp_polys.items():
+
+            bps = coordinates.get_coords_at_key(
+                key=exp_id, scale=coordinates._scales[exp_id]
+            )[bodyparts]
+
+            # ---------------------------------------------------------------------
+            # Compute per-frame interaction signal ONCE for the whole experiment
+            # ---------------------------------------------------------------------
+            polygon = np.asarray(polygon, dtype=np.float64)
+            # Remove possible double points at beginning / end
+            if polygon.shape[0] >= 2 and np.allclose(polygon[0], polygon[-1]):
+                polygon = polygon[:-1]
+            if mode == "fov":
+                # bps: (T, 3*2) -> (T, 3, 2)
+                pts = bps.to_numpy().reshape(-1, 3, 2)
+                polygon = np.asarray(polygon, dtype=np.float64)
+                interaction_full = deepof.utils.in_field_of_view_numba(
+                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon
+                )  # shape (T,)
+
+            elif mode == "distance":
+                T = bps.shape[0]
+                B = len(bodyparts)
+
+                inside = np.empty((T, B), dtype=bool)
+                dists  = np.empty((T, B), dtype=float)
+
+                for k, bp in enumerate(bodyparts):
+                    pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
+                    inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
+                    dists[:, k]  = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
+
+                # Match old semantics:
+                # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
+                # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI
+                valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)
+
+                min_dist = np.nanmin(dists, axis=1)
+                min_dist[~valid] = np.nan
+
+                interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
+
+            else:
+                raise NotImplementedError(
+                    'The only currently available modes are "distance" and "fov" (field of view)'
+                )  # pragma: no cover
+
+            # ---------------------------------------------------------------------
+            # Bin by slicing precomputed per-frame result
+            # ---------------------------------------------------------------------
+            if not get_raw_data:
+                for bin_id, bin_info in multi_bin_info.items():
+                    frames = bin_info[exp_id]              # frame indices for this exp_id and bin
+                    value = np.nanmean(interaction_full[frames])
+                    rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value})
+            else:
+                raw_cols[exp_id] = pd.Series(interaction_full)
+
+
+
+    if not get_raw_data:
+        df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
+
+  
+        df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
+
+        mean_values, error_values, binned_effect_sizes_df = process_df(df, error_bars=error_bars)
+    
+    else:
+        df = pd.DataFrame(raw_cols)
+        last_valid = df.last_valid_index()
+        if last_valid is not None:
+            df = df.loc[:last_valid]
+        mean_values, error_values, binned_effect_sizes_df, hide_time_bins = None, None, None, None
+
+
+    return mean_values, error_values, df, binned_effect_sizes_df, hide_time_bins
+
+#####
+# Trendline plotting helpers
+#####
+
+def process_df(df: pd.DataFrame, error_bars: str = "sem"):
+    """
+    Process binned behavioral DF independent of number of exp conditions.
+
+    Returns
+    -------
+    mean_values : dict[str, np.ndarray]
+        Mapping condition -> array of mean values per time_bin (sorted by time_bin).
+    error_values : dict[str, np.ndarray]
+        Mapping condition -> array of error values per time_bin (sorted by time_bin).
+    binned_effect_sizes_df : pd.DataFrame
+        Pairwise effect sizes (Cohen's d) for all condition pairs per time_bin.
+        Columns: ["time_bin","cond_a","cond_b","Absolute_Cohens_d","Effect_Size_Category"]
+        Empty if <2 conditions.
+    time_bins : np.ndarray
+        Sorted unique time_bin values used for the arrays.
+    conditions : list[str]
+        Sorted unique exp_condition values (keys of the dicts).
+    """
+    if df.shape[1] < 4:
+        raise ValueError("df is expected to have at least 3 columns: time_bin, exp_condition, <value>")  # pragma: no cover
+
+    value_col = df.columns[3]
+
+    # Stable, explicit ordering (important if bins are missing / not contiguous)
+    time_bins = np.sort(df["time_bin"].unique())
+    conditions = sorted(df["exp_condition"].astype(str).unique().tolist())
+
+    # Group once
+    g = df.groupby(["time_bin", "exp_condition"])[value_col]
+
+    means = (
+        g.mean()
+        .unstack("exp_condition")
+        .reindex(index=time_bins, columns=conditions)
+    )
+
+    if error_bars == "sem":
+        errs = (
+            g.sem()
+            .unstack("exp_condition")
+            .reindex(index=time_bins, columns=conditions)
+        )
+    elif error_bars == "std":
+        errs = (
+            g.std()
+            .unstack("exp_condition")
+            .reindex(index=time_bins, columns=conditions)
+        )
+    else:
+        raise NotImplementedError(
+            'error_bars currently only supports standard deviation ("std") '
+            'and standard error of the mean ("sem")!'
+        )  # pragma: no cover
+
+    # Return as dicts keyed by condition (more robust than positional lists)
+    mean_values = {cond: means[cond].to_numpy() for cond in conditions}
+    error_values = {cond: errs[cond].to_numpy() for cond in conditions}
+
+    # Pairwise Cohen's d for all condition pairs per bin
+    effect_rows = []
+    if len(conditions) >= 2:
+        for tb in time_bins:
+            for cond_a, cond_b in itertools.combinations(conditions, 2):
+                array_a = df.loc[
+                    (df["exp_condition"].astype(str) == cond_a) & (df["time_bin"] == tb),
+                    value_col
+                ].to_numpy()
+                array_b = df.loc[
+                    (df["exp_condition"].astype(str) == cond_b) & (df["time_bin"] == tb),
+                    value_col
+                ].to_numpy()
+
+                array_a = array_a[~np.isnan(array_a)]
+                array_b = array_b[~np.isnan(array_b)]
+
+                if array_a.size == 0 or array_b.size == 0:
+                    d = np.nan
+                    d_effect_size = np.nan
+                else:
+                    d = abs(deepof.visuals_utils.cohend(array_a, array_b))
+                    d_effect_size = deepof.visuals_utils.cohend_effect_size(d)
+
+                effect_rows.append(
+                    {
+                        "time_bin": tb,
+                        "cond_a": cond_a,
+                        "cond_b": cond_b,
+                        "Absolute_Cohens_d": d,
+                        "Effect_Size_Category": d_effect_size,
+                    }
+                )
+
+    binned_effect_sizes_df = pd.DataFrame(
+        effect_rows,
+        columns=["time_bin", "cond_a", "cond_b", "Absolute_Cohens_d", "Effect_Size_Category"],
+    )
+
+    return mean_values, error_values, binned_effect_sizes_df
+
+
+
+def plot_binned_line(
+    ax,
+    x,
+    y,
+    yerr=None,
+    hide_time_bins=None,
+    color="C0",
+    label=None,
+    smooth_points_per_interval: int = 10,
+    mean_linewidth: float = 3.0,
+    mean_alpha: float = 0.8,
+    err_linewidth: float = 1.0,
+    err_alpha: float = 0.15,
+    marker: str = "o",
+): # pragma: no cover
+    """
+    Plot a binned mean line with interpolation + markers + error band, leaving gaps
+    for hidden bins and NaNs.
+
+    Parameters
+    ----------
+    ax : matplotlib axis
+    x : array-like, shape (n_bins,)
+        X positions (must be strictly increasing).
+    y : array-like, shape (n_bins,)
+        Mean values per bin.
+    yerr : array-like or None, shape (n_bins,)
+        Error values per bin (sem/std). If None, no error band is drawn.
+    hide_time_bins : array-like of bool or None, shape (n_bins,)
+        True bins will be hidden (gaps in line, no marker/error there).
+    color : str
+    label : str
+    smooth_points_per_interval : int
+        Number of points per bin-to-bin interval for mean interpolation (>=2).
+    """
+
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    if yerr is not None:
+        yerr = np.asarray(yerr, dtype=float).ravel()
+
+    n = len(x)
+    if len(y) != n:
+        raise ValueError("x and y must have the same length")  # pragma: no cover
+    if yerr is not None and len(yerr) != n:
+        raise ValueError("yerr must have the same length as x and y")  # pragma: no cover
+    if hide_time_bins is None:
+        hide = np.zeros(n, dtype=bool)
+    else:
+        hide = np.asarray(hide_time_bins, dtype=bool).ravel()
+        if len(hide) != n:
+            raise ValueError("hide_time_bins must have the same length as x and y")  # pragma: no cover
+
+    if smooth_points_per_interval < 2:
+        raise ValueError("smooth_points_per_interval must be >= 2")  # pragma: no cover
+
+    # Visible points for means/markers (hidden bins and NaNs are excluded)
+    visible_mean = (~hide) & (~np.isnan(y)) & (~np.isnan(x))
+
+    # --- 1) Interpolated mean lines per contiguous visible segment
+    first_segment = True
+    for sl in contiguous_segments(visible_mean):
+        x_seg = x[sl]
+        y_seg = y[sl]
+        m = len(x_seg)
+
+        # Can't interpolate a single point; marker will handle it.
+        if m < 2:
+            continue
+
+        kind = "cubic" if m >= 4 else "linear"
+        f = interp1d(x_seg, y_seg, kind=kind, assume_sorted=True)
+
+        # smooth grid within segment (no duplicates between intervals)
+        n_smooth = (m - 1) * (smooth_points_per_interval - 1) + 1
+        x_smooth = np.linspace(x_seg[0], x_seg[-1], n_smooth)
+        y_smooth = f(x_smooth)
+
+        ax.plot(
+            x_smooth,
+            y_smooth,
+            color=color,
+            alpha=mean_alpha,
+            linewidth=mean_linewidth,
+            linestyle="-",
+            label=label if first_segment else None,  # avoid duplicate legend entries
+        )
+        first_segment = False
+
+    # --- 2) Markers at original bin centers (hidden bins + NaNs masked)
+    point_mask = hide | np.isnan(y) | np.isnan(x)
+    marker_handle = ax.plot(
+        np.ma.masked_array(x, point_mask),
+        np.ma.masked_array(y, point_mask),
+        marker=marker,
+        linestyle="",
+        color=color,
+        linewidth=2,
+    )[0]
+
+    # --- 3) Errors on original grid (optional), with gaps
+    if yerr is not None:
+        err_mask = point_mask | np.isnan(yerr)
+        x_err = np.ma.masked_array(x, err_mask)
+        upper = np.ma.masked_array(y + yerr, err_mask)
+        lower = np.ma.masked_array(y - yerr, err_mask)
+
+        ax.plot(x_err, upper, linestyle="--", color=color, alpha=mean_alpha, linewidth=err_linewidth)
+        ax.plot(x_err, lower, linestyle="--", color=color, alpha=mean_alpha, linewidth=err_linewidth)
+        ax.fill_between(x_err, lower, upper, color=color, alpha=err_alpha)
+
+    return marker_handle
+
+
+
+#def get_bin_centers(bin_lengths, as_radians: bool = False):
+#    """Compute centers of consecutive bins given their lengths.
+#
+#    Args:
+#        bin_lengths : array-like of positive numbers
+#        as_radians : bool, default False, if True return result as fractions of 2 pi
+#    """
+#    L = np.asarray(bin_lengths, float).ravel()
+#    if L.size == 0:
+#        return L, L
+#    tot = L.sum()
+#    if tot <= 0:
+#        raise ValueError("sum(bin_lengths) must be > 0")
+#
+#    starts = np.r_[0.0, np.cumsum(L)[:-1]] / tot
+#    centers = starts + 0.5 * (L / tot)
+#
+#    if as_radians:
+#        s = 2 * np.pi
+#        return centers * s, starts * s
+#    return centers, starts
+
+
+def ensure_axis(ax=None, polar_depiction=False, figsize=(12, 4)): # pragma: no cover
+    """
+    If ax is None: create proper axis and return (fig, ax, show=True)
+    If ax is given:
+      - if polar_depiction=True and ax is not polar, convert it in-place
+      - return (ax.figure, ax, show=False)
+    """
+    if ax is None:
+        if polar_depiction:
+            fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=figsize)
+        else:
+            fig, ax = plt.subplots(figsize=figsize)
+        return fig, ax, True
+
+    if polar_depiction and getattr(ax, "name", "") != "polar":
+        fig = ax.figure
+        position = ax.get_position()
+        fig.delaxes(ax)
+        new_ax = fig.add_axes(position, projection="polar")
+
+        # in-place swap to preserve outside references
+        ax.__dict__.clear()
+        ax.__dict__.update(new_ax.__dict__)
+        ax.__class__ = new_ax.__class__
+        fig.axes[fig.axes.index(new_ax)] = ax
+        del new_ax
+
+    return ax.figure, ax, False
+
+
+def get_binned_geometry(bin_lengths): # pragma: no cover
+    """
+    Returns a dict with centers/widths/edges in radians (0..2π) + labels "1..N".
+    """
+    bl = np.asarray(bin_lengths, dtype=float)
+    if bl.ndim != 1 or bl.size == 0:
+        raise ValueError("bin_lengths must be a 1D non-empty sequence")  # pragma: no cover
+
+    total = float(np.nansum(bl))
+    if not np.isfinite(total) or total <= 0:
+        widths = np.ones_like(bl) * (2 * np.pi / bl.size)
+    else:
+        widths = bl / total * (2 * np.pi)
+
+    edges = np.concatenate([[0.0], np.cumsum(widths)])
+    centers = edges[:-1] + widths / 2.0
+    labels = [str(i) for i in range(1, bl.size + 1)]
+
+    return {"centers": centers, "widths": widths, "edges": edges, "labels": labels}
+
+
+def format_time_binned_axis(
+    ax,
+    geom,
+    polar_depiction,
+    max_value,
+    title=None,
+    xlabel=None,
+    ylabel=None,
+): # pragma: no cover
+    if title:
+        if polar_depiction:
+            ax.set_title(title, fontsize=14, pad=35)
+        else:
+            ax.set_title(title, fontsize=18)
+
+    base = float(max_value) if np.isfinite(max_value) else 0.0
+    y_main = (base * 1.5) if base > 0 else 1.0
+
+    # IMPORTANT: do NOT include y_main in the ticks (restores old placement logic)
+    step = y_main / 6.0
+    y_ticks = np.arange(0, y_main, step)
+    ax.set_yticks(y_ticks)
+    ax.grid(True)
+
+    if polar_depiction:
+        ax.set_xticks(geom["edges"])
+        ax.set_xticklabels([])
+
+        ax.set_theta_zero_location("N")
+        ax.set_theta_direction(-1)
+        ax.set_rlabel_position(0)
+
+        hist_bottom = y_main
+        ax.set_ylim(ax.get_ylim()[0], max(ax.get_ylim()[1], y_main))
+
+    else:
+        ax.set_xlim(0, 2 * np.pi)
+        ax.set_xticks(geom["centers"])
+        ax.set_xticklabels(geom["labels"])
+        if xlabel:
+            ax.set_xlabel(xlabel, fontsize=12)
+        if ylabel:
+            ax.set_ylabel(ylabel, fontsize=12)
+
+        hist_bottom = ax.get_ylim()[0]
+
+    return hist_bottom
+
+
+def add_polar_bin_labels(ax, geom, radius_factor=1.05): # pragma: no cover
+    """Call after histogram so rmax is final."""
+    r = ax.get_rmax() * radius_factor
+    for theta, label in zip(geom["centers"], geom["labels"]):
+        ax.text(theta, r, label, ha="center", va="center")
+
+
+def plot_binned_groups(
+    ax,
+    x_radians,
+    mean_values,
+    error_values,
+    condition_values,
+    hide_time_bins,
+    colors,
+    plot_binned_line_func,
+): # pragma: no cover
+    """
+    Plots mean +/- error for each condition using your existing plot_binned_line.
+    Returns (handles, max_value).
+    """
+    handles = [None] * len(condition_values)
+
+    for i, cond in enumerate(condition_values):
+        cond = str(cond)
+        handles[i] = plot_binned_line_func(
+            ax=ax,
+            x=x_radians,
+            y=mean_values[cond],
+            yerr=error_values[cond],
+            hide_time_bins=hide_time_bins,
+            color=colors[i],
+            label=cond,
+        )
+
+    # nan-robust max
+    all_vals = []
+    for cond in condition_values:
+        arr = np.asarray(mean_values[str(cond)], dtype=float)
+        if np.any(~np.isnan(arr)):
+            all_vals.append(arr[~np.isnan(arr)])
+    max_value = float(np.nanmax(np.concatenate(all_vals))) if all_vals else 0.0
+
+    return handles, max_value
+
+
+def plot_effectsize_histogram(
+    ax,
+    geom,
+    effect_size_categories,
+    hide_time_bins,
+    max_value,
+    bottom,
+    show_histogram=True,
+    cmap=("#9370DB", "#6A5ACD", "#4B0082"),
+    hidden_color="#C0C0C0",
+    alpha=0.8,
+): # pragma: no cover
+    """
+    Draws effect size histogram bars. Returns (legend_handles, stat_text_col).
+    """
+    stat_text_col = "k"
+    if not show_histogram:
+        return None, stat_text_col
+
+    cats = np.asarray(effect_size_categories, dtype=float)
+    values = cats * (max_value * 0.1 if max_value > 0 else 0.1)
+
+    colors = []
+    for cat in cats.astype(int):
+        idx = int(np.clip(cat - 1, 0, len(cmap) - 1))
+        colors.append(cmap[idx])
+
+    for k in range(min(len(colors), len(hide_time_bins))):
+        if hide_time_bins[k]:
+            colors[k] = hidden_color
+            values[k] = (max_value * 0.1 if max_value > 0 else 0.1)
+
+    bars = ax.bar(geom["centers"], values, width=geom["widths"], bottom=bottom, align="center")
+
+    for c, b in zip(colors, bars):
+        b.set_facecolor(c)
+        b.set_alpha(alpha)
+
+    stat_text_col = "#FFFF00"
+
+    # expand polar r-limits to include the bars ---
+    if getattr(ax, "name", "") == "polar":
+        lower = ax.get_ylim()[0]
+
+        ax.set_rlim(lower, ax.get_rmax()+np.diff(ax.get_yticks())[0])
+
+    # effect size legend handles
+    legend_labels = ["large", "medium", "small"]
+    legend_colors = list(cmap)[::-1]
+    bar_handles = [Patch(color=legend_colors[i], label=legend_labels[i]) for i in range(3)]
+    return bar_handles, stat_text_col
+
+
+def annotate_binwise_stats(ax, test_dict, geom, polar_depiction, text_color="k"): # pragma: no cover
+    if not test_dict:
+        return
+
+    if polar_depiction:
+        yt = ax.get_yticks()
+        y = yt[-1] + (yt[-1] - yt[-2]) * 1.166 if len(yt) >= 2 else ax.get_rmax()
+
+        for k in test_dict:
+            idx = int(k)
+            theta = geom["centers"][idx] + 0.02
+            ax.text(
+                theta,
+                y,
+                test_dict[k],
+                ha="center",
+                va="center",
+                fontsize="small",
+                color=text_color,
+                rotation=-(geom["centers"][idx] * 180.0 / np.pi),
+            )
+    else:
+        yt = ax.get_yticks()
+        y = ax.get_ylim()[0] + (yt[-1] - yt[-2]) * 0.166 if len(yt) >= 2 else ax.get_ylim()[0]
+
+        for k in test_dict:
+            idx = int(k)
+            ax.text(
+                geom["centers"][idx],
+                y,
+                test_dict[k],
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize="small",
+            )
+
+
+def add_binned_legends(
+    ax,
+    condition_handles,
+    condition_labels,
+    effect_handles=None,
+    polar_depiction=False,
+    show_histogram=True,
+    first_plot=True,
+): # pragma: no cover
+    """
+    Adds condition legend + effect-size legend with consistent placement.
+    Only adds legends if first_plot=True.
+    """
+    if not first_plot:
+        return
+
+    # Legend 1: conditions
+    if polar_depiction:
+        leg1 = ax.legend(
+            handles=condition_handles,
+            labels=[str(c) for c in condition_labels],
+            fontsize=12,
+            loc="upper right",
+            bbox_to_anchor=(1.0, 1.1),
+        )
+    else:
+        leg1 = ax.legend(
+            handles=condition_handles,
+            labels=[str(c) for c in condition_labels],
+            fontsize=12,
+            loc="upper right",
+        )
+    ax.add_artist(leg1)
+
+    # Legend 2: effect size (optional)
+    if show_histogram and effect_handles is not None:
+        if polar_depiction:
+            leg2 = ax.legend(
+                handles=effect_handles,
+                title="Effect Size",
+                loc="upper left",
+                bbox_to_anchor=(0.0, 1.1),
+                fontsize=8,
+            )
+            ax.add_artist(leg2)
+        else:
+            ax.legend(
+                handles=effect_handles,
+                title="Effect Size",
+                loc="upper left",
+                fontsize=8,
+            )

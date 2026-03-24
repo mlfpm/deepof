@@ -20,10 +20,12 @@ from hypothesis import strategies as st
 from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
+from types import SimpleNamespace
 from shutil import rmtree
 import warnings
 
 import deepof.data
+import deepof.visuals_utils
 from deepof.data import TableDict
 from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
@@ -58,6 +60,22 @@ def test_time_conversion(second, full_second):
     assert second == second_second #this pun is intended and necessary
 
 
+@given(
+    r=st.integers(min_value=0, max_value=255),
+    g=st.integers(min_value=0, max_value=255),
+    b=st.integers(min_value=0, max_value=255),
+)
+def test_color_conversion(r, g, b):
+    bgr_color = (b, g, r)
+    rgb_color = (r, g, b)
+    
+    # Test BGR -> hex -> BGR round trip
+    assert bgr_color == deepof.visuals_utils.hex_to_BGR(deepof.visuals_utils.BGR_to_hex(bgr_color))
+    
+    # Test that RGB_to_hex and BGR_to_hex produce the same hex for equivalent colors
+    assert deepof.visuals_utils.RGB_to_hex(rgb_color) == deepof.visuals_utils.BGR_to_hex(bgr_color)
+
+
 @settings(max_examples=2, deadline=None)
 @given(
 
@@ -83,7 +101,7 @@ def test_get_behavior_colors(experiment_type):
         ),
         arena="circular-autodetect",
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale=380,
+        video_scale="380 mm",
         animal_ids=animal_ids,
         video_format=".mp4",
         table_format=".h5",
@@ -91,6 +109,10 @@ def test_get_behavior_colors(experiment_type):
 
     supervised = prun.supervised_annotation()
     behaviors=list(supervised['test'].keys())
+
+    # remove continuous behaviors (they currently do not get a color attributed)
+    continuous_behaviors=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
+    behaviors=list(set(behaviors)-set(continuous_behaviors))
 
     colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
     colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
@@ -453,7 +475,7 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
         ),
         project_name=f"deepof_project_roi_test",
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
@@ -668,3 +690,205 @@ def test_contiguous_segments(binary_table):
     assert len(slices) <= np.sum(binary_array)
     if (binary_array==1).any():
         assert np.where(binary_array)[1][0] == slices[0].start
+
+
+@given(
+    fps=st.floats(10.0, 120.0, allow_nan=False, allow_infinity=False, width=32),
+    mm_to_px=st.floats(0.10000000149011612, 10.0, allow_nan=False, allow_infinity=False, width=32),
+    value=st.floats(1.0, 100.0, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_scale_units(fps, mm_to_px, value):
+    key = "k"
+    coordinates =  SimpleNamespace(_frame_rate=fps, _scales={key: (0.0, 0.0, mm_to_px, 1.0)})
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, value, None)
+    # unit=None returns unchanged
+    assert out == value and out_u is None
+
+    # known conversions (fps and mm_to_px dependent)
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 100.0, "frames", None, "s")
+    assert np.allclose(out, 100.0 / fps, rtol=0.0, atol=1e-9) and out_u == "s"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 10.0, "mm", "px", None)
+    assert np.allclose(out, 10.0 * mm_to_px, rtol=0.0, atol=1e-9) and out_u == "px"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 1.0, "mm/s", "px", "frames")
+    assert np.allclose(out, (1.0*mm_to_px) / fps, rtol=0.0, atol=1e-9) and out_u == "px/frames"
+
+    # known conversions (fps and mm_to_px independent)
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 10.0, "mm", "cm", None)
+    assert np.allclose(out, 1.0, rtol=0.0, atol=1e-9) and out_u == "cm"
+
+    out, out_u = deepof.visuals_utils.scale_units(coordinates, key, 60.0, "s", None, "min")
+    assert np.allclose(out, 1.0, rtol=0.0, atol=1e-9) and out_u == "min"
+
+    # round-trip: A->B->A preserves value
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "mm", "px", None)
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "px", "mm", None)
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "frames", None, "s")
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "s", None, "frames")
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+    out1, _ = deepof.visuals_utils.scale_units(coordinates, key, value, "mm/s", "px", "frames")
+    out2, _ = deepof.visuals_utils.scale_units(coordinates, key, out1, "px/frames", "mm", "s")
+    assert np.allclose(out2, value, rtol=0.0, atol=1e-9)
+
+
+@given(n=st.integers(1, 100))
+def test_get_square_shape_for_gridlike_plot(n):
+    r, c = deepof.visuals_utils.get_square_shape_for_gridlike_plot(n)
+    assert r * c == n
+    if n == 12: assert (r, c) == (4, 3)
+
+
+######
+# Regression testing of plot Data for consitency
+######
+
+
+def test_mouse_roi_interaction():
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
+        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions=None,
+    ).create(force=True, test=True)
+
+    roi = np.array([[158.61861862, 154.05405405],
+                    [276.15615616, 152.91291291],
+                    [276.15615616, 260.18018018],
+                    [158.61861862, 260.18018018]])
+    prun._roi_dicts = {"test": {1: roi}, "test2": {1: roi}}
+
+    # Create exp_conditions with pandas DataFrames containing "CSDS" column
+    prun._exp_conditions = {
+        "test": pd.DataFrame({"CSDS": ["test_cond1"]}),
+        "test2": pd.DataFrame({"CSDS": ["test_cond2"]}),
+    }
+
+    ref_path = os.path.join(".", "tests", "test_examples", "test_data", "mouse_roi_interaction")
+    os.makedirs(ref_path, exist_ok=True)
+
+    # FOV mode with experiment_ids
+    effect_fov, group_fov = deepof.visuals.return_mouse_roi_interaction(
+        prun, animal_id="B", roi_number=1, N_time_bins=20, mode="fov",
+        experiment_ids={"a": ["test"], "b": ["test2"]}, error_bars="std", unit_distance="pixel",
+    )
+    
+    ref_fov_e = os.path.join(ref_path, "fov_effect.csv")
+    ref_fov_g = os.path.join(ref_path, "fov_group.csv")
+
+    if not os.path.exists(ref_fov_e):
+        effect_fov.to_csv(ref_fov_e, index=False)
+        group_fov.to_csv(ref_fov_g, index=False)
+        
+    # Output data matches reference (FOV mode)
+    pd.testing.assert_frame_equal(effect_fov, pd.read_csv(ref_fov_e), atol=1e-9, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(group_fov, pd.read_csv(ref_fov_g), atol=1e-9, check_like=True, check_dtype=False)
+
+    # Distance mode with custom bins
+    effect_dist, group_dist = deepof.visuals.return_mouse_roi_interaction(
+        prun, bodyparts="B_Nose", mode="distance",
+        custom_time_bins=[[0, 2], [3, 6], [7, 22], [21, 99]],
+        hide_time_bins=[False, True, False, True],
+        exp_condition="CSDS" ,condition_values=["test_cond1","test_cond2"],
+        experiment_ids="test",
+    )
+    
+    ref_dist_e = os.path.join(ref_path, "distance_effect.csv")
+    ref_dist_g = os.path.join(ref_path, "distance_group.csv")
+
+    if not os.path.exists(ref_dist_e):
+        effect_dist.to_csv(ref_dist_e, index=False)
+        group_dist.to_csv(ref_dist_g, index=False)
+    
+    # Output data matches reference (distance mode)
+    pd.testing.assert_frame_equal(effect_dist, pd.read_csv(ref_dist_e), atol=1e-9, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(group_dist, pd.read_csv(ref_dist_g), atol=1e-9, check_like=True, check_dtype=False)
+ 
+    #Test raw data extraction
+    raw_data_fov = deepof.visuals.return_mouse_roi_interaction(
+        prun, animal_id="B", roi_number=1, mode="fov",
+        experiment_ids={"a": ["test"], "b": ["test2"]}, error_bars="sem", unit_distance="m", get_raw_data=True, fov_angle_deg=150,
+    )
+
+    ref_raw_e = os.path.join(ref_path, "raw_data.csv")
+
+    if not os.path.exists(ref_raw_e):
+        raw_data_fov.to_csv(ref_raw_e, index=False)
+
+    pd.testing.assert_frame_equal(raw_data_fov, pd.read_csv(ref_raw_e), atol=1e-9, check_like=True, check_dtype=False)
+
+
+    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
+
+
+def test_transitions():
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
+        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions=None,
+    ).create(force=True, test=True)
+
+    # Create exp_conditions with pandas DataFrames containing "CSDS" column
+    prun._exp_conditions = {
+        "test": pd.DataFrame({"CSDS": ["test_cond1"]}),
+        "test2": pd.DataFrame({"CSDS": ["test_cond2"]}),
+    }
+
+    # Generate supervised annotations (replace with actual method if different)
+    supervised_annotation = prun.supervised_annotation()
+
+    ref_path = os.path.join(".", "tests", "test_examples", "test_data", "transitions")
+
+    # Call 1: silence_diagonal=True, normalize=False, delta_T=2
+    result1 = deepof.visuals.return_transitions(
+        prun,
+        supervised_annotations=supervised_annotation,
+        visualization="heatmaps",
+        bin_size=6,
+        bin_index=0,
+        exp_condition="CSDS",
+        delta_T=2,
+        normalize=False,
+        silence_diagonal=True,
+    )
+    
+    ref1 = os.path.join(ref_path, "transitions_silenced.csv")  
+    
+    pd.testing.assert_frame_equal(result1, pd.read_csv(ref1, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
+
+    # Call 2: normalize=True, diagonal_behavior_counting="Events"
+    result2 = deepof.visuals.return_transitions(
+        prun,
+        supervised_annotations=supervised_annotation,
+        visualization="networks",
+        bin_size=3,
+        bin_index=1,
+        exp_condition="CSDS",
+        delta_T=1,
+        normalize=True,
+        silence_diagonal=False,
+        diagonal_behavior_counting="Events",
+    )
+    
+    ref2 = os.path.join(ref_path, "transitions_normalized.csv")
+    
+    pd.testing.assert_frame_equal(result2, pd.read_csv(ref2, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
+
+    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))

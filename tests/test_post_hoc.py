@@ -9,6 +9,7 @@ Testing module for deepof.post_hoc
 """
 import os
 from shutil import rmtree
+from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ from deepof.data import TableDict
 
 
 @settings(deadline=None, max_examples=25)
-@given(states=st.sampled_from([3, "aic", "bic"]))
+@given(states=st.sampled_from([3, 2, "aic", "bic"]))
 def test_get_contrastive_soft_counts(states):
 
     prun = deepof.data.Project(
@@ -43,7 +44,7 @@ def test_get_contrastive_soft_counts(states):
             "Tables",
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=[""],
         table_format=".h5",
@@ -60,21 +61,22 @@ def test_get_contrastive_soft_counts(states):
         exp_conditions=None,
     )
     
-    #if states == "priors":
-    #    # Define a test matrix of soft counts
-    #    soft_counts = {}
-    #    for i in range(10):
-    #        counts = np.abs(np.random.normal(size=(100, 2)))
-    #        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-    #else:
-    #    soft_counts = None
+    if isinstance(states, int):
+        # Define a test matrix of soft counts
+        soft_counts = {}
+        for i in range(10):
+            counts = np.abs(np.random.normal(size=(100, states)))
+            soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    else:
+        soft_counts = None
 
-    deepof.post_hoc.get_contrastive_soft_counts(
+    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts(
         prun,
         embeddings,
         states=states,
         min_states=2,
         max_states=3,
+        soft_counts=soft_counts,
     )
 
     rmtree(
@@ -82,8 +84,88 @@ def test_get_contrastive_soft_counts(states):
             ".", "tests", "test_examples", "test_single_topview", "deepof_project"
         )
     )
+    
+    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
+    assert all([np.sum(soft_counts_out[key])==100.0 for key in soft_counts_out.keys()])
+
+    # Check if Ideal states determined based on different modes stay consistent 
+    # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
+    if states != "bic" and states != 2:
+        assert all([np.shape(soft_counts_out[key])[1]==3 for key in soft_counts_out.keys()])
+    else:
+        assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
+
+'''
+@settings(deadline=None, max_examples=25)
+@given(K_pose=st.sampled_from([3, 2]), M_bins=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
+def test_get_contrastive_soft_counts_gmm(K_pose,M_bins,window_size,distance_bp,exp_type):
 
 
+    animal_ids = [""]
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    embeddings = {key: np.random.normal(size=(100-window_size+1, 10)) for key in keys}
+
+    embeddings=deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=None, 
+        exp_conditions=None,
+    )
+    
+    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts_gmm(
+        prun,
+        embeddings,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        K_pose=K_pose,
+        M_bins=M_bins,
+        embedding_gates=distance_bp,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", exp_type, "deepof_project"
+        )
+    )
+    
+    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
+    assert all([np.round(np.sum(soft_counts_out[key]))==100-window_size+1 for key in soft_counts_out.keys()])
+
+    # Check if Ideal states determined based on different modes stay consistent 
+    # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
+    if exp_type=="test_single_topview":
+        assert all([np.shape(soft_counts_out[key])[1]==K_pose for key in soft_counts_out.keys()])
+    else:
+        assert all([np.shape(soft_counts_out[key])[1]==K_pose*M_bins for key in soft_counts_out.keys()])
+'''
 
 @settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
@@ -106,7 +188,7 @@ def test_recluster(states):
             "Tables",
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=[""],
         table_format=".h5",
@@ -146,15 +228,25 @@ def test_get_time_on_cluster():
 
     # Define a test matrix of soft counts
     soft_counts = {}
+    bin_info = {}
     for i in range(10):
         counts = np.random.normal(size=(100, 10))
         soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+        bin_info[i] = {}
+        bin_info[i]["time"]=np.array([0,1,2,3,4,5,6,7,8]) 
+        bin_info[i][""]=np.array([True]*5+[False]*4)
 
-    toc = deepof.post_hoc.get_time_on_cluster(soft_counts)
+    roi_number=1
+
+    toc = deepof.post_hoc.get_time_on_cluster(soft_counts,False)
+    toc2 = deepof.post_hoc.get_time_on_cluster(soft_counts,False, False, bin_info,roi_number)
 
     # Assert that both the soft counts and breaks are correctly aggregated
     assert toc.shape[0] * 100 == np.concatenate(list(soft_counts.values())).shape[0]
-    assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1]
+    assert toc.shape[1] == np.concatenate(list(soft_counts.values())).shape[1] # one shorter due to binning
+    assert np.sum(np.sum(toc)) > np.sum(np.sum(toc2))
+    assert all(np.sum(toc, axis=1)==100)    
+    assert all(np.sum(toc2, axis=1)==5)
 
 
 @given(
@@ -295,7 +387,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     assert isinstance(enrichment, pd.DataFrame)
     assert enrichment.shape[0] > 0
-    assert enrichment.shape[1] == 3
+    assert enrichment.shape[1] == 4
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -392,7 +484,7 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
             "Tables",
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",
@@ -475,7 +567,7 @@ def test_shap_pipeline(mode, sampler):
         ),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
         table_format=".h5",

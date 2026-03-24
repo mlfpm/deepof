@@ -21,6 +21,8 @@ from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from scipy.spatial import distance
 from shapely.geometry import Point, Polygon
+from typing import Any, List, NewType, Tuple, Union
+
 
 
 import deepof.data
@@ -372,7 +374,7 @@ def test_count_transitions(num_features, exp_conditions,bins,animals_in_roi,delt
     # (there cannot be more transitions than events) excluding aggregate, as then 
     # keys no longer match (new group bound keys that summarize multiple tables into one)
     elif normalize and supervised and not aggregate:
-        assert all([(transitions_dict[key].sum(axis=0)<tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
+        assert all([(transitions_dict[key].sum(axis=0)<=tab_dict[key].sum(axis=0)-1).all() for key in transitions_dict])
 
 
     # Diagonal behavior counting
@@ -579,7 +581,7 @@ def test_remove_outliers(mode):
             ".", "tests", "test_examples", "test_single_topview", "Tables"
         ),
         arena="circular-autodetect",
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".csv",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -646,7 +648,7 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
             ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -657,7 +659,6 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
     #actually detect arenas 
     arena_parameters, h, w = deepof.arena_utils.automatically_recognize_arena(
-        coordinates=prun,
         videos=coords.get_videos(),
         vid_key=video_key,
         path=path,
@@ -671,11 +672,10 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
     )
     #adjust scaling
     scaling_ratio = coords._scales[video_key][3]/coords._scales[video_key][2]
-    if "polygonal" in detection_mode:
-        arena_parameters=np.array(arena_parameters)*scaling_ratio
-    elif "circular" in detection_mode:
-        arena_parameters=(tuple(np.array(arena_parameters[0])*scaling_ratio),tuple(np.array(arena_parameters[1])*scaling_ratio),arena_parameters[2])
-
+    if "circular" in detection_mode:
+        arena_parameters=deepof.arena_utils.extract_corners_from_arena(arena_parameters)
+    arena_parameters=np.array(arena_parameters)*scaling_ratio
+    
     rmtree(
         os.path.join(
             ".", "tests", "test_examples", arena_type, "deepof_project"
@@ -691,10 +691,15 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
     if detection_mode=="circular-autodetect":
 
+        # Legacy compatibility
+        if isinstance(coords._arena_params[video_key], Tuple):
+            vgl_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
+        else:
+            vgl_arena_parameters=coords._arena_params[video_key]
         #check if the detected circular areas are sufficiently similar
         for i in range(3):
             assert np.linalg.norm(
-                np.array(coords._arena_params[video_key][i]) - np.array(arena_parameters[i])
+                np.array(vgl_arena_parameters[i]) - np.array(arena_parameters[i])
                 ) < 1
 
         pass
@@ -735,7 +740,7 @@ def test_detection_modes(detection_mode):
             ".", "tests", "test_examples", arena_type, "Tables"
         ),
         arena=detection_mode,
-        video_scale=380,
+        video_scale="380 mm",
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
@@ -752,12 +757,8 @@ def test_detection_modes(detection_mode):
     
     #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
     assert len(coords._arena_params)==2
-    if detection_mode=="polygonal-autodetect":
-        assert isinstance(coords._arena_params['test'], np.ndarray)
-        assert isinstance(coords._arena_params['test2'], np.ndarray)
-    else:
-        assert isinstance(coords._arena_params['test'], tuple)
-        assert isinstance(coords._arena_params['test2'], tuple)
+    assert isinstance(coords._arena_params['test'], np.ndarray)
+    assert isinstance(coords._arena_params['test2'], np.ndarray)
     assert (coords._video_resolution['test'][0]<coords._video_resolution['test'][1])
     assert (coords._video_resolution['test2'][0]<coords._video_resolution['test2'][1])
     assert (len(coords._scales['test'])==4)
@@ -930,6 +931,7 @@ polygons = [
     ],  # ring polygon
 ]
 
+
 @settings(max_examples=100, deadline=None)
 @given(
     points=st.lists(
@@ -951,4 +953,118 @@ def test_point_in_polygon(points, polygons):
     )
 
 
-test_point_in_polygon()
+@settings(deadline=None, max_examples=25)
+@given(
+    poly_idx=st.integers(0, 2),
+    rand_pts=st.lists(
+        st.tuples(
+            st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+            st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+        ),
+        min_size=1,
+        max_size=50,
+    ),
+    x0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    y0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    w=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+    h=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_get_point_polygon_distance(poly_idx, rand_pts, x0, y0, w, h):
+    # --- 3 fixed polygons + fixed points with known distances to verify ---
+    cases = [
+        # unit square
+        (
+            np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]),
+            np.array([[0.5, 0.5], [2.0, 0.5], [0.0, 0.0], [0.2, 1.0]]),
+            np.array([0.5, 1.0, 0.0, 0.0]),
+        ),
+        # right triangle
+        (
+            np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]),
+            np.array([[0.5, 0.5], [1.0, 1.0], [3.0, 0.0]]),
+            np.array([0.5, 0.0, 1.0]),
+        ),
+        # diamond (rotated square)
+        (
+            np.array([[0.0, 1.0], [1.0, 0.0], [0.0, -1.0], [-1.0, 0.0]]),
+            np.array([[0.0, 0.0], [2.0, 0.0], [1.0, 0.0], [0.5, 0.5]]),
+            np.array([1.0 / np.sqrt(2.0), 1.0, 0.0, 0.0]),
+        ),
+    ]
+
+    for poly_xy, pts, expected in cases:
+        d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_xy)
+        d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_xy)
+
+        # Make sure that distances are as expected for specific point/polygon combinations
+        assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
+        assert np.allclose(d_shapely, expected, rtol=0.0, atol=1e-9)
+
+    pts = np.asarray(rand_pts, dtype=np.float64)  # (N,2)
+    poly_rand = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]], dtype=np.float64)
+
+    d_shapely = deepof.utils.get_point_polygon_distance(pts, poly_rand)
+    d_numba = deepof.utils.get_point_polygon_distance_numba(pts, poly_rand)
+    
+    # Make sure that both versions of the point polygon distance functions return similar results
+    assert np.allclose(d_numba, d_shapely, rtol=1e-9, atol=1e-9)
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    mouse_pts=st.lists(
+        st.lists(
+            st.tuples(
+                st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+                st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+            ),
+            min_size=3,
+            max_size=3,
+        ),
+        min_size=1,
+        max_size=50,
+    ),
+    fov_angle_deg=st.floats(0.0010000000474974513, 179.99899291992188, allow_nan=False, allow_infinity=False, width=32),
+    x0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    y0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
+    w=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+    h=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+)
+def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
+    # Fixed ROIs
+    roi_front = np.array([[-1.0, 4.0], [1.0, 4.0], [1.0, 6.0], [-1.0, 6.0]], dtype=float)
+    roi_back  = np.array([[-1.0, -6.0], [1.0, -6.0], [1.0, -4.0], [-1.0, -4.0]], dtype=float)
+    roi_diag  = np.array([[9.9, 9.9], [10.1, 9.9], [10.1, 10.1], [9.9, 10.1]], dtype=float)  # ~45deg from +y
+    roi_far   = np.array([[9.9, 9809.9], [10.1, 9809.9], [10.1, 10010.1], [9.9, 10010.1]], dtype=float)
+
+    # Fixed mouse head position examples
+    mouse_up  = np.array([[-1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=float)    # faces +y
+    mouse_dn  = np.array([[-1.0, 0.0], [0.0, -1.0], [1.0, 0.0]], dtype=float)   # faces -y
+    mouse_bad = np.array([[0.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=float)     # degenerate ears
+
+    # Test special cases
+    small = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_diag, plot=False)[0]
+    large = deepof.utils.in_field_of_view(mouse_up, 120.0, roi_diag, plot=False)[0]
+    far   = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_far, plot=False)[0]
+    updown = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_back, plot=False)[0]
+    downdown = deepof.utils.in_field_of_view(mouse_dn, 60.0, roi_back, plot=False)[0]
+    
+    # Mouse sees diagonal ROI up close only with wide angle, far away also with small angle
+    assert small == 0.0 and large == 1.0 and far == 1.0 and updown == 0.0 and downdown == 1.0
+
+    
+    bad_py = deepof.utils.in_field_of_view(mouse_bad, 60.0, roi_front, plot=False)[0]
+    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64))[0]
+    
+    # degenerate geometry -> nan
+    assert np.isnan(bad_py) and np.isnan(bad_nb)
+
+    mouse = np.asarray(mouse_pts, dtype=np.float64)  # (N,3,2)
+    roi = np.array([[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]], dtype=np.float64)
+
+    # add small value to mouse to avoid numerical edge cases 
+    out_py = deepof.utils.in_field_of_view(mouse+0.000001, float(fov_angle_deg), roi, plot=False)
+    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi)
+
+    # Both versions are the same for random head / angle / ROI combinations
+    assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)
