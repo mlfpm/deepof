@@ -4048,8 +4048,11 @@ def _print_losses(model_name: str,
     # Print header line
     header = f"Epoch {epoch+1}/{n_epochs}"
     if model_name == "vade":
-        header += f" | KLw={klw:.3f} | λ_distill={lambda_d:.3f}"
+        header += f" | KLw={klw:.3f}"
+    header += f" | λ_distill={lambda_d:.3f}"
+ 
     print(header)
+    print("Losses:")
 
     # Helper for print losses oderly
     def _print_phase(phase: str, logs: dict):
@@ -4070,10 +4073,16 @@ def _print_losses(model_name: str,
     _print_phase("Train", train_logs)
     _print_phase("Val", val_logs)
 
+    print("Scores:")
+
     # Alignment metrics
-    print(f"  Align: conf={train_logs.get('conf_norm', np.nan):.3f} | "
-          f"bal={train_logs.get('bal_norm', np.nan):.3f} | "
-          f"score={train_logs.get('alignment_score', np.nan):.3f}")
+    footer = f"  Train total={train_logs.get('total_loss', np.nan):.4f} | Val total={val_logs.get('total_loss', np.nan):.4f}"
+    if model_name == "vade":
+        footer += (f" | Align: conf={train_logs.get('conf_norm', np.nan):.3f} | " +
+            f"bal={train_logs.get('bal_norm', np.nan):.3f} | " +
+            f"score={train_logs.get('alignment_score', np.nan):.3f}")
+    print(footer)
+        
 
     # Update summary
     log_summary = _update_log_summary(log_summary, train_logs, val_logs)
@@ -5126,9 +5135,7 @@ def fit_VQVAE(
         v_total = float(val_logs.get("total_loss", float("inf")))
         # To do: calculate score
 
-        # Print training progress
-        print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
-                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")              
+        # Print training progress            
         log_summary = _print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
@@ -5325,8 +5332,6 @@ def fit_contrastive(
         # To do: calculate score
 
         # Print training progress
-        print(f"Epoch {epoch+1}/{common_cfg.epochs} | Train total={train_logs.get('total_loss', np.nan):.4f} | "
-                f"Val total={v_total:.4f} | λ_distill={lam:.2f}")
         log_summary = _print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
