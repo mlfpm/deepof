@@ -4057,7 +4057,8 @@ def _print_losses(model_name: str,
     # Helper for print losses oderly
     def _print_phase(phase: str, logs: dict):
         line = f"  {phase:<7}:"
-        for i, name in enumerate(loss_names):
+        z=0
+        for name in loss_names:
             # Skip non-relevant losses
             if np.isnan(logs.get(name, float("nan"))):
                 continue
@@ -4065,8 +4066,9 @@ def _print_losses(model_name: str,
             key_label = key_label.replace("reconstruct", "recon")
             key_label = key_label.replace("similarity", "-sim")
             line += f" {key_label[:9]:<9}: {_fmt_loss(name, logs)} |"
-            if (i + 1) % 5 == 0 and i != len(loss_names) - 1:  # line wrap for long outputs
+            if (z + 1) % 5 == 0 and z != len(loss_names) - 1:  # line wrap for long outputs
                 line += "\n          "
+            z+=1
         print(line.rstrip("|"))
 
     # Print train and validation sections
