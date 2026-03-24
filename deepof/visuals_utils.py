@@ -1634,8 +1634,7 @@ def _check_enum_inputs(
         all_conditions = [cond.columns.values for cond in coordinates.get_exp_conditions.values()]
         exp_cond_opts = np.unique(np.concatenate(all_conditions)).tolist()
         if exp_condition in exp_cond_opts:
-            all_values = [c[exp_condition].values.astype(str) for c in coordinates.get_exp_conditions.values()]
-            cond_val_opts = np.unique(np.concatenate(all_values)).tolist()
+            cond_val_opts = [str(v) for v in coordinates.get_condition_values(exp_condition)]
 
     all_bps = []
     for key, table in coordinates._tables.items():

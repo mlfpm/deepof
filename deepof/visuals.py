@@ -3435,6 +3435,7 @@ def export_annotated_video(
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
 
     """
+    assert min_confidence <= 1 and min_confidence >= 0, "\"min_confidence\" needs to be within a range from 0 to 1"
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
@@ -3853,12 +3854,7 @@ def plot_behavior_trends(
 
     # Init condition_values if not given
     if not condition_values:
-        condition_values = np.unique(
-            [
-                str(val.loc[:, exp_condition].values[0])
-                for key, val in coordinates.get_exp_conditions.items()
-            ]
-        )
+        condition_values = coordinates.get_condition_values(exp_condition)
     if len(condition_values) > 2:
         condition_values = condition_values[0:2]
         warning_message = (
