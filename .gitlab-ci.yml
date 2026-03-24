@@ -24,7 +24,7 @@ install-poetry:
 
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
-    - curl -sSL https://install.python-poetry.org | python3 - --version 2.2.1
+    - curl -sSL https://install.python-poetry.org | python3 -
     - export PATH="/root/.local/bin:$PATH"
     - poetry lock
     - poetry install
