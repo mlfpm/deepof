@@ -4,8 +4,10 @@
 - VaDE: a variational autoencoder with a Gaussian mixture latent-space.
 - Contrastive: an embedding model consisting of a single encoder, trained using a contrastive loss.
 
+Models were translated from original tensorflow implementations to Pytorch using LLMs.
+
 """
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
 # encoding: utf-8
 # module deepof
 
@@ -449,7 +451,9 @@ class BatchNorm1dKerasFP32(nn.BatchNorm1d):
     
 class TCNEncoderPT(nn.Module):
     """
-    PyTorch port of the TF get_TCN_encoder with matching behavior:
+    Builds a neural network that can be used to encode motion tracking instances into a
+    vector. Each layer contains a residual block with a convolutional layer and a skip connection. See the following
+    paper for more details: https://arxiv.org/pdf/1803.01271.pdf
       - Inputs:
           x: (B, W, N, NF)   node features
           a: (B, W, E, EF)   edge features
@@ -460,10 +464,6 @@ class TCNEncoderPT(nn.Module):
       - use_gnn=False:
           Flatten nodes+features -> TCN -> MLP head
 
-      Parity details:
-        - keras-tcn-compatible skip semantics and activation placement
-        - BN eps=1e-3 everywhere
-        - 'causal' and 'same' paddings supported
     """
     def __init__(
         self,
@@ -592,7 +592,9 @@ class TCNEncoderPT(nn.Module):
 
 class TCNDecoderPT(nn.Module):
     """
-    PyTorch port of TF get_TCN_decoder:
+    Builds a neural network that can be used to decode a latent space into a sequence of
+    motion tracking instances. Each layer contains a residual block with a convolutional layer and a skip connection. See
+    the following paper for more details: https://arxiv.org/pdf/1803.01271.pdf
       - g: (B, latent_dim)
       - x: (B, W, NNF) or (B, W, N, NF) for mask computation
       Pipeline:
@@ -770,7 +772,7 @@ def _act(name: str) -> nn.Module:
 
 
 def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtype=torch.float32) -> torch.Tensor:
-    """Generate sinusoidal positional encodings."""
+    """Compute positional encodings, as in https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf."""
     pe = torch.zeros(max_len, d_model, dtype=dtype, device=device)
     position = torch.arange(0, max_len, dtype=dtype, device=device).unsqueeze(1)
     div_term = torch.exp(torch.arange(0, d_model, 2, dtype=dtype, device=device) * (-np.log(10000.0) / d_model))
@@ -841,7 +843,7 @@ class MultiHeadAttentionPT(nn.Module):
 
 
 class TransformerEncoderLayerPT(nn.Module):
-    """Transformer encoder layer with post-normalization."""
+    """Transformer encoder layer with post-normalization. Based on https://www.tensorflow.org/text/tutorials/transformer."""
     def __init__(self, key_dim: int, num_heads: int, dff: int, rate: float = 0.1):
         super().__init__()
         self.mha = MultiHeadAttentionPT(in_dim=key_dim, num_heads=num_heads, key_dim=key_dim // num_heads, dropout=rate)
@@ -938,8 +940,9 @@ class TransformerCorePT(nn.Module):
 
 class TFMEncoderPT(nn.Module):
     """
-    PyTorch Transformer Encoder with optional GNN.
-    Mirrors the TCN encoder structure for consistency.
+    Based on https://www.tensorflow.org/text/tutorials/transformer.
+    Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377
+    and https://arxiv.org/abs/1711.03905.
     """
     def __init__(
         self,
@@ -1214,6 +1217,7 @@ class MultiHeadAttentionGeneralPT(nn.Module):
 
 
 class TransformerDecoderLayerPT(nn.Module):
+    """Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer."""
     def __init__(self, model_dim: int, memory_dim: int, num_heads: int, dff: int, rate: float = 0.1):
         super().__init__()
         self.mha1 = MultiHeadAttentionGeneralPT(q_in_dim=model_dim, kv_in_dim=model_dim, num_heads=num_heads, key_dim=model_dim, dropout=rate)
@@ -1326,6 +1330,10 @@ class DecoderCorePT(nn.Module):
 
 class TFMDecoderPT(nn.Module):
     """
+    Based on https://www.tensorflow.org/text/tutorials/transformer.
+    Adapted according to https://academic.oup.com/gigascience/article/8/11/giz134/5626377?login=true
+    and https://arxiv.org/abs/1711.03905.
+
     Transformer decoder that FORCES latent usage by concatenating 
     latent to every timestep, not using cross-attention.
     """
@@ -1488,7 +1496,9 @@ class CausalSelfAttentionLayer(nn.Module):
     
 
 class VectorQuantizerPT(nn.Module):
-    """PyTorch Vector quantizer layer."""
+    """Quantizes the input vectors into a fixed number of clusters using L2 norm. Based on
+    https://arxiv.org/pdf/1509.03700.pdf, and adapted for clustering using https://arxiv.org/abs/1806.02199.
+    Implementation based on https://keras.io/examples/generative/vq_vae/."""
 
     def __init__(
         self,
@@ -1819,6 +1829,8 @@ class GaussianMixtureLatentPT(nn.Module):
     """
     PyTorch implementation of the Gaussian Mixture probabilistic latent space model.
     It embeds data into a latent space and models that space as a mixture of Gaussians.
+    Implementation based on VaDE (https://arxiv.org/abs/1611.05148)
+    and VaDE-SC (https://openreview.net/forum?id=RQ428ZptQfU)
     """
     def __init__(
         self,

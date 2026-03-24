@@ -10,6 +10,7 @@ import copy
 from dataclasses import dataclass, asdict
 import tqdm
 from contextlib import nullcontext
+import math
 
 
 from IPython.display import clear_output
@@ -20,8 +21,6 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.distributions import Distribution, TransformedDistribution
 from torch.distributions.transforms import AffineTransform
-
-from keras_tuner import BayesianOptimization, Hyperband, Objective
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 from deepof.data_loading import get_dt, save_dt
@@ -338,7 +337,7 @@ def nce_loss_pt_old(
     temperature: float = 0.1,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Exact port of provided TF nce_loss (including BCE-with-logits on a positive ratio).
+    Compute the NCE loss function, as described in the paper "A Simple Framework for Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2002.05709).
     """
     N = history.shape[0]
     sim = similarity(history, future)  # (N, N)
@@ -358,12 +357,15 @@ def nce_loss_pt_old(
     return loss, mean_sim, mean_neg
 
 def nce_loss_pt(history, future, similarity, temperature=0.1):
+    """
+    Standard NCE loss 
+    """
     sim = similarity(history, future) / temperature        # (N,N)
     labels = torch.arange(sim.size(0), device=sim.device)
     loss = torch.nn.functional.cross_entropy(sim, labels)  # row-wise softmax
 
     mean_pos = torch.diag(sim).mean() * temperature
-    off = _off_diagonal_rows(sim * temperature)  # if you want consistent logging
+    off = _off_diagonal_rows(sim * temperature)  
     mean_neg = off.mean() if off.numel() else torch.tensor(0., device=sim.device)
     return loss, mean_pos, mean_neg
 
@@ -376,6 +378,7 @@ def dcl_loss_pt(
     debiased: bool = True,
     tau_plus: float = 0.1,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
     N = history.shape[0]
     sim = similarity(history, future)  # (N, N)
     pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
@@ -405,6 +408,7 @@ def fc_loss_pt(
     temperature: float = 0.1,
     elimination_topk: float = 0.1,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2004.11362)."""
     N = history.shape[0]
     elim = min(elimination_topk, 0.5)
     k = int(math.ceil(elim * N))
@@ -442,6 +446,7 @@ def hard_loss_pt(
     debiased: bool = True,
     tau_plus: float = 0.1,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples" (https://arxiv.org/abs/2011.03343)."""
     N = history.shape[0]
     sim = similarity(history, future)  # (N, N)
 
@@ -475,7 +480,8 @@ def hard_loss_pt(
 def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.Tensor:
     """
     Computes a loss based on the singular values of the Gram matrix of the
-    latent vectors, encouraging orthogonality.
+    latent vectors, encouraging orthogonality.     
+    Based on https://arxiv.org/pdf/1610.04794.pdf, and https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
 
     Args:
         latent_means: The latent vectors from the model (batch_size, latent_dim).
