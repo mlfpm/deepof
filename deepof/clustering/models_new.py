@@ -2687,7 +2687,7 @@ class TurtleTeacher(nn.Module):
         Runs a sequential pass over the data to compute assignments for the whole dataset.
         Used to generate the final tau_star without loading everything into GPU RAM at once.
         Args:
-            loader (DataLoader): DataLoader yielding batches of views in dataset order.
+            loader (DataLoader): DataLoader yielding batches of views.
 
         Returns:
             torch.Tensor: Tensor of shape [N, K] containing the soft assignments for the full dataset.
@@ -2831,6 +2831,19 @@ def extract_latents(model: nn.Module, dataset: BatchDictDataset, device: torch.d
         block_shuffle=False,
         permute_within_block=False,
     )
+    """
+        Extracts latent mean vectors using the model encoder.
+
+        Args:
+            model (nn.Module): Model providing an encoder and latent-space encoder head.
+            dataset (BatchDictDataset): Dataset from which latent representations should be extracted.
+            device (torch.device): Device on which the model inference should be performed.
+            batch_size (int): Batch size used for latent extraction. Defaults to 512.
+            num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+
+        Returns:
+            torch.Tensor: Tensor of shape [N_samples, latent_dim] containing the extracted latent mean vectors on CPU.
+    """
     base = unwrap_dp(model)                                                      
     base.eval()
     zs = []
@@ -2855,9 +2868,17 @@ def initialize_gmm_from_teacher(model: nn.Module,
       σ^2_c = sum_i τ*_ic (u_i - μ_c)^2 / sum_i τ*_ic
       π_c = sum_i τ*_ic / N
 
-    Where u_i = lens(z_i) if lens_enabled, else z_i.
-
     Writes directly into model.latent_space.{gmm_means, gmm_log_vars, prior}.
+
+    Args:
+        model (nn.Module): Model whose latent-space GMM parameters should be initialized.
+        z_all (torch.Tensor): Latent representations of shape [N_samples, D], typically extracted from the training set.
+        tau_star (torch.Tensor): Teacher soft assignments of shape [N_samples, C], where C is the number of mixture components.
+        min_var (float): Minimum variance value used to clamp estimated cluster variances for numerical stability. Defaults to 1e-4.
+        min_mass (float): Small constant added to cluster masses to avoid division by zero during estimation. Defaults to 1e-6.
+
+    Returns:
+        None
     """
     base = unwrap_dp(model)
     base.eval()
@@ -2925,7 +2946,6 @@ def fit_nodes_pca(
     batch_size: int = 4096,
     num_workers: int = 0,
     max_samples: Optional[int] = None,
-    seed: Optional[int] = None,
 ):
     """
     Fits two IncrementalPCAs:
@@ -2935,28 +2955,34 @@ def fit_nodes_pca(
     Assumes dataset returns x with shape [B, T, N, F] where F>=3 and
     channel 0,1 are (x,y), channel 2 is speed.
 
-    Returns:
-      ipca_pos, feats_pos_all  # [N, n_components_pos]
-      ipca_spd, feats_spd_all  # [N, n_components_spd]
-    """
+    Args:
+        dataset (BatchDictDataset): Dataset providing node features and adjacency information.
+        n_components_pos (int): Number of PCA components to retain for flattened position features. Defaults to 32.
+        n_components_spd (int): Number of PCA components to retain for flattened speed features. Defaults to 32.
+        batch_size (int): Batch size used for the two-pass IncrementalPCA fitting and transformation. Defaults to 4096.
+        num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+        max_samples (Optional[int]): Maximum number of samples to use during PCA fitting. If None, uses all samples. Defaults to None.
 
-    shuffle=False
-    if seed is not None:
-        shuffle=True
+    Returns:
+        Tuple[IncrementalPCA, torch.Tensor, IncrementalPCA, torch.Tensor]:
+        ipca_pos: Fitted IncrementalPCA object for flattened position features.
+        feats_pos_all: Tensor of shape [N_samples, n_components_pos] containing PCA-transformed position features.
+        ipca_spd: Fitted IncrementalPCA object for flattened speed features.
+        feats_spd_all: Tensor of shape [N_samples, n_components_spd] containing PCA-transformed speed features.
+    """
 
     # ---- Pass 1: partial_fit ----
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=shuffle,
+        block_shuffle=False,
         permute_within_block=False,
-        seed=seed,
     )
 
     ipca_pos = IncrementalPCA(n_components=n_components_pos)
@@ -2991,16 +3017,15 @@ def fit_nodes_pca(
     # ---- Pass 2: transform all ----
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=shuffle,
+        block_shuffle=False,
         permute_within_block=False,
-        seed=seed,
     )
 
     feats_pos, feats_spd = [], []
@@ -3031,28 +3056,33 @@ def fit_angles_pca(
     n_components: int = 32,
     batch_size: int = 8192,
     num_workers: int = 0,
-    seed: Optional[int] = None,
 ) -> Tuple[IncrementalPCA, torch.Tensor]:
     """
     Fits IncrementalPCA on angle tensors and returns both the fitted ipca and features.
     Mirrors fit_nodes_pca but for angle data.
+
+    Args:
+        dataset_with_angles (BatchDictDataset): Dataset providing precomputed angle tensors.
+        n_components (int): Number of PCA components to retain for the flattened angle features. Defaults to 32.
+        batch_size (int): Batch size used for the two-pass IncrementalPCA fitting and transformation. Defaults to 8192.
+        num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+
+    Returns:
+        Tuple[IncrementalPCA, torch.Tensor]:
+        ipca: Fitted IncrementalPCA object for the angle features.
+        feats_all: Tensor of shape [N_samples, n_components] containing PCA-transformed angle features.
     """
     assert getattr(dataset_with_angles, "return_angles", False), \
         "fit_angles_pca expects a dataset created with return_angles=True."
 
-    shuffle=False
-    if seed is not None:
-        shuffle=True
-
     # Pass 1: partial_fit
     ipca = IncrementalPCA(n_components=n_components)
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=shuffle, drop_last=False,
+        batch_size=batch_size, shuffle=False, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
-        seed=seed,
     )
     for batch in loader:
         # Expected: (x, a, ang, vid) when return_angles=True
@@ -3067,12 +3097,11 @@ def fit_angles_pca(
     # Pass 2: transform all
     feats_all = []
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=shuffle, drop_last=False,
+        batch_size=batch_size, shuffle=False, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
-        seed=seed,
     )
     for batch in loader:
         ang = batch[2]
@@ -3089,34 +3118,36 @@ def extract_pca_angles_view(
     n_components: int = 32,
     batch_size: int = 8192,
     num_workers: int = 0,
-    seed: Optional[int] = None,
 ) -> torch.Tensor:
     """
     Builds an IncrementalPCA view from precomputed angles in the dataset.
     Requires dataset_with_angles to be constructed with return_angles=True.
-    Returns [N_samples, n_components] in dataset order (shuffle=False).
+    
+    Args:
+        dataset_with_angles (BatchDictDataset): Dataset providing precomputed angle tensors.
+        n_components (int): Number of PCA components to retain for the flattened angle features. Defaults to 32.
+        batch_size (int): Batch size used for the two-pass IncrementalPCA fitting and transformation. Defaults to 8192.
+        num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+
+    Returns:
+        torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed angle features.
     """
     assert getattr(dataset_with_angles, "return_angles", False), \
         "extract_pca_angles_view expects a dataset created with return_angles=True."
 
-    shuffle=False
-    if seed is not None:
-        shuffle=True
-
     # Pass 1: partial_fit
     ipca = IncrementalPCA(n_components=n_components)
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=shuffle, drop_last=False,
+        batch_size=batch_size, shuffle=False, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
-        seed=seed,
     )
     for batch in loader:
         # expected: x, a, ang, vid
         if len(batch) == 4:
-            _, _, ang, _, _ = batch
+            _, _, ang, _, = batch
         else:
             raise RuntimeError("Angles loader must yield (x, a, ang, vid)")
         X = ang.view(ang.size(0), -1).cpu().numpy()  # flatten (T*K*1)
@@ -3125,12 +3156,11 @@ def extract_pca_angles_view(
     # Pass 2: transform
     feats_all = []
     loader = dataset_with_angles.make_loader(
-        batch_size=batch_size, shuffle=shuffle, drop_last=False,
+        batch_size=batch_size, shuffle=False, drop_last=False,
         num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
+        pin_memory=False, block_shuffle=False, permute_within_block=False,
         prefetch_factor=0 if num_workers == 0 else 2,
         persistent_workers=(num_workers > 0),
-        seed=seed,
     )
     for batch in loader:
         _, _, ang, _, _ = batch
@@ -3145,34 +3175,34 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
                            n_components: int = 16,
                            batch_size: int = 8192,
                            num_workers: int = 0,
-                           max_samples: Optional[int] = None,
-                           seed: Optional[int] = None) -> torch.Tensor:
+                           max_samples: Optional[int] = None) -> torch.Tensor:
     """
     Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
     in order (shuffle=False), using two passes: partial_fit, then transform.
+   
+    Args:
+        dataset (BatchDictDataset): Dataset providing node and edge features.
+        n_components (int): Number of PCA components to retain for the flattened edge features. Defaults to 16.
+        batch_size (int): Batch size used for the two-pass IncrementalPCA fitting and transformation. Defaults to 8192.
+        num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+        max_samples (Optional[int]): Maximum number of samples to use during PCA fitting. If None, uses all samples. Defaults to None.
 
-    Notes:
-    - This keeps the node PCA (Cell 3) as-is and adds a separate view for edges.
-    - If edges have very different scale across datasets, consider pre-standardizing.
+    Returns:
+       torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed edge features.
     """
-
-    shuffle=False
-    if seed is not None:
-        shuffle=True
 
     # 1) Pass 1: fit IncrementalPCA on flattened edges
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=shuffle,
+        block_shuffle=False,
         permute_within_block=False,
-        seed=seed,
     )
 
     ipca = IncrementalPCA(n_components=n_components)
@@ -3192,16 +3222,15 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     # 2) Pass 2: transform all edges -> PCA
     loader = dataset.make_loader(
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers,
         drop_last=False,
         iterable_for_h5=True,
         pin_memory=False,
         prefetch_factor=0,
         persistent_workers=(num_workers > 0),
-        block_shuffle=shuffle,
+        block_shuffle=False,
         permute_within_block=False,
-        seed=seed,
     )
     feats = []
     for batch in loader:
@@ -3230,7 +3259,7 @@ def run_turtle_teacher_on_views(views_dict: dict,
     Fits a TURTLE teacher on a set of precomputed views and returns the final soft assignments.
 
     The input views are packed into a TensorDataset, trained in shuffled mini-batches, 
-    and then evaluated sequentially to produce tau_star in dataset order.
+    and then evaluated sequentially to produce tau_star.
 
     Args:
         views_dict (dict): Dictionary mapping view names to tensors of shape [N, D]. Entries with value None are ignored.
@@ -3306,6 +3335,20 @@ def cache_pca_angles(
     batch_size: int = 8192,
     num_workers: int = 0,
 ) -> torch.Tensor:
+    """
+    Loads a cached PCA angle view from disk if available, otherwise compute-store-returns.
+    Used to avoid repeated computation of angle view
+    
+    Args:
+        dataset_with_angles (BatchDictDataset): Dataset providing precomputed angle tensors.
+        cache_path (str): File path where the PCA-transformed angle features should be stored or loaded from.
+        n_components (int): Number of PCA components to retain for the flattened angle features. Defaults to 32.
+        batch_size (int): Batch size used when computing the PCA angle view. Defaults to 8192.
+        num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
+
+    Returns:
+        torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed angle features.
+    """
     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
     if os.path.exists(cache_path):
         arr = np.load(cache_path, mmap_mode="r")
@@ -3318,6 +3361,10 @@ def cache_pca_angles(
 class DiscriminativeHead(nn.Module):
     """
     Simple linear head on top of z (latent) to predict C clusters (logits).
+
+    Args:
+        latent_dim (int): Dimensionality of the latent input vectors.
+        n_components (int): Number of output components or clusters.
     """
     def __init__(self, latent_dim: int, n_components: int):
         super().__init__()
