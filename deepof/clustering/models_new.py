@@ -2504,77 +2504,60 @@ def soft_cross_entropy_logits(logits, soft_targets, eps=1e-8, reduction="mean"):
     elif reduction == "sum":
         return loss.sum()
     return loss
-
-class MLPHead(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int,
-                 hidden_dim: int = 32,
-                 dropout: float = 0.0):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, out_dim),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
-    
+   
 
 class TurtleHeads(nn.Module):
+    """Trains each linear head for each view to resemble the target tau (the lienar fit based on all views)
+    i.e. tries to get as close as possible to prediciting the separation within the full dataset (at teh current batch) based on each view of the dataset.
+    
+    Args:
+        feature_dims (List[int]): List containing the feature dimensionality of each active view.
+        n_components (int): Number of output clusters.
+        inner_lr (float): Learning rate used for the per-head inner optimization. Defaults to 0.1.
+        M (int): Number of inner optimization steps performed for the heads at each outer step. Defaults to 100.
+        weight_decay (float): Weight decay used for the head optimizers. Defaults to 1e-4.
+        normalize_feats (bool): If True, L2-normalizes each input feature vector before fitting or inference. Defaults to True.
+        temperature (float): Temperature used to scale the logits produced by each head. Defaults to 0.7.
+    """
     def __init__(self, feature_dims: List[int], n_components: int,
                  inner_lr: float = 0.1, M: int = 100,
                  weight_decay: float = 1e-4,
                  normalize_feats: bool = True,
                  temperature: float = 0.7,
-                 supervised_index: Optional[int] = None, 
-                 mlp_hidden: int = 32,                    
-                 mlp_dropout: float = 0.0                 
                  ):
         super().__init__()
         self.M = M
         self.normalize_feats = normalize_feats
         self.temperature = temperature
-        self.supervised_index = supervised_index
-
         self.heads = nn.ModuleList()
         self._optims = []
 
-        for i, d in enumerate(feature_dims):
-            if False: #i != supervised_index:
-                head = MLPHead(d, n_components,
-                               hidden_dim=mlp_hidden,
-                               dropout=mlp_dropout)
-            else:
-                head = nn.Linear(d, n_components)
+        for d in feature_dims:
+            head = nn.Linear(d, n_components)
             self.heads.append(head)
             self._optims.append(
                 torch.optim.SGD(head.parameters(), lr=inner_lr, weight_decay=weight_decay)
             )
-
-    @torch.no_grad()
-    def reset_parameters(self):
-        for h in self.heads:
-            # Check if module has reset_parameters (Linear/MLP)
-            if hasattr(h, 'reset_parameters'):
-                h.reset_parameters()
-            elif hasattr(h, 'net'):
-                for m in h.net:
-                    if hasattr(m, 'reset_parameters'):
-                        m.reset_parameters()
 
     def _maybe_normalize(self, feats_list):
         if not self.normalize_feats:
             return feats_list
         out = []
         for i, f in enumerate(feats_list):
-            if hasattr(self, "supervised_index") and (i == self.supervised_index):
-                out.append(f)  # don't normalize labels
-            else:
-                out.append(F.normalize(f, dim=-1))
+            out.append(F.normalize(f, dim=-1))
         return out
 
     def inner_fit(self, feats_list, soft_targets):
+        """
+        Trains each linear head for each view to resemble the target tau (the lienar fit based on all views)
+
+        Args:
+            feats_list (List[torch.Tensor]): List of feature tensors, one per view, each of shape [B, D_i].
+            soft_targets (torch.Tensor): Soft target assignments of shape [B, K], typically produced by the task encoder.
+
+        Returns:
+            None
+        """
         feats_list = self._maybe_normalize([f.detach().float() for f in feats_list])
         soft_targets = soft_targets.detach().float()
         
@@ -2588,35 +2571,43 @@ class TurtleHeads(nn.Module):
 
     @torch.no_grad()
     def logits_list(self, feats_list):
+        """Computes detached logits for each view-specific head."""
         feats_list = self._maybe_normalize([f.detach().float() for f in feats_list])
         return [(head(feats) / self.temperature).detach() for head, feats in zip(self.heads, feats_list)]
 
 class TaskEncoder(nn.Module):
+    """
+    Applies linear projections (fully connected layers) to each individual view and sums up the result
+    
+    Args:
+        feature_dims (List[int]): List containing the feature dimensionality of each active view.
+        n_components (int): Number of output clusters.
+        temperature (float): Temperature used to scale the per-view logits before averaging and softmax. Defaults to 1.0.
+    """
     def __init__(self, feature_dims: List[int], n_components: int, 
                  temperature: float = 1.0,
-                 supervised_index: Optional[int] = None,  
-                 mlp_hidden: int = 32,                  
-                 mlp_dropout: float = 0.0                
                  ):
         super().__init__()
         self.temperature = temperature
-        self.supervised_index = supervised_index
 
         self.projs = nn.ModuleList()
-        for i, d in enumerate(feature_dims):
-            if False: #i != supervised_index:
-                proj = MLPHead(d, n_components,
-                               hidden_dim=mlp_hidden,
-                               dropout=mlp_dropout)
-            else:
-                proj = nn.Linear(d, n_components)
+        for d in feature_dims:
+            proj = nn.Linear(d, n_components)
             self.projs.append(proj)
 
     def forward(self, feats_list):
+        """
+        Computes soft cluster assignments from the available views.
+
+        Args:
+            feats_list (List[torch.Tensor]): List of feature tensors, one per view, each of shape [B, D_i], D_i may vary based on view type.
+
+        Returns:
+            torch.Tensor: Soft assignments of shape [B, n_clusters], obtained by averaging projected logits across views and applying softmax.
+        """
         logits = None
         for proj, feats in zip(self.projs, feats_list):
-            # Ensure float for stability, detaching is handled by optimizer zero_grad mostly
-            # but usually we want gradients through this.
+            # Ensure float for stability
             out = proj(feats.float()) / self.temperature
             logits = out if logits is None else (logits + out)
         
@@ -2625,6 +2616,28 @@ class TaskEncoder(nn.Module):
     
 
 class TurtleTeacher(nn.Module):
+    """ 
+    Teacher model that learns soft cluster assignments τ which are easy to predict
+    from each individual view using linear heads, while regularizers encourage
+    confident assignments and balanced cluster usage.
+
+    Based on "Let Go of Your Labels with Unsupervised Transfer" by Artyom Gadetsky et al., see https://arxiv.org/abs/2406.07236  
+
+    Args:
+        feature_dims (List[int]): List containing the feature dimensionality of each active view.
+        n_components (int): Number of output clusters.
+        gamma (float): Strength of the marginal entropy penalty that encourages balanced cluster usage. Defaults to 10.0.
+        alpha_sample_entropy (float): Weight of the per-sample entropy term that encourages confident assignments. Defaults to 0.1.
+        inner_lr (float): Learning rate for the per-view heads during inner optimization. Defaults to 0.1.
+        inner_steps (int): Number of inner optimization steps used to fit the per-view heads at each outer step. Defaults to 100.
+        head_wd (float): Weight decay used for the per-view head optimizers. Defaults to 1e-4.
+        head_temp (float): Temperature used for the per-view head logits. Defaults to 0.5.
+        task_temp (float): Temperature used for the task encoder logits. Defaults to 0.5.
+        normalize_feats (bool): If True, L2-normalizes features before passing them to the per-view heads. Defaults to True.
+        lr_theta (float): Learning rate for the task encoder optimizer. Defaults to 5e-3.
+        delta_death_barrier (float): Strength of the penalty discouraging dead or weakly used clusters. Defaults to 40.0.
+        device (str): Device on which the teacher should operate. Defaults to "cpu".
+    """
     def __init__(self, feature_dims: List[int], n_components: int,
                  gamma: float = 10.0,
                  alpha_sample_entropy: float = 0.1,
@@ -2636,36 +2649,30 @@ class TurtleTeacher(nn.Module):
                  normalize_feats: bool = True,
                  lr_theta: float = 5e-3,
                  delta_death_barrier: float = 40.0,
-                 supervised_index: Optional[int] = None,  
-                 mlp_hidden: int = 32,                    
-                 mlp_dropout: float = 0.0                  
+                 device: str = "cpu",                 
                  ):
         super().__init__()
         self.n_components = n_components
         self.gamma = gamma
         self.delta = delta_death_barrier
         self.alpha = alpha_sample_entropy
-        self.supervised_index = supervised_index
 
+        # to predict general labeling using individual views
         self.heads = TurtleHeads(
             feature_dims, n_components,
             inner_lr=inner_lr, M=inner_steps,
             weight_decay=head_wd,
             normalize_feats=normalize_feats,
             temperature=head_temp,
-            supervised_index=supervised_index,
-            mlp_hidden=mlp_hidden,
-            mlp_dropout=mlp_dropout, 
         )
+
+        # To generate general labeling using full dataset
         self.task_encoder = TaskEncoder(
             feature_dims, n_components,
             temperature=task_temp,
-            supervised_index=supervised_index,
-            mlp_hidden=mlp_hidden,
-            mlp_dropout=mlp_dropout,
         )
         self.opt_theta = torch.optim.Adam(self.task_encoder.parameters(), lr=lr_theta)
-        self.device = torch.device("cpu")
+        self.device = torch.device(device)
 
     def to(self, device: torch.device):
         self.device = device
@@ -2673,17 +2680,17 @@ class TurtleTeacher(nn.Module):
         self.task_encoder.to(device)
         return self
 
-    @staticmethod
-    def _entropy(p: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
-        p = p.clamp_min(eps)
-        return -(p * p.log()).sum(dim=-1)
-
-    # --- NEW: Helper for full dataset prediction (Sequential) ---
+    # Helper for full dataset prediction
     @torch.no_grad()
     def predict(self, loader) -> torch.Tensor:
         """
         Runs a sequential pass over the data to compute assignments for the whole dataset.
         Used to generate the final tau_star without loading everything into GPU RAM at once.
+        Args:
+            loader (DataLoader): DataLoader yielding batches of views in dataset order.
+
+        Returns:
+            torch.Tensor: Tensor of shape [N, K] containing the soft assignments for the full dataset.
         """
         self.task_encoder.eval()
         all_taus = []
@@ -2698,10 +2705,31 @@ class TurtleTeacher(nn.Module):
     # Fits on batches from a DataLoader ---
     def fit(self, loader, outer_steps: int = 200,
             rho: float = 0.04, verbose: bool = True):
+        """
+        Fits the teacher by alternating between per-view head updates and task encoder updates on mini-batches.
+
+        At each outer step, the task encoder produces a batch of soft assignments tau.
+        The per-view heads are then fitted to match tau, after which the task encoder is updated so that tau becomes easier 
+        to predict from each view while remaining confident and well-distributed across clusters.
+
+        Args:
+        loader (DataLoader): DataLoader yielding batches of feature tensors, one tensor per active view.
+        outer_steps (int): Number of outer optimization steps for the task encoder. Defaults to 200.
+        rho (float): Weight of the optional batch-local smoothness regularizer between neighboring rows in a batch. Defaults to 0.04.
+        verbose (bool): If True, prints optimization statistics during fitting. Defaults to True.
+
+        Returns:
+        None
+        """
+        
+        def _entropy(p: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
+            p = p.clamp_min(eps)
+            return -(p * p.log()).sum(dim=-1)
         
         # Create an infinite iterator over the loader
         iterator = iter(loader)
         
+        # Outer fitting loop 
         for step in range(outer_steps):
             # Fetch next batch
             try:
@@ -2713,46 +2741,44 @@ class TurtleTeacher(nn.Module):
             # Move batch to GPU (non_blocking helps if pin_memory=True)
             feats_list = [f.to(self.device, non_blocking=True) for f in feats_list]
 
-            # Extract labels if present in the batch
-            labels = None
-            if self.supervised_index is not None and 0 <= self.supervised_index < len(feats_list):
-                labels = feats_list[self.supervised_index]
-
-            # --- Forward Pass ---
+            # Generate labeling based on linear layers (will start out as random gibberish)
             tau = self.task_encoder(feats_list)  # [Batch, K]
 
-            # --- Inner Loop: Update Heads ---
-            # Fit linear heads to current batch assignments
+            # Inner Loop: Update Heads
+            # Train linear heads to reflect current labeling based only on their individual views
             self.heads.inner_fit(feats_list, tau)
 
-            # --- Compute Loss Components ---
+            # Compute Loss Components
             logits_k = self.heads.logits_list(feats_list)
-            ce_term = 0.0
-            feats_weight = np.ones(len(logits_k))
-            
+            # Sum of cross entropy losses all heads have when trying to predicting the current labeling
+            # (Minimizing this pushes τ toward labels that each view can predict linearly.)
+            ce_term = 0.0           
             for k, logits in enumerate(logits_k):
-                ce_term = ce_term + soft_cross_entropy_logits(logits, tau) * feats_weight[k]
+                ce_term = ce_term + soft_cross_entropy_logits(logits, tau)
             ce_term = ce_term / max(len(logits_k), 1)
 
-            sample_entropy = self._entropy(tau).mean()
+            # sample entropy of labelling accross clusters
+            # (Less uniform labelling i.e. in one sample containing values for n clusters, one cluster is more prominent than others, 
+            # i.e. lower sample entropy, is better)
+            sample_entropy = _entropy(tau).mean()
             
             # Estimate Marginal Entropy (Batch Approximation)
+            # (Measure for usage of clusters, even usuage of all clusters i.e. higher H(marg) is better)
             marginal = tau.mean(dim=0)
-            H_marginal = self._entropy(marginal.unsqueeze(0)).mean()
-
+            H_marginal = _entropy(marginal.unsqueeze(0)).mean()
             logK = float(np.log(self.n_components))
-            H_target = torch.tensor(1 * logK, device=H_marginal.device)
-            marg_gap = torch.relu(H_target - H_marginal)
-            
+            H_target = torch.tensor(1 * logK, device=H_marginal.device) #option for weighting for not compeltely even distribution, currently not applied
+            marg_gap = torch.relu(H_target - H_marginal)          
             gamma_t = float(self.gamma) * (1.0 - float(step) / float(max(1, outer_steps)))
-            dead_floor = max(1e-4, 0.1 / self.n_components)
 
             # Dead penalty
+            # (punishes dead i.e. empty or nearly empty clusters)
+            dead_floor = max(1e-4, 0.1 / self.n_components)
             tau_clamp = tau.clamp_min(1e-8)
+            # Using tau**2 makes diffuse assignments count less than confident ones
             gamma_pow = 2.0
             usage = (tau_clamp ** gamma_pow).mean(dim=0)
             dead_pen = torch.relu(dead_floor - usage).sum() / (dead_floor * self.n_components)
-
             delta_t = self.delta * max(0.5, 0.6 + 0.4 * (1.0 - step / (float(max(1, outer_steps)))))
             
             # Active count metric (for logging)
@@ -2760,76 +2786,23 @@ class TurtleTeacher(nn.Module):
             tau_act = 0.02
             active_soft = torch.sigmoid((marginal - dead_floor) / tau_act)
             active_count = active_soft.sum()
-
-            lambda_purity, H_y_weighted, beta, L_size = 0, 0, 0, 0
             
-            # Supervised Regularization (Batch Approximation)
-            if labels is not None:
-                labels_bin = (labels > 0.05).to(torch.int64)
-                
-                # Count unique labels in this batch
-                unique_rows, inverse_idx, counts = torch.unique(
-                    labels_bin, dim=0, return_inverse=True, return_counts=True
-                )
-                freqs = counts.float() / labels_bin.size(0)
-                freqs_sorted, _ = torch.sort(freqs, descending=True)
-                
-                K_keep = min(len(freqs_sorted)-1, int(self.n_components/2))
-                
-                if K_keep < len(freqs_sorted):
-                    thresh = freqs_sorted[K_keep]
-                    keep = freqs > thresh
-                else:
-                    keep = torch.ones_like(freqs, dtype=torch.bool)
-
-                kept_codes = torch.nonzero(keep, as_tuple=False).squeeze(1)
-                K_combos = kept_codes.numel()
-
-                if K_combos > 0:
-                    mapping = -torch.ones(len(unique_rows), dtype=torch.long, device=labels.device)
-                    mapping[kept_codes] = torch.arange(K_combos, device=labels.device)
-                    cls_idx = mapping[inverse_idx]
-
-                    Y_one_hot = torch.zeros(labels_bin.size(0), K_combos, device=labels.device)
-                    mask = cls_idx >= 0
-                    Y_one_hot[mask, cls_idx[mask]] = 1.0
-
-                    mass_c = tau_clamp.sum(dim=0) + 1e-8
-                    p_c = mass_c / mass_c.sum()
-                    counts_c = tau_clamp.t() @ Y_one_hot
-                    p_y_given_c = (counts_c + 1e-8) / (mass_c.unsqueeze(1) + 1e-8)
-                    H_y_c = -(p_y_given_c * p_y_given_c.log()).sum(dim=1)
-
-                    alpha_w = 1.0
-                    w = (p_c + 1e-8).pow(-alpha_w)
-                    w = w / w.sum()
-                    H_y_weighted = (w * H_y_c).sum()
-
-                    beta = 0.5
-                    purity = 1.0 - H_y_c / H_y_c.max().clamp_min(1e-8)
-                    psi = 1.0 / (p_c + 1e-8)
-                    L_size = ((1.0 - purity) * psi).sum()
-                    lambda_purity = 20.0
-
             loss = (
                 ce_term
                 + self.alpha * sample_entropy
                 + gamma_t * marg_gap
                 + delta_t * dead_pen
-                + lambda_purity * H_y_weighted
-                + beta * L_size
             )
 
-            # Temporal Smoothing (Batch-local)
+            # Optional adjacency penalty between neighboring rows in the current batch.
+            # If the loader is shuffled, this is not true temporal smoothing;
+            # it acts only as a weak local consistency / stability regularizer.
             if (step % 2) != 0 and rho > 0.0:
-                # Calculates smoothness between consecutive samples in the batch.
-                # Note: if batch is shuffled, this regularization is noisy/weak, 
-                # but prevents collapse during training.
                 diff = tau[1:] - tau[:-1]
                 smooth = (diff.abs().sum(dim=-1)).mean()
                 loss = loss + rho * smooth
 
-            # --- Optimization ---
+            # Optimization
             self.opt_theta.zero_grad(set_to_none=True)
             loss.backward()
             self.opt_theta.step()
@@ -2840,11 +2813,7 @@ class TurtleTeacher(nn.Module):
                     print(f"[Teacher] step {step:03d} | loss {loss.item():.4f} | CE {ce_term.item():.4f} | "
                           f"E[H(τ)] {sample_entropy.item():.4f} | H(marg) {H_marginal.item():.4f} | "
                           f"mean max_p {mean_max_p:.3f} | dead_pen {dead_pen.item():.3f} | "
-                          f"H(y|c) {lambda_purity * H_y_weighted:.3f} | "
                           f"active≈{active_count.item():.2f}/{K_dim}")
-
-
-
 
 
 @torch.no_grad()
@@ -3244,67 +3213,6 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     feats_all = torch.cat(feats, dim=0)  # CPU [N, n_components]
     return feats_all
 
-@torch.no_grad()
-def extract_supervised_labels_view(
-    dataset: BatchDictDataset,
-    batch_size: int = 8192,
-    num_workers: int = 0,
-    seed: Optional[int] = None,
-) -> torch.Tensor:
-    """
-    Extracts the supervised labels 'y' from the dataset for use as a teacher view.
-    Returns [N, n_behaviors] tensor.
-    """
-    if dataset.supervised_dict is None:
-        raise ValueError("Dataset does not contain supervised labels.")
-
-    shuffle=False
-    if seed is not None:
-        shuffle=True
-    loader = dataset.make_loader(
-        batch_size=batch_size, shuffle=shuffle, drop_last=False,
-        num_workers=num_workers, iterable_for_h5=True,
-        pin_memory=False, block_shuffle=shuffle, permute_within_block=False,
-        prefetch_factor=0 if num_workers == 0 else 2,
-        persistent_workers=(num_workers > 0),
-        seed=seed,
-    )
-    
-    labels_all = []
-    # Loader yields (x, a, [ang], [y], vid). We need to find y.
-    # The structure depends on return_angles and supervised_dict.
-    
-    for batch in loader:
-        # Unpack based on known structure from BatchDictDataset.__getitem__
-        # Basic is (x, a). Optionals follow.
-        # We know y is the last optional before vid.
-        
-        # Easier approach: check tuple length
-        # (x, a, vid) -> 3
-        # (x, a, ang, vid) -> 4
-        # (x, a, y, vid) -> 4
-        # (x, a, ang, y, vid) -> 5
-        
-        has_y = dataset.supervised_dict is not None
-        has_angles = dataset.has_angles
-        
-        if not has_y:
-             raise ValueError("Loader did not yield labels.")
-             
-            # (x, a, ang, y, vid)
-        y_batch = batch[2]
-
-            
-        # y_batch shape might be (B, 1, F) or (B, F). Squeeze if needed.
-        if y_batch.ndim == 3 and y_batch.shape[1] == 1:
-            y_batch = y_batch.squeeze(1)
-        if y_batch.ndim == 1:
-            y_batch = y_batch[:, None]
-            
-        labels_all.append(y_batch.cpu())
-
-    return torch.cat(labels_all, dim=0)
-
 
 def run_turtle_teacher_on_views(views_dict: dict,
                                 n_components: int,
@@ -3317,13 +3225,36 @@ def run_turtle_teacher_on_views(views_dict: dict,
                                 device: Optional[torch.device] = None,
                                 head_temp: float = 0.3,
                                 task_temp: float = 0.3,
-                                batch_size: int = 2048) -> Tuple[Any, torch.Tensor]: # Added batch_size
+                                batch_size: int = 2048) -> Tuple[Any, torch.Tensor]:
+    """
+    Fits a TURTLE teacher on a set of precomputed views and returns the final soft assignments.
+
+    The input views are packed into a TensorDataset, trained in shuffled mini-batches, 
+    and then evaluated sequentially to produce tau_star in dataset order.
+
+    Args:
+        views_dict (dict): Dictionary mapping view names to tensors of shape [N, D]. Entries with value None are ignored.
+        n_components (int): Number of output components or clusters.
+        gamma (float): Strength of the marginal entropy penalty encouraging balanced cluster usage. Defaults to 6.0.
+        alpha_sample_entropy (float): Weight of the per-sample entropy term encouraging confident assignments. Defaults to 1.0.
+        outer_steps (int): Number of outer optimization steps for the task encoder. Defaults to 200.
+        inner_steps (int): Number of inner optimization steps for the per-view heads at each outer step. Defaults to 200.
+        normalize_feats (bool): If True, L2-normalizes features before passing them to the per-view heads. Defaults to True.
+        verbose (bool): If True, prints training progress during fitting. Defaults to True.
+        device (Optional[torch.device]): Device on which the teacher should be trained. Defaults to CPU if None.
+        head_temp (float): Temperature used for the per-view head logits. Defaults to 0.3.
+        task_temp (float): Temperature used for the task encoder logits. Defaults to 0.3.
+        batch_size (int): Batch size used for training and prediction. Defaults to 2048.
+
+    Returns:
+        Tuple[Any, torch.Tensor]:
+        teacher: Fitted TURTLE teacher object.
+        tau_star: Tensor of shape [N, K] containing the final soft assignments in dataset order.
+    """
     
     device = device or torch.device("cpu")
     
-    # 1. Filter active views and keep them on CPU
-    # active_items = [(k, v) for k, v in views_dict.items() if v is not None]
-    # We need to maintain the order carefully to identify the supervised index
+    # Move data to cpu
     keys = []
     tensors = []
     for k, v in views_dict.items():
@@ -3333,20 +3264,13 @@ def run_turtle_teacher_on_views(views_dict: dict,
             
     assert len(tensors) > 0, "No active views found."
     
-    # 2. Determine supervised index based on the list order
-    try:
-        supervised_index = keys.index("supervised_labels")
-    except ValueError:
-        supervised_index = None
-
-    # 3. Create DataLoader (Shuffling is generally good for the teacher)
+    # Create DataLoader (Shuffling is generally good for the teacher)
     dataset = TensorDataset(*tensors)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, 
                         num_workers=0, pin_memory=(device.type == 'cuda'), drop_last=True)
 
-    # 4. Initialize Teacher
-    feature_dims = [t.shape[1] for t in tensors]
-    
+    # Initialize Teacher
+    feature_dims = [t.shape[1] for t in tensors] 
     teacher = TurtleTeacher(
         feature_dims=feature_dims,
         n_components=n_components,
@@ -3359,16 +3283,14 @@ def run_turtle_teacher_on_views(views_dict: dict,
         task_temp=task_temp,
         normalize_feats=normalize_feats,
         lr_theta=1e-3,
-        supervised_index=supervised_index,
-        mlp_hidden=32,
-        mlp_dropout=0.0,
+        device=device.type,
     ).to(device)
 
-    # 5. Fit (Batch-wise)
+    # Fit teacher batch wise
     print(f"--- Fitting TurtleTeacher (batch_size={batch_size}) ---")
     teacher.fit(loader, outer_steps=outer_steps, rho=0.04, verbose=verbose)
     
-    # 6. Predict full tau_star (Sequential pass)
+    # Predict tau star ("ideal" labeling) using the trained teacher
     # We use a sequential loader to ensure output matches dataset order
     print("--- Computing final τ* assignments ---")
     seq_loader = DataLoader(dataset, batch_size=batch_size * 2, shuffle=False, num_workers=0)
@@ -3417,10 +3339,25 @@ def maybe_build_turtle_teacher(
 
 ) -> Tuple[Optional[Any], Optional[torch.Tensor], Dict[str, Any]]:
     """
+    Builds the requested teacher views, fits the TURTLE teacher if enabled, and returns the resulting teacher together with final soft assignments.
+
+    Depending on the configuration, this function can include a latent view, PCA-based node, edge, and angle views, and a supervised label view.
+    All constructed views are returned so they can be reused later.
+
+    Args:
+        teacher_cfg (TurtleTeacherCfg): Configuration controlling which views are used and how the teacher is trained.
+        common_cfg (CommonFitCfg): Common training configuration, including the number of components.
+        train_dataset (BatchDictDataset): Training dataset used to extract or derive teacher views.
+        preprocessed_train (dict): Preprocessed training data used when rebuilding angle-based datasets.
+        data_path (str): Path to the underlying dataset files.
+        device (torch.device): Device on which the teacher should be trained.
+        latent_view (Optional[torch.Tensor]): Optional latent representation computed externally, for example by another model. Required if include_latent_view is enabled.
+
     Returns:
-      teacher: the TURTLE teacher object (or None)
-      tau_star: [N,K] soft assignments (or None)
-      views: dict with computed views + PCA objects (for reuse/refresh/inference)
+        Tuple[Optional[Any], Optional[torch.Tensor], Dict[str, Any]]:
+        teacher: Fitted TURTLE teacher object, or None if the teacher is disabled.
+        tau_star: Final soft assignments of shape [N, K], or None if the teacher is disabled.
+        views: Dictionary containing the constructed views and any fitted PCA objects for reuse.
     """
 
     # Early return in case of no teacher being required
@@ -3436,13 +3373,13 @@ def maybe_build_turtle_teacher(
         "supervised_labels": None,
     }
 
-    # --- Latent view (Mainly for VaDE): include only if explicitly requested ---
+    # Latent view (only for VaDE): include only if explicitly requested
     if teacher_cfg.include_latent_view:
         if latent_view is None:
             raise ValueError("include_latent_view=True but latent_view=None")
         views["z"]=latent_view.to(device)
 
-    # --- Nodes view (PCA pos + PCA spd) ---
+    # Nodes view (PCA pos + PCA spd) ---
     if teacher_cfg.include_nodes_view:
         print("\n--- Building PCA views for teacher (nodes) ---")
         _, pca_pos, _, pca_spd = fit_nodes_pca(
@@ -3455,7 +3392,7 @@ def maybe_build_turtle_teacher(
         views["pca_pos"] = pca_pos
         views["pca_spd"] = pca_spd
 
-    # --- Edges view (distances between nodes) ---
+    # Edges view (distances between nodes)
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for teacher (edges) ---")
         pca_edges = extract_pca_edges_view(
@@ -3463,7 +3400,7 @@ def maybe_build_turtle_teacher(
         )
         views["pca_edges"] = pca_edges
 
-    # --- Angles view (standardized to fit_angles_pca everywhere) ---
+    # Angles view (standardized to fit_angles_pca everywhere)
     if teacher_cfg.include_angles_view:
         print("\n--- Building PCA views for teacher (angles) ---")
         angles_train_dataset = BatchDictDataset(
@@ -3474,14 +3411,6 @@ def maybe_build_turtle_teacher(
             angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=8192, num_workers=0 
         )
         views["pca_angles"] = pca_angles_train
-
-    # --- Supervised view (raw, no thresholding) ---
-    if teacher_cfg.include_supervised_view:
-        print("\n--- Adding Supervised Labels view for teacher ---")
-        if train_dataset.supervised_dict is None:
-            raise ValueError("include_supervised_view=True but dataset has no supervised labels.")
-        supervised_labels = extract_supervised_labels_view(train_dataset, batch_size=8192, num_workers=0)
-        views["supervised_labels"] = supervised_labels
 
     print("\n--- Running TURTLE teacher on views ---")
     teacher, tau_star = run_turtle_teacher_on_views(
@@ -5548,6 +5477,7 @@ def fit_VADE(
     # cached views for refresh
     pca_pos = pca_spd = pca_edges = pca_angles_train = supervised_labels = None
 
+    log_summary=_init_log_summary()
     if teacher_cfg.use_turtle_teacher:
         print("\n--- Extracting latents for teacher ---")
         z_all = extract_latents(
@@ -5636,7 +5566,6 @@ def fit_VADE(
 
     print(f"\n--- Training for {common_cfg.epochs} epochs ---")
     print("NOTE: some losses are intentionally defined negative and function as rewards.")
-    log_summary=_init_log_summary()
     for epoch in range(common_cfg.epochs):
                
         apply_decoder_schedule(model, epoch)
