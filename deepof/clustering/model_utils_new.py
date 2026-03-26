@@ -144,6 +144,15 @@ class VaDECfg:
     nonempty_p: float = 2.0
     nonempty_floor_percent: float = 0.05
 
+    kmeans_loss_pretrain: float = 1.0
+    repel_weight_pretrain: float = 0.5
+    repel_length_scale_pretrain: float = 0.5
+    nonempty_weight_pretrain: float = 2e-2
+    nonempty_p_pretrain: float = 2.0
+    nonempty_floor_percent_pretrain: float = 0.05
+
+
+
 
 @dataclass
 class ContrastiveCfg:
@@ -330,7 +339,7 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
-def nce_loss_pt(
+def nce_loss_pt_old(
     history: torch.Tensor,
     future: torch.Tensor,
     similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
@@ -356,7 +365,7 @@ def nce_loss_pt(
     mean_neg = neg.mean()
     return loss, mean_sim, mean_neg
 
-def nce_loss_pt_new(history, future, similarity, temperature=0.1):
+def nce_loss_pt(history, future, similarity, temperature=0.1):
     """
     Standard NCE loss 
     """

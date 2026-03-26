@@ -700,34 +700,6 @@ class TCNDecoderPT(nn.Module):
         return self.prob_decoder(hidden_seq, validity_mask)
     
 
-# --------- NaN debug helpers (shared) ---------
-def _dbg_report_nan(name: str, t: torch.Tensor, sample_elems: int = 8):
-    if t is None or not torch.is_floating_point(t):
-        return
-    with torch.no_grad():
-        nan_mask = torch.isnan(t)
-        if not nan_mask.any():
-            return
-        device = str(t.device)
-        dtype = str(t.dtype)
-        shape = tuple(t.shape)
-        num_nan = int(nan_mask.sum().item())
-        numel = t.numel()
-        inf_mask = torch.isinf(t)
-        num_inf = int(inf_mask.sum().item())
-        finite_mask = torch.isfinite(t)
-        finite_count = int(finite_mask.sum().item())
-        stats = ""
-        if finite_count > 0:
-            finite_vals = t[finite_mask]
-            try:
-                stats = f"min={finite_vals.min().item():.4e}, max={finite_vals.max().item():.4e}, mean={finite_vals.float().mean().item():.4e}"
-            except Exception:
-                stats = "min/max/mean unavailable"
-        idx = torch.nonzero(nan_mask, as_tuple=False)
-        idx_sample = idx[:sample_elems].cpu().numpy() if idx.numel() > 0 else []
-        print(f"[NaN DETECTED] {name}: shape={shape}, dtype={dtype}, device={device}, NaNs={num_nan}/{numel}, Infs={num_inf}, {stats}, nan_idx_sample={idx_sample}")
-
 def _has_nonfinite(t: torch.Tensor) -> bool:
     if t is None or not torch.is_floating_point(t):
         return False
@@ -740,25 +712,17 @@ def _safe_pointwise_conv1d(conv1x1: nn.Conv1d, x_bct: torch.Tensor, out_dtype: t
     Also sanitize inputs if non-finite values are detected (no-op otherwise).
     x_bct: (B, C_in, T)
     """
-    _dbg_report_nan(f"{name_prefix}.input_bct", x_bct)
     # Sanitize only if needed
     if _has_nonfinite(x_bct):
         with torch.no_grad():
             print(f"[SANITIZE] Non-finite detected at {name_prefix}.input_bct -> applying nan_to_num")
         x_bct = torch.nan_to_num(x_bct, nan=0.0, posinf=1e4, neginf=-1e4)
 
-    # Check weights/bias before use
-    _dbg_report_nan(f"{name_prefix}.weight", conv1x1.weight)
-    if conv1x1.bias is not None:
-        _dbg_report_nan(f"{name_prefix}.bias", conv1x1.bias)
-
     # Compute in float32 (AMP off) to avoid fp16 overflows
     with torch.amp.autocast(device_type=x_bct.device.type, enabled=False):
         y = conv1x1(x_bct.float())
-    _dbg_report_nan(f"{name_prefix}.out_fp32", y)
 
     y = y.to(out_dtype)
-    _dbg_report_nan(f"{name_prefix}.out_cast", y)
     return y
 # ----------------------------------------------
 
@@ -1247,25 +1211,17 @@ class TransformerDecoderLayerPT(nn.Module):
         padding_mask_2d: torch.Tensor,     # (B, Tk) True=masked-out
         training: bool = False,
     ):
-        _dbg_report_nan("Decoder.DecLayer.input_x", x)
-        _dbg_report_nan("Decoder.DecLayer.input_memory", memory)
         # Self-attention
         attn1, w1 = self.mha1(query=x, key=x, value=x, attn_mask=look_ahead_mask_3d, return_attention_scores=True)
-        _dbg_report_nan("Decoder.DecLayer.attn1_out", attn1)
         x = self.norm1(x + self.dropout1(attn1))
-        _dbg_report_nan("Decoder.DecLayer.after_norm1", x)
 
         # Cross-attention
         attn2, w2 = self.mha2(query=x, key=memory, value=memory, attn_mask=padding_mask_2d, return_attention_scores=True)
-        _dbg_report_nan("Decoder.DecLayer.attn2_out", attn2)
         x = self.norm2(x + self.dropout2(attn2))
-        _dbg_report_nan("Decoder.DecLayer.after_norm2", x)
 
         # FFN
         ffn_out = self.ffn2(self.act(self.ffn1(x)))
-        _dbg_report_nan("Decoder.DecLayer.ffn_out", ffn_out)
         x = self.norm3(x + self.dropout3(ffn_out))
-        _dbg_report_nan("Decoder.DecLayer.after_norm3", x)
         return x, w1, w2
 
 
@@ -1298,31 +1254,24 @@ class DecoderCorePT(nn.Module):
         training: bool = False,
     ):
         B, T, _ = x.shape
-        _dbg_report_nan("Decoder.Core.input_x", x)
-        _dbg_report_nan("Decoder.Core.input_memory", memory)
 
         # FIX: safe 1x1 conv in fp32 with optional sanitization
         x_bct = x.transpose(1, 2)  # (B, C_in, T)
         y_bct = _safe_pointwise_conv1d(self.embed, x_bct, out_dtype=x.dtype, name_prefix="Decoder.Core.embed")
         y = y_bct.transpose(1, 2)
-        _dbg_report_nan("Decoder.Core.after_embed", y)
 
         y = torch.relu(y)
-        _dbg_report_nan("Decoder.Core.after_relu", y)
         y = y * (self.model_dim ** 0.5)
-        _dbg_report_nan("Decoder.Core.after_scale", y)
 
         if T > self.pos_encoding.size(1):
             self.pos_encoding = sinusoidal_positional_encoding(T, self.model_dim, device=x.device).to(self.pos_encoding.dtype)
         y = y + self.pos_encoding[:, :T, :].to(y.dtype)
-        _dbg_report_nan("Decoder.Core.after_posenc", y)
         y = self.dropout(y)
 
         attention_weights = {}
         out = y
         for i, layer in enumerate(self.layers, start=1):
             out, w1, w2 = layer(out, memory, look_ahead_mask_3d, padding_mask_2d, training=training)
-            _dbg_report_nan(f"Decoder.Core.layer[{i}].out", out)
             attention_weights[f"decoder_layer{i}_block1"] = w1
             attention_weights[f"decoder_layer{i}_block2"] = w2
 
@@ -2406,7 +2355,6 @@ def move_to(x, device):
 def _clip01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
-
 @torch.no_grad()
 def _get_q_vade(
     model: nn.Module,
@@ -2673,9 +2621,6 @@ def _compute_diagnostics(
         model.train()
 
     return out
-
-
-
 
 
 ################
@@ -4096,10 +4041,9 @@ class VaDELossTFExact(nn.Module):
         # KMeans loss
         if not torch.is_tensor(kmeans_loss):
             kmeans_loss = torch.as_tensor(kmeans_loss, device=device, dtype=rec_nll.dtype)
-        if not self.pretrain_mode and q is not None:
+        if q is not None:
             kmeans_loss = (self.kmeans_loss_weight * kmeans_loss).to(rec_nll.dtype)
-        elif self.pretrain_mode and q is not None:
-            kmeans_loss = (1.0 * kmeans_loss).to(rec_nll.dtype)
+
 
         # Total loss
         total = (
@@ -4910,6 +4854,13 @@ def embedding_model_fittingPT(
     teacher_head_temp: float = 0.5,
     teacher_task_temp: float = 0.5,
     teacher_alpha_sample_entropy: float = 2.0,
+    # Vade pretrain
+    kmeans_loss_pretrain: float = 1.0,
+    repel_weight_pretrain: float = 0.5,
+    repel_length_scale_pretrain: float = 0.5,
+    nonempty_weight_pretrain: float = 2e-2,
+    nonempty_p_pretrain: float = 2.0,
+    nonempty_floor_percent_pretrain: float = 0.05,
     # KL cap
     kl_max_weight: float = 1,
     kl_warmup: int = 5,
@@ -5060,6 +5011,13 @@ def embedding_model_fittingPT(
         nonempty_weight=nonempty_weight,
         nonempty_floor_percent=nonempty_floor_percent,
         nonempty_p=nonempty_p,
+
+        kmeans_loss_pretrain = kmeans_loss_pretrain,
+        repel_weight_pretrain = repel_weight_pretrain,
+        repel_length_scale_pretrain = repel_length_scale_pretrain,
+        nonempty_weight_pretrain = nonempty_weight_pretrain,
+        nonempty_p_pretrain = nonempty_p_pretrain,
+        nonempty_floor_percent_pretrain = nonempty_floor_percent_pretrain,
     )
 
     contrastive_cfg = ContrastiveCfg(
@@ -5279,8 +5237,8 @@ def fit_VQVAE(
     best_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
-    score_warmup = 5
-    score_tol = 1e-6
+    score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
+    score_tol = 0.01
     log_summary=_init_log_summary()
 
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
@@ -5381,13 +5339,13 @@ def fit_VQVAE(
         # Save best model based on model balance and certainty score
         improved_score = (
             apply_distill and math.isfinite(score_value) and
-            (epoch >= score_warmup) and (
+            (
                 (score_value > best_score + score_tol) or
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
             )
         )
 
-        if improved_score:
+        if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = v_total
             if common_cfg.save_weights:
@@ -5514,8 +5472,8 @@ def fit_contrastive(
     best_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
-    score_warmup = 5
-    score_tol = 1e-6
+    score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
+    score_tol = 0.01
     log_summary=_init_log_summary()
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
@@ -5625,13 +5583,13 @@ def fit_contrastive(
         # Save best model based on model balance and certainty score
         improved_score = (
             apply_distill and math.isfinite(score_value) and
-            (epoch >= score_warmup) and (
+            (
                 (score_value > best_score + score_tol) or
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
             )
         )
 
-        if improved_score:
+        if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = v_total
             if common_cfg.save_weights:
@@ -5705,7 +5663,7 @@ def fit_VADE(
         encoder_type=common_cfg.encoder_type,
         use_gnn=True,
         interaction_regularization=common_cfg.interaction_regularization,
-        kmeans_loss=1.0,
+        kmeans_loss=vade_cfg.kmeans_loss_pretrain,
         device=device,
     )
     if torch.cuda.device_count() > 1:
@@ -5749,17 +5707,17 @@ def fit_VADE(
         distill_class_reweight_beta=teacher_cfg.distill_class_reweight_beta,
         distill_class_reweight_cap=teacher_cfg.distill_class_reweight_cap,
         kmeans_loss_weight=common_cfg.kmeans_loss,
-        nonempty_weight=vade_cfg.nonempty_weight,
+        nonempty_weight=vade_cfg.nonempty_weight_pretrain,
     ).to(device)
     if hasattr(criterion, "gmm_logvar_clamp"):
         criterion.gmm_logvar_clamp = (-8.0, 8.0)
     criterion.temporal_cohesion_weight = vade_cfg.temporal_cohesion_weight
     criterion.reg_scatter_weight = vade_cfg.reg_scatter_weight
     criterion.reg_scatter_beta = vade_cfg.reg_scatter_beta
-    criterion.repel_weight = vade_cfg.repel_weight
-    criterion.repel_length_scale = vade_cfg.repel_length_scale
-    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent / common_cfg.n_components)
-    criterion.nonempty_p = vade_cfg.nonempty_p
+    criterion.repel_weight = vade_cfg.repel_weight_pretrain
+    criterion.repel_length_scale = vade_cfg.repel_length_scale_pretrain
+    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent_pretrain / common_cfg.n_components)
+    criterion.nonempty_p = vade_cfg.nonempty_p_pretrain
 
     # Pretraining
     print("\n--- Pretraining (reconstruction and setting up the latent space) ---")
@@ -5782,6 +5740,13 @@ def fit_VADE(
         )
         if writer:
             writer.add_scalar("Pretrain/total_loss", pre_logs["total_loss"], ep)
+
+    # Set loss parameters to main training parameter values
+    criterion.repel_weight = vade_cfg.repel_weight
+    criterion.repel_length_scale = vade_cfg.repel_length_scale
+    criterion.nonempty_weight = vade_cfg.nonempty_weight
+    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent / common_cfg.n_components)
+    criterion.nonempty_p = vade_cfg.nonempty_p
 
     # Finish pretraining, reset KL schedule
     unwrap_dp(model).set_pretrain_mode(False)
@@ -5885,11 +5850,10 @@ def fit_VADE(
     best_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
-    score_warmup = 5
-    score_tol = 1e-6
+    score_tol = 0.01
+    score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
     epochs_no_improve = 0
     early_stop_patience = 50
-    early_stop_min_delta = 0.0
     early_stop_warmup = max(5, vade_cfg.freeze_gmm_epochs)
 
     # Epoch dependent weights
@@ -6008,12 +5972,12 @@ def fit_VADE(
             writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
-        improved_val = (val_total < best_val - early_stop_min_delta)
+        improved_val = (val_total < best_val)
 
         improved_score = (
-            (epoch >= score_warmup) and (
+            (
                 (score_value > best_score + score_tol) or
-                (abs(score_value - best_score) <= score_tol and val_total < best_score_val - early_stop_min_delta)
+                (abs(score_value - best_score) <= score_tol and val_total < best_score_val)
             )
         )
 
@@ -6052,7 +6016,7 @@ def fit_VADE(
 
 
         # Save best model based on model balance and certainty score
-        if improved_score:
+        if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = val_total
             if common_cfg.save_weights:
