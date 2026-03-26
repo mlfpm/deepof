@@ -14,6 +14,7 @@ Models were translated from original tensorflow implementations to Pytorch using
 from typing import Any, NewType, Iterable, Tuple, Dict, Optional, Mapping, List, Callable
 from types import SimpleNamespace
 from dataclasses import dataclass
+from functools import partial
 
 import os
 import numpy as np
@@ -2402,93 +2403,280 @@ def move_to(x, device):
         return x.to(device, non_blocking=True)
     return x
 
+def _clip01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+@torch.no_grad()
+def _get_q_vade(
+    model: nn.Module,
+    x: torch.Tensor,
+    a: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Extracts soft cluster assignments q(c|z) from VaDE.
+
+    Assumes model(x, a, return_gmm_params=True) returns a tuple whose third
+    element is the cluster responsibility matrix of shape [B, K].
+    """
+    outputs = model(x, a, return_gmm_params=True)
+    q = outputs[2]
+
+    if not torch.is_tensor(q) or q.ndim != 2:
+        raise RuntimeError(
+            f"Expected VaDE responsibilities at outputs[2] with shape [B, K], got {type(q)}"
+        )
+
+    q = q.float().clamp_min(1e-8)
+    q = q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+    return q
+
+
+@torch.no_grad()
+def _get_q_vqvae(
+    model: nn.Module,
+    x: torch.Tensor,
+    a: torch.Tensor,
+    *,
+    distill_head: nn.Module,
+) -> torch.Tensor:
+    """
+    Extracts soft cluster assignments for VQVAE by applying the distillation head
+    to the pre-quantization encoder output.
+    """
+    _, _, _, _, encoder_output, _ = model(
+        x, a, return_losses=True, return_all_outputs=True
+    )
+
+    logits = distill_head(encoder_output.float())
+    q = F.softmax(logits, dim=-1).clamp_min(1e-8)
+    q = q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+    return q
+
+
+@torch.no_grad()
+def _get_q_contrastive(
+    model: nn.Module,
+    x_full: torch.Tensor,
+    a_full: torch.Tensor,
+    *,
+    distill_head: nn.Module,
+    edge_index: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Extracts soft cluster assignments for the contrastive model by reproducing
+    the main-window embedding path used for distillation during training.
+    """
+    del a_full  # Not used; edges are recomputed from x_full exactly as in training.
+
+    a_full = _recompute_edges(x_full, edge_index)
+
+    half_len = x_full.shape[1] // 2
+    starts = torch.full(
+        (x_full.shape[0],),
+        fill_value=half_len // 2,
+        device=x_full.device,
+        dtype=torch.long,
+    )
+
+    x = deepof.clustering.model_utils_new._slice_time_per_sample(x_full, starts, half_len)
+    a = deepof.clustering.model_utils_new._slice_time_per_sample(a_full, starts, half_len)
+
+    z = model(x, a)
+    z = F.normalize(z, dim=1)
+
+    logits = distill_head(z.float())
+    q = F.softmax(logits, dim=-1).clamp_min(1e-8)
+    q = q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+    return q
+
+
+@torch.no_grad()
+def _compute_vade_specific_diagnostics(model: nn.Module) -> Dict[str, float]:
+    """
+    Computes VaDE-specific diagnostics related to the latent GMM.
+
+    Returns an empty dict for models without a latent_space GMM.
+    """
+    base = unwrap_dp(model)
+    latent_space = getattr(base, "latent_space", None)
+    if latent_space is None:
+        return {}
+
+    out: Dict[str, float] = {}
+
+    if hasattr(latent_space, "gmm_log_vars"):
+        gmm_log_vars = latent_space.gmm_log_vars.detach()
+        out["diag/gmm_logvar_min"] = float(gmm_log_vars.min().item())
+        out["diag/gmm_logvar_max"] = float(gmm_log_vars.max().item())
+
+    if hasattr(latent_space, "prior"):
+        prior = latent_space.prior
+        prior = prior.detach() if torch.is_tensor(prior) else torch.as_tensor(prior)
+        prior = prior.clamp_min(1e-9)
+        out["diag/prior_entropy"] = float(-(prior * prior.log()).sum().item())
+
+    return out
+
+
 @torch.no_grad()
 def _compute_diagnostics(
     model: nn.Module,
     dataloader: DataLoader,
-    criterion: Optional[nn.Module],
+    q_fn: Callable[[nn.Module, torch.Tensor, torch.Tensor], torch.Tensor],
     device: torch.device,
+    n_components: int,
+    tau_star: Optional[torch.Tensor] = None,
+    distill_sharpen_T: float = 0.5,
+    distill_conf_weight: bool = False,
+    distill_conf_thresh: float = 0.55,
     max_batches: int = 4,
+    extra_stats_fn: Optional[Callable[[nn.Module], Dict[str, float]]] = None,
 ) -> Dict[str, float]:
     """
-    Fast diagnostics:
-      - mean entropy of q(c|z) over samples
-      - entropy of marginal q̄(c) across the inspected set
-      - GMM logvar min/max and prior entropy
-      - teacher τ*: marginal entropy, mean confidence, mean distillation weight
-    """
-    base = unwrap_dp(model)
-    base.eval()
+    Computes clustering diagnostics and alignment score from model soft assignments.
 
-    # q(c|z) stats on a few validation batches
+    The function is model-agnostic: it only requires a q_fn that extracts soft
+    assignments q of shape [B, K] from a batch.
+
+    Args:
+    model (nn.Module): Model to evaluate.
+    dataloader (DataLoader): Validation or analysis loader.
+    q_fn (Callable): Function that maps (model, x, a) -> q of shape [B, K].
+    device (torch.device): Device for inference.
+    n_components (int): Number of clusters/components K.
+    tau_star (Optional[torch.Tensor]): Teacher assignments of shape [N, K]. If provided,
+        the balance term is based on KL(q_marginal || tau_marginal). If None, the balance
+        term falls back to normalized marginal entropy of q.
+    distill_sharpen_T (float): Temperature used when computing teacher-confidence diagnostics.
+    distill_conf_weight (bool): Whether teacher confidence weighting is enabled.
+    distill_conf_thresh (float): Threshold used for teacher confidence weighting diagnostics.
+    max_batches (int): Maximum number of dataloader batches to inspect.
+    extra_stats_fn (Optional[Callable]): Optional model-specific diagnostics helper.
+
+    Returns:
+    Dict[str, float]: Diagnostics dictionary including conf_norm, bal_norm, and alignment_score.
+    """
+    if n_components < 2:
+        raise ValueError(f"n_components must be >= 2, got {n_components}")
+
+    was_training = model.training
+    model.eval()
+
     total_samples = 0
     sum_ent = 0.0
+    sum_max_p = 0.0
     sum_q = None
-    for i, batch in enumerate(dataloader):
-        if i >= max_batches:
+
+    for batch_idx, batch in enumerate(dataloader):
+        if batch_idx >= max_batches:
             break
-        x, a, *rest = move_to(batch, device)
-        outputs = base(x, a, return_gmm_params=True)
-        q = outputs[2].float().clamp_min(1e-8)  # (B,C)
-        ent = -(q * q.log()).sum(dim=-1)        # (B,)
+
+        batch = move_to(batch, device)
+        x, a = batch[0], batch[1]
+
+        q = q_fn(model, x, a)
+
+        if not torch.is_tensor(q) or q.ndim != 2 or q.size(1) != n_components:
+            raise RuntimeError(
+                f"q_fn must return a [B, {n_components}] tensor, got {tuple(q.shape)}"
+            )
+
+        q = q.float().clamp_min(1e-8)
+        q = q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+
+        ent = -(q * q.log()).sum(dim=-1)  # [B]
         sum_ent += float(ent.sum().item())
+        sum_max_p += float(q.max(dim=-1).values.sum().item())
         total_samples += q.size(0)
-        sum_q = q.sum(dim=0) if sum_q is None else (sum_q + q.sum(dim=0))
+
+        q_sum = q.sum(dim=0)  # [K]
+        sum_q = q_sum if sum_q is None else (sum_q + q_sum)
+
+    out: Dict[str, float] = {
+        "diag/q_mean_entropy": float("nan"),
+        "diag/q_marginal_entropy": float("nan"),
+        "diag/q_mean_max_prob": float("nan"),
+        "diag/teacher_marginal_entropy": float("nan"),
+        "diag/teacher_conf_mean": float("nan"),
+        "diag/teacher_weight_mean": float("nan"),
+        "diag/kl_marg_q_to_tau": float("nan"),
+        "conf_norm": float("nan"),
+        "bal_norm": float("nan"),
+        "alignment_score": float("nan"),
+    }
 
     if total_samples > 0:
-        q_marginal = (sum_q / total_samples).clamp_min(1e-9)   # (C,) torch
+        q_marginal = (sum_q / total_samples).clamp_min(1e-9)
         mean_q_entropy = sum_ent / total_samples
         q_marginal_entropy = float(-(q_marginal * q_marginal.log()).sum().item())
-    else:
-        q_marginal = None
-        mean_q_entropy = float("nan")
-        q_marginal_entropy = float("nan")
+        mean_q_max_prob = sum_max_p / total_samples
 
-    # GMM stats
-    gmm_log_vars = unwrap_dp(model).latent_space.gmm_log_vars.detach()
-    logvar_min = float(gmm_log_vars.min().item())
-    logvar_max = float(gmm_log_vars.max().item())
+        logK = math.log(float(n_components))
+        conf_norm = _clip01(1.0 - mean_q_entropy / max(1e-9, logK))
 
-    prior = unwrap_dp(model).latent_space.prior
-    prior = prior.detach() if torch.is_tensor(prior) else torch.as_tensor(prior)
-    prior = prior.clamp_min(1e-9)
-    prior_entropy = float(-(prior * prior.log()).sum().item())
+        out["diag/q_mean_entropy"] = mean_q_entropy
+        out["diag/q_marginal_entropy"] = q_marginal_entropy
+        out["diag/q_mean_max_prob"] = mean_q_max_prob
 
-    # Teacher τ* stats
-    teacher_marginal_entropy, teacher_conf_mean, teacher_w_mean = float("nan"), float("nan"), float("nan")
-    kl_marg_q_to_tau = float("nan")  # NEW
-    if criterion is not None and getattr(criterion, "tau_star", None) is not None:
-        tau = criterion.tau_star.detach()
-        T = float(getattr(criterion, "distill_sharpen_T", 0.5))
-        tau_sharp = torch.softmax((tau.clamp_min(1e-8)).log() / T, dim=-1) if T > 0.0 else tau
-        conf = tau_sharp.max(dim=1).values
-        teacher_conf_mean = float(conf.mean().item())
-        if bool(getattr(criterion, "distill_conf_weight", False)):
-            thr = float(getattr(criterion, "distill_conf_thresh", 0.55))
-            w = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(min=0.0, max=1.0)
-            teacher_w_mean = float(w.mean().item())
+        if tau_star is not None:
+            tau = tau_star.detach().to(device=q_marginal.device, dtype=q_marginal.dtype)
+            if tau.ndim != 2 or tau.size(1) != n_components:
+                raise RuntimeError(
+                    f"tau_star must have shape [N, {n_components}], got {tuple(tau.shape)}"
+                )
+
+            tau_marg = tau.mean(dim=0).clamp_min(1e-9)
+            teacher_marginal_entropy = float(-(tau_marg * tau_marg.log()).sum().item())
+
+            kl_marg_q_to_tau = float(
+                (q_marginal * (q_marginal.log() - tau_marg.log())).sum().item()
+            )
+            kl_marg_q_to_tau = max(0.0, kl_marg_q_to_tau)
+
+            bal_norm = _clip01(1.0 - kl_marg_q_to_tau / max(1e-9, logK))
+
+            T = float(distill_sharpen_T)
+            if T > 0.0:
+                tau_sharp = torch.softmax(tau.clamp_min(1e-8).log() / T, dim=-1)
+            else:
+                tau_sharp = tau
+
+            conf = tau_sharp.max(dim=1).values
+            teacher_conf_mean = float(conf.mean().item())
+
+            if distill_conf_weight:
+                thr = float(distill_conf_thresh)
+                w = ((conf - thr) / max(1e-6, (1.0 - thr))).clamp(min=0.0, max=1.0)
+                teacher_weight_mean = float(w.mean().item())
+            else:
+                teacher_weight_mean = 1.0
+
+            out["diag/teacher_marginal_entropy"] = teacher_marginal_entropy
+            out["diag/teacher_conf_mean"] = teacher_conf_mean
+            out["diag/teacher_weight_mean"] = teacher_weight_mean
+            out["diag/kl_marg_q_to_tau"] = kl_marg_q_to_tau
+
         else:
-            teacher_w_mean = 1.0
+            bal_norm = _clip01(q_marginal_entropy / max(1e-9, logK))
 
-        tau_marg = tau.mean(dim=0).clamp_min(1e-9)  # (C,) torch
-        teacher_marginal_entropy = float(-(tau_marg * tau_marg.log()).sum().item())
+        alignment_score = conf_norm * bal_norm
 
-        # NEW: KL(student marginal || teacher marginal)
-        if q_marginal is not None:
-            kl = (q_marginal * (q_marginal.log() - tau_marg.log())).sum().item()
-            kl_marg_q_to_tau = float(max(0.0, kl))
+        out["conf_norm"] = conf_norm
+        out["bal_norm"] = bal_norm
+        out["alignment_score"] = alignment_score
 
-    return {
-        "diag/q_mean_entropy": mean_q_entropy,
-        "diag/q_marginal_entropy": q_marginal_entropy,
-        "diag/gmm_logvar_min": logvar_min,
-        "diag/gmm_logvar_max": logvar_max,
-        "diag/prior_entropy": prior_entropy,
-        "diag/teacher_marginal_entropy": teacher_marginal_entropy,
-        "diag/teacher_conf_mean": teacher_conf_mean,
-        "diag/teacher_weight_mean": teacher_w_mean,
-        "diag/kl_marg_q_to_tau": kl_marg_q_to_tau, 
-    }
+    if extra_stats_fn is not None:
+        out.update(extra_stats_fn(model))
+
+    if was_training:
+        model.train()
+
+    return out
+
+
+
+
 
 ################
 # Turtle teacher
@@ -4055,10 +4243,9 @@ def _print_losses(model_name: str,
 
     # Alignment metrics
     footer = f"  Train total={train_logs.get('total_loss', np.nan):.4f} | Val total={val_logs.get('total_loss', np.nan):.4f}"
-    if model_name == "vade":
-        footer += (f" | Align: conf={train_logs.get('conf_norm', np.nan):.3f} | " +
-            f"bal={train_logs.get('bal_norm', np.nan):.3f} | " +
-            f"score={train_logs.get('alignment_score', np.nan):.3f}")
+    footer += (f" | Align: conf={val_logs.get('conf_norm', np.nan):.3f} | " +
+        f"bal={val_logs.get('bal_norm', np.nan):.3f} | " +
+        f"score={val_logs.get('alignment_score', np.nan):.3f}")
     print(footer)
         
 
@@ -4426,12 +4613,17 @@ def step_vqvae_distill(
     distill_loss = torch.tensor(0.0, device=device, dtype=enc_rec_loss.dtype)
 
     # Distillation on z_e
-    if apply_distill and hasattr(ctx, "distill_head") and (getattr(ctx, "lambda_distill", 0.0) > 0.0):
-        z_e = encoder_output  # pre-quantization latent
-        logits = ctx.distill_head(z_e)  # [B, C]
+    lambda_distill = 0.0
+    if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+        lambda_distill = float(ctx.lambda_scheduler.get_weight())
 
-        idx = batch[-2].to(device).long() 
-        tau_b = ctx.tau_star[idx]  # (B, C)
+    if apply_distill and hasattr(ctx, "distill_head") and lambda_distill > 0.0:
+        z_e = encoder_output
+        logits = ctx.distill_head(z_e)
+
+        idx = idx.to(device).long()
+        tau_b = ctx.tau_star[idx]
+
         eps = 1e-8
         T = float(getattr(ctx, "distill_sharpen_T", 0.5))
         if T > 0.0:
@@ -4446,10 +4638,7 @@ def step_vqvae_distill(
             distill_loss = (w * per_sample).mean()
         else:
             distill_loss = _soft_ce_logits(logits, tau_b, reduction="mean")
-        lambda_distill = 0.0
-        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
-            lambda_distill = float(ctx.lambda_scheduler.get_weight())
-        
+
         distill_loss = lambda_distill * distill_loss
         total = base_total + distill_loss
     else:
@@ -4584,12 +4773,17 @@ def step_contrastive_distill(
     distill_loss = torch.tensor(0.0, device=device, dtype=loss.dtype)
 
     # Distillation on the main window embedding
-    if apply_distill and hasattr(ctx, "distill_head") and (getattr(ctx, "lambda_distill", 0.0) > 0.0):
-        z_main = z  # [B, D]
-        logits = ctx.distill_head(z_main)  # [B, C]
+    lambda_distill = 0.0
+    if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
+        lambda_distill = float(ctx.lambda_scheduler.get_weight())
 
-        idx = batch[-2].to(device).long() 
-        tau_b = ctx.tau_star[idx]  # (B, C)
+    if apply_distill and hasattr(ctx, "distill_head") and lambda_distill > 0.0:
+        z_main = z
+        logits = ctx.distill_head(z_main)
+
+        idx = idx.to(device).long()
+        tau_b = ctx.tau_star[idx]
+
         eps = 1e-8
         T = float(getattr(ctx, "distill_sharpen_T", 0.5))
         if T > 0.0:
@@ -4604,9 +4798,6 @@ def step_contrastive_distill(
             distill_loss = (w * per_sample).mean()
         else:
             distill_loss = _soft_ce_logits(logits, tau_b, reduction="mean")
-        lambda_distill = 0.0
-        if hasattr(ctx, "lambda_scheduler") and ctx.lambda_scheduler is not None:
-            lambda_distill = float(ctx.lambda_scheduler.get_weight())
 
         distill_loss = lambda_distill * distill_loss
         total = loss + distill_loss
@@ -5066,12 +5257,16 @@ def fit_VQVAE(
 
     # Set distillation weights
     apply_distill = (tau_star is not None)
-    lambda_scheduler=None
-    if not apply_distill:
+    lambda_scheduler = None
+    if apply_distill:
         lambda_scheduler = Dynamic_weight_manager(
-            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-            warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
-            cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+            n_batches_per_epoch,
+            mode=common_cfg.kl_annealing_mode,
+            warmup_epochs=0,
+            at_max_epochs=teacher_cfg.lambda_decay_start,
+            max_weight=teacher_cfg.lambda_distill,
+            cooldown_epochs=teacher_cfg.lambda_cooldown,
+            end_weight=teacher_cfg.lambda_end_weight,
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
@@ -5082,7 +5277,10 @@ def fit_VQVAE(
     _, best_path_val, best_path_score, _ = _ckpt_paths("vqvae", common_cfg=common_cfg)
     best_val = float("inf")
     best_score = -float("inf")
-    score_value = 0
+    best_score_val = float("inf")
+    score_value = float("nan")
+    score_warmup = 5
+    score_tol = 1e-6
     log_summary=_init_log_summary()
 
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
@@ -5111,16 +5309,43 @@ def fit_VQVAE(
             ctx=SimpleNamespace(apply_distill=False), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
-        # To do: calculate score
+        score_value = float("nan")
+
+        if apply_distill:
+            diag = _compute_diagnostics(
+                model=model,
+                dataloader=val_loader,
+                q_fn=partial(_get_q_vqvae, distill_head=distill_head),
+                device=device,
+                n_components=common_cfg.n_components,
+                tau_star=tau_star,
+                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+                max_batches=common_cfg.diag_max_batches,
+            )
+            val_logs.update(diag)
+            score_value = float(val_logs["alignment_score"])
+        else:
+            val_logs["alignment_score"] = float("nan")
+            val_logs["conf_norm"] = float("nan")
+            val_logs["bal_norm"] = float("nan")
 
         # Print training progress            
         log_summary = _print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
         if writer:
-            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
-            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+            for k, v in train_logs.items():
+                writer.add_scalar(f"Train/{k}", v, epoch)
+            for k, v in val_logs.items():
+                writer.add_scalar(f"Val/{k}", v, epoch)
             writer.add_scalar("Distill/lambda", lam, epoch)
+
+            if math.isfinite(score_value):
+                writer.add_scalar("Val/alignment_score", score_value, epoch)
+                writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
+                writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
 
         # Save best model based on total validation loss
         if v_total < best_val:
@@ -5154,8 +5379,17 @@ def fit_VQVAE(
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
         # Save best model based on model balance and certainty score
-        if score_value > best_score:
+        improved_score = (
+            apply_distill and math.isfinite(score_value) and
+            (epoch >= score_warmup) and (
+                (score_value > best_score + score_tol) or
+                (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
+            )
+        )
+
+        if improved_score:
             best_score = score_value
+            best_score_val = v_total
             if common_cfg.save_weights:
                 save_model_info(
                     best_path_score,
@@ -5258,12 +5492,16 @@ def fit_contrastive(
 
     # Set distillation weights
     apply_distill = (tau_star is not None)
-    lambda_scheduler=None
-    if not apply_distill:
+    lambda_scheduler = None
+    if apply_distill:
         lambda_scheduler = Dynamic_weight_manager(
-            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-            warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
-            cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
+            n_batches_per_epoch,
+            mode=common_cfg.kl_annealing_mode,
+            warmup_epochs=0,
+            at_max_epochs=teacher_cfg.lambda_decay_start,
+            max_weight=teacher_cfg.lambda_distill,
+            cooldown_epochs=teacher_cfg.lambda_cooldown,
+            end_weight=teacher_cfg.lambda_end_weight,
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
@@ -5274,7 +5512,10 @@ def fit_contrastive(
     _, best_path_val, best_path_score, _ = _ckpt_paths("contrastive", common_cfg=common_cfg)
     best_val = float("inf")
     best_score = -float("inf")
-    score_value = 0
+    best_score_val = float("inf")
+    score_value = float("nan")
+    score_warmup = 5
+    score_tol = 1e-6
     log_summary=_init_log_summary()
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
@@ -5307,16 +5548,47 @@ def fit_contrastive(
             ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
-        # To do: calculate score
+        score_value = float("nan")
+
+        if apply_distill:
+            diag = _compute_diagnostics(
+                model=model,
+                dataloader=val_loader,
+                q_fn=partial(
+                    _get_q_contrastive,
+                    distill_head=distill_head,
+                    edge_index=edge_index_global,
+                ),
+                device=device,
+                n_components=common_cfg.n_components,
+                tau_star=tau_star,
+                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+                max_batches=common_cfg.diag_max_batches,
+            )
+            val_logs.update(diag)
+            score_value = float(val_logs["alignment_score"])
+        else:
+            val_logs["alignment_score"] = float("nan")
+            val_logs["conf_norm"] = float("nan")
+            val_logs["bal_norm"] = float("nan")
 
         # Print training progress
         log_summary = _print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
 
         # Write training progress
         if writer:
-            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
-            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
+            for k, v in train_logs.items():
+                writer.add_scalar(f"Train/{k}", v, epoch)
+            for k, v in val_logs.items():
+                writer.add_scalar(f"Val/{k}", v, epoch)
             writer.add_scalar("Distill/lambda", lam, epoch)
+
+            if math.isfinite(score_value):
+                writer.add_scalar("Val/alignment_score", score_value, epoch)
+                writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
+                writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
    
         # Save best model based on total validation loss
         if v_total < best_val:
@@ -5351,8 +5623,17 @@ def fit_contrastive(
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
         # Save best model based on model balance and certainty score
-        if score_value > best_score:
+        improved_score = (
+            apply_distill and math.isfinite(score_value) and
+            (epoch >= score_warmup) and (
+                (score_value > best_score + score_tol) or
+                (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
+            )
+        )
+
+        if improved_score:
             best_score = score_value
+            best_score_val = v_total
             if common_cfg.save_weights:
                 save_model_info(
                     best_path_score,
@@ -5600,8 +5881,12 @@ def fit_VADE(
         unwrap_dp(model).initialize_gmm_from_data(train_loader)
 
     # Inits for training
-    best_align = -float("inf")
     best_val = float("inf")
+    best_score = -float("inf")
+    best_score_val = float("inf")
+    score_value = float("nan")
+    score_warmup = 5
+    score_tol = 1e-6
     epochs_no_improve = 0
     early_stop_patience = 50
     early_stop_min_delta = 0.0
@@ -5693,18 +5978,23 @@ def fit_VADE(
         )
 
         # A ton of diagnostics for printing training progress
-        diag = _compute_diagnostics(model, val_loader, criterion, device, max_batches=common_cfg.diag_max_batches)
-
-        logK = math.log(common_cfg.n_components)
-        qH = float(diag.get("diag/q_mean_entropy", float("nan")))
-        mKL = float(diag.get("diag/kl_marg_q_to_tau", float("nan")))
-        train_logs["conf_norm"] = max(0.0, min(1.0, 1.0 - qH / max(1e-9, logK)))
-        train_logs["bal_norm"]  = max(0.0, min(1.0, 1.0 - mKL / max(1e-9, logK)))
-        if not math.isfinite(mKL):
-            mH = float(diag.get("diag/q_marginal_entropy", float("nan")))
-            train_logs["bal_norm"] = max(0.0, min(1.0, mH / max(1e-9, logK)))
-        train_logs["alignment_score"] = train_logs["conf_norm"] * train_logs["bal_norm"]
+        diag = _compute_diagnostics(
+            model=model,
+            dataloader=val_loader,
+            q_fn=_get_q_vade,
+            device=device,
+            n_components=common_cfg.n_components,
+            tau_star=getattr(criterion, "tau_star", None),
+            distill_sharpen_T=float(getattr(criterion, "distill_sharpen_T", 0.5)),
+            distill_conf_weight=bool(getattr(criterion, "distill_conf_weight", False)),
+            distill_conf_thresh=float(getattr(criterion, "distill_conf_thresh", 0.55)),
+            max_batches=common_cfg.diag_max_batches,
+            extra_stats_fn=_compute_vade_specific_diagnostics,
+        )
+        
+        val_logs.update(diag)
         val_total = float(val_logs.get("total_loss", float("inf")))
+        score_value = float(val_logs["alignment_score"])
 
         log_summary = _print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
 
@@ -5712,18 +6002,24 @@ def fit_VADE(
         if writer:
             for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
             for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
-            writer.add_scalar("Align/score", train_logs["alignment_score"], epoch)
+            writer.add_scalar("Align/score", val_logs["alignment_score"], epoch)
+            writer.add_scalar("Val/alignment_score", score_value, epoch)
+            writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
+            writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
-        improved_score = ((epoch > 5) and (train_logs["alignment_score"]) > best_align + 1e-6) or (
-            (epoch > 5) and abs(train_logs["alignment_score"] - best_align) <= 1e-6 and val_total < (best_val - early_stop_min_delta)
+        improved_val = (val_total < best_val - early_stop_min_delta)
+
+        improved_score = (
+            (epoch >= score_warmup) and (
+                (score_value > best_score + score_tol) or
+                (abs(score_value - best_score) <= score_tol and val_total < best_score_val - early_stop_min_delta)
+            )
         )
-        improved_val = (epoch > 5) and (val_total < best_val)
 
         # Save best model based on total validation loss
         if improved_val:
             best_val = val_total
-            epochs_no_improve = 0
             if common_cfg.save_weights:
                 save_model_info(
                     best_path_val,
@@ -5753,13 +6049,12 @@ def fit_VADE(
                     save_bundle=True,
                 )
                 print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
-        #else:
-        #    epochs_no_improve += 1
+
 
         # Save best model based on model balance and certainty score
         if improved_score:
-            best_align = train_logs["alignment_score"]
-            epochs_no_improve = 0
+            best_score = score_value
+            best_score_val = val_total
             if common_cfg.save_weights:
                 torch.save(unwrap_dp(model).state_dict(), best_path_score)
                 save_model_info(
@@ -5790,7 +6085,7 @@ def fit_VADE(
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
-                print(f"Saved best SCORE model -> {best_path_score} (align={best_align:.4f})")
+                print(f"Saved best SCORE model -> {best_path_score} (score={best_score:.4f})")
         
 
         # Collect relevant logs
