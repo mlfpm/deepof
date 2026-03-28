@@ -2015,6 +2015,7 @@ def scale_table(
     standardize: bool = True,     # if False: only size-normalize
     dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
     speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    coord_standardize: str = "none",
     log_distances: bool = True,   
 ) -> pd.DataFrame:
     if not scale:
@@ -2025,6 +2026,8 @@ def scale_table(
         raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
     if speed_standardize not in {"per_column", "groupwise", "none"}:
         raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
+    if coord_standardize not in {"per_column", "groupwise", "none"}:
+        raise ValueError("coord_standardize must be one of {'per_column','groupwise','none'}")
 
     out = df.copy()
 
@@ -2145,6 +2148,12 @@ def scale_table(
         _fit_transform_groupwise(inner_dist_cols)
         _fit_transform_groupwise(intra_dist_cols)
     # else: "none" -> do nothing
+
+    # Coords
+    if coord_standardize == "per_column":
+        _fit_transform_per_column(coord_cols)
+    elif coord_standardize == "groupwise":
+        _fit_transform_groupwise(coord_cols)
 
     return out
 

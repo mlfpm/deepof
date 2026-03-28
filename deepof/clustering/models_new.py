@@ -2109,9 +2109,7 @@ class VaDEPT(nn.Module):
             for x, a, *_ in data_loader:
                 x, a = x.to(dev), a.to(dev)
                 enc = self.encoder(x, a)
-                z_mean, _ = self.latent_space._encode(enc)
-                if getattr(self.latent_space, "lens_enabled", False):          
-                    z_mean = self.latent_space.lens(z_mean)  
+                z_mean, _ = self.latent_space._encode(enc) 
                 all_embeddings.append(z_mean.cpu())
                 samples_gathered += z_mean.size(0)
                 if samples_gathered >= n_samples:
@@ -3019,14 +3017,6 @@ def initialize_gmm_from_teacher(model: nn.Module,
     device = next(base.parameters()).device
     z = z_all.to(device=device, dtype=base.latent_space.gmm_means.dtype)
     tau = tau_star.to(device=device, dtype=z.dtype)
-
-    # Project to mixture space only if z is encoder/posterior-dim (not already lens-dim)
-    if getattr(base.latent_space, "lens_enabled", False):                                           
-        in_feats = getattr(base.latent_space.lens, "in_features", base.latent_space.latent_dim)     
-        if z.shape[1] == int(in_feats):                                                           
-            with torch.no_grad():                                                                   
-                z = base.latent_space.lens(z)                                                       
-        # else: z already in lens-space; skip projection  
         
     N, D_mix = z.shape
     C = tau.shape[1]
@@ -3680,81 +3670,121 @@ def cluster_frequencies_regularizer(soft_counts: torch.Tensor) -> torch.Tensor:
 
 
 
-class VaDELossTFExact(nn.Module):
+class VadeLoss(nn.Module):
     """
-    TF-exact VaDE loss:
-      - Reconstruction NLL
-      - KL surrogate (TF): -0.5 * sum(z_log_var + 1) + sum(q log q) [entropy off in pretrain], weighted by kl_weight
-      - Clustering agreement: -E[q * softmax(log p(z|c))] (no prior in target)
-      - Prior matching: -E[q log pi], pi uniform and fixed
-      - KMeans/Gram compactness: passed from model outputs
-      - Activity L1 on z_var (Dense 'cluster_variances' output in TF): l1_activity * mean_batch(|z_var|)
+    VaDE loss function combining reconstruction, KL divergence, clustering, and optional teacher distillation terms.
+
+    Supports two training phases (pretrain and main) with separate parameter sets for phase-dependent
+    regularization terms. Call set_pretrain_mode() to switch between them.
+
+    Phase-dependent parameters (stored separately for pretrain and main):
+    - repel_weight, repel_length_scale
+    - nonempty_weight, nonempty_floor, nonempty_p
+
+    Phase-independent parameters are set once at construction and do not change between phases.
+
+    Args:
+        common_cfg (CommonFitCfg): Common training configuration providing n_components, latent_dim, and kmeans_loss.
+        vade_cfg (VaDECfg): VaDE-specific configuration including both pretrain and main parameter values.
+        teacher_cfg (TurtleTeacherCfg): Teacher distillation configuration.
+        kl_scheduler (Optional[Dynamic_weight_manager]): KL weight scheduler. Can be replaced later via set_kl_scheduler().
+        l1_activity_weight (float): L1 regularization weight on z_log_var. Defaults to 0.1.
+        gmm_logvar_clamp (Tuple[float, float]): Min and max clamp values for GMM log-variances. Defaults to (-8.0, 8.0).
     """
-    def __init__(self, n_components: int, latent_dim: int,
-                l1_activity_weight: float = 0.1,
-                kl_scheduler: Optional["Dynamic_weight_manager"] = None,
-                lambda_scheduler: Optional["Dynamic_weight_manager"] = None,
-                reg_cat_clusters=0.0,
-                kl_weight=1.0,
-                prior_loss_weight=0.0,
-                mc_kl_samples=100,          # kept for API, unused in TF-analytic mode #### CHANGES SECTION #####
-                kl_clamp_min=0.0,
-                lambda_distill: float = 0.0,
-                tau_star: Optional[torch.Tensor] = None,
-                distill_sharpen_T: float = 0.5,
-                distill_conf_weight: bool = False,
-                distill_conf_thresh: float = 0.55,
-                tf_cluster_weight: float = 0.0,             # weight for TF-style clustering term
-                reg_cluster_var_weight: float = 0.0,       # variance equalization weight
-                distill_use_class_reweight: bool = True,
-                distill_class_reweight_beta: float = 1.0,
-                distill_class_reweight_cap: Optional[float] = 3.0,
-                nonempty_weight: float = 2e-2,
-                nonempty_floor: float = 0.003,
-                nonempty_p: float = 2,
-                kmeans_loss_weight: float = 0.0
-                ):
+    def __init__(
+            self,
+            common_cfg: "CommonFitCfg",
+            vade_cfg: "VaDECfg",
+            teacher_cfg: "TurtleTeacherCfg",
+            kl_scheduler: Optional["Dynamic_weight_manager"] = None,
+            l1_activity_weight: float = 0.1,
+            gmm_logvar_clamp: Tuple[float, float] = (-8.0, 8.0),
+        ):
         super().__init__()
-        self.n_components = n_components
-        self.latent_dim = latent_dim
+        # Core dimensions
+        self.n_components = common_cfg.n_components
+        self.latent_dim = common_cfg.latent_dim
+
+        # Phase-independent loss parameters
         self.l1_activity_weight = float(l1_activity_weight)
-        self.kl_scheduler = kl_scheduler 
-        self.pretrain_mode = False
-        self.kmeans_loss_weight = kmeans_loss_weight
+        self.tf_cluster_weight = float(vade_cfg.tf_cluster_weight)
+        self.reg_cat_clusters_weight = float(vade_cfg.reg_cat_clusters)
+        self.temporal_cohesion_weight = float(vade_cfg.temporal_cohesion_weight)
+        self.reg_scatter_weight = float(vade_cfg.reg_scatter_weight)
+        self.reg_scatter_beta = float(vade_cfg.reg_scatter_beta)
+        self.gmm_logvar_clamp = gmm_logvar_clamp
 
-        # Distillation
-        self.lambda_distill = float(lambda_distill)
-        self.lambda_scheduler = lambda_scheduler
-        self.tau_star = tau_star
-        self.distill_sharpen_T = float(distill_sharpen_T)
-        self.distill_conf_weight = bool(distill_conf_weight)
-        self.distill_conf_thresh = float(distill_conf_thresh)
+        # Distillation parameters (teacher and lambda set later via set_teacher())
+        self.lambda_distill = 0.0
+        self.lambda_scheduler = None
+        self.tau_star = None
+        self.teacher_marginal = None
+        self.class_weight = None
+        self.distill_sharpen_T = float(teacher_cfg.distill_sharpen_T)
+        self.distill_conf_weight = bool(teacher_cfg.distill_conf_weight)
+        self.distill_conf_thresh = float(teacher_cfg.distill_conf_thresh)
+        self.distill_use_class_reweight = True
+        self.distill_class_reweight_beta = float(teacher_cfg.distill_class_reweight_beta)
+        self.distill_class_reweight_cap = (
+            None if teacher_cfg.distill_class_reweight_cap is None
+            else float(teacher_cfg.distill_class_reweight_cap)
+        )
 
-        # TF-style clustering and variance equalization
-        self.tf_cluster_weight = float(tf_cluster_weight)
-        self.reg_cat_clusters_weight = float(reg_cat_clusters)
-        self.reg_cluster_var_weight = float(reg_cluster_var_weight)
+        # KL scheduling
+        self.kl_scheduler = kl_scheduler
 
-        self.distill_use_class_reweight = bool(distill_use_class_reweight)
-        self.distill_class_reweight_beta = float(distill_class_reweight_beta)
-        self.distill_class_reweight_cap = (None if distill_class_reweight_cap is None
-                                           else float(distill_class_reweight_cap))
-        self.class_weight: Optional[torch.Tensor] = None  # set in set_teacher()
-        self.nonempty_weight = nonempty_weight
-        self.nonempty_floor = nonempty_floor
-        self.nonempty_p = nonempty_p
+        # Mode-dependent parameters: two complete sets, applied via set_pretrain_mode()
+        self.mode_params = {
+            "pretrain": {
+                "kmeans_loss" : float(vade_cfg.kmeans_loss_pretrain),
+                "repel_weight": float(vade_cfg.repel_weight_pretrain),
+                "repel_length_scale": float(vade_cfg.repel_length_scale_pretrain),
+                "nonempty_weight": float(vade_cfg.nonempty_weight_pretrain),
+                "nonempty_floor": max(1e-4, vade_cfg.nonempty_floor_percent_pretrain / common_cfg.n_components),
+                "nonempty_p": int(vade_cfg.nonempty_p_pretrain),
+            },
+            "main": {
+                "kmeans_loss" : float(common_cfg.kmeans_loss),
+                "repel_weight": float(vade_cfg.repel_weight),
+                "repel_length_scale": float(vade_cfg.repel_length_scale),
+                "nonempty_weight": float(vade_cfg.nonempty_weight),
+                "nonempty_floor": max(1e-4, vade_cfg.nonempty_floor_percent / common_cfg.n_components),
+                "nonempty_p": int(vade_cfg.nonempty_p),
+            },
+        }
 
-        self.mc_kl_samples = 100
-        self.kl_clamp_min = 0.0
-        self.gmm_logvar_clamp = (-8.0, 8.0)
+        # Start in pretrain mode
+        self.set_mode("pretrain")
+
+    def set_mode(self, mode: str):
+        """Copies the parameter set for the given phase into the active attributes."""
+        self.pretrain_mode = (mode == "pretrain")
+        params = self.mode_params[mode]
+        self.kmeans_loss_weight = params["kmeans_loss"]
+        self.repel_weight = params["repel_weight"]
+        self.repel_length_scale = params["repel_length_scale"]
+        self.nonempty_weight = params["nonempty_weight"]
+        self.nonempty_floor = params["nonempty_floor"]
+        self.nonempty_p = params["nonempty_p"]
 
 
     def set_teacher(self, tau_star: torch.Tensor, lambda_distill: float = 1.0, lambda_scheduler: Optional["Dynamic_weight_manager"] = None,):
+        """
+        Sets teacher assignments and distillation parameters.
+
+        Computes inverse-marginal class reweighting from the teacher distribution
+        if distill_use_class_reweight is enabled.
+
+        Args:
+            tau_star (torch.Tensor): Teacher soft assignments of shape [N, K].
+            lambda_distill (float): Distillation loss weight. Defaults to 1.0.
+            lambda_scheduler (Optional[Dynamic_weight_manager]): Optional scheduler for lambda_distill.
+        """
         self.tau_star = tau_star
         self.lambda_distill = float(lambda_distill)
         self.lambda_scheduler = lambda_scheduler
 
-        # NEW: compute inverse-marginal class weights from teacher τ*
+        #Compute inverse-marginal class weights from teacher τ*
         self.class_weight = None
         if self.distill_use_class_reweight and (tau_star is not None):
             with torch.no_grad():
@@ -3772,64 +3802,101 @@ class VaDELossTFExact(nn.Module):
                 self.teacher_marginal = tau_star.mean(dim=0).clamp_min(eps)  # (C,)
 
     def set_kl_scheduler(self, kl_scheduler: Optional["Dynamic_weight_manager"] = None):
+        """Replaces the KL weight scheduler and resets its iteration counter."""
         self.kl_scheduler = kl_scheduler 
         self.kl_scheduler.current_iteration = 0
 
-
     @staticmethod
     def _log_normal_diag(x, mean, log_var):
+        """Log-probability under a diagonal Gaussian."""
         LOG_2PI = math.log(2.0 * math.pi)
-        return -0.5 * (torch.sum(LOG_2PI + log_var + (x - mean) ** 2 * torch.exp(-log_var), dim=-1))
+        return -0.5 * torch.sum(
+            LOG_2PI + log_var + (x - mean) ** 2 * torch.exp(-log_var), dim=-1
+        )
 
     def _log_mog(self, z, gmm_means, gmm_log_vars, prior, eps=1e-8):
+        """Log-probability under a mixture of diagonal Gaussians."""
         S, B, D = z.shape
         C = gmm_means.shape[0]
-        gmm_log_vars = torch.clamp(gmm_log_vars, min=self.gmm_logvar_clamp[0], max=self.gmm_logvar_clamp[1])
+        gmm_log_vars = torch.clamp(
+            gmm_log_vars,
+            min=self.gmm_logvar_clamp[0],
+            max=self.gmm_logvar_clamp[1],
+        )
         log_prior = torch.log(torch.clamp(prior, min=eps))
-        z_exp = z.unsqueeze(2)               # (S, B, 1, D)
-        means = gmm_means.view(1, 1, C, D)   # (1, 1, C, D)
-        log_vars = gmm_log_vars.view(1, 1, C, D)
-        log_p_z_given_c = self._log_normal_diag(z_exp, means, log_vars)  # (S,B,C)
-        log_mix = log_prior.view(1, 1, C)
-        log_pz = torch.logsumexp(log_mix + log_p_z_given_c, dim=-1)      # (S,B)
-        return log_pz
 
+        z_exp = z.unsqueeze(2)                          # (S, B, 1, D)
+        means = gmm_means.view(1, 1, C, D)
+        log_vars = gmm_log_vars.view(1, 1, C, D)
+
+        log_p_z_given_c = self._log_normal_diag(z_exp, means, log_vars)  # (S, B, C)
+        log_mix = log_prior.view(1, 1, C)
+        return torch.logsumexp(log_mix + log_p_z_given_c, dim=-1)        # (S, B)
+
+    def _monte_carlo_kl(self, z_mean, z_log_var, gmm_means, gmm_log_vars, prior,
+                        n_samples: int = 32):
+        """
+        Monte Carlo estimate of KL(q(z|x) || p(z)) where p(z) is the GMM prior.
+
+        This is the key loss term that pulls latent representations toward cluster centers.
+        """
+        z_log_var = torch.clamp(z_log_var, min=-4.0, max=4.0)
+        B, D = z_mean.shape
+        scale_q = torch.exp(0.5 * z_log_var)
+
+        eps = torch.randn(n_samples, B, D, device=z_mean.device, dtype=z_mean.dtype)
+        z_samples = z_mean.unsqueeze(0) + eps * scale_q.unsqueeze(0)  # (S, B, D)
+
+        log_q = self._log_normal_diag(
+            z_samples, z_mean.unsqueeze(0), z_log_var.unsqueeze(0)
+        )
+        log_p = self._log_mog(z_samples, gmm_means, gmm_log_vars, prior)
+
+        kl = (log_q - log_p).mean()
+        return torch.clamp(kl, min=0.0)
+    
     def _log_p_z_given_c(self, z: torch.Tensor, gmm_means: torch.Tensor, gmm_log_vars: torch.Tensor) -> torch.Tensor:
         """
-        Compute log p(z|c) for each class c (diagonal Gaussian).
-        z: (B, D), means: (C, D), log_vars: (C, D) -> returns (B, C)
+        Computes log p(z|c) for each component c using diagonal Gaussians.
+
+        Treats gmm_log_vars as log(sigma) rather than log(sigma^2), matching the
+        original TF model's parameterization where the stored values are log-std-devs.
+
+        Args:
+            z (torch.Tensor): Latent samples of shape [B, D].
+            gmm_means (torch.Tensor): Component means of shape [C, D].
+            gmm_log_vars (torch.Tensor): Component log-standard-deviations of shape [C, D].
+
+        Returns:
+            torch.Tensor: Log-likelihoods of shape [B, C].
         """
-        # clamp for stability
         gmm_log_vars = torch.clamp(gmm_log_vars, min=self.gmm_logvar_clamp[0], max=self.gmm_logvar_clamp[1])
-        scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-3)
+        scale = torch.exp(gmm_log_vars).clamp(min=1e-6)
         dist = Normal(gmm_means.unsqueeze(0), scale.unsqueeze(0))  # (1,C,D)
         logp = dist.log_prob(z.unsqueeze(1)).sum(dim=-1)           # (B,C)
         return logp
-
-    def _monte_carlo_kl(self, z_mean, z_log_var, gmm_means, gmm_log_vars, prior):
-        # kept for compatibility, no longer used in TF-analytic branch #### CHANGES SECTION #####
-        z_log_var = torch.clamp(z_log_var, min=-4.0, max=4.0)
-        B, D = z_mean.shape
-        S = self.mc_kl_samples
-        scale_q = torch.exp(0.5 * z_log_var)
-        eps = torch.randn(S, B, D, device=z_mean.device, dtype=z_mean.dtype)
-        z_samples = z_mean.unsqueeze(0) + eps * scale_q.unsqueeze(0)  # (S,B,D)
-        log_q = self._log_normal_diag(z_samples, z_mean.unsqueeze(0), z_log_var.unsqueeze(0))
-        log_p = self._log_mog(z_samples, gmm_means, gmm_log_vars, prior)
-        kl = (log_q - log_p).mean()
-        if self.kl_clamp_min is not None:
-            kl = torch.clamp(kl, min=self.kl_clamp_min)
-        return kl
+    
 
     def forward(self, model_outputs, x_original, batch_indices: Optional[torch.Tensor] = None):
+        """
+        Computes the full VaDE loss from model outputs and original inputs.
+
+        Args:
+            model_outputs: Tuple of (recon_dist, latent_z, q, kmeans_loss, z_mean, z_log_var, gmm_params).
+            x_original (torch.Tensor): Original input tensor of shape [B, T, N, F].
+            batch_indices (Optional[torch.Tensor]): Sample indices into tau_star for distillation.
+
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary of all individual loss terms and the total loss.
+        """
         (recon_dist, latent_z, q, kmeans_loss, z_mean, z_log_var, gmm_params) = model_outputs
         device = z_mean.device
         B, T, N, F = x_original.shape
         x_flat = x_original.view(B, T, N * F)
 
-        # Reconstruction NLL
+        # Reconstruction loss
         with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
-            rec_nll = -(recon_dist.log_prob(x_flat.float())).mean()
+            reconstruction_loss = -(recon_dist.log_prob(x_flat.float())).mean()
 
         # Ensure q is normalized
         if q is not None:
@@ -3837,19 +3904,17 @@ class VaDELossTFExact(nn.Module):
             q = q.clamp_min(eps)
             q = q / q.sum(dim=-1, keepdim=True)
 
-
         # Activity regularizer: average over batch (matches TF effective scaling)
-        activity_l1 = self.l1_activity_weight * torch.sum(torch.abs(z_log_var), dim=-1).mean()  #### CHANGES SECTION #####
-        # (TF regularizes the 'cluster_variances' Dense output; here we use z_log_var as proxy.)
+        activity_l1 = self.l1_activity_weight * torch.sum(torch.abs(z_log_var), dim=-1).mean() 
 
-        # KL weight from scheduler (TF-style)
+        # KL weight from scheduler
         klw = 0.0
-        if getattr(self, "kl_scheduler", None) is not None:
+        if self.kl_scheduler is not None:
             klw = float(self.kl_scheduler.get_weight())
 
-        # ---- TF-analytic KL surrogate ---- #### CHANGES SECTION #####
+        # Custom KL
         # loss_variational_1 = -0.5 * sum(z_log_var + 1)
-        # loss_variational_2 = sum(q log q)    (entropy term; gated by pretrain in TF via (1 - pretrain))
+        # loss_variational_2 = sum(q log q)    (entropy term)
         z_log_var32 = z_log_var.float()
         if q is not None:
             q32 = q.float()
@@ -3857,114 +3922,47 @@ class VaDELossTFExact(nn.Module):
             # If q is None, we cannot include the entropy term; fall back to loss_variational_1 only.
             q32 = None
 
-        
-        v_max = 0.5 #2.0 * math.log(2.0) 
+        v_max = 0.5 
         z_var_eff = z_log_var32.clamp_max(v_max) 
         loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
         if self.pretrain_mode:
-            # Pretrain: only loss_variational_1 proxy (no q log q), as in TF (they multiply entropy by (1 - pretrain))
+            # Pretrain: simple variance proxy (no clusters yet)
             kl_vec = loss_var1
+            kl_batch = klw * kl_vec.mean()
         else:
-            if q32 is not None:
-                loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q
-            else:
-                loss_var2 = torch.zeros_like(loss_var1)
-            kl_vec = loss_var1 + loss_var2  # [B]
+            # Main training: proper MC-KL against the mixture of Gaussians
+            # This pulls latent representations toward their nearest cluster centers
+            with torch.amp.autocast(device_type=device.type, enabled=False):
+                kl_vec = self._monte_carlo_kl(
+                    z_mean.float(),
+                    z_log_var32,
+                    gmm_params["means"].float(),
+                    gmm_params["log_vars"].float(),
+                    gmm_params["prior"].float(),
+                )
+                kl_batch = klw * kl_vec
 
-        kl_batch = klw * kl_vec.mean()  # this can be negative, as in TF
+        # Init Losses
+        tf_cluster = torch.tensor(0.0, device=device, dtype=reconstruction_loss.dtype)
+        prior_loss = torch.tensor(0.0, device=device, dtype=reconstruction_loss.dtype)
+        cat_cluster_loss = torch.tensor(0.0, device=device, dtype=reconstruction_loss.dtype)
+        scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
+        repel_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
+        distill_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
+        temporal_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
+        nonempty_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
 
-        '''
-        v_max = 0.5
-        z_var_eff = z_log_var32.clamp_max(v_max)
-
-        if self.pretrain_mode:
-            # Pretrain: simplified proxy (original TF behavior)
-            loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean() / z_log_var32.shape[-1]
-            kl_vec = loss_var1
-        else:
-            # Main training: true KL divergence against N(0,1) prior
-            # KL(q(z|x) || N(0,1)) = -0.5 * sum(1 + log_var - mu^2 - exp(log_var))
-            z_mean32 = z_mean.float()
-            kl_per_dim = -0.5 * (1.0 + z_var_eff - z_mean32.pow(2) - z_var_eff.exp())
-            kl_vec = kl_per_dim.sum(dim=-1)  # Sum over latent dimensions -> (B,)
-            
-            # Add categorical entropy term if using clustering
-            if q32 is not None:
-                loss_var2 = (q32 * q32.clamp_min(1e-8).log()).sum(dim=-1)  # Σ q log q (negative entropy)
-                kl_vec = kl_vec + loss_var2
-
-        kl_batch = klw * kl_vec.mean()
-        '''
 
         # ----------------------------------------------------------------
+        # Losses used in all modes
 
-        # Init other losses
-        tf_cluster = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
-        prior_loss = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
-        cat_cluster_loss = torch.tensor(0.0, device=device, dtype=rec_nll.dtype)
-        scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-        repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-        distill_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-        temporal_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-        nonempty_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
+        if not torch.is_tensor(kmeans_loss):
+            kmeans_loss = torch.as_tensor(kmeans_loss, device=device, dtype=reconstruction_loss.dtype)
+        if q is not None:
+            kmeans_loss = (self.kmeans_loss_weight * kmeans_loss).to(reconstruction_loss.dtype)
 
-        if not self.pretrain_mode and q is not None:
-            z_for = latent_z
-            logp = self._log_p_z_given_c(
-                z_for.float(),
-                gmm_params["means"].float(),
-                gmm_params["log_vars"].float(),
-            )
-            log_post_like = torch.log_softmax(logp, dim=-1)
-            tf_cluster = -(q * log_post_like).sum(dim=-1).mean() * self.tf_cluster_weight
-            #tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
-
-            # Prior match (uniform)
-            C = self.n_components
-            log_pi = math.log(1.0 / max(1, C))
-            prior_loss = -(q * log_pi).sum(dim=-1).mean()
-
-            # Cat balance (optional)
-            if self.reg_cat_clusters_weight > 0 and q is not None:
-                cat_cluster_loss = self.reg_cat_clusters_weight * cluster_frequencies_regularizer(q)
-
-            # Temporal cohesion on q(c|z)
-            rho = float(getattr(self, "temporal_cohesion_weight", 0.0))
-            if (rho > 0.0) and (q is not None) and (q.size(0) > 1):
-                diffs = (q[1:] - q[:-1]).abs().sum(dim=-1).mean()
-                temporal_loss = (rho * diffs).to(rec_nll.dtype)
-
-
-            eta = float(getattr(self, "reg_scatter_weight", 3e-2))
-            beta = float(getattr(self, "reg_scatter_beta", 1.0))
-            if eta > 0.0 and (q is not None):
-                qf = q.float()                        # (B,C)
-                z = z_mean.float()                    # (B,D)
-                pi_b = qf.sum(dim=0).clamp_min(1e-8)  # (C,)
-                mu = (qf.t() @ z) / pi_b.unsqueeze(1) # (C,D)
-                diff = z.unsqueeze(1) - mu.unsqueeze(0)              # (B,C,D)
-                scat_c = (qf.unsqueeze(-1) * diff.pow(2)).sum(dim=0) / pi_b.unsqueeze(1)  # (C,D)
-                w = ((pi_b / pi_b.mean()).pow(-beta)).unsqueeze(1)   # (C,1)
-                scatter_loss = eta * (w * scat_c).mean()
-            else:
-                scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-
-            # Center repulsion between GMM means
-        repel_weight = float(getattr(self, "repel_weight", 8e-2))
-        repel_length_scale = float(getattr(self, "repel_length_scale", 1.0))
-            #if repel_weight > 0.0 and gmm_params["means"].requires_grad:
-            #    with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
-            #        means = gmm_params["means"].float()  # (C,D)
-            #        C = means.size(0)
-            #        diffs = means.unsqueeze(1) - means.unsqueeze(0)      # (C,C,D)
-            #        D2 = (diffs * diffs).sum(dim=-1)                     # (C,C)
-            #        Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
-            #        Kmat = Kmat - torch.diag(torch.diag(Kmat))
-            #        denom = float(max(1, C * C - C))
-            #        repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
-            #else:
-            #    repel_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-            
+        repel_weight = self.repel_weight
+        repel_length_scale = self.repel_length_scale          
         if repel_weight > 0.0:
             with torch.amp.autocast(device_type=x_flat.device.type, enabled=False):
                 # Use data-derived centroids instead of (possibly frozen) GMM means
@@ -3982,16 +3980,17 @@ class VaDELossTFExact(nn.Module):
                 Kmat = torch.exp(-D2 / max(1e-9, 2.0 * (repel_length_scale ** 2)))
                 Kmat = Kmat - torch.diag(torch.diag(Kmat))
                 denom = float(max(1, C * C - C))
-                repel_loss = (repel_weight * (Kmat.sum() / denom)).to(rec_nll.dtype)
+                repel_loss = (repel_weight * (Kmat.sum() / denom)).to(reconstruction_loss.dtype)
+
 
         # Non-empty floor on batch marginal q̄(c)
-        nonempty_w = float(getattr(self, "nonempty_weight", 0.0))
+        nonempty_w = self.nonempty_weight
         if (nonempty_w > 0.0) and (q is not None):
-            p = int(getattr(self, "nonempty_p", 2))
+            p = self.nonempty_p
             q_marg = q.mean(dim=0)  # (C,)
 
-            base_floor = float(getattr(self, "nonempty_floor", max(1e-4, 0.05 / max(1, self.n_components))))
-            if getattr(self, "teacher_marginal", None) is not None:
+            base_floor = float(self.nonempty_floor)
+            if self.teacher_marginal is not None:
                 pi_t = self.teacher_marginal.to(q_marg.device)  # (C,)
                 alpha = 0.9
                 floor_c = torch.max(base_floor * torch.ones_like(pi_t),
@@ -4001,9 +4000,52 @@ class VaDELossTFExact(nn.Module):
 
             underuse = (floor_c - q_marg).clamp_min(0.0)
             pen = underuse.pow(p).sum()
-            nonempty_loss = (nonempty_w * pen).to(rec_nll.dtype)
+            nonempty_loss = (nonempty_w * pen).to(reconstruction_loss.dtype)
 
-        # Distillation (unchanged)
+        # ----------------------------------------------------------------
+        # Losses only used in main training
+
+        if not self.pretrain_mode and q is not None:
+            z_for = latent_z
+            logp = self._log_p_z_given_c(
+                z_for.float(),
+                gmm_params["means"].float(),
+                gmm_params["log_vars"].float(),
+            )
+            post_like = torch.softmax(logp, dim=-1)
+            tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
+
+            # Prior match (uniform)
+            C = self.n_components
+            log_pi = math.log(1.0 / max(1, C))
+            prior_loss = -(q * log_pi).sum(dim=-1).mean()
+
+            # Cat balance (optional)
+            if self.reg_cat_clusters_weight > 0 and q is not None:
+                cat_cluster_loss = self.reg_cat_clusters_weight * cluster_frequencies_regularizer(q)
+
+            # Temporal cohesion on q(c|z)
+            rho = self.temporal_cohesion_weight
+            if (rho > 0.0) and (q is not None) and (q.size(0) > 1):
+                diffs = (q[1:] - q[:-1]).abs().sum(dim=-1).mean()
+                temporal_loss = (rho * diffs).to(reconstruction_loss.dtype)
+
+            eta = self.reg_scatter_weight
+            beta = self.reg_scatter_beta
+            if eta > 0.0 and (q is not None):
+                qf = q.float()                        # (B,C)
+                z = z_mean.float()                    # (B,D)
+                pi_b = qf.sum(dim=0).clamp_min(1e-8)  # (C,)
+                mu = (qf.t() @ z) / pi_b.unsqueeze(1) # (C,D)
+                diff = z.unsqueeze(1) - mu.unsqueeze(0)              # (B,C,D)
+                scat_c = (qf.unsqueeze(-1) * diff.pow(2)).sum(dim=0) / pi_b.unsqueeze(1)  # (C,D)
+                w = ((pi_b / pi_b.mean()).pow(-beta)).unsqueeze(1)   # (C,1)
+                scatter_loss = eta * (w * scat_c).mean()
+            else:
+                scatter_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
+
+        # ----------------------------------------------------------------
+        # Distillation
         if (self.lambda_distill > 0.0) and (self.tau_star is not None) and (batch_indices is not None):
             eps = 1e-8
             tau_batch = self.tau_star[batch_indices]  # (B,C)
@@ -4034,20 +4076,14 @@ class VaDELossTFExact(nn.Module):
             else:
                 distill_loss = per_sample_ce.mean()
 
-            distill_loss = (self.lambda_distill * distill_loss).to(rec_nll.dtype)
+            distill_loss = (self.lambda_distill * distill_loss).to(reconstruction_loss.dtype)
         else:
-            distill_loss = torch.tensor(0.0, device=x_original.device, dtype=rec_nll.dtype)
-
-        # KMeans loss
-        if not torch.is_tensor(kmeans_loss):
-            kmeans_loss = torch.as_tensor(kmeans_loss, device=device, dtype=rec_nll.dtype)
-        if q is not None:
-            kmeans_loss = (self.kmeans_loss_weight * kmeans_loss).to(rec_nll.dtype)
+            distill_loss = torch.tensor(0.0, device=x_original.device, dtype=reconstruction_loss.dtype)
 
 
         # Total loss
         total = (
-            rec_nll
+            reconstruction_loss
             + kl_batch
             + cat_cluster_loss
             + temporal_loss
@@ -4063,22 +4099,20 @@ class VaDELossTFExact(nn.Module):
 
         return {
             "total_loss": total,
-            "reconstruct_loss": rec_nll,
+            "reconstruct_loss": reconstruction_loss,
             "kl_surrogate": kl_batch,                               
-            "kl_div": kl_vec.mean(),                        
-            "kl_weight": torch.tensor(klw, device=device, dtype=rec_nll.dtype),
+            "kl_div": kl_batch,                        
+            "kl_weight": torch.tensor(klw, device=device, dtype=reconstruction_loss.dtype),
             "tf_clust_loss": tf_cluster,
             "prior_loss": prior_loss,
             "kmeans_loss": kmeans_loss,
             "activity_l1": activity_l1,
             "cat_clust_loss": cat_cluster_loss,
-            "reg_cluster_var_loss": None,
             "distill_loss": distill_loss,
             "nonempty_loss": nonempty_loss,
             "temporal_loss": temporal_loss,
             "scatter_loss": scatter_loss,
             "repel_loss": repel_loss,
-            "student_clustering_loss": None,
         }
     
 
@@ -4303,6 +4337,7 @@ def apply_decoder_schedule(model: nn.Module, epoch: int):
 
 def train_one_epoch_indexed(
     model: nn.Module,
+    model_name: str,
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     step_fn: Callable[[nn.Module, Any, SimpleNamespace], StepResult],
@@ -4342,14 +4377,13 @@ def train_one_epoch_indexed(
                     train=True, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
                 ))
             scaler.scale(res.loss).backward()
-            print(scaler.get_scale())
             
             if grad_clip_value is not None:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
             scaler.step(optimizer)
-            if torch.isnan(model.encoder.node_recurrent_block.conv1d.weight).any():
-                print("z issues!")
+            #if torch.isnan(model.encoder.node_recurrent_block.conv1d.weight).any():
+            #    print("z issues!")
             scaler.update()
             optimizer.zero_grad(set_to_none=True)
         else:
@@ -4362,7 +4396,7 @@ def train_one_epoch_indexed(
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
             optimizer.step()
 
-        if ctx is not None and model=="Vade":
+        if ctx is not None and model_name=="vade":
             if hasattr(ctx.criterion, "kl_scheduler") and ctx.criterion.kl_scheduler is not None:
                 ctx.criterion.kl_scheduler.step()
                 if(step==int(len(iterator)/2)):
@@ -4487,6 +4521,8 @@ def step_vade(
         loss_dict = ctx.criterion(outputs, x, batch_indices=batch_indices)
         total = loss_dict["total_loss"]
         
+        if loss_dict["reconstruct_loss"] > 50000:
+            print("Halt!")
 
         # EMA update of π from current batch responsibilities 
         with torch.no_grad():
@@ -4515,7 +4551,6 @@ def step_vade(
             "kmeans_loss": float(loss_dict["kmeans_loss"].detach().item()) if torch.is_tensor(loss_dict["kmeans_loss"]) else float(loss_dict["kmeans_loss"]),
             "prior_loss": float(loss_dict["prior_loss"].detach().item()),
             "distill_loss": float(loss_dict["distill_loss"].detach().item()),
-            "student_clustering_loss": 0.0, #float(loss_dict["student_clustering_loss"].detach().item()),
             "tf_clust_loss" : float(loss_dict["tf_clust_loss"].detach().item()),
             "nonempty_loss": float(loss_dict["nonempty_loss"].detach().item()),
             "temporal_loss": float(loss_dict["temporal_loss"].detach().item()),
@@ -4826,7 +4861,7 @@ def embedding_model_fittingPT(
     save_weights: bool = True,
     run: int = 0,
     # VaDE-specific
-    kl_annealing_mode: str = "tf_sigmoid",#"sigmoid",
+    kl_annealing_mode: str = "tf_sigmoid",
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
     freeze_gmm_epochs: int = 0,
@@ -5169,6 +5204,78 @@ def embedding_model_fitting(
         raise ValueError(f"Unsupported model: {model_name}")
 
 
+######################move to utils later
+
+def _load_best_checkpoints(
+    model: nn.Module,
+    best_path_val: str,
+    best_path_score: str,
+    device: torch.device,
+    save_weights: bool,
+) -> Tuple[nn.Module, nn.Module]:
+    """
+    Loads the best-val and best-score checkpoints into two separate model copies.
+
+    Returns the best-val model and best-score model, both unwrapped from DataParallel.
+    If a checkpoint does not exist, the corresponding model retains its current weights.
+
+    Args:
+        model (nn.Module): Current model (possibly DataParallel-wrapped).
+        best_path_val (str): Path to the best-validation checkpoint.
+        best_path_score (str): Path to the best-score checkpoint.
+        device (torch.device): Device for loading weights.
+        save_weights (bool): Whether weight saving was enabled during training.
+
+    Returns:
+    Tuple[nn.Module, nn.Module]: (best_val_model, best_score_model), both unwrapped.
+    """
+    model_score = deepcopy(model)
+
+    if save_weights and os.path.exists(best_path_val):
+        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
+        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
+
+    if save_weights and os.path.exists(best_path_score):
+        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
+        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
+
+    return unwrap_dp(model), unwrap_dp(model_score)
+
+
+def _log_epoch_to_tensorboard(
+    writer: Optional[SummaryWriter],
+    train_logs: Dict[str, float],
+    val_logs: Dict[str, float],
+    epoch: int,
+    score_value: float = float("nan"),
+    lambda_d: float = 0.0,
+):
+    """
+    Writes per-epoch training and validation metrics to TensorBoard.
+
+    Args:
+        writer (Optional[SummaryWriter]): TensorBoard writer. If None, this is a no-op.
+        train_logs (Dict[str, float]): Training metrics for the current epoch.
+        val_logs (Dict[str, float]): Validation metrics for the current epoch.
+        epoch (int): Current epoch index.
+        score_value (float): Current alignment score. Only logged if finite.
+        lambda_d (float): Current distillation lambda weight.
+    """
+    if writer is None:
+        return
+
+    for k, v in train_logs.items():
+        writer.add_scalar(f"Train/{k}", v, epoch)
+    for k, v in val_logs.items():
+        writer.add_scalar(f"Val/{k}", v, epoch)
+    writer.add_scalar("Distill/lambda", lambda_d, epoch)
+
+    if math.isfinite(score_value):
+        writer.add_scalar("Val/alignment_score", score_value, epoch)
+        writer.add_scalar("Val/conf_norm", val_logs.get("conf_norm", float("nan")), epoch)
+        writer.add_scalar("Val/bal_norm", val_logs.get("bal_norm", float("nan")), epoch)
+
+######################move to utils later
 
 def fit_VQVAE(
     train_loader: DataLoader,
@@ -5184,6 +5291,19 @@ def fit_VQVAE(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
+
+    model_name = "vqvae"
+    rebuild_spec={                    
+        "model_name": model_name,
+        "x_shape": train_loader.dataset.x_shape,
+        "a_shape": train_loader.dataset.a_shape,
+        "adjacency_matrix": adjacency_matrix.astype("float32"),
+        "latent_dim": common_cfg.latent_dim,
+        "n_components": common_cfg.n_components,
+        "encoder_type": common_cfg.encoder_type,
+        "use_gnn": True,
+        "interaction_regularization": common_cfg.interaction_regularization,
+    }
 
     # Create model
     model = VQVAEPT(
@@ -5212,6 +5332,8 @@ def fit_VQVAE(
         device=device,
         latent_view=None,
     )
+    if tau_star is not None:
+        tau_star = tau_star.to(device)
 
     # Set distillation weights
     apply_distill = (tau_star is not None)
@@ -5246,7 +5368,7 @@ def fit_VQVAE(
 
         # Summarize some variables into namespace
         ctx = SimpleNamespace(
-            tau_star=(tau_star.to(device) if tau_star is not None else None),
+            tau_star=tau_star,
             distill_head=distill_head,
             lambda_scheduler=lambda_scheduler,
             distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
@@ -5257,7 +5379,7 @@ def fit_VQVAE(
 
         # Train and validate
         train_logs, _, lam = train_one_epoch_indexed(
-            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
+            model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_vqvae_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
             grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False,
         )
@@ -5291,19 +5413,7 @@ def fit_VQVAE(
 
         # Print training progress            
         log_summary = _print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
-
-        # Write training progress
-        if writer:
-            for k, v in train_logs.items():
-                writer.add_scalar(f"Train/{k}", v, epoch)
-            for k, v in val_logs.items():
-                writer.add_scalar(f"Val/{k}", v, epoch)
-            writer.add_scalar("Distill/lambda", lam, epoch)
-
-            if math.isfinite(score_value):
-                writer.add_scalar("Val/alignment_score", score_value, epoch)
-                writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
-                writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
+        _log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
         # Save best model based on total validation loss
         if v_total < best_val:
@@ -5320,17 +5430,7 @@ def fit_VQVAE(
                     teacher_cfg=teacher_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "vqvae",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
@@ -5360,17 +5460,7 @@ def fit_VQVAE(
                     teacher_cfg=teacher_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "vqvae",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
@@ -5378,18 +5468,14 @@ def fit_VQVAE(
         
 
     # Load states of best val and score models
-    model_score = deepcopy(model)
-    if common_cfg.save_weights and os.path.exists(best_path_val):
-        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
-        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
-    if common_cfg.save_weights and os.path.exists(best_path_score):
-        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
-        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
+    model_val, model_score = _load_best_checkpoints(
+        model, best_path_val, best_path_score, device, common_cfg.save_weights
+    )
 
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), None, log_summary
+    return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
 
 
 def fit_contrastive(
@@ -5408,6 +5494,19 @@ def fit_contrastive(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
+
+    model_name = "contrastive"
+    rebuild_spec={                    
+        "model_name": model_name,
+        "x_shape": train_loader.dataset.x_shape,
+        "a_shape": train_loader.dataset.a_shape,
+        "adjacency_matrix": adjacency_matrix.astype("float32"),
+        "latent_dim": common_cfg.latent_dim,
+        "n_components": common_cfg.n_components,
+        "encoder_type": common_cfg.encoder_type,
+        "use_gnn": True,
+        "interaction_regularization": common_cfg.interaction_regularization,
+    }
 
     # Create model
     model = deepof.clustering.models_new.ContrastivePT(
@@ -5447,6 +5546,8 @@ def fit_contrastive(
         device=device,
         latent_view=None,
     )
+    if tau_star is not None:
+        tau_star = tau_star.to(device)
 
     # Set distillation weights
     apply_distill = (tau_star is not None)
@@ -5481,7 +5582,7 @@ def fit_contrastive(
 
         # Summarize some variables into namespace
         ctx = SimpleNamespace(
-            tau_star=(tau_star.to(device) if tau_star is not None else None),
+            tau_star=tau_star,
             distill_head=distill_head,
             lambda_scheduler=lambda_scheduler,
             distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
@@ -5496,7 +5597,7 @@ def fit_contrastive(
 
         # Train and validate
         train_logs, _, lam = train_one_epoch_indexed(
-            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
+            model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
             grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False, 
         )
@@ -5534,19 +5635,8 @@ def fit_contrastive(
 
         # Print training progress
         log_summary = _print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+        _log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
-        # Write training progress
-        if writer:
-            for k, v in train_logs.items():
-                writer.add_scalar(f"Train/{k}", v, epoch)
-            for k, v in val_logs.items():
-                writer.add_scalar(f"Val/{k}", v, epoch)
-            writer.add_scalar("Distill/lambda", lam, epoch)
-
-            if math.isfinite(score_value):
-                writer.add_scalar("Val/alignment_score", score_value, epoch)
-                writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
-                writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
    
         # Save best model based on total validation loss
         if v_total < best_val:
@@ -5564,17 +5654,7 @@ def fit_contrastive(
                     contrastive_cfg=contrastive_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "contrastive",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
@@ -5605,17 +5685,7 @@ def fit_contrastive(
                     contrastive_cfg=contrastive_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "contrastive",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
@@ -5623,18 +5693,14 @@ def fit_contrastive(
 
 
     # Load states of best val and score models
-    model_score = deepcopy(model)
-    if common_cfg.save_weights and os.path.exists(best_path_val):
-        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
-        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
-    if common_cfg.save_weights and os.path.exists(best_path_score):
-        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
-        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
+    model_val, model_score = _load_best_checkpoints(
+        model, best_path_val, best_path_score, device, common_cfg.save_weights
+    )
 
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), None, log_summary   
+    return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary   
 
 
 def fit_VADE(
@@ -5648,7 +5714,11 @@ def fit_VADE(
     writer: SummaryWriter,
 ):
     
-    # Some setup
+
+    ###############
+    # Set up
+    ###############
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
@@ -5674,13 +5744,23 @@ def fit_VADE(
     optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
     n_batches_per_epoch = len(train_loader)
-    # Set up fixed KL weight schedule (determines KL weight for each epoch)
-    kl_scheduler = Dynamic_weight_manager(
-        n_batches_per_epoch, mode="tf_sigmoid", #common_cfg.kl_annealing_mode,
-        warmup_epochs=15, max_weight=0.0, cooldown_epochs=1, end_weight=0.0
-    )
 
-    # Load pretrained model if available
+    model_name = "vade"
+    rebuild_spec={                    
+        "model_name": model_name,
+        "x_shape": train_loader.dataset.x_shape,
+        "a_shape": train_loader.dataset.a_shape,
+        "adjacency_matrix": adjacency_matrix.astype("float32"),
+        "latent_dim": common_cfg.latent_dim,
+        "n_components": common_cfg.n_components,
+        "encoder_type": common_cfg.encoder_type,
+        "use_gnn": True,
+        "kmeans_loss": common_cfg.kmeans_loss,
+        "interaction_regularization": common_cfg.interaction_regularization,
+        "lens_enabled": False,
+    }
+
+    # Load pretrained model if available + early return
     if common_cfg.pretrained:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
         unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device, weights_only=False))
@@ -5688,43 +5768,31 @@ def fit_VADE(
             writer.flush(); writer.close()
         return unwrap_dp(model), unwrap_dp(model), None
 
-    # Set up loss function
-    criterion = VaDELossTFExact(
-        n_components=common_cfg.n_components,
-        latent_dim=common_cfg.latent_dim,
-        reg_cat_clusters=vade_cfg.reg_cat_clusters,
-        kl_scheduler=kl_scheduler,
-        prior_loss_weight=vade_cfg.prior_loss_weight,
-        mc_kl_samples=32,
-        kl_clamp_min=0.0,
-        lambda_distill=0.0,
-        distill_sharpen_T=teacher_cfg.distill_sharpen_T,
-        distill_conf_weight=teacher_cfg.distill_conf_weight,
-        distill_conf_thresh=teacher_cfg.distill_conf_thresh,
-        tf_cluster_weight=vade_cfg.tf_cluster_weight,
-        reg_cluster_var_weight=0.001,
-        distill_use_class_reweight=True,
-        distill_class_reweight_beta=teacher_cfg.distill_class_reweight_beta,
-        distill_class_reweight_cap=teacher_cfg.distill_class_reweight_cap,
-        kmeans_loss_weight=common_cfg.kmeans_loss,
-        nonempty_weight=vade_cfg.nonempty_weight_pretrain,
-    ).to(device)
-    if hasattr(criterion, "gmm_logvar_clamp"):
-        criterion.gmm_logvar_clamp = (-8.0, 8.0)
-    criterion.temporal_cohesion_weight = vade_cfg.temporal_cohesion_weight
-    criterion.reg_scatter_weight = vade_cfg.reg_scatter_weight
-    criterion.reg_scatter_beta = vade_cfg.reg_scatter_beta
-    criterion.repel_weight = vade_cfg.repel_weight_pretrain
-    criterion.repel_length_scale = vade_cfg.repel_length_scale_pretrain
-    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent_pretrain / common_cfg.n_components)
-    criterion.nonempty_p = vade_cfg.nonempty_p_pretrain
 
+    ###############
+    # Define function, will start in pretrain mode
+    ###############
+
+    criterion = VadeLoss(
+        common_cfg=common_cfg,
+        vade_cfg=vade_cfg,
+        teacher_cfg=teacher_cfg,
+    ).to(device)
+
+
+    ###############
     # Pretraining
+    ###############
+
     print("\n--- Pretraining (reconstruction and setting up the latent space) ---")
     unwrap_dp(model).set_pretrain_mode(True)
-    criterion.pretrain_mode = True
     pre_epochs = min(10, max(1, common_cfg.epochs))
     ctx = SimpleNamespace(criterion=criterion, scheduler=None, scheduler_per_batch=True)
+    kl_scheduler = Dynamic_weight_manager(
+        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+        warmup_epochs=15, max_weight=0.0, cooldown_epochs=1, end_weight=0.0
+    )
+    criterion.set_kl_scheduler(kl_scheduler)
 
     leave = False 
     for ep in range(pre_epochs):
@@ -5734,25 +5802,21 @@ def fit_VADE(
             leave=True
         apply_decoder_schedule(model, ep)
         pre_logs, _, _ = train_one_epoch_indexed(
-            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
+            model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
             device=device, epoch=ep, num_epochs=pre_epochs, scaler=scaler, use_amp=common_cfg.use_amp,
             grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=leave
         )
         if writer:
             writer.add_scalar("Pretrain/total_loss", pre_logs["total_loss"], ep)
 
-    # Set loss parameters to main training parameter values
-    criterion.repel_weight = vade_cfg.repel_weight
-    criterion.repel_length_scale = vade_cfg.repel_length_scale
-    criterion.nonempty_weight = vade_cfg.nonempty_weight
-    criterion.nonempty_floor = max(1e-4, vade_cfg.nonempty_floor_percent / common_cfg.n_components)
-    criterion.nonempty_p = vade_cfg.nonempty_p
+    ###############
+    # Main training
+    ###############
 
     # Finish pretraining, reset KL schedule
     unwrap_dp(model).set_pretrain_mode(False)
-    criterion.pretrain_mode = False
-
-    # New user determiend KL schedule
+    criterion.set_mode("main")
+    # New KL schedule
     kl_scheduler = Dynamic_weight_manager(
         n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
         warmup_epochs=common_cfg.kl_warmup, max_weight=common_cfg.kl_max_weight,
@@ -5822,19 +5886,7 @@ def fit_VADE(
                 vade_cfg=vade_cfg,
                 model=unwrap_dp(model),
                 log_summary=log_summary,
-                rebuild_spec={                    
-                    "model_name": "vade",
-                    "x_shape": train_loader.dataset.x_shape,
-                    "a_shape": train_loader.dataset.a_shape,
-                    "adjacency_matrix": adjacency_matrix.astype("float32"),
-                    "latent_dim": common_cfg.latent_dim,
-                    "n_components": common_cfg.n_components,
-                    "encoder_type": common_cfg.encoder_type,
-                    "use_gnn": True,
-                    "kmeans_loss": common_cfg.kmeans_loss,
-                    "interaction_regularization": common_cfg.interaction_regularization,
-                    "lens_enabled": False,
-                },
+                rebuild_spec=rebuild_spec,
                 save_weights=common_cfg.save_weights,
                 save_bundle=True,
             )
@@ -5852,9 +5904,6 @@ def fit_VADE(
     score_value = float("nan")
     score_tol = 0.01
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
-    epochs_no_improve = 0
-    early_stop_patience = 50
-    early_stop_warmup = max(5, vade_cfg.freeze_gmm_epochs)
 
     # Epoch dependent weights
     lambda_d = 0.0
@@ -5931,7 +5980,7 @@ def fit_VADE(
         ctx = SimpleNamespace(criterion=criterion, scheduler_per_batch=True)
         # klw is updated in every training step, getting the weight for printing at the middle of the epochs
         train_logs, klw, lambda_d = train_one_epoch_indexed(
-            model=model, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
+            model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
             grad_clip_value=0.75, ctx=ctx, show_progress=True,
         )
@@ -5961,21 +6010,13 @@ def fit_VADE(
         score_value = float(val_logs["alignment_score"])
 
         log_summary = _print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
-
-        # Write training progress
-        if writer:
-            for k, v in train_logs.items(): writer.add_scalar(f"Train/{k}", v, epoch)
-            for k, v in val_logs.items(): writer.add_scalar(f"Val/{k}", v, epoch)
-            writer.add_scalar("Align/score", val_logs["alignment_score"], epoch)
-            writer.add_scalar("Val/alignment_score", score_value, epoch)
-            writer.add_scalar("Val/conf_norm", val_logs["conf_norm"], epoch)
-            writer.add_scalar("Val/bal_norm", val_logs["bal_norm"], epoch)
+        _log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
         improved_val = (val_total < best_val)
 
         improved_score = (
-            (
+            math.isfinite(score_value) and (
                 (score_value > best_score + score_tol) or
                 (abs(score_value - best_score) <= score_tol and val_total < best_score_val)
             )
@@ -5996,19 +6037,7 @@ def fit_VADE(
                     vade_cfg=vade_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "vade",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "kmeans_loss": common_cfg.kmeans_loss,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                        "lens_enabled": False,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
@@ -6020,61 +6049,34 @@ def fit_VADE(
             best_score = score_value
             best_score_val = val_total
             if common_cfg.save_weights:
-                torch.save(unwrap_dp(model).state_dict(), best_path_score)
                 save_model_info(
                     best_path_score,
                     stage="best_score",
                     epoch=epoch,
                     train_steps=(epoch + 1) * len(train_loader),
                     val_total=val_total,
-                    score_value=train_logs["alignment_score"],
+                    score_value=score_value,
                     common_cfg=common_cfg,
                     teacher_cfg=teacher_cfg,
                     vade_cfg=vade_cfg,
                     model=unwrap_dp(model),
                     log_summary=log_summary,
-                    rebuild_spec={                    
-                        "model_name": "vade",
-                        "x_shape": train_loader.dataset.x_shape,
-                        "a_shape": train_loader.dataset.a_shape,
-                        "adjacency_matrix": adjacency_matrix.astype("float32"),
-                        "latent_dim": common_cfg.latent_dim,
-                        "n_components": common_cfg.n_components,
-                        "encoder_type": common_cfg.encoder_type,
-                        "use_gnn": True,
-                        "kmeans_loss": common_cfg.kmeans_loss,
-                        "interaction_regularization": common_cfg.interaction_regularization,
-                        "lens_enabled": False,
-                    },
+                    rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
                     save_bundle=True,
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (score={best_score:.4f})")
-        
-
-        # Collect relevant logs
-
-
-
-
-        #if epoch >= early_stop_warmup and epochs_no_improve >= early_stop_patience:
-        #    print(f"[EarlyStopping] No val improvement for {early_stop_patience} epoch(s). Stop.")
-        #    break
 
 
     # Load states of best val and score models
-    model_score = deepcopy(model)
-    if common_cfg.save_weights and os.path.exists(best_path_val):
-        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
-        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
-    if common_cfg.save_weights and os.path.exists(best_path_score):
-        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
-        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
+    model_val, model_score = _load_best_checkpoints(
+        model, best_path_val, best_path_score, device, common_cfg.save_weights
+    )
 
     if writer:
         writer.flush(); writer.close()
 
-    return unwrap_dp(model), unwrap_dp(model_score), teacher_init_model, log_summary    
+    return unwrap_dp(model_val), unwrap_dp(model_score), teacher_init_model, log_summary    
 
 
 def _build_edge_from_metainfo(

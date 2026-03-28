@@ -2394,6 +2394,7 @@ class Coordinates:
         preprocess: bool = True,
         dist_standardize: str = "per_column",
         speed_standardize: str = "per_column",
+        coord_standardize: str = "groupwise",
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2588,6 +2589,7 @@ class Coordinates:
                 quality_to_load=None, #quality_to_load,
                 dist_standardize=dist_standardize,
                 speed_standardize=speed_standardize,
+                coord_standardize=coord_standardize,
                 window_size=window_size,
                 **kwargs,
                 )
@@ -3505,6 +3507,7 @@ class TableDict(dict):
         quality_to_load=None, 
         dist_standardize: str = "groupwise", 
         speed_standardize: str = "groupwise", 
+        coord_standardize: str = "groupwise",
         log_distances: bool = True, 
     ) -> tuple:
         """
@@ -3582,8 +3585,8 @@ class TableDict(dict):
                 del table_temp[k]
         
         rng = np.random.RandomState(2)
-        samples_speed, samples_dist, samples_inner, samples_intra = [], [], [], []
-        ref_speed_cols, ref_dist_cols = None, None
+        samples_speed, samples_dist, samples_coord, samples_inner, samples_intra = [], [], [], [], []
+        ref_speed_cols, ref_dist_cols, ref_coord_cols = None, None, None
         global_scaler = None
         valid_keys = []
 
@@ -3615,6 +3618,7 @@ class TableDict(dict):
                         standardize=True,   # size-normalize only
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
+                        coord_standardize="none",
                         log_distances=log_distances,
                     )
 
@@ -3653,6 +3657,25 @@ class TableDict(dict):
                                         tab_local.iloc[idx][col_types["intra_dists"]].to_numpy(float).reshape(-1)
                                     )
 
+                        # Coordinates
+                        coord_cols_local = [c for c in tab_local.columns
+                                            if isinstance(c, tuple) and len(c) == 2
+                                            and c[1] in ("x", "y")]
+                        if coord_standardize != "none" and coord_cols_local:
+                            if coord_standardize == "per_column":
+                                if ref_coord_cols is None:
+                                    ref_coord_cols = coord_cols_local
+                                samples_coord.append(
+                                    tab_local.iloc[idx].reindex(
+                                        columns=ref_coord_cols
+                                    )[ref_coord_cols].to_numpy(float)
+                                )
+                            else:  # groupwise
+                                samples_coord.append(
+                                    tab_local.iloc[idx][coord_cols_local]
+                                    .to_numpy(float).reshape(-1)
+                                )
+
                 pbar.update()
 
         # ========== Fit global scaler (per-column) ==========
@@ -3681,8 +3704,10 @@ class TableDict(dict):
                 "dist": None,
                 "dist_inner": None,
                 "dist_intra": None,
+                "coord": None,
                 "speed_mode": speed_standardize,
                 "dist_mode": dist_standardize,
+                "coord_mode": coord_standardize,
                 "log_distances": log_distances,
             }
 
@@ -3697,7 +3722,13 @@ class TableDict(dict):
                 global_scaler["dist_inner"] = _fit_global_groupwise(samples_inner)
                 global_scaler["dist_intra"] = _fit_global_groupwise(samples_intra)
 
-            if all(global_scaler[k] is None for k in ("speed", "dist", "dist_inner", "dist_intra")):
+            if coord_standardize == "per_column":
+                global_scaler["coord"] = _fit_global_per_column(samples_coord)
+            elif coord_standardize == "groupwise":
+                global_scaler["coord"] = _fit_global_groupwise(samples_coord)
+
+            if all(global_scaler[k] is None
+                   for k in ("speed", "dist", "dist_inner", "dist_intra", "coord")):
                 global_scaler = None
 
 
@@ -3729,6 +3760,14 @@ class TableDict(dict):
                 _apply_1d(col_types["inner_dists"], gs.get("dist_inner"))
                 _apply_1d(col_types["intra_dists"], gs.get("dist_intra"))
 
+            coord_cols_apply = [c for c in tab_scaled.columns
+                                if isinstance(c, tuple) and len(c) == 2
+                                and c[1] in ("x", "y")]
+            if coord_standardize == "per_column":
+                _apply_2d(coord_cols_apply, gs.get("coord"))
+            elif coord_standardize == "groupwise":
+                _apply_1d(coord_cols_apply, gs.get("coord"))
+
             return tab_scaled
         
         with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
@@ -3757,6 +3796,7 @@ class TableDict(dict):
                         standardize=True,  
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
+                        coord_standardize="none",
                         log_distances=log_distances,
                     )
 
@@ -3768,11 +3808,16 @@ class TableDict(dict):
                     # Clip outliers and interpolate (scalars only)
                     if scale == "standard" and interpolate_normalized:
                         scalars = [c for c in col_types["scalars"] if c in tab.columns]
-                        if scalars:
-                            arr = tab[scalars].to_numpy(float)
+                        # Include coordinates in outlier clipping
+                        coord_cols_clip = [c for c in tab.columns
+                                           if isinstance(c, tuple) and len(c) == 2
+                                           and c[1] in ("x", "y")]
+                        clip_cols = list(dict.fromkeys(scalars + coord_cols_clip))
+                        if clip_cols:
+                            arr = tab[clip_cols].to_numpy(float)
                             arr[np.abs(arr) > interpolate_normalized] = np.nan
-                            tab[scalars] = pd.DataFrame(
-                                arr, index=tab.index, columns=scalars
+                            tab[clip_cols] = pd.DataFrame(
+                                arr, index=tab.index, columns=clip_cols
                             ).interpolate(limit_direction="both")
 
                 # Reattach interpolated angles

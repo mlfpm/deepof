@@ -66,7 +66,7 @@ class CommonFitCfg:
     interaction_regularization: float = 0.0
     kmeans_loss: float = 0.0
 
-    kl_annealing_mode: str = "sigmoid"
+    kl_annealing_mode: str = "tf_sigmoid"
     kl_max_weight: float = 1.0
     kl_warmup: int = 5
     kl_end_weight: float = 0.2
@@ -339,7 +339,7 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
-def nce_loss_pt_old(
+def nce_loss_pt(
     history: torch.Tensor,
     future: torch.Tensor,
     similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
@@ -365,7 +365,7 @@ def nce_loss_pt_old(
     mean_neg = neg.mean()
     return loss, mean_sim, mean_neg
 
-def nce_loss_pt(history, future, similarity, temperature=0.1):
+def nce_loss_pt_new(history, future, similarity, temperature=0.1):
     """
     Standard NCE loss 
     """
