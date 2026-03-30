@@ -3859,19 +3859,17 @@ class VadeLoss(nn.Module):
         """
         Computes log p(z|c) for each component c using diagonal Gaussians.
 
-        Treats gmm_log_vars as log(sigma) rather than log(sigma^2), matching the
-        original TF model's parameterization where the stored values are log-std-devs.
-
         Args:
             z (torch.Tensor): Latent samples of shape [B, D].
             gmm_means (torch.Tensor): Component means of shape [C, D].
-            gmm_log_vars (torch.Tensor): Component log-standard-deviations of shape [C, D].
+            gmm_log_vars (torch.Tensor): Component log-variances of shape [C, D].
 
         Returns:
             torch.Tensor: Log-likelihoods of shape [B, C].
         """
+        # clamp for stability
         gmm_log_vars = torch.clamp(gmm_log_vars, min=self.gmm_logvar_clamp[0], max=self.gmm_logvar_clamp[1])
-        scale = torch.exp(gmm_log_vars).clamp(min=1e-6)
+        scale = torch.exp(0.5 * gmm_log_vars).clamp(min=1e-3)
         dist = Normal(gmm_means.unsqueeze(0), scale.unsqueeze(0))  # (1,C,D)
         logp = dist.log_prob(z.unsqueeze(1)).sum(dim=-1)           # (B,C)
         return logp
@@ -3912,29 +3910,23 @@ class VadeLoss(nn.Module):
         if self.kl_scheduler is not None:
             klw = float(self.kl_scheduler.get_weight())
 
-        # Custom KL
-        # loss_variational_1 = -0.5 * sum(z_log_var + 1)
-        # loss_variational_2 = sum(q log q)    (entropy term)
-        z_log_var32 = z_log_var.float()
-        if q is not None:
-            q32 = q.float()
-        else:
-            # If q is None, we cannot include the entropy term; fall back to loss_variational_1 only.
-            q32 = None
+        # KL terms
+        z_mean32 = z_mean.float()
+        z_log_var32 = z_log_var.float().clamp(min=-4.0, max=2.0)
 
-        v_max = 0.5 
-        z_var_eff = z_log_var32.clamp_max(v_max) 
-        loss_var1 = -1 * (z_var_eff + 0.5).sum(dim=-1).mean()/z_log_var32.shape[-1]  # [B]
         if self.pretrain_mode:
-            # Pretrain: simple variance proxy (no clusters yet)
-            kl_vec = loss_var1
+            # Pretrain: weak standard-VAE KL against N(0, I).
+            # This keeps the latent space compact and well-behaved
+            # without imposing mixture structure too early.
+            kl_vec = 0.5 * (
+                z_mean32.pow(2) + z_log_var32.exp() - 1.0 - z_log_var32
+            ).sum(dim=-1) / z_log_var32.shape[-1]
             kl_batch = klw * kl_vec.mean()
         else:
-            # Main training: proper MC-KL against the mixture of Gaussians
-            # This pulls latent representations toward their nearest cluster centers
+            # Main training: proper MC-KL against the GMM prior.
             with torch.amp.autocast(device_type=device.type, enabled=False):
                 kl_vec = self._monte_carlo_kl(
-                    z_mean.float(),
+                    z_mean32,
                     z_log_var32,
                     gmm_params["means"].float(),
                     gmm_params["log_vars"].float(),
@@ -4120,9 +4112,6 @@ def _init_log_summary():
     """Initialize distionary structure of losses to collect"""
 
     log_summary={}
-    log_summary['conf_norm']=[]
-    log_summary['bal_norm']=[]
-    log_summary['alignment_score']=[]
     for data_type in ['train','val']:
         log_summary[data_type]={}
         log_summary[data_type]['total_loss']=[]
@@ -4140,6 +4129,9 @@ def _init_log_summary():
         log_summary[data_type]['activity_l1']=[]
         log_summary[data_type]['pos_similarity']=[]
         log_summary[data_type]['neg_similarity']=[]
+        log_summary[data_type]['conf_norm']=[]
+        log_summary[data_type]['bal_norm']=[]
+        log_summary[data_type]['alignment_score']=[]
 
 
     return log_summary
@@ -5440,7 +5432,7 @@ def fit_VQVAE(
         improved_score = (
             apply_distill and math.isfinite(score_value) and
             (
-                (score_value > best_score + score_tol) or
+                (score_value > best_score) or
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
             )
         )
@@ -5664,7 +5656,7 @@ def fit_contrastive(
         improved_score = (
             apply_distill and math.isfinite(score_value) and
             (
-                (score_value > best_score + score_tol) or
+                (score_value > best_score) or
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
             )
         )
@@ -5790,7 +5782,7 @@ def fit_VADE(
     ctx = SimpleNamespace(criterion=criterion, scheduler=None, scheduler_per_batch=True)
     kl_scheduler = Dynamic_weight_manager(
         n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-        warmup_epochs=15, max_weight=0.0, cooldown_epochs=1, end_weight=0.0
+        warmup_epochs=15, max_weight=0.2, cooldown_epochs=10, end_weight=0.2
     )
     criterion.set_kl_scheduler(kl_scheduler)
 
@@ -5898,12 +5890,14 @@ def fit_VADE(
         unwrap_dp(model).initialize_gmm_from_data(train_loader)
 
     # Inits for training
-    best_val = float("inf")
+    best_val = -float("inf") #start negative, as Vade first is expected to get worse validation wise, then top out and get better
     best_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
     score_tol = 0.01
+    val_tol = 0.01
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
+    val_top_reached=False
 
     # Epoch dependent weights
     lambda_d = 0.0
@@ -6013,18 +6007,23 @@ def fit_VADE(
         _log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
-        improved_val = (val_total < best_val)
+        improved_val = ((val_total + val_tol) < best_val)
+
+        if not improved_val and not val_top_reached:
+            best_val = val_total
 
         improved_score = (
             math.isfinite(score_value) and (
-                (score_value > best_score + score_tol) or
+                (score_value > best_score) or
                 (abs(score_value - best_score) <= score_tol and val_total < best_score_val)
             )
         )
 
         # Save best model based on total validation loss
         if improved_val:
+            val_top_reached=True
             best_val = val_total
+            val_tol=0.0
             if common_cfg.save_weights:
                 save_model_info(
                     best_path_val,

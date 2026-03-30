@@ -2394,7 +2394,7 @@ class Coordinates:
         preprocess: bool = True,
         dist_standardize: str = "per_column",
         speed_standardize: str = "per_column",
-        coord_standardize: str = "groupwise",
+        coord_standardize: str = "per_column",
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2578,7 +2578,7 @@ class Coordinates:
             collect_quality = True
             if collect_quality==True:
                 quality_to_load = self.get_quality()
-            to_preprocess, shapes, global_scaler = tab_dict.preprocess(
+            to_preprocess, metainfo, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
                 bin_size=bin_size,
@@ -2625,7 +2625,6 @@ class Coordinates:
                     else:
                         metainfo['shape_train']=[(0,),(0,),(0,)]
                     pbar.update()
-
 
             return (
                 to_preprocess,
@@ -2676,6 +2675,10 @@ class Coordinates:
 
                 metainfo[f'shape_{key}']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
 
+            # add standardizations
+            metainfo['dist_standardize'] = dist_standardize
+            metainfo['speed_standardize'] = speed_standardize
+            metainfo['coord_standardize'] = coord_standardize
             return to_preprocess, metainfo, nx.adjacency_matrix(graph).todense(), tab_dict, None
                 
     # noinspection PyDefaultArgument
@@ -3864,10 +3867,16 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
+        to_preprocess=(X_train, X_test)
+        
         metainfo={}
         metainfo['shape_train']=train_shape
         metainfo['shape_test']=test_shape
-        return (X_train, X_test), metainfo, global_scaler
+        # add standardizations
+        metainfo['dist_standardize'] = dist_standardize
+        metainfo['speed_standardize'] = speed_standardize
+        metainfo['coord_standardize'] = coord_standardize
+        return to_preprocess, metainfo, global_scaler
 
 
     def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:

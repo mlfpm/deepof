@@ -14,8 +14,10 @@ from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 from sklearn.cluster import MiniBatchKMeans
+from scipy.ndimage import uniform_filter1d
 #from deeptime.markov import TransitionCountEstimator
 #from deeptime.markov.msm import MaximumLikelihoodMSM
+import types
 
 import numpy as np
 import ot
@@ -370,208 +372,213 @@ def get_contrastive_soft_counts(
     )
 
     return soft_counts_out
-    
 
 
-def get_contrastive_soft_counts_gmm(
+
+def get_supervised_chaos(
     coordinates,
-    embeddings: Dict[str, np.ndarray],
-    animal_ids: list,
-    *,
-    window_size: int = 12,
-    supervised_annotations=None,
-    K_pose: int = 8,
-    M_bins: int = 3,
-    binning: str = "quantile",
-    fixed_edges: Optional[list] = None,
-    reg_covar: float = 1e-5,
-    sample_size: int = 200000,
-    random_state: int = 0,
-    embedding_gates: Any = "Center",
-    smoothing: float = 1e-4,
+    quality_threshold: float = 0.90,
+    frac_bps_below: float = 0.25,
+    chaos_suffix: str = "chaos",
 ):  # pragma: no cover
-    """
-    Distance/behavior-gated GMM decoder.
+    """Create a supervised-annotations-like table dict containing only quality-based chaos labels.
 
     Args:
-        coordinates: deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
-        animal_ids (list): list of animal ids of all animals that should be included in the gating
-        window_size (int): size of the window that should be used for binning
-        supervised_annotations (table_dict): table dict with supervised annotations per video.    
-        K_pose (int): bins per gate
-        M_bins (int): number of gates
-        binning (str): binning process to be used for gating. Can be "quantile" for even sized bins or "fixed" for specific bins. "quantile" is default.
-        fixed_edges (list): Optional list of edges for binning, will be ignored wenn binning is not fixed.
-        reg_covar (float): Covariance regularization for the GMM to ensure positive covariance matrices.
-        sample_size (int): Sample size to be used for cluster prediction. 
-        random_state (int): Random state for reproducibility
-        embedding_gates (any): Either a bodypart name for distance binning or, if supervised_annotations are given, alternatively a behavior name.
-        smoothing (float): 
-    """
-    keys = list(embeddings.keys())
-    if not keys:
-        raise ValueError("Embeddings are empty.")
-    if animal_ids is None:
-        animal_ids = coordinates._animal_ids
+        coordinates (coordinates): deepof.Coordinates object for the project at hand.
+        quality_threshold (float): Per-bodypart quality threshold below which a bodypart is counted as low quality.
+        frac_bps_below (float): Fraction of bodyparts that need to fall below ``quality_threshold`` for a frame
+            to be flagged as chaotic for a given animal.
+        chaos_suffix (str): Suffix used for per-animal chaos columns. Resulting columns are of the form
+            ``"{animal_id}_{chaos_suffix}"``.
 
-    # ---- cache embeddings + lengths ----
+    Returns:
+        supervised_chaos (table_dict): table dict with one table per experiment containing
+            per-animal chaos columns and one additional ``"any_chaos"`` column.
+    """
+    quality = coordinates.get_quality()
+    if quality is None:
+        raise ValueError("Could not obtain quality tables from coordinates.get_quality().")
+
+    animal_ids = coordinates._animal_ids
+    if animal_ids is None or animal_ids == "":
+        animal_ids = [""]
+    else:
+        animal_ids = [aid + "_" for aid in animal_ids]
+    keys = list(coordinates._tables.keys())
+    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+
+    out = {}
+
+    for key in keys:
+        q_df = get_dt(quality, key).copy()
+        pose = get_dt(coordinates._tables, key)
+        chaos_df = pd.DataFrame(index=q_df.index.copy())
+
+        per_animal_chaos = []
+        for mid in animal_ids:
+            cols = [c for c in q_df.columns if str(c[0]).startswith(f"{mid}")]
+
+            if len(cols) == 0:
+                chaos = np.zeros(len(pose), dtype=np.float32)
+            else:
+                arr = q_df.loc[:, cols].to_numpy(dtype=np.float32, copy=True)
+                bad = (~np.isfinite(arr)) | (arr < float(quality_threshold))
+                frac_bad = bad.mean(axis=1)
+                chaos = (frac_bad >= float(frac_bps_below)).astype(np.float32)
+
+            chaos_df[f"{mid}{chaos_suffix}"] = chaos
+            per_animal_chaos.append(chaos.astype(bool))
+
+        chaos_df["anychaos"] = np.logical_or.reduce(per_animal_chaos).astype(np.float32)
+
+        table_path_key = os.path.join(table_path, key, f"{key}_supervised_chaos")
+        out[key] = deepof.utils.save_dt(
+            chaos_df,
+            table_path_key,
+            coordinates._very_large_project,
+        )
+
+    return deepof.data.TableDict(
+        out,
+        typ="supervised_annotation",
+        table_path=table_path,
+        exp_conditions=coordinates.get_exp_conditions,
+    )
+
+
+def add_chaos_gates(
+    coordinates,
+    soft_counts_dict,
+    soft_counts_chaos_dict,
+    supervised_annotations,
+    extract_pair,
+    window_size: int,
+):  # pragma: no cover
+    """Combine regular and chaos-specific soft counts gate-wise.
+
+    Args:
+        soft_counts_dict (dict): Dictionary mapping gate -> TableDict with regular soft counts.
+        soft_counts_chaos_dict (dict): Dictionary mapping gate -> TableDict with chaos soft counts.
+            Typically this contains a single gate generated from ``embedding_gates="any_chaos"``.
+        supervised_annotations (table_dict): Table dict with frame-wise chaos annotations. Expected columns are
+            ``"{animal_id}_chaos"`` and ``"any_chaos"``.
+        extract_pair (list): Tuple of animal ids to extract.
+        window_len (int): Window size used to produce the soft counts from frame-wise annotations.
+
+    Returns:
+        soft_counts_out (dict): Dictionary mapping gate -> TableDict with regular and chaos-specific
+            soft counts concatenated along the feature axis.
+    """
+
+    out = {}
+    chaos_cols = ["anychaos"]
+    table_path = os.path.join(
+        coordinates._project_path, coordinates._project_name, "Tables"
+    ) 
+
+    for gate, soft_counts_gate in soft_counts_dict.items():
+
+        # get parallel soft_counts for chaos gmm detections
+        soft_counts_chaos_gate = soft_counts_chaos_dict[gate]
+
+        result_gate = {}
+
+        # add new chaos clusters for each soft_counts table
+        for key in soft_counts_gate.keys():
+            # Extract info
+            ann = get_dt(supervised_annotations, key)
+            sc1 = get_dt(soft_counts_gate, key).copy()
+            sc2 = get_dt(soft_counts_chaos_gate, key).copy()      
+            needed_len = n_windows + window_size - 1
+            ann_used = ann.iloc[:needed_len]
+
+            # Check shapes
+            n_windows = sc1.shape[0]
+            if sc2.shape[0] != n_windows or ann_used.shape[0] != n_windows:
+                raise ValueError(
+                    f"Soft_counts and soft_counts_chaos must have same length, annotations must have same lenght or longer (Error at key{key!r}): "
+                    f"{sc1.shape[0]} vs {sc2.shape[0]} vs {ann.shape[0]}"
+                )            
+
+            per_signal = []
+            for col in chaos_cols:
+                raw = ann_used[col].to_numpy(dtype=np.float32, copy=False)
+                win = np.convolve(
+                    raw,
+                    np.ones(window_size, dtype=np.float32),
+                    mode="valid",
+                ) > 0
+                if win.shape[0] != n_windows:
+                    raise ValueError(
+                        f"Convolved length mismatch for key {key!r}, column {col!r}: "
+                        f"{win.shape[0]} vs expected {n_windows}"
+                    )
+                per_signal.append(win)
+
+            chaos_mask = np.logical_or.reduce(per_signal)
+
+            # regular states only on non-chaotic windows
+            sc1[chaos_mask, :] = 0
+
+            # chaos states only on chaotic windows
+            sc2[~chaos_mask, :] = 0
+
+            # keep only the chaotic half from the chaos extractor
+            n_cols_chaos = sc2.shape[1]
+            if n_cols_chaos % 2 != 0:
+                raise ValueError(
+                    f"Chaos soft counts for key {key!r} have an odd number of columns "
+                    f"({n_cols_chaos}); expected two equally sized chaos/non-chaos blocks."
+                )
+
+            combined = np.concatenate([sc1, sc2[:, n_cols_chaos // 2 :]], axis=1)
+
+            gate_tag = _gate_to_tag(gate)
+            table_path_key = os.path.join(
+                table_path, key, f"{key}_soft_counts_combined_{gate_tag}"
+            )
+            result_gate[key] = deepof.utils.save_dt(
+                combined,
+                table_path_key,
+                coordinates._very_large_project,
+            )
+
+        out[gate] = deepof.data.TableDict(
+            result_gate,
+            typ="unsupervised_counts",
+            table_path=table_path,
+            exp_conditions=coordinates.get_exp_conditions,
+        )
+
+    return out
+
+
+def _cache_embeddings(
+    coordinates,
+    embeddings,
+    keys: list,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, int]]:  # pragma: no cover
+    """Cache embeddings in memory (unless very large project) and return lengths."""
     Z_by_key = (
         {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
         if not coordinates._very_large_project else {}
     )
     emb_len = {
-        k: (Z_by_key[k].shape[0] if k in Z_by_key
-            else get_dt(embeddings, k, only_metainfo=True)["shape"][0])
+        k: (
+            Z_by_key[k].shape[0]
+            if k in Z_by_key
+            else get_dt(embeddings, k, only_metainfo=True)["shape"][0]
+        )
         for k in keys
     }
+    return Z_by_key, emb_len
 
-    if not isinstance(embedding_gates, str):
-        M_bins = 2 ** len(sorted(set(embedding_gates)))
-
-    # ---- gating series ----
-    dist_series_dict = get_pairwise_distances(
-        coordinates, window_size,
-        supervised_annotations=supervised_annotations,
-        embedding_gates=embedding_gates,
-        behavior_combinations=True,
-    )
-    first_key = list(dist_series_dict.keys())[0]
-    gates = list(dist_series_dict[first_key].keys())
-
-    if len(animal_ids) == 1 or len(animal_ids) > 4:
-        gates = [animal_ids[0]]
-        M_bins = 1
-
-    # ---- build masks (same structure as msm_pcca_upgrade) ----
-    gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
-    for gate in gates:
-        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
-        gate_masks[gate] = {}
-
-        if supervised_annotations is not None:
-            for b in range(M_bins):
-                in_bin = (full_g == b)
-                gate_masks[gate][b] = {}
-                cum = 0
-                for key in keys:
-                    T = emb_len[key]
-                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
-                    cum += T
-        else:
-            if binning == "quantile":
-                qs = np.linspace(0, 1, M_bins + 1)
-                edges = np.nanquantile(full_g, qs).astype(np.float64)
-                edges[0], edges[-1] = -np.inf, np.inf
-            elif binning == "fixed":
-                if fixed_edges is None or len(fixed_edges) != M_bins + 1:
-                    raise ValueError("fixed_edges must have length M_bins+1")
-                edges = np.asarray(fixed_edges, dtype=np.float64)
-                edges[0], edges[-1] = -np.inf, np.inf
-            else:
-                raise ValueError('binning must be "quantile" or "fixed"')
-
-            for b in range(M_bins):
-                in_bin = (full_g > edges[b]) & (full_g <= edges[b + 1])
-                gate_masks[gate][b] = {}
-                cum = 0
-                for key in keys:
-                    T = emb_len[key]
-                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
-                    cum += T
-
-    # ---- fit GMM per (gate, bin) ----
-    models: Dict[Any, List] = {}
-    total_steps = len(gates) * M_bins
-
-    with tqdm.tqdm(total=total_steps, desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="gmm") as pbar:
-        for gate_idx, gate in enumerate(gates):
-            models[gate] = []
-            for b in range(M_bins):
-                seed_b = int(random_state + 17 * b + 3 * gate_idx)
-
-                # collect points for this bin via reservoir sampling
-                bin_segments = []
-                n_windows = 0
-                for key in keys:
-                    Z = Z_by_key.get(key)
-                    if Z is None:
-                        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
-                    mask = gate_masks[gate][b][key]
-                    idx = np.flatnonzero(mask)
-                    n_windows += idx.size
-                    if idx.size > 0:
-                        bin_segments.append(Z[idx, :])
-
-                #if verbose:
-                #    print(f"  gate={gate} bin={b}: {n_windows} windows")
-
-                if n_windows < max(10, K_pose):
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
-
-                X_fit = _reservoir_sample(bin_segments, int(sample_size), seed=seed_b)
-
-                gmm = GaussianMixture(
-                    n_components=int(K_pose),
-                    covariance_type="full",
-                    reg_covar=float(reg_covar),
-                    random_state=seed_b,
-                    init_params="kmeans",
-                    max_iter=200,
-                    tol=1e-3,
-                ).fit(X_fit)
-
-                models[gate].append(dict(gmm=gmm))
-                pbar.update(1)
-
-    # ---- decode ----
-    K_total = M_bins * K_pose * len(gates)
-    soft_counts_out = {}
-    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
-
-    for key in tqdm.tqdm(keys, desc=f"{'Decode softcounts (GMM)':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
-        Z0 = Z_by_key.get(key)
-        if Z0 is None:
-            Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
-
-        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
-
-        for gate_idx, gate in enumerate(gates):
-            base = gate_idx * M_bins * K_pose
-
-            for b in range(M_bins):
-                model = models[gate][b]
-                mask = gate_masks[gate][b][key]
-                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
-
-                if model is None:
-                    if np.any(mask):
-                        P[mask, block] = 1.0 / K_pose
-                    continue
-
-                idx = np.flatnonzero(mask)
-                if idx.size == 0:
-                    continue
-
-                Z = Z0[idx, :]
-                R = model["gmm"].predict_proba(Z).astype(np.float32, copy=False)
-                P[idx, block] = R
-
-        # guard against all-zero rows
-        rs = P.sum(axis=1, keepdims=True)
-        P = P / np.maximum(rs, 1e-12)
-
-        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts_gmm")
-        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
-
-    return deepof.data.TableDict(
-        soft_counts_out,
-        typ="unsupervised_counts",
-        table_path=table_path,
-        exp_conditions=coordinates.get_exp_conditions,
-    )
+def _get_Z(Z_by_key: dict, embeddings: dict, key: str) -> np.ndarray:  # pragma: no cover
+    """Retrieve embedding array for a key, loading from disk if not cached."""
+    Z = Z_by_key.get(key)
+    if Z is None:
+        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+    return Z
 
 
 def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
@@ -606,13 +613,174 @@ def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray:  # pragma: no cover
     """Apply a uniform moving-average along axis 0 (frames) of a 2-D softcount matrix."""
     if win is None or win <= 1 or P.shape[0] < win:
         return P
-    kernel = np.ones((win, 1), dtype=np.float32) / float(win)
-    from scipy.ndimage import uniform_filter1d
     out = uniform_filter1d(P.astype(np.float32), size=win, axis=0, mode="nearest")
     # re-normalise rows
     rs = out.sum(axis=1, keepdims=True)
     rs = np.maximum(rs, 1e-12)
     return out / rs
+
+
+def _get_gating_series_and_gates(
+    coordinates,
+    animal_ids,
+    window_size: int,
+    supervised_annotations=None,
+    embedding_gates: Any = "Center",
+) -> Tuple[Dict[str, Dict], list]:  # pragma: no cover
+    """Return per-key gating series and the gate labels used downstream."""
+    dist_series_dict = get_pairwise_distances(
+        coordinates,
+        window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+        behavior_combinations=True,
+    )
+
+    first_key = list(dist_series_dict.keys())[0]
+    gates = list(dist_series_dict[first_key].keys())
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        gates = gates[:1] if gates else [""]
+
+    return dist_series_dict, gates
+
+
+def compute_gate_edges(
+    coordinates,
+    animal_ids: list,
+    *,
+    keys: Optional[list] = None,
+    window_size: int = 12,
+    supervised_annotations=None,
+    M_gates: int = 3,
+    embedding_gates: Any = "Center",
+    fixed_edges: Optional[list] = None,
+) -> Optional[Dict[Any, np.ndarray]]:  # pragma: no cover
+    """
+    Precompute bin edges for distance-gated extraction.
+
+    Behavior is intentionally identical to the original in-function logic:
+    - supervised gating -> return None
+    - fixed_edges provided -> validate and use them
+    - otherwise -> compute quantile edges from the full gating series
+    """
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    if not isinstance(embedding_gates, str):
+        M_gates = 2 ** len(set(embedding_gates))
+
+    dist_series_dict, gates = _get_gating_series_and_gates(
+        coordinates=coordinates,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+    )
+
+    if keys is None:
+        keys = list(dist_series_dict.keys())
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        M_gates = 1
+
+    if supervised_annotations is not None:
+        return None
+
+    if fixed_edges is not None:
+        if len(fixed_edges) != M_gates + 1:
+            raise ValueError("fixed_edges must have length \"M_gates\"+1")
+        edges = np.asarray(fixed_edges, dtype=np.float64).copy()
+        edges[0], edges[-1] = -np.inf, np.inf
+        return {gate: edges.copy() for gate in gates}
+
+    qs = np.linspace(0, 1, M_gates + 1)
+    gate_edges = {}
+
+    for gate in gates:
+        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
+        edges = np.nanquantile(full_g, qs).astype(np.float64)
+        edges[0], edges[-1] = -np.inf, np.inf
+        gate_edges[gate] = edges
+
+    return gate_edges
+
+
+def _build_gate_masks(
+    keys: list,
+    emb_len: Dict[str, int],
+    dist_series_dict: Dict[str, Dict],
+    gates: list,
+    M_gates: int,
+    supervised_annotations=None,
+    gate_edges: Optional[Dict[Any, np.ndarray]] = None,
+) -> Dict[Any, Dict[int, Dict[str, np.ndarray]]]:  # pragma: no cover
+    """Build per-(gate, bin, key) masks exactly as in the original code."""
+    gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
+
+    for gate in gates:
+        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
+        gate_masks[gate] = {}
+
+        if supervised_annotations is not None:
+            for b in range(M_gates):
+                in_bin = (full_g == b)
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+        else:
+            if gate_edges is None:
+                raise ValueError(
+                    "gate_edges must be provided when supervised_annotations is None. "
+                    "Use compute_gate_edges() first."
+                )
+
+            edges = np.asarray(gate_edges[gate], dtype=np.float64)
+            if len(edges) != M_gates + 1:
+                raise ValueError(
+                    f"gate_edges[{gate!r}] must have length {M_gates + 1}, got {len(edges)}"
+                )
+
+            for b in range(M_gates):
+                in_bin = (full_g > edges[b]) & (full_g <= edges[b + 1])
+                gate_masks[gate][b] = {}
+                cum = 0
+                for key in keys:
+                    T = emb_len[key]
+                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
+                    cum += T
+
+    return gate_masks
+
+
+def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:  # pragma: no cover
+    """Reservoir-sample up to n rows from a list of 2-D arrays without full concat."""
+    rng = np.random.default_rng(seed)
+    total = sum(s.shape[0] for s in segments)
+    if total <= n:
+        return np.concatenate(segments, axis=0)
+
+    # pre-allocate reservoir
+    D = segments[0].shape[1]
+    buf = np.empty((n, D), dtype=np.float32)
+    filled = 0
+    seen = 0
+
+    for seg in segments:
+        for row in seg:
+            if filled < n:
+                buf[filled] = row
+                filled += 1
+            else:
+                j = int(rng.integers(0, seen + 1))
+                if j < n:
+                    buf[j] = row
+            seen += 1
+
+    return buf[:filled]
 
 
 def get_pairwise_distances(
@@ -635,7 +803,7 @@ def get_pairwise_distances(
     gating = None
 
     # ---- decide mode ----
-    if (animal_ids and len(animal_ids) <= 4
+    if (animal_ids and 2 <= len(animal_ids) <= 4
             and supervised_annotations is None
             and isinstance(embedding_gates, str)):
         gating = "distances"
@@ -718,50 +886,37 @@ def get_pairwise_distances(
 
     return out
 
+def _gate_to_tag(gate: Any) -> str:  # pragma: no cover
+    """Convert a gate key to a filesystem-safe tag."""
+    if isinstance(gate, tuple):
+        return "_".join(map(str, gate))
+    if gate in ("", None):
+        return "all"
+    return str(gate).replace(os.sep, "-").replace(" ", "_")
 
-def get_contrastive_soft_counts_msm_pcca(
+
+def get_contrastive_soft_counts_gmm(
     coordinates,
     embeddings: Dict[str, np.ndarray],
     animal_ids: list,
-    *,
     window_size: int = 12,
     supervised_annotations=None,
-    K_pose: int = 10,
-    M_bins: int = 3,
-    binning: str = "quantile",
-    fixed_edges: Optional[list] = None,
+    N_clusters_per_gate: int = 8,
+    M_gates: int = 3,
+    gate_edges: Optional[Dict[Any, np.ndarray]] = None,
+    reg_covar: float = 1e-5,
     sample_size: int = 200000,
     random_state: int = 0,
     embedding_gates: Any = "Center",
-    smoothing: float = 1e-4,
-    temporal_smooth_win: Optional[int] = 3,  
-    n_micro: int = 400,
-    min_micro_per_macro: int = 3,      
-    lagtime: int = 3,
+    temporal_smooth_win: Optional[int] = 3,
 ):  # pragma: no cover
     """
-    Distance/behavior-gated MSM + PCCA with k-means microstates.
+    Distance/behavior-gated GMM decoder.
 
-    Args:
-        coordinates: deepOF project where the data is stored.
-        embeddings (table_dict): table dict with neural embeddings per animal experiment across time.
-        animal_ids (list): list of animal ids of all animals that should be included in the gating
-        window_size (int): size of the window that should be used for binning
-        supervised_annotations (table_dict): table dict with supervised annotations per video.    
-        K_pose (int): bins per gate
-        M_bins (int): number of gates
-        binning (str): binning process to be used for gating. Can be "quantile" for even sized bins or "fixed" for specific bins. "quantile" is default.
-        fixed_edges (list): Optional list of edges for binning, will be ignored wenn binning is not fixed.
-        sample_size (int): Sample size to be used for cluster prediction. 
-        random_state (int): Random state for reproducibility
-        embedding_gates (any): Either a bodypart name for distance binning or, if supervised_annotations are given, alternatively a behavior name.
-        smoothing (float): 
-        temporal_smooth_win (int): Length of temporal smooting window. Longer means smoother.
-        n_micro (int): Number of micro states
-        min_micro_per_macro (int): Minimum number of micro states within each macro state
-        lagtime (int): number of continuous frames used for state transitions (in practise input lagtime+2)
+    Returns:
+        Dict[Any, TableDict]: one soft-count TableDict per gate.
+        For pairwise distance gating, keys are animal pairs like ("A", "B").
     """
-
     keys = list(embeddings.keys())
     if not keys:
         raise ValueError("Embeddings are empty.")
@@ -769,89 +924,218 @@ def get_contrastive_soft_counts_msm_pcca(
         animal_ids = coordinates._animal_ids
 
     # ---- cache embeddings + lengths ----
-    Z_by_key = (
-        {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
-        if not coordinates._very_large_project else {}
-    )
-    emb_len = {
-        k: (Z_by_key[k].shape[0] if k in Z_by_key
-            else get_dt(embeddings, k, only_metainfo=True)["shape"][0])
-        for k in keys
-    }
+    Z_by_key, emb_len = _cache_embeddings(coordinates, embeddings, keys)
 
     if not isinstance(embedding_gates, str):
-        M_bins = 2 ** len(set(embedding_gates))
+        M_gates = 2 ** len(sorted(set(embedding_gates)))
 
-    # ---- gating series ----
-    dist_series_dict = get_pairwise_distances(
-        coordinates, window_size,
+    # ---- gating series + masks ----
+    dist_series_dict, gates = _get_gating_series_and_gates(
+        coordinates=coordinates,
+        animal_ids=animal_ids,
+        window_size=window_size,
         supervised_annotations=supervised_annotations,
         embedding_gates=embedding_gates,
-        behavior_combinations=True,
     )
-    first_key = list(dist_series_dict.keys())[0]
-    gates = list(dist_series_dict[first_key].keys())
 
     if len(animal_ids) == 1 or len(animal_ids) > 4:
-        gates = [animal_ids[0]]
-        M_bins = 1
+        M_gates = 1
 
-    # ---- build masks ----
-    gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
-    for gate in gates:
-        full_g = np.concatenate([dist_series_dict[key][gate] for key in keys])
-        gate_masks[gate] = {}
+    gate_masks = _build_gate_masks(
+        keys=keys,
+        emb_len=emb_len,
+        dist_series_dict=dist_series_dict,
+        gates=gates,
+        M_gates=M_gates,
+        supervised_annotations=supervised_annotations,
+        gate_edges=gate_edges,
+    )
 
-        if supervised_annotations is not None:
-            for b in range(M_bins):
-                in_bin = (full_g == b)
-                gate_masks[gate][b] = {}
-                cum = 0
+    # ---- fit GMM per (gate, bin) ----
+    models: Dict[Any, List] = {}
+    total_steps = len(gates) * M_gates
+
+    with tqdm.tqdm(
+        total=total_steps,
+        desc=f"{'Fit GMMs':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="gmm",
+    ) as pbar:
+        for gate_idx, gate in enumerate(gates):
+            models[gate] = []
+            for b in range(M_gates):
+                seed_b = int(random_state + 17 * b + 3 * gate_idx)
+
+                bin_segments = []
+                n_windows = 0
                 for key in keys:
-                    T = emb_len[key]
-                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
-                    cum += T
-        else:
-            if binning == "quantile":
-                qs = np.linspace(0, 1, M_bins + 1)
-                edges = np.nanquantile(full_g, qs).astype(np.float64)
-                edges[0], edges[-1] = -np.inf, np.inf
-            elif binning == "fixed":
-                if fixed_edges is None or len(fixed_edges) != M_bins + 1:
-                    raise ValueError("fixed_edges must have length M_bins+1")
-                edges = np.asarray(fixed_edges, dtype=np.float64)
-                edges[0], edges[-1] = -np.inf, np.inf
-            else:
-                raise ValueError('binning must be "quantile" or "fixed"')
+                    Z = _get_Z(Z_by_key, embeddings, key)
+                    mask = gate_masks[gate][b][key]
+                    idx = np.flatnonzero(mask)
+                    n_windows += idx.size
+                    if idx.size > 0:
+                        bin_segments.append(Z[idx, :])
 
-            for b in range(M_bins):
-                in_bin = (full_g > edges[b]) & (full_g <= edges[b + 1])
-                gate_masks[gate][b] = {}
-                cum = 0
-                for key in keys:
-                    T = emb_len[key]
-                    gate_masks[gate][b][key] = in_bin[cum:cum + T]
-                    cum += T
+                if n_windows < max(10, N_clusters_per_gate):
+                    models[gate].append(None)
+                    pbar.update(1)
+                    continue
+
+                X_fit = _reservoir_sample(bin_segments, int(sample_size), seed=seed_b)
+
+                gmm = GaussianMixture(
+                    n_components=int(N_clusters_per_gate),
+                    covariance_type="full",
+                    reg_covar=float(reg_covar),
+                    random_state=seed_b,
+                    init_params="kmeans",
+                    max_iter=200,
+                    tol=1e-3,
+                ).fit(X_fit)
+
+                models[gate].append({"gmm": gmm})
+                pbar.update(1)
+
+    # ---- decode per gate ----
+    K_total = M_gates * N_clusters_per_gate
+    soft_counts_out_by_gate = {gate: {} for gate in gates}
+    table_path = os.path.join(
+        coordinates._project_path, coordinates._project_name, "Tables"
+    )
+
+    for key in tqdm.tqdm(
+        keys,
+        desc=f"{'Decode softcounts (GMM)':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="table",
+    ):
+        Z0 = _get_Z(Z_by_key, embeddings, key)
+
+        for gate in gates:
+            P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
+
+            for b in range(M_gates):
+                model = models[gate][b]
+                mask = gate_masks[gate][b][key]
+                block = slice(
+                    b * N_clusters_per_gate,
+                    (b + 1) * N_clusters_per_gate,
+                )
+
+                if model is None:
+                    if np.any(mask):
+                        P[mask, block] = 1.0 / N_clusters_per_gate
+                    continue
+
+                idx = np.flatnonzero(mask)
+                if idx.size == 0:
+                    continue
+
+                Z = Z0[idx, :]
+                R = model["gmm"].predict_proba(Z).astype(np.float32, copy=False)
+                P[idx, block] = R
+
+            if temporal_smooth_win and temporal_smooth_win > 1:
+                P = _temporal_smooth(P, temporal_smooth_win)
+
+            rs = P.sum(axis=1, keepdims=True)
+            P = P / np.maximum(rs, 1e-12)
+
+            gate_tag = _gate_to_tag(gate)
+            table_path_key = os.path.join(
+                table_path, key, f"{key}_soft_counts_gmm_{gate_tag}"
+            )
+            soft_counts_out_by_gate[gate][key] = deepof.utils.save_dt(
+                P, table_path_key, coordinates._very_large_project
+            )
+
+    return {
+        gate: deepof.data.TableDict(
+            soft_counts_out_by_gate[gate],
+            typ="unsupervised_counts",
+            table_path=table_path,
+            exp_conditions=coordinates.get_exp_conditions,
+        )
+        for gate in gates
+    }
+
+
+def get_contrastive_soft_counts_msm_pcca(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],
+    animal_ids: list,
+    window_size: int = 12,
+    supervised_annotations=None,
+    N_clusters_per_gate: int = 10,
+    M_gates: int = 3,
+    gate_edges: Optional[Dict[Any, np.ndarray]] = None,
+    sample_size: int = 200000,
+    random_state: int = 0,
+    embedding_gates: Any = "Center",
+    temporal_smooth_win: Optional[int] = 3,
+    n_micro: int = 400,
+    min_micro_per_macro: int = 3,
+    lagtime: int = 3,
+):  # pragma: no cover
+    """
+    Distance/behavior-gated MSM + PCCA with k-means microstates.
+
+    Returns:
+        Dict[Any, TableDict]: one soft-count TableDict per gate.
+        For pairwise distance gating, keys are animal pairs like ("A", "B").
+    """
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # ---- cache embeddings + lengths ----
+    Z_by_key, emb_len = _cache_embeddings(coordinates, embeddings, keys)
+
+    if not isinstance(embedding_gates, str):
+        M_gates = 2 ** len(sorted(set(embedding_gates)))
+
+    # ---- gating series + masks ----
+    dist_series_dict, gates = _get_gating_series_and_gates(
+        coordinates=coordinates,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+    )
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        M_gates = 1
+
+    gate_masks = _build_gate_masks(
+        keys=keys,
+        emb_len=emb_len,
+        dist_series_dict=dist_series_dict,
+        gates=gates,
+        M_gates=M_gates,
+        supervised_annotations=supervised_annotations,
+        gate_edges=gate_edges,
+    )
 
     # ---- fit per (gate, bin) ----
     models: Dict[Any, List] = {}
-    total_steps = len(gates) * M_bins
+    total_steps = len(gates) * M_gates
 
-    with tqdm.tqdm(total=total_steps, desc=f"{'Fit MSM/PCCA':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="model") as pbar:
+    with tqdm.tqdm(
+        total=total_steps,
+        desc=f"{'Fit MSM/PCCA':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="model",
+    ) as pbar:
         for gate_idx, gate in enumerate(gates):
             models[gate] = []
-            for b in range(M_bins):
+            for b in range(M_gates):
                 seed_b = int(random_state + 1000 * gate_idx + 17 * b)
 
-                # --- collect segments (short ones OK for spatial fit) ---
-                seg_spatial: List[np.ndarray] = []   # all runs ≥ 2
-                seg_temporal: List[np.ndarray] = []  # only runs ≥ lagtime+2
+                seg_spatial: List[np.ndarray] = []
+                seg_temporal: List[np.ndarray] = []
                 n_windows = 0
 
                 for key in keys:
-                    Z = Z_by_key.get(key)
-                    if Z is None:
-                        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+                    Z = _get_Z(Z_by_key, embeddings, key)
                     mask = gate_masks[gate][b][key]
                     n_windows += int(mask.sum())
 
@@ -861,11 +1145,7 @@ def get_contrastive_soft_counts_msm_pcca(
                         if seg.shape[0] >= lagtime + 2:
                             seg_temporal.append(seg)
 
-                #if verbose:
-                #    print(f"  gate={gate} bin={b}: {n_windows} win, "
-                #          f"{len(seg_spatial)} spatial segs, {len(seg_temporal)} temporal segs")
-
-                if not seg_spatial or n_windows < max(50, 5 * K_pose):
+                if not seg_spatial or n_windows < max(50, 5 * N_clusters_per_gate):
                     models[gate].append(None)
                     pbar.update(1)
                     continue
@@ -875,10 +1155,15 @@ def get_contrastive_soft_counts_msm_pcca(
                 scaler = StandardScaler()
                 X_fit = scaler.fit_transform(X_fit)
 
-                n_micro_eff = int(min(
-                    n_micro,
-                    max(min_micro_per_macro * K_pose, X_fit.shape[0] // 50),
-                ))
+                n_micro_eff = int(
+                    min(
+                        n_micro,
+                        max(
+                            min_micro_per_macro * N_clusters_per_gate,
+                            X_fit.shape[0] // 50,
+                        ),
+                    )
+                )
                 n_micro_eff = max(n_micro_eff, 2)
 
                 kmeans = MiniBatchKMeans(
@@ -890,7 +1175,6 @@ def get_contrastive_soft_counts_msm_pcca(
                     n_init="auto",
                 ).fit(X_fit)
 
-                # --- build dtrajs from temporal segments only ---
                 if not seg_temporal:
                     models[gate].append(None)
                     pbar.update(1)
@@ -898,7 +1182,7 @@ def get_contrastive_soft_counts_msm_pcca(
 
                 dtrajs = []
                 for seg in seg_temporal:
-                    Xs = scaler.transform(seg) if scaler else seg
+                    Xs = scaler.transform(seg)
                     dtrajs.append(np.asarray(kmeans.predict(Xs), dtype=np.int32))
 
                 if not dtrajs:
@@ -906,24 +1190,26 @@ def get_contrastive_soft_counts_msm_pcca(
                     pbar.update(1)
                     continue
 
-                # --- MSM ---
                 counts_est = TransitionCountEstimator(
-                    lagtime=int(lagtime), count_mode="sliding",
+                    lagtime=int(lagtime),
+                    count_mode="sliding",
                 ).fit(dtrajs)
                 count_model = counts_est.fetch_model()
 
-                # FIX: reversible=False for directional behaviour
                 msm = MaximumLikelihoodMSM(
                     reversible=True,
                 ).fit(count_model).fetch_model()
 
-                # --- active set (robust lookup) ---
                 n_msm = msm.n_states if hasattr(msm, "n_states") else None
                 active_syms = None
                 for src in (count_model, msm):
                     for attr in ("active_set", "state_symbols"):
                         cand = getattr(src, attr, None)
-                        if cand is not None:
+                        if (
+                            cand is not None
+                            and not isinstance(cand, types.MethodType)
+                            and not isinstance(cand, types.FunctionType)
+                        ):
                             cand = np.asarray(cand, dtype=np.int32)
                             if n_msm is None or cand.shape[0] == n_msm:
                                 active_syms = cand
@@ -931,7 +1217,11 @@ def get_contrastive_soft_counts_msm_pcca(
                     if active_syms is not None:
                         break
 
-                n_active = active_syms.shape[0] if active_syms is not None else (n_msm or 0)
+                n_active = (
+                    active_syms.shape[0]
+                    if active_syms is not None
+                    else (n_msm or 0)
+                )
                 if n_active < 2:
                     models[gate].append(None)
                     pbar.update(1)
@@ -940,8 +1230,7 @@ def get_contrastive_soft_counts_msm_pcca(
                 if active_syms is None:
                     active_syms = np.arange(n_active, dtype=np.int32)
 
-                # --- FIX: cap PCCA at actual active set size ---
-                K_request = int(min(K_pose, n_active))
+                K_request = int(min(N_clusters_per_gate, n_active))
                 if K_request < 2:
                     models[gate].append(None)
                     pbar.update(1)
@@ -960,53 +1249,64 @@ def get_contrastive_soft_counts_msm_pcca(
                     pbar.update(1)
                     continue
 
-                # pad to K_pose columns if needed
-                if chi_eff.shape[1] == K_pose:
+                if chi_eff.shape[1] == N_clusters_per_gate:
                     chi = chi_eff
                 else:
-                    chi = np.zeros((n_active, K_pose), dtype=np.float32)
+                    chi = np.zeros(
+                        (n_active, N_clusters_per_gate), dtype=np.float32
+                    )
                     chi[:, :chi_eff.shape[1]] = chi_eff
                     rs = chi.sum(axis=1, keepdims=True)
                     good = rs.squeeze(-1) > 0
                     chi[good] /= rs[good]
 
-                # dense micro→macro (inactive → uniform)
-                micro2macro = np.full((n_micro_eff, K_pose), 1.0 / K_pose, dtype=np.float32)
+                micro2macro = np.full(
+                    (n_micro_eff, N_clusters_per_gate),
+                    1.0 / N_clusters_per_gate,
+                    dtype=np.float32,
+                )
                 for i in range(n_active):
                     s = int(active_syms[i])
                     if 0 <= s < n_micro_eff:
                         micro2macro[s, :] = chi[i, :]
 
-                models[gate].append(dict(
-                    scaler=scaler,
-                    kmeans=kmeans,
-                    micro2macro=micro2macro,
-                ))
+                models[gate].append(
+                    {
+                        "scaler": scaler,
+                        "kmeans": kmeans,
+                        "micro2macro": micro2macro,
+                    }
+                )
                 pbar.update(1)
 
-    # ---- decode ----
-    K_total = M_bins * K_pose * len(gates)
-    soft_counts_out = {}
-    table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
+    # ---- decode per gate ----
+    K_total = M_gates * N_clusters_per_gate
+    soft_counts_out_by_gate = {gate: {} for gate in gates}
+    table_path = os.path.join(
+        coordinates._project_path, coordinates._project_name, "Tables"
+    )
 
-    for key in tqdm.tqdm(keys, desc=f"{'Decode softcounts':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
-        Z0 = Z_by_key.get(key)
-        if Z0 is None:
-            Z0 = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+    for key in tqdm.tqdm(
+        keys,
+        desc=f"{'Decode softcounts':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="table",
+    ):
+        Z0 = _get_Z(Z_by_key, embeddings, key)
 
-        P = np.full((Z0.shape[0], K_total), float(smoothing), dtype=np.float32)
+        for gate in gates:
+            P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
 
-        for gate_idx, gate in enumerate(gates):
-            base = gate_idx * M_bins * K_pose
-
-            for b in range(M_bins):
+            for b in range(M_gates):
                 model = models[gate][b]
                 mask = gate_masks[gate][b][key]
-                block = slice(base + b * K_pose, base + (b + 1) * K_pose)
+                block = slice(
+                    b * N_clusters_per_gate,
+                    (b + 1) * N_clusters_per_gate,
+                )
 
                 if model is None:
                     if np.any(mask):
-                        P[mask, block] = 1.0 / K_pose
+                        P[mask, block] = 1.0 / N_clusters_per_gate
                     continue
 
                 scaler = model["scaler"]
@@ -1015,73 +1315,33 @@ def get_contrastive_soft_counts_msm_pcca(
 
                 for s, e in _mask_to_runs(mask, min_len=2):
                     seg = Z0[s:e, :]
-                    Xs = scaler.transform(seg) if scaler else seg
+                    Xs = scaler.transform(seg)
                     d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
                     P[s:e, block] = m2m[d, :]
 
-        # FIX: temporal smoothing (optional)
-        if temporal_smooth_win and temporal_smooth_win > 1:
-            P = _temporal_smooth(P, temporal_smooth_win)
+            if temporal_smooth_win and temporal_smooth_win > 1:
+                P = _temporal_smooth(P, temporal_smooth_win)
 
-        # FIX: guard against all-zero rows
-        rs = P.sum(axis=1, keepdims=True)
-        P = P / np.maximum(rs, 1e-12)
+            rs = P.sum(axis=1, keepdims=True)
+            P = P / np.maximum(rs, 1e-12)
 
-        table_path_key = os.path.join(table_path, key, f"{key}_soft_counts_msmpcca")
-        soft_counts_out[key] = deepof.utils.save_dt(P, table_path_key, coordinates._very_large_project)
+            gate_tag = _gate_to_tag(gate)
+            table_path_key = os.path.join(
+                table_path, key, f"{key}_soft_counts_msmpcca_{gate_tag}"
+            )
+            soft_counts_out_by_gate[gate][key] = deepof.utils.save_dt(
+                P, table_path_key, coordinates._very_large_project
+            )
 
-    return deepof.data.TableDict(
-        soft_counts_out,
-        typ="unsupervised_counts",
-        table_path=table_path,
-        exp_conditions=coordinates.get_exp_conditions,
-    )
-
-    
-def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
-    """Boolean mask → list of (start, end) slices for contiguous True runs."""
-    idx = np.flatnonzero(np.asarray(mask, dtype=bool))
-    if idx.size == 0:
-        return []
-    cuts = np.where(np.diff(idx) > 1)[0]
-    runs = []
-    s = idx[0]
-    for c in cuts:
-        e = idx[c] + 1
-        if (e - s) >= min_len:
-            runs.append((int(s), int(e)))
-        s = idx[c + 1]
-    e = idx[-1] + 1
-    if (e - s) >= min_len:
-        runs.append((int(s), int(e)))
-    return runs
-
-
-def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:  # pragma: no cover
-    """Reservoir-sample up to n rows from a list of 2-D arrays without full concat."""
-    rng = np.random.default_rng(seed)
-    total = sum(s.shape[0] for s in segments)
-    if total <= n:
-        return np.concatenate(segments, axis=0)
-
-    # pre-allocate reservoir
-    D = segments[0].shape[1]
-    buf = np.empty((n, D), dtype=np.float32)
-    filled = 0
-    seen = 0
-
-    for seg in segments:
-        for row in seg:
-            if filled < n:
-                buf[filled] = row
-                filled += 1
-            else:
-                j = int(rng.integers(0, seen + 1))
-                if j < n:
-                    buf[j] = row
-            seen += 1
-
-    return buf[:filled]
+    return {
+        gate: deepof.data.TableDict(
+            soft_counts_out_by_gate[gate],
+            typ="unsupervised_counts",
+            table_path=table_path,
+            exp_conditions=coordinates.get_exp_conditions,
+        )
+        for gate in gates
+    }
 
 
 def recluster(

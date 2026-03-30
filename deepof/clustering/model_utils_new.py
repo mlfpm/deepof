@@ -339,7 +339,7 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
-def nce_loss_pt(
+def nce_loss_pt_old(
     history: torch.Tensor,
     future: torch.Tensor,
     similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
@@ -365,7 +365,7 @@ def nce_loss_pt(
     mean_neg = neg.mean()
     return loss, mean_sim, mean_neg
 
-def nce_loss_pt_new(history, future, similarity, temperature=0.1):
+def nce_loss_pt(history, future, similarity, temperature=0.1):
     """
     Standard NCE loss 
     """
@@ -708,15 +708,16 @@ def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
     model: str,
+    metainfo: dict,
     supervised_annotations: table_dict = None,
     scale: str = "standard",
     animal_id: str = None,
+    extract_pair: list = None,
     global_scaler: Any = None,
     softcounts_extraction_method = None,
     embedding_gates: str = "Center",
     states: int = 24,
-	samples_max: int = 227272,
-    **kwargs,
+    samples_max: int = 227272,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -724,21 +725,55 @@ def embedding_per_video(
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
         model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        metainfo (dict): meta_nfo dictionary containing information regarding dataset preprocessing.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         pretrained (bool): whether to use the specified pretrained model to recluster the data.
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
-        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, gmm or hierarchical. If None, decoder of model is used. If model has no decoder, gmm is used as a default.
-        distance_bp (str): Teh mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
+        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "msm" (for msm-pcca) or "combined" for an approach that applies msm-pcca first, then filters out all samples with high tracking uncertainty and uses a gmm approach to predict separate clusters on the uncertain sampel fraction. If None, decoder of model is used. If model has no decoder, "msm" is used as a default.
+        distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
-        **kwargs: additional arguments to pass to coordinates.get_graph_dataset().
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
         soft_counts (table_dict): soft_counts per experiment.
 
     """
+
+    def _extract_pair_to_gate_key(
+        coordinates,
+        extract_pair: Optional[list],
+    ) -> Any:
+        """
+        Convert extract_pair list to the gate key used in soft_counts_dict.
+        """
+        animal_ids = coordinates._animal_ids
+        if extract_pair is None:
+            if len(animal_ids) == 1:
+                return ""
+            elif len(animal_ids) >= 2:
+                return tuple(sorted([animal_ids[0], animal_ids[1]]))
+            else:
+                raise AssertionError("No animal IDs found in coordinates._animal_ids.")
+
+        if extract_pair == [""]:
+            return ""
+
+        if not isinstance(extract_pair, list) or len(extract_pair) != 2:
+            raise AssertionError(
+                "extract_pair must be a list with two animal ids or [\"\"] in case of a single mouse!"
+            )
+
+        id1, id2 = extract_pair
+        if id1 not in animal_ids or id2 not in animal_ids:
+            raise AssertionError(
+                f"Animal IDs {id1}, {id2} not found in coordinates._animal_ids: {animal_ids}"
+            )
+
+        return tuple(sorted([id1, id2]))
+
+    extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
 
     # at some point _check_enum_inputs will get moved somewhere else and be reworked to function as a general guard function 
     deepof.visuals_utils._check_enum_inputs(
@@ -756,7 +791,7 @@ def embedding_per_video(
     # The contrastive model only consists out of an encoder and hence needs additional soft_counts extraction
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if contrastive and softcounts_extraction_method is None:
-        softcounts_extraction_method = "hmm"
+        softcounts_extraction_method = "msm"
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
     
@@ -784,7 +819,10 @@ def embedding_per_video(
                 window_step=1,
                 pretrained_scaler=global_scaler,
                 samples_max=samples_max,
-            )
+                dist_standardize=metainfo['dist_standardize'],
+                speed_standardize=metainfo['speed_standardize'] ,
+                coord_standardize=metainfo['coord_standardize'],
+            )    
 
         else:
 
@@ -795,6 +833,9 @@ def embedding_per_video(
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,
+                dist_standardize=metainfo['dist_standardize'],
+                speed_standardize=metainfo['speed_standardize'] ,
+                coord_standardize=metainfo['coord_standardize'],
             )
 
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
@@ -807,19 +848,8 @@ def embedding_per_video(
         a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
 
         batch_size = 256  # adjust to fit your GPU
-        recon_list, emb_list, sc_list = [], [], []
-
-        # Optional AMP for speed/memory on GPU
-        if False: #device.type == "cuda":
-            try:
-                bf16_ok = torch.cuda.is_bf16_supported()
-            except Exception:
-                major, _ = torch.cuda.get_device_capability()
-                bf16_ok = major >= 8  # Ampere+ typically supports bf16
-            amp_dtype = torch.bfloat16 if bf16_ok else torch.float16
-            amp_ctx = torch.amp.autocast(device_type="cuda", dtype=amp_dtype)
-        else:
-            amp_ctx = nullcontext()
+        emb_list, sc_list = [], []
+        amp_ctx = nullcontext()
 
         with torch.inference_mode(), amp_ctx:
             for s in range(0, x_all.size(0), batch_size):
@@ -879,18 +909,82 @@ def embedding_per_video(
         exp_conditions=exp_conds,
     )
 
+    gate_edges = None
+    if softcounts_extraction_method in {"gmm", "msm", "combined"}:
+        if isinstance(animal_id,str):
+            animal_id=[animal_id]
+        gate_edges = deepof.post_hoc.compute_gate_edges(
+            coordinates=coordinates,
+            animal_ids=animal_id,
+            keys=list(embeddings.keys()),
+            window_size=window_size,
+            supervised_annotations=supervised_annotations,
+            M_gates=3,
+            embedding_gates=embedding_gates,
+        )
+
+
     if softcounts_extraction_method == "gmm":
 
-        soft_counts = deepof.post_hoc.get_contrastive_soft_counts_gmm(
-            coordinates, embeddings, animal_id, supervised_annotations=supervised_annotations, window_size=window_size, embedding_gates=embedding_gates, K_pose=states,
+        soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_gmm(
+            coordinates=coordinates,
+            embeddings=embeddings,
+            window_size=window_size,
+            animal_ids=animal_id,
+            supervised_annotations=supervised_annotations,
+            embedding_gates=embedding_gates,
+            temporal_smooth_win=3,
+            N_clusters_per_gate=states,
+            M_gates=3,
+            gate_edges=gate_edges,
         )
-    elif softcounts_extraction_method == "hmm":
+        soft_counts = soft_counts_dict[extract_pair]
 
-        soft_counts = deepof.post_hoc.get_contrastive_soft_counts_hmm(
-            coordinates, embeddings, animal_id, supervised_annotations=supervised_annotations, window_size=window_size, embedding_gates=embedding_gates, K_pose=states,
+
+    elif softcounts_extraction_method == "msm" or softcounts_extraction_method == "combined":
+
+        soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
+            coordinates=coordinates,
+            embeddings=embeddings,
+            window_size=window_size,
+            animal_ids=animal_id,
+            supervised_annotations=supervised_annotations,
+            embedding_gates=embedding_gates,
+            temporal_smooth_win=3,
+            N_clusters_per_gate=states,
+            M_gates=3,
+            gate_edges=gate_edges,
+            n_micro=200,  # 400
+            lagtime=3,    # 3
         )
+        if softcounts_extraction_method == "combined":
+
+            supervised_chaos = deepof.post_hoc.get_supervised_chaos(coordinates)
+
+            soft_counts_chaos_dict = deepof.post_hoc.get_contrastive_soft_counts_gmm(
+                coordinates=coordinates,
+                embeddings=embeddings,
+                window_size=window_size,
+                animal_ids=animal_id,
+                supervised_annotations=supervised_chaos,
+                temporal_smooth_win=3,
+                N_clusters_per_gate=states,
+                embedding_gates=['anychaos'],
+                M_gates=3,
+                gate_edges=None,
+            )
+            soft_counts_dict = deepof.post_hoc.add_chaos_gates(
+                coordinates=coordinates, 
+                soft_counts_dict=soft_counts_dict, 
+                soft_counts_chaos_dict=soft_counts_chaos_dict,
+                supervised_chaos=supervised_chaos, 
+                extract_pair=extract_pair,
+                window_size=window_size)
+        
+        soft_counts = soft_counts_dict[extract_pair]
+
     elif softcounts_extraction_method is not None:
-        raise ValueError("For \"softcounts_extraction_method\" only \"gmm\" or \"hierarchical\" are supported!")
+        raise ValueError("For \"softcounts_extraction_method\" only \"gmm\", \"msm\" or \"combined\" are supported!")
     else:
         soft_counts=deepof.data.TableDict(
             soft_counts,
