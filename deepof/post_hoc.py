@@ -450,7 +450,7 @@ def add_chaos_gates(
     coordinates,
     soft_counts_dict,
     soft_counts_chaos_dict,
-    supervised_annotations,
+    supervised_chaos,
     extract_pair,
     window_size: int,
 ):  # pragma: no cover
@@ -479,22 +479,24 @@ def add_chaos_gates(
     for gate, soft_counts_gate in soft_counts_dict.items():
 
         # get parallel soft_counts for chaos gmm detections
-        soft_counts_chaos_gate = soft_counts_chaos_dict[gate]
+        soft_counts_chaos_gate = soft_counts_chaos_dict['behavior_combinations']
 
         result_gate = {}
 
         # add new chaos clusters for each soft_counts table
         for key in soft_counts_gate.keys():
             # Extract info
-            ann = get_dt(supervised_annotations, key)
+            ann = get_dt(supervised_chaos, key)
             sc1 = get_dt(soft_counts_gate, key).copy()
-            sc2 = get_dt(soft_counts_chaos_gate, key).copy()      
+            sc2 = get_dt(soft_counts_chaos_gate, key).copy()  
+            n_windows = sc1.shape[0]    
             needed_len = n_windows + window_size - 1
             ann_used = ann.iloc[:needed_len]
 
+
             # Check shapes
             n_windows = sc1.shape[0]
-            if sc2.shape[0] != n_windows or ann_used.shape[0] != n_windows:
+            if sc2.shape[0] != n_windows or not(ann_used.shape[0] >= n_windows):
                 raise ValueError(
                     f"Soft_counts and soft_counts_chaos must have same length, annotations must have same lenght or longer (Error at key{key!r}): "
                     f"{sc1.shape[0]} vs {sc2.shape[0]} vs {ann.shape[0]}"
