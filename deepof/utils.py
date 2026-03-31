@@ -2015,19 +2015,19 @@ def scale_table(
     standardize: bool = True,     # if False: only size-normalize
     dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
     speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
-    coord_standardize: str = "none",
+    coord_standardize: str = "per_column",
     log_distances: bool = True,   
 ) -> pd.DataFrame:
     if not scale:
         return df.copy()
     if scale not in {"standard", "minmax", "robust"}:
         raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
-    if dist_standardize not in {"per_column", "groupwise", "none"}:
-        raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
-    if speed_standardize not in {"per_column", "groupwise", "none"}:
-        raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
-    if coord_standardize not in {"per_column", "groupwise", "none"}:
-        raise ValueError("coord_standardize must be one of {'per_column','groupwise','none'}")
+    if dist_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise','None'}")
+    if speed_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise','None'}")
+    if coord_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("coord_standardize must be one of {'per_column','groupwise','None'}")
 
     out = df.copy()
 

@@ -6114,7 +6114,7 @@ def _build_edge_from_metainfo(
 
     node_to_idx = {name: i for i, name in enumerate(node_names)}
 
-    # 2) Build global edge index (unchanged behavior)
+    # 2) Build global edge index 
     pairs = []
     for (u_name, v_name) in edge_cols:
         if u_name not in node_to_idx or v_name not in node_to_idx:

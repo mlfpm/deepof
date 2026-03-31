@@ -377,8 +377,8 @@ def get_contrastive_soft_counts(
 
 def get_supervised_chaos(
     coordinates,
-    quality_threshold: float = 0.90,
-    frac_bps_below: float = 0.25,
+    quality_threshold: float = 0.75,
+    frac_bps_below: float = 0.5,
     chaos_suffix: str = "chaos",
 ):  # pragma: no cover
     """Create a supervised-annotations-like table dict containing only quality-based chaos labels.
@@ -416,10 +416,10 @@ def get_supervised_chaos(
 
         per_animal_chaos = []
         for mid in animal_ids:
-            cols = [c for c in q_df.columns if str(c[0]).startswith(f"{mid}")]
+            cols = [c for c in q_df.columns if str(c).startswith(f"{mid}")]
 
             if len(cols) == 0:
-                chaos = np.zeros(len(pose), dtype=np.float32)
+                raise ValueError("Provided animal_id is not in quality table!")
             else:
                 arr = q_df.loc[:, cols].to_numpy(dtype=np.float32, copy=True)
                 bad = (~np.isfinite(arr)) | (arr < float(quality_threshold))
@@ -1290,7 +1290,7 @@ def get_contrastive_soft_counts_msm_pcca(
 
     for key in tqdm.tqdm(
         keys,
-        desc=f"{'Decode softcounts':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        desc=f"{'Decode softcounts (MSM/PCCA)':<{PROGRESS_BAR_FIXED_WIDTH}}",
         unit="table",
     ):
         Z0 = _get_Z(Z_by_key, embeddings, key)

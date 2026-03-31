@@ -2392,6 +2392,7 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        scale: str = "standard",
         dist_standardize: str = "per_column",
         speed_standardize: str = "per_column",
         coord_standardize: str = "per_column",
@@ -2567,11 +2568,6 @@ class Coordinates:
         # Create metainfo
         metainfo={}
 
-        metainfo['node_columns']=feature_names[node_sorting_indices]
-        metainfo['edge_columns']=feature_names[edge_sorting_indices]
-        metainfo['angle_columns']=feature_names[angle_sorting_indices]
-
-
         # Create graph datasets
         if preprocess:
 
@@ -2591,8 +2587,12 @@ class Coordinates:
                 speed_standardize=speed_standardize,
                 coord_standardize=coord_standardize,
                 window_size=window_size,
+                scale=scale,
                 **kwargs,
                 )
+            metainfo['node_columns']=feature_names[node_sorting_indices]
+            metainfo['edge_columns']=feature_names[edge_sorting_indices]
+            metainfo['angle_columns']=feature_names[angle_sorting_indices]
    
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for k in range(0,len(to_preprocess)):
@@ -2676,6 +2676,9 @@ class Coordinates:
                 metainfo[f'shape_{key}']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
 
             # add standardizations
+            metainfo['node_columns']=feature_names[node_sorting_indices]
+            metainfo['edge_columns']=feature_names[edge_sorting_indices]
+            metainfo['angle_columns']=feature_names[angle_sorting_indices]
             metainfo['dist_standardize'] = dist_standardize
             metainfo['speed_standardize'] = speed_standardize
             metainfo['coord_standardize'] = coord_standardize
@@ -3621,7 +3624,7 @@ class TableDict(dict):
                         standardize=True,   # size-normalize only
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
-                        coord_standardize="none",
+                        coord_standardize=None,
                         log_distances=log_distances,
                     )
 
@@ -3631,7 +3634,7 @@ class TableDict(dict):
                     n_take = min(samples_max, len(tab_local))
                     if n_take > 0:
                         idx = rng.choice(len(tab_local), size=n_take, replace=False)
-                        if speed_standardize != "none" and col_types["speeds"]:
+                        if speed_standardize is not None and col_types["speeds"]:
                             if speed_standardize == "per_column":
                                 if ref_speed_cols is None:
                                     ref_speed_cols = col_types["speeds"]
@@ -3643,7 +3646,7 @@ class TableDict(dict):
                                     tab_local.iloc[idx][col_types["speeds"]].to_numpy(float).reshape(-1)
                                 )
 
-                        if dist_standardize != "none" and col_types["dists"]:
+                        if dist_standardize is not None and col_types["dists"]:
                             if dist_standardize == "per_column":
                                 if ref_dist_cols is None:
                                     ref_dist_cols = col_types["dists"]
@@ -3664,7 +3667,7 @@ class TableDict(dict):
                         coord_cols_local = [c for c in tab_local.columns
                                             if isinstance(c, tuple) and len(c) == 2
                                             and c[1] in ("x", "y")]
-                        if coord_standardize != "none" and coord_cols_local:
+                        if coord_standardize is not None and coord_cols_local:
                             if coord_standardize == "per_column":
                                 if ref_coord_cols is None:
                                     ref_coord_cols = coord_cols_local
@@ -3799,7 +3802,7 @@ class TableDict(dict):
                         standardize=True,  
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
-                        coord_standardize="none",
+                        coord_standardize=None,
                         log_distances=log_distances,
                     )
 

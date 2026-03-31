@@ -717,6 +717,8 @@ def embedding_per_video(
     softcounts_extraction_method = None,
     embedding_gates: str = "Center",
     states: int = 24,
+    quality_threshold: float = 0.75,
+    frac_bps_below: float = 0.5,
     samples_max: int = 227272,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
@@ -959,7 +961,7 @@ def embedding_per_video(
         )
         if softcounts_extraction_method == "combined":
 
-            supervised_chaos = deepof.post_hoc.get_supervised_chaos(coordinates)
+            supervised_chaos = deepof.post_hoc.get_supervised_chaos(coordinates, quality_threshold, frac_bps_below)
 
             soft_counts_chaos_dict = deepof.post_hoc.get_contrastive_soft_counts_gmm(
                 coordinates=coordinates,
