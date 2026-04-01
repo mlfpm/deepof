@@ -6,7 +6,7 @@ authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.10,<3.12"
 scikit-learn = "1.2.0"
 scipy = "1.9.3"
 numpy = "^1.25.2"
@@ -52,12 +52,12 @@ sleap-io = "^0.0.9"
 matplotlib = "3.7.2"
 moviepy = "^1.0.3"
 torch = [
-    {version="2.8.0", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="2.8.0", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="2.11.0", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="2.11.0", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 torchvision = [
-    {version="0.23.0", source="PyPI", markers="sys_platform != 'linux'"},
-    {version="0.23.0", source="pytorch-cpu", markers="sys_platform == 'linux'"}
+    {version="0.26.0", source="PyPI", markers="sys_platform != 'linux'"},
+    {version="0.26.0", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
 keras = "2.14.0"
 natsort = "8.4.0"

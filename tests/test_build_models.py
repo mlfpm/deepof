@@ -26,8 +26,8 @@ from types import SimpleNamespace
 import deepof.model_utils
 import deepof.models
 import deepof.clustering
-#import deepof.clustering.models_new
-#import deepof.clustering.model_utils_new
+import deepof.clustering.models_new
+import deepof.clustering.model_utils_new
 
 
 ###################
