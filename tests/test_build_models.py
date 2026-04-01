@@ -24,7 +24,6 @@ from types import SimpleNamespace
 
 import deepof.model_utils
 import deepof.models
-import deepof.clustering.models_new
 
 
 ###################
@@ -877,7 +876,7 @@ def test_vade_full_pipeline_regression(encoder_type):
         check_like=True,
     )
 
-    
+
 @settings(deadline=None)
 @pytest.mark.slow
 @given(
