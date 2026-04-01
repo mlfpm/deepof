@@ -2201,11 +2201,11 @@ class ContrastivePT(nn.Module):
         
         if T != Te:
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
-        if T < 2 or (T % 2) != 0:
-            raise ValueError(
-                f"ContrastivePT requires an even sequence length T>=2. Got T={T}. "
-                "Please pre-trim or pad your sequences (e.g., use T=24 if original T=25)."
-            )
+        #if T < 2 or (T % 2) != 0:
+        #    raise ValueError(
+        #        f"ContrastivePT requires an even sequence length T>=2. Got T={T}. "
+        #        "Please pre-trim or pad your sequences (e.g., use T=24 if original T=25)."
+        #    )
 
         self.full_time_steps = T
         self.window_size = T // 2 # To enable length shift augmentation
@@ -4447,33 +4447,6 @@ def validate_one_epoch_indexed(
 
     return average_logs(logs_accum)
 
-
-def build_model_and_step(
-    input_shape: Tuple[int, int, int],
-    edge_feature_shape: Tuple[int, int, int],
-    adjacency_matrix: np.ndarray,
-    latent_dim: int,
-    n_components: int,
-    encoder_type: str,
-    use_gnn: bool,
-    interaction_regularization: float,
-    kmeans_loss: float,
-    device: torch.device,
-) -> Tuple[nn.Module, Callable]:
-    model = deepof.clustering.models_new.VaDEPT(
-        input_shape=input_shape,
-        edge_feature_shape=edge_feature_shape,
-        adjacency_matrix=adjacency_matrix,
-        latent_dim=latent_dim,
-        n_components=n_components,
-        encoder_type=encoder_type,
-        use_gnn=use_gnn,
-        kmeans_loss=kmeans_loss,
-        interaction_regularization=interaction_regularization,
-    ).to(device, non_blocking=True)
-    return model, step_vade
-
-
 def step_vade(
     model: nn.Module,
     batch: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],  # (x, a, idx or None)
@@ -4541,6 +4514,7 @@ def step_vade(
             "kl_div": float(loss_dict["kl_div"].detach().item()),
             "cat_clust_loss": float(loss_dict["cat_clust_loss"].detach().item()),
             "kmeans_loss": float(loss_dict["kmeans_loss"].detach().item()) if torch.is_tensor(loss_dict["kmeans_loss"]) else float(loss_dict["kmeans_loss"]),
+            "activity_l1": float(loss_dict["activity_l1"].detach().item()),
             "prior_loss": float(loss_dict["prior_loss"].detach().item()),
             "distill_loss": float(loss_dict["distill_loss"].detach().item()),
             "tf_clust_loss" : float(loss_dict["tf_clust_loss"].detach().item()),
@@ -5716,7 +5690,7 @@ def fit_VADE(
     n_batches_per_epoch = len(train_loader)
 
     # Create model and step function
-    model, step_fn = build_model_and_step(
+    model = deepof.clustering.models_new.VaDEPT(
         input_shape=train_loader.dataset.x_shape,
         edge_feature_shape=train_loader.dataset.a_shape,
         adjacency_matrix=adjacency_matrix,
@@ -5724,10 +5698,11 @@ def fit_VADE(
         n_components=common_cfg.n_components,
         encoder_type=common_cfg.encoder_type,
         use_gnn=True,
-        interaction_regularization=common_cfg.interaction_regularization,
         kmeans_loss=vade_cfg.kmeans_loss_pretrain,
-        device=device,
-    )
+        interaction_regularization=common_cfg.interaction_regularization,
+    ).to(device, non_blocking=True)
+    step_fn = step_vade
+
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
@@ -6133,7 +6108,7 @@ def _build_edge_from_metainfo(
         # 'B_Right_bhip' -> 'B', 'W_Nose' -> 'W'
         # (split on first underscore)
         if "_" not in name:
-            raise RuntimeError(f"Cannot infer animal prefix from node name '{name}'.")
+            return("")
         return name.split("_", 1)[0]
 
     keys = [animal_key(nm) for nm in node_names]  # len N
