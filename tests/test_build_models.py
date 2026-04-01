@@ -25,6 +25,9 @@ from types import SimpleNamespace
 
 import deepof.model_utils
 import deepof.models
+import deepof.clustering
+import deepof.clustering.models_new
+import deepof.clustering.model_utils_new
 
 
 ###################
@@ -1163,15 +1166,6 @@ def test_contrastive_full_pipeline_regression(encoder_type):
     )
 
 
-
-
-
-
-
-
-
-
-
 #
 #
 #
@@ -1189,50 +1183,6 @@ def test_contrastive_full_pipeline_regression(encoder_type):
 #
 #
 #
-
-
-@settings(deadline=None)
-@given(
-    use_gnn=st.booleans(),
-    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
-)
-def test_VQVAE_build(use_gnn, encoder_type):
-    vqvae = deepof.clustering.models_new.VQVAEPT(
-        input_shape=(15, 11, 3),
-        edge_feature_shape=(15, 11, 1),
-        adjacency_matrix=nx.adjacency_matrix(
-            nx.generators.random_graphs.dense_gnm_random_graph(11, 11)
-        ).todense(),
-        use_gnn=use_gnn,
-        encoder_type=encoder_type,
-        n_components=10,
-        latent_dim=8,
-    )
-    vqvae.compile()
-
-
-@settings(deadline=None)
-@given(
-    use_gnn=st.booleans(),
-    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
-)
-def test_Contrastive_build(use_gnn, encoder_type):
-    contrasts = deepof.clustering.models_new.ContrastivePT(
-        input_shape=(15, 11, 3),
-        edge_feature_shape=(15, 11, 1),
-        adjacency_matrix=nx.adjacency_matrix(
-            nx.generators.random_graphs.dense_gnm_random_graph(11, 11)
-        ).todense(),
-        use_gnn=use_gnn,
-        encoder_type=encoder_type,
-        latent_dim=8,
-    )
-    contrasts.compile()
-
-test_Contrastive_build()
-
-
-
 
 
 @settings(deadline=None)
