@@ -38,7 +38,12 @@ from deepof.clustering.dataset import BatchDictDataset
 from sklearn.decomposition import IncrementalPCA
 from copy import deepcopy
 from torch.utils.data import DataLoader, TensorDataset
-from torch.amp import GradScaler, autocast
+from torch.amp import autocast
+if hasattr(torch.amp, 'GradScaler'):
+    from torch.amp import GradScaler
+elif hasattr(torch.cpu.amp, 'GradScaler'):
+    from torch.cpu.amp import GradScaler
+
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
