@@ -43,6 +43,8 @@ if hasattr(torch.amp, 'GradScaler'):
     from torch.amp import GradScaler
 elif hasattr(torch.cpu.amp, 'GradScaler'):
     from torch.cpu.amp import GradScaler
+elif hasattr(torch, 'GradScaler'):
+    from torch import GradScaler
 
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
