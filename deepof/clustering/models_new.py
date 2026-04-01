@@ -3286,7 +3286,7 @@ def extract_pca_angles_view(
         persistent_workers=(num_workers > 0),
     )
     for batch in loader:
-        _, _, ang, _, _ = batch
+        _, _, ang, _ = batch
         X = ang.view(ang.size(0), -1).cpu().numpy()
         Z = ipca.transform(X)
         feats_all.append(torch.from_numpy(Z).float())
@@ -4432,7 +4432,7 @@ def validate_one_epoch_indexed(
     seen = 0
     for batch in iterator:
         batch = move_to(batch, device)
-        x, a, _, idx, _ = batch
+        x, a, _, idx = batch
         B = x.size(0)
         #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
@@ -5071,6 +5071,8 @@ def embedding_model_fitting(
     vade_cfg: VaDECfg,
     contrastive_cfg: ContrastiveCfg,
     h5_dataset_folder: str = None,
+    shuffle: bool = True,
+    device: str = None,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
@@ -5078,7 +5080,13 @@ def embedding_model_fitting(
     # Prepare device and data
     # ----------------------------------------------------
     model_name = common_cfg.model_name # Name defaults to "vade"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    elif isinstance(device, str) and (device=="cpu" or device=="gpu"):
+        device = torch.device(device)
+    else:
+        raise ValueError("If a device is given, it needs to be either cpu or gpu!")
+    
     print(f"Using device: {device}")
     if device.type == "cuda":
         torch.backends.cudnn.benchmark = True
@@ -5093,20 +5101,20 @@ def embedding_model_fitting(
         data_path = os.path.join(common_cfg.output_path, "Datasets")
     else:
         data_path = h5_dataset_folder
-    preprocessed_train, preprocessed_val, supervised_train, supervised_val = preprocessed_object
+    preprocessed_train, preprocessed_val = preprocessed_object
     train_dataset = BatchDictDataset(
         preprocessed_train, data_path, "train_", force_rebuild=False,
-        h5_chunk_len=common_cfg.batch_size, supervised_dict=supervised_train
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=None
     )
     val_dataset = BatchDictDataset(
         preprocessed_val, data_path, "val_", force_rebuild=False,
-        h5_chunk_len=common_cfg.batch_size, supervised_dict=supervised_val
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=None
     )
 
     train_loader = train_dataset.make_loader(
-        batch_size=common_cfg.batch_size, shuffle=True, num_workers=common_cfg.num_workers, drop_last=False,
+        batch_size=common_cfg.batch_size, shuffle=shuffle, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=True, permute_within_block=False, seed=common_cfg.seed,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,
     )
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
