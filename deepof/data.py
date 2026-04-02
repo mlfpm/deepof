@@ -97,7 +97,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.8.5"
+current_deepof_version="0.8.6"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)

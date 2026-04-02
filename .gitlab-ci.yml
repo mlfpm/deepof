@@ -11,9 +11,33 @@ install-pypi:
     name: python:3.9.14
 
   script:
-    - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
-    - pip install deepof
-    # - python -c 'import deepof.data'
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install --no-cache-dir deepof
+    - cd /tmp
+    - python -m pip show deepof
+    #- python -c "import deepof.data"
+
+
+install-pypi-local:
+  stage: install
+  retry: 1
+
+  image:
+    name: python:3.9.14
+
+  before_script:
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6 curl
+    - curl -sSL https://install.python-poetry.org | python3 - --version 2.2.1
+    - export PATH="/root/.local/bin:$PATH"
+
+  script:
+    - poetry build
+    - python -m pip install --upgrade pip
+    - python -m pip install --no-cache-dir dist/*.whl
+    - cd /tmp
+    - python -c "import deepof.data"
+    
 
 install-poetry:
   stage: install

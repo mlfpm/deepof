@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "deepof"
-version = "0.8.5"
+version = "0.8.6"
 description = ""
-authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
+authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>", "patrick_schlegel <patrick_schlegel@psych.mpg.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -67,6 +67,7 @@ pyarrow = "^17.0.0"
 pot = "^0.8.2"
 xgboost = "2.1.4"
 duckdb = "1.2.2"
+psutil = ">=7.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -107,7 +108,7 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.bumpver]
-current_version = "0.8.5"
+current_version = "0.8.6"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
@@ -138,5 +139,3 @@ push = true
 "docs/source/index.rst" = [
     'release-v{version}-informational',
 ]
-
-
