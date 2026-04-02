@@ -67,6 +67,7 @@ pyarrow = "^17.0.0"
 pot = "^0.8.2"
 xgboost = "2.1.4"
 duckdb = "1.2.2"
+psutil = ">=7.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
