@@ -1,6 +1,37 @@
 Changelog
 =========
 
+
+[0.8.6] - 2026-04-02
+====================
+
+Deprecated
+----------
+- During the rework of the unsupervised pipeline we plan to replace all old tensorflow code with updated Pytorch implementations
+- Starting with version 0.9.0 we will drop support for Python version 0.9 and start supporting newer Python versions instead (up to 0.12).
+
+Bug Fixes
+---------
+- Fixed installation bug that lead to not all required packages being automatically installed under some circumstances
+
+Known Issues
+------------
+- The current imputation method (added in 0.7.0) is sub-optimal and will be replaced in a future update.
+- Current tensorflow models cannot access the GPU on windows systems and are hence very slow. They will be replaced with pytorch models in the next major update
+
+Compatibility
+-------------
+- Limited backwards compatibility with published 0.7 versions. Loading 0.7 projects will automatically recreate them as 0.8 projects.
+
+Additional Information
+----------------------
+- Release Date: 2026-03-24
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.8.6/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
 [0.8.5] - 2026-03-24
 ====================
 
