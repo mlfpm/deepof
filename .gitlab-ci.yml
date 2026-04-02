@@ -30,6 +30,30 @@ install-poetry:
     - poetry install
     - poetry run python -c 'import deepof.data'
 
+regression_test:
+  stage: test
+  retry: 1
+
+  image:
+    name: lucasmiranda42/deepof
+    entrypoint: [""]
+
+  before_script:
+    - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
+
+  cache:
+    key: "regression-refs"
+    paths:
+      - tests/test_examples/test_data/regression_tests/
+    policy: pull-push
+
+  script:
+    # First run: creates baselines if cache was empty, verifies otherwise
+    - pytest tests/regression/ -v --timeout=600
+    # Second run: guarantees verification even on cold cache
+    - pytest tests/regression/ -v --timeout=600
+
+
 test:
   stage: test
   retry: 1
@@ -47,7 +71,7 @@ test:
     - pip install duckdb==1.2.2
     - coverage run --source deepof -m pytest
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,
-    - coverage xml -o deepof_cov.xml
+    - coverage xml -o deepof_cov.xml  
 
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
