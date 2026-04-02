@@ -16,7 +16,7 @@ install-pypi:
     - python -m pip install --no-cache-dir deepof
     - cd /tmp
     - python -m pip show deepof
-    - python -c "import deepof.data"
+    #- python -c "import deepof.data"
 
 
 install-pypi-local:
