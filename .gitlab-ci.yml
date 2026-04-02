@@ -38,6 +38,11 @@ install-pypi-local:
     - cd /tmp
     - python -c "import deepof.data"
 
+  artifacts:
+    paths:
+      - dist/*.whl
+    expire_in: 1 week  
+
 
 install-poetry:
   stage: install
@@ -59,8 +64,11 @@ regression_test:
   retry: 1
 
   image:
-    name: lucasmiranda42/deepof
-    entrypoint: [""]
+    name: python:3.9.14
+
+  needs:
+    - job: install-pypi-local
+      artifacts: true
 
   before_script:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
@@ -72,6 +80,9 @@ regression_test:
     policy: pull-push
 
   script:
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install dist/*.whl
     # First run: creates baselines if cache was empty, verifies otherwise
     - pytest tests/regression/  
     # Second run: guarantees verification even on cold cache
@@ -83,14 +94,20 @@ test:
   retry: 1
 
   image:
-    name: lucasmiranda42/deepof
-    entrypoint: [""]
+    name: python:3.9.14
+
+  needs:
+    - job: install-pypi-local
+      artifacts: true
 
   before_script:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
-    - coverage run --source deepof -m pytest
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install dist/*.whl
+    - coverage run --source deepof -m pytest --ignore=tests/regression
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,
     - coverage xml -o deepof_cov.xml  
 
