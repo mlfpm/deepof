@@ -91,6 +91,7 @@ import deepof.models
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
+import deepof.data_loading
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
 from concurrent.futures import ThreadPoolExecutor
