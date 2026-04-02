@@ -1,2 +1,0 @@
-embed_sum,embed_mean,embed_std,sim_diag_mean,sim_offdiag_mean,param_norm,total_loss_train_start,total_loss_train_end,total_loss_val_start,total_loss_val_end
--25.493301391601562,-0.3983328342437744,0.3045991361141205,1.0,0.8332875370979309,57.67648411201795,186.41924375,175.3459,4.0414160461425785,2.7571399963378904

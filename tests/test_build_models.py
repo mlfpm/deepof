@@ -863,7 +863,10 @@ def test_vade_full_pipeline_regression(encoder_type):
     ref_path = os.path.join(ref_dir, "vade_summary.csv")
 
     if not os.path.exists(ref_path):
+        print("\033[33mCreating reference for vade pipeline regression!\033[0m")
         summary.to_csv(ref_path, index=False)
+    else:
+        print("\033[33mFound reference, comparing...\033[0m")
 
     ref = pd.read_csv(ref_path)
 
@@ -997,7 +1000,10 @@ def test_vqvae_full_pipeline_regression(encoder_type):
     ref_path = os.path.join(ref_dir, "vqvae_summary.csv")
 
     if not os.path.exists(ref_path):
+        print("\033[33mCreating reference for vqvae pipeline regression!\033[0m")
         summary.to_csv(ref_path, index=False)
+    else:
+        print("\033[33mFound reference, comparing...\033[0m")
 
     ref = pd.read_csv(ref_path)
 
@@ -1148,7 +1154,10 @@ def test_contrastive_full_pipeline_regression(encoder_type):
     ref_path = os.path.join(ref_dir, "contrastive_summary.csv")
 
     if not os.path.exists(ref_path):
+        print("\033[33mCreating reference for contrastive pipeline regression!\033[0m")
         summary.to_csv(ref_path, index=False)
+    else:
+        print("\033[33mFound reference, comparing...\033[0m")
 
     ref = pd.read_csv(ref_path)
 
