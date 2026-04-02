@@ -15,6 +15,7 @@ install-pypi:
     - python -m pip install --upgrade pip
     - python -m pip install --no-cache-dir deepof
     - cd /tmp
+    - python -m pip show deepof
     - python -c "import deepof.data"
 
 install-poetry:
