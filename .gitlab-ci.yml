@@ -83,6 +83,7 @@ regression_test:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
     - python -m pip install --upgrade pip
     - python -m pip install dist/*.whl
+    - python -m pip install pytest hypothesis pytest-timeout
     # First run: creates baselines if cache was empty, verifies otherwise
     - pytest tests/regression/  
     # Second run: guarantees verification even on cold cache
@@ -107,6 +108,7 @@ test:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
     - python -m pip install --upgrade pip
     - python -m pip install dist/*.whl
+    - python -m pip install coverage pytest hypothesis pytest-timeout
     - coverage run --source deepof -m pytest --ignore=tests/regression
     - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,
     - coverage xml -o deepof_cov.xml  
