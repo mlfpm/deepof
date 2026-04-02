@@ -2,7 +2,7 @@
 name = "deepof"
 version = "0.8.5"
 description = ""
-authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
+authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>", "patrick_schlegel <patrick_schlegel@psych.mpg.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
