@@ -11,9 +11,12 @@ install-pypi:
     name: python:3.9.14
 
   script:
-    - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
-    - pip install deepof
-    - python -c 'import deepof.data'
+    - apt-get update && apt-get install ffmpeg libsm6 libxext6 -y
+    - pip install --no-cache-dir deepof
+    - python -c "import deepof; print(deepof.__file__)"
+    - cd /tmp
+    - python -c "import deepof; print(deepof.__file__)"
+    - python -c "import deepof.data"
 
 install-poetry:
   stage: install
