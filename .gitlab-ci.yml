@@ -26,21 +26,16 @@ install-pypi-local:
   image:
     name: python:3.9.14
 
+  before_script:
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6 curl
+    - curl -sSL https://install.python-poetry.org | python3 - --version 2.2.1
+    - export PATH="/root/.local/bin:$PATH"
+
   script:
-    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - poetry build
     - python -m pip install --upgrade pip
-    - python -m pip install --no-cache-dir deepof
+    - python -m pip install --no-cache-dir dist/*.whl
     - cd /tmp
-    - python -m pip show deepof
-    - python -m pip show psutil || true
-    - |
-        python - <<'PY'
-        from importlib.metadata import metadata
-        print("Version:", metadata("deepof")["Version"])
-        print("Requires-Dist:")
-        for req in metadata("deepof").get_all("Requires-Dist") or []:
-            print(" ", req)
-        PY
     - python -c "import deepof.data"
 
 
