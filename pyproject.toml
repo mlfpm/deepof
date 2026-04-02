@@ -2,7 +2,10 @@
 name = "deepof"
 version = "0.8.5"
 description = ""
-authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>"]
+authors = [
+    { name ="lucas_miranda", email = "lucas_miranda@psych.mpg.de" },
+    { name ="patrick_schlegel" email = "patrick_schlegel@psych.mpg.de" }
+    ]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -67,6 +70,7 @@ pyarrow = "^17.0.0"
 pot = "^0.8.2"
 xgboost = "2.1.4"
 duckdb = "1.2.2"
+psutil = ">=7.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"
@@ -138,5 +142,3 @@ push = true
 "docs/source/index.rst" = [
     'release-v{version}-informational',
 ]
-
-
