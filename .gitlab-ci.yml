@@ -61,6 +61,8 @@ install-poetry:
 
 regression_test:
   stage: test
+  variables:
+    PYTHONHASHSEED: "0"
   retry: 1
 
   image:
