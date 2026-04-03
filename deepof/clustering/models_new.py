@@ -39,13 +39,8 @@ from sklearn.decomposition import IncrementalPCA
 from copy import deepcopy
 from torch.utils.data import DataLoader, TensorDataset
 from torch.amp import autocast
-try:
-    GradScaler = torch.amp.GradScaler
-except AttributeError:
-    try:
-        GradScaler = torch.cuda.amp.GradScaler
-    except AttributeError:
-        GradScaler = torch.cpu.amp.GradScaler
+from torch.amp import GradScaler
+
 
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -194,9 +189,6 @@ class RecurrentEncoderPT(nn.Module):
             x_edges_flat = x_edges.view(B, -1)
             encoder = torch.cat([x_nodes_flat, x_edges_flat], dim=-1)
 
-            if torch.isnan(encoder).any():
-                print("z issues!")
-
         else:
             # Flatten nodes/features into a single feature dim and keep a single group
             x_flat = x.view(B, T, N_nodes * F_per_node)  # (B, T, N*F)
@@ -215,8 +207,6 @@ class RecurrentDecoderPT(nn.Module):
         super().__init__()
         self.latent_dim = latent_dim
         self.output_shape = output_shape
-        if bidirectional_merge != "concat":
-            warnings.warn("Bidirectional merge mode is fixed to 'concat' to correspond with original TensorFlow implementation.")
 
         # First Bi-GRU layer
         self.gru1 = nn.GRU(
