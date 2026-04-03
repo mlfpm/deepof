@@ -87,9 +87,9 @@ regression_test:
     - python -m pip install dist/*.whl
     - python -m pip install pytest hypothesis pytest-timeout
     # First run: creates baselines if cache was empty, verifies otherwise
-    - pytest tests/regression/  
+    - pytest -s tests/regression/  
     # Second run: guarantees verification even on cold cache
-    - pytest tests/regression/ 
+    - pytest -s tests/regression/ 
 
 
 test:
