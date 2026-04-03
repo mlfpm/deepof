@@ -758,67 +758,67 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
             assert a_data.shape[0]<=10*N_windows_tab
 
 
-    @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-    @given(
-        table_type=st.just("h5"),
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    table_type=st.just("h5"),
+)
+def test_deep_unsupervised_embedding(table_type):
+
+    tables_path = "Tables"
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", tables_path
+        ),
+        project_name=f"test_{table_type[1:]}",
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=table_type,
     )
-    def test_deep_unsupervised_embedding(table_type):
 
-        tables_path = "Tables"
+    prun = prun.create(test=True, force=True)
 
-        prun = deepof.data.Project(
-            project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-            video_path=os.path.join(
-                ".", "tests", "test_examples", "test_multi_topview", "Videos"
-            ),
-            table_path=os.path.join(
-                ".", "tests", "test_examples", "test_multi_topview", tables_path
-            ),
-            project_name=f"test_{table_type[1:]}",
-            animal_ids=["B","W"],
-            bodypart_graph="deepof_11",
-            arena="circular-autodetect",
-            video_scale="380 mm",
-            video_format=".mp4",
-            table_format=table_type,
-        )
+    (
+    graph_preprocessed_coords, shapes, adj_matrix, to_preprocess, global_scaler
+    ) = prun.get_graph_dataset(
+        animal_id="B",  # Comment out for multi-animal embeddings
+        center="Center",
+        align="Spine_1",
+        window_size=25,
+        window_step=1,
+        test_videos=1,
+        preprocess=True,
+        scale="standard",
+    )
 
-        prun = prun.create(test=True, force=True)
+    trained_model = prun.deep_unsupervised_embedding(
+        preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
+        adjacency_matrix=adj_matrix,
+        embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
+        epochs=10,
+        encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
+        n_components=10,
+        latent_dim=8,
+        batch_size=16,
+        verbose=True, # Set to True to follow the training loop
+        interaction_regularization=0.0,
+        pretrained=False, # Set to False to train a new model!
+    )
 
-        (
-        graph_preprocessed_coords, shapes, adj_matrix, to_preprocess, global_scaler
-        ) = prun.get_graph_dataset(
-            animal_id="B",  # Comment out for multi-animal embeddings
-            center="Center",
-            align="Spine_1",
-            window_size=25,
-            window_step=1,
-            test_videos=1,
-            preprocess=True,
-            scale="standard",
-        )
+    embeddings, soft_counts = deepof.model_utils.embedding_per_video(
+        coordinates=prun,
+        to_preprocess=to_preprocess,
+        model=trained_model,
+        animal_id="B",
+        global_scaler=global_scaler,
+    )
 
-        trained_model = prun.deep_unsupervised_embedding(
-            preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
-            adjacency_matrix=adj_matrix,
-            embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
-            epochs=10,
-            encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
-            n_components=10,
-            latent_dim=8,
-            batch_size=16,
-            verbose=True, # Set to True to follow the training loop
-            interaction_regularization=0.0,
-            pretrained=False, # Set to False to train a new model!
-        )
-
-        embeddings, soft_counts = deepof.model_utils.embedding_per_video(
-            coordinates=prun,
-            to_preprocess=to_preprocess,
-            model=trained_model,
-            animal_id="B",
-            global_scaler=global_scaler,
-        )
-
-        assert embeddings['test'].shape==(76,8)
-        assert embeddings['test2'].shape==(76,8)
+    assert embeddings['test'].shape==(76,8)
+    assert embeddings['test2'].shape==(76,8)
