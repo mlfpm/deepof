@@ -93,8 +93,8 @@ class TurtleTeacherCfg:
     # Distillation (VaDE)
     lambda_distill: float = 4.0
     lambda_decay_start: int = 10
-    lambda_end_weight: float = 0.2,
-    lambda_cooldown: int = 10,
+    lambda_end_weight: float = 0.2
+    lambda_cooldown: int = 10
     distill_sharpen_T: float = 0.5
     distill_conf_weight: bool = False
     distill_conf_thresh: float = 0.3
@@ -161,17 +161,17 @@ class ContrastiveCfg:
     contrastive_loss_function: str = "nce"
     beta: float = 0.1
     tau: float = 0.1        
-    aug_min_shift: int = 1,
-    aug_max_shift: int = 6,
-    aug_p_shift: float = 0.8,
-    aug_max_rot: int = 30, 
-    aug_n_rot: int = 4, 
-    aug_p_rot: float = 0.8,
-    aug_max_interp: int = 8,
-    aug_min_interp: int = 3,         
-    aug_p_interp: float = 0.3, 
-    aug_noise_sigma: float = 0.03,  
-    aug_p_noise: float = 1.0, 
+    aug_min_shift: int = 1
+    aug_max_shift: int = 6
+    aug_p_shift: float = 0.8
+    aug_max_rot: int = 30
+    aug_n_rot: int = 4
+    aug_p_rot: float = 0.8
+    aug_max_interp: int = 8
+    aug_min_interp: int = 3        
+    aug_p_interp: float = 0.3
+    aug_noise_sigma: float = 0.03
+    aug_p_noise: float = 1.0
 
 def _append_cfg(lines, title: str, cfg) -> None:
     if cfg is None:

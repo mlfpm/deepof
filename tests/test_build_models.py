@@ -19,6 +19,7 @@ import pytest
 
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import pandas as pd
 from types import SimpleNamespace
@@ -28,6 +29,68 @@ import deepof.models
 import deepof.clustering
 import deepof.clustering.models_new
 import deepof.clustering.model_utils_new
+
+
+###################
+# HELPER OBJECTS
+###################
+
+
+class TinyIndexedDataset(Dataset):
+    def __init__(self, n=4, T=24, N=11, F_node=3, F_edge=1):
+        self.X = torch.randn(n, T, N, F_node)
+        self.A = torch.randn(n, T, N, F_edge)
+        self.x_shape = (T, N, F_node)
+        self.a_shape = (T, N, F_edge)
+        self.n_videos = n
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        idx_t = torch.tensor(idx, dtype=torch.long)
+        # Keep idx and vid equal here because validate_one_epoch_indexed currently
+        # reads the 4th returned element as idx
+        return self.X[idx], self.A[idx], idx_t, idx_t
+
+
+class DummyWriter:
+    def __init__(self):
+        self.flushed = False
+        self.closed = False
+
+    def flush(self):
+        self.flushed = True
+
+    def close(self):
+        self.closed = True
+
+    def __getattr__(self, _):
+        return lambda *args, **kwargs: None
+
+
+def _tiny_setup():
+    ds = TinyIndexedDataset()
+    loader = DataLoader(ds, batch_size=2, shuffle=False)
+
+    N = ds.x_shape[1]
+    names = [chr(65 + i) for i in range(N)]
+
+    adjacency = np.zeros((N, N), dtype=np.float32)
+    edge_columns = []
+    for i in range(N - 1):
+        edge_columns.append((names[i], names[i + 1]))
+        adjacency[i, i + 1] = 1
+        adjacency[i + 1, i] = 1
+    edge_columns.append(("A", "C"))
+    adjacency[0, 2] = 1
+    adjacency[2, 0] = 1
+
+    meta_info = {
+        "node_columns": [(name, "x") for name in names],
+        "edge_columns": edge_columns,
+    }
+    return loader, loader, adjacency, meta_info
 
 
 ###################
@@ -409,6 +472,84 @@ def test_vqvae_backward_step_with_distillation(
 # CONTRASTIVE TESTS
 ###################
 
+
+@settings(deadline=None, max_examples=2)
+@given(use_teacher=st.booleans())
+def test_fit_contrastive_smoke(use_teacher):
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
+
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+
+    train_loader, val_loader, adjacency, meta_info = _tiny_setup()
+    common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
+    teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
+    contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg()
+    writer = DummyWriter()
+
+    common_cfg.output_path = out_path
+    common_cfg.epochs = 1
+    common_cfg.save_weights = False
+    common_cfg.latent_dim = 4
+    common_cfg.n_components = 4
+    common_cfg.diag_max_batches = 1
+
+    seen_apply_distill = []
+    diag_calls = {"n": 0}
+
+    orig_step = deepof.clustering.models_new.step_contrastive_distill
+    orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
+    orig_diag = deepof.clustering.models_new._compute_diagnostics
+
+    def wrapped_step(model, batch, ctx):
+        seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
+        return orig_step(model, batch, ctx)
+
+    def fake_teacher(**kwargs):
+        if not use_teacher:
+            return None, None, None
+        n = kwargs["train_dataset"].n_videos
+        k = kwargs["common_cfg"].n_components
+        tau_star = torch.softmax(torch.randn(n, k), dim=-1)
+        return object(), tau_star, None
+
+    def fake_diag(**kwargs):
+        diag_calls["n"] += 1
+        return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
+
+    deepof.clustering.models_new.step_contrastive_distill = wrapped_step
+    deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
+    deepof.clustering.models_new._compute_diagnostics = fake_diag
+
+    model_val, model_score, _, _ = deepof.clustering.models_new.fit_contrastive(
+        train_loader=train_loader,
+        val_loader=val_loader,
+        preprocessed_train={},
+        adjacency_matrix=adjacency,
+        meta_info=meta_info,
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg,
+        contrastive_cfg=contrastive_cfg,
+        writer=writer,
+    )
+
+    assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
+    assert isinstance(model_score, deepof.clustering.models_new.ContrastivePT)
+    assert writer.flushed and writer.closed
+    assert seen_apply_distill
+    assert False in seen_apply_distill
+    assert (True in seen_apply_distill) == use_teacher
+    assert diag_calls["n"] == int(use_teacher)
+
+
+    deepof.clustering.models_new.step_contrastive_distill = orig_step
+    deepof.clustering.models_new.maybe_build_turtle_teacher = orig_teacher
+    deepof.clustering.models_new._compute_diagnostics = orig_diag
+    if os.path.exists(out_path):
+        rmtree(out_path)
+
+
 @settings(deadline=None)
 @given(
     use_gnn=st.booleans(),
@@ -646,6 +787,16 @@ def test_contrastive_backward_step_with_distillation(
             assert 0.0 <= result.logs["neg_similarity"] <= 1.0001
         else:
             assert (1.0 / 3.0) - 1e-4 <= result.logs["neg_similarity"] <= 1.0001
+
+
+
+
+
+
+
+
+
+
 
 
 #

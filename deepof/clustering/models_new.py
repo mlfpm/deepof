@@ -294,19 +294,19 @@ class RecurrentDecoderPT(nn.Module):
         return final_dist
     
 
-def _act(name: str) -> nn.Module:
-    name = (name or "relu").lower()
-    if name == "relu":
-        return nn.ReLU()
-    if name == "gelu":
-        return nn.GELU()
-    if name == "tanh":
-        return nn.Tanh()
-    if name == "leaky_relu":
-        return nn.LeakyReLU(0.2)
-    if name in {"linear", "identity", "none"}:
-        return nn.Identity()
-    raise ValueError(f"Unsupported activation: {name}")
+#def _act(name: str) -> nn.Module:
+#    name = (name or "relu").lower()
+#    if name == "relu":
+#        return nn.ReLU()
+#    if name == "gelu":
+#        return nn.GELU()
+#    if name == "tanh":
+#        return nn.Tanh()
+#    if name == "leaky_relu":
+#        return nn.LeakyReLU(0.2)
+#    if name in {"linear", "identity", "none"}:
+#        return nn.Identity()
+#    raise ValueError(f"Unsupported activation: {name}")
 
 
 class TemporalBlockPT(nn.Module):
@@ -745,14 +745,14 @@ def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtyp
     return pe.unsqueeze(0)  # (1, max_len, d_model)
 
 
-class BatchNorm1dKerasFP32(nn.BatchNorm1d):
-    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01."""
-    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
-        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y = super().forward(x.float())
-        return y.to(dtype=x.dtype)
+#class BatchNorm1dKerasFP32(nn.BatchNorm1d):
+#    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01."""
+#    def __init__(self, num_features, eps=1e-3, momentum=0.01, affine=True, track_running_stats=True):
+#        super().__init__(num_features, eps=eps, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
+#    
+#    def forward(self, x: torch.Tensor) -> torch.Tensor:
+#        y = super().forward(x.float())
+#        return y.to(dtype=x.dtype)
 
 
 class MultiHeadAttentionPT(nn.Module):
@@ -4430,7 +4430,8 @@ def validate_one_epoch_indexed(
     seen = 0
     for batch in iterator:
         batch = move_to(batch, device)
-        x, a, _, idx = batch
+        x, a = batch[0], batch[1]
+        idx = batch[-2]
         B = x.size(0)
         #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
