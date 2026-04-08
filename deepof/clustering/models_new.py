@@ -2133,7 +2133,7 @@ class VaDEPT(nn.Module):
     @torch.no_grad()
     def embed(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """
-        Inference-only method to get the latent embedding. Equivalent to the 'embedding' Keras model.
+        Inference-only method to get the latent embedding.
 
         Args:
             x (torch.Tensor): Input node features tensor.
@@ -2149,7 +2149,7 @@ class VaDEPT(nn.Module):
     @torch.no_grad()
     def group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """
-        Inference-only method to get cluster probabilities. Equivalent to the 'grouper' Keras model.
+        Inference-only method to get cluster probabilities.
 
         Args:
             x (torch.Tensor): Input node features tensor.
@@ -2197,7 +2197,7 @@ class ContrastivePT(nn.Module):
         T, N, F_in = input_shape
         Te, E, Fe = edge_feature_shape
         
-        if T != Te:
+        if T != Te: # pragma: no cover
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
         #if T < 2 or (T % 2) != 0:
         #    raise ValueError(
@@ -2248,7 +2248,7 @@ class ContrastivePT(nn.Module):
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
             )
-        else:
+        else: # pragma: no cover
             raise ValueError(f"Unknown encoder_type: {encoder_type}")
 
         # Debug cache
@@ -2261,14 +2261,14 @@ class ContrastivePT(nn.Module):
         """
         return self.encoder(x, a)
 
-    @staticmethod
-    def _ts_samples(x: torch.Tensor, win: int):
-        # TF parity: pos = x[:, 1:win+1], neg = x[:, -win:]
-        pos = x[:, 1 : win + 1]
-        neg = x[:, -win:]
-        return pos, neg
+    #@staticmethod
+    #def _ts_samples(x: torch.Tensor, win: int):
+    #    # TF parity: pos = x[:, 1:win+1], neg = x[:, -win:]
+    #    pos = x[:, 1 : win + 1]
+    #    neg = x[:, -win:]
+    #    return pos, neg
 
-    def compute_loss(
+    '''def compute_loss(
         self,
         x: torch.Tensor,  # (B, T, N, F)
         a: torch.Tensor,  # (B, T, E, Fe)
@@ -2328,7 +2328,7 @@ class ContrastivePT(nn.Module):
         return loss, pos_mean, neg_mean, debug
 
     def get_last_debug(self) -> Dict[str, Any]:
-        return self._last_debug
+        return self._last_debug'''
  
 
 #########################################################

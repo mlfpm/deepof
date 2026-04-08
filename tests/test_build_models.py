@@ -136,6 +136,132 @@ def _tiny_setup():
 
 
 @settings(deadline=None)
+@given(
+    use_teacher=st.booleans(),
+    conf_weight=st.booleans(),
+)
+def test_compute_diagnostics_smoke(use_teacher, conf_weight):
+    device = torch.device("cpu")
+    train_loader, _, _, _ = _tiny_setup()
+    n_components = 4
+
+    class DummyDiagModel(torch.nn.Module):
+        def __init__(self, n_components):
+            super().__init__()
+            self.n_components = n_components
+            self.scale = torch.nn.Parameter(torch.tensor(1.0))
+
+    model = DummyDiagModel(n_components).to(device)
+    model.train()  # check that training state gets restored afterwards
+
+    def q_fn(model, x, a):
+        # Sample-dependent but deterministic soft assignments [B, K]
+        base = x.mean(dim=(1, 2, 3))  # [B]
+        offsets = torch.linspace(-1.0, 1.0, model.n_components, device=x.device)
+        logits = model.scale * base[:, None] * offsets[None, :]
+        return F.softmax(logits, dim=-1)
+
+    tau_star = None
+    if use_teacher:
+        tau_star = torch.softmax(
+            torch.randn(len(train_loader.dataset), n_components, device=device), dim=-1
+        )
+
+    diag = deepof.clustering.models_new._compute_diagnostics(
+        model=model,
+        dataloader=train_loader,
+        q_fn=q_fn,
+        device=device,
+        n_components=n_components,
+        tau_star=tau_star,
+        distill_sharpen_T=0.5,
+        distill_conf_weight=conf_weight,
+        distill_conf_thresh=0.6,
+        max_batches=2,
+        extra_stats_fn=lambda m: {"diag/custom_stat": 123.0},
+    )
+
+    expected_keys = [
+        "diag/q_mean_entropy",
+        "diag/q_marginal_entropy",
+        "diag/q_mean_max_prob",
+        "diag/teacher_marginal_entropy",
+        "diag/teacher_conf_mean",
+        "diag/teacher_weight_mean",
+        "diag/kl_marg_q_to_tau",
+        "conf_norm",
+        "bal_norm",
+        "alignment_score",
+        "diag/custom_stat",
+    ]
+    assert all(k in diag for k in expected_keys)
+
+    # Generic outputs should always be finite and bounded
+    assert np.isfinite(diag["diag/q_mean_entropy"])
+    assert np.isfinite(diag["diag/q_marginal_entropy"])
+    assert np.isfinite(diag["diag/q_mean_max_prob"])
+    assert np.isfinite(diag["conf_norm"])
+    assert np.isfinite(diag["bal_norm"])
+    assert np.isfinite(diag["alignment_score"])
+
+    assert 0.0 <= diag["diag/q_mean_max_prob"] <= 1.0
+    assert 0.0 <= diag["conf_norm"] <= 1.0
+    assert 0.0 <= diag["bal_norm"] <= 1.0
+    assert 0.0 <= diag["alignment_score"] <= 1.0
+    assert diag["diag/custom_stat"] == 123.0
+
+    if use_teacher:
+        assert np.isfinite(diag["diag/teacher_marginal_entropy"])
+        assert np.isfinite(diag["diag/teacher_conf_mean"])
+        assert np.isfinite(diag["diag/teacher_weight_mean"])
+        assert np.isfinite(diag["diag/kl_marg_q_to_tau"])
+
+        assert 0.0 <= diag["diag/teacher_conf_mean"] <= 1.0
+        assert 0.0 <= diag["diag/teacher_weight_mean"] <= 1.0
+        assert diag["diag/kl_marg_q_to_tau"] >= 0.0
+
+        if not conf_weight:
+            assert np.isclose(diag["diag/teacher_weight_mean"], 1.0)
+    else:
+        assert np.isnan(diag["diag/teacher_marginal_entropy"])
+        assert np.isnan(diag["diag/teacher_conf_mean"])
+        assert np.isnan(diag["diag/teacher_weight_mean"])
+        assert np.isnan(diag["diag/kl_marg_q_to_tau"])
+
+    # _compute_diagnostics should restore the original training state
+    assert model.training
+
+
+def test_compute_vade_specific_diagnostics():
+    class DummyLatentSpace(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.gmm_log_vars = torch.nn.Parameter(torch.tensor([-1.0, 0.5, 1.5]))
+            self.prior = torch.tensor([0.2, 0.3, 0.5])
+
+    class DummyVaDE(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.latent_space = DummyLatentSpace()
+
+    diag = deepof.clustering.models_new._compute_vade_specific_diagnostics(DummyVaDE())
+
+    assert "diag/gmm_logvar_min" in diag
+    assert "diag/gmm_logvar_max" in diag
+    assert "diag/prior_entropy" in diag
+
+    assert np.isclose(diag["diag/gmm_logvar_min"], -1.0)
+    assert np.isclose(diag["diag/gmm_logvar_max"], 1.5)
+    assert np.isfinite(diag["diag/prior_entropy"])
+    assert diag["diag/prior_entropy"] > 0.0
+
+    # Models without latent_space should simply return {}
+    assert deepof.clustering.models_new._compute_vade_specific_diagnostics(
+        torch.nn.Linear(2, 2)
+    ) == {}
+    
+
+@settings(deadline=None)
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
 def test_fit_vade_smoke(use_teacher,encoder_type):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
