@@ -357,7 +357,7 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     writer = DummyWriter()
 
     common_cfg.output_path = out_path
-    common_cfg.epochs = 1
+    common_cfg.epochs = 10
     common_cfg.save_weights = False
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
@@ -596,7 +596,7 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     writer = DummyWriter()
 
     common_cfg.output_path = out_path
-    common_cfg.epochs = 1
+    common_cfg.epochs = 10
     common_cfg.save_weights = False
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
@@ -876,7 +876,7 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     writer = DummyWriter()
 
     common_cfg.output_path = out_path
-    common_cfg.epochs = 1
+    common_cfg.epochs = 10
     common_cfg.save_weights = False
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
