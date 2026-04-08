@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import pandas as pd
 from types import SimpleNamespace
+from typing import Optional
 
 import deepof.model_utils
 import deepof.models
