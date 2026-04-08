@@ -135,9 +135,9 @@ def _tiny_setup():
 ###################
 
 
-@settings(deadline=None, max_examples=2)
-@given(use_teacher=st.booleans())
-def test_fit_vade_smoke(use_teacher):
+@settings(deadline=None)
+@given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
+def test_fit_vade_smoke(use_teacher,encoder_type):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
 
     if os.path.exists(out_path):
@@ -156,6 +156,7 @@ def test_fit_vade_smoke(use_teacher):
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
+    common_cfg.encoder_type=encoder_type
     teacher_cfg.use_turtle_teacher=use_teacher
     teacher_cfg.teacher_outer_steps=10
     teacher_cfg.teacher_inner_steps=10
@@ -374,9 +375,9 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
 ###################
 
 
-@settings(deadline=None, max_examples=2)
-@given(use_teacher=st.booleans())
-def test_fit_vqvae_smoke(use_teacher):
+@settings(deadline=None)
+@given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
+def test_fit_vqvae_smoke(use_teacher, encoder_type):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
 
     if os.path.exists(out_path):
@@ -394,6 +395,7 @@ def test_fit_vqvae_smoke(use_teacher):
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
+    common_cfg.encoder_type = encoder_type
 
 
     seen_apply_distill = []
@@ -652,9 +654,9 @@ def test_vqvae_backward_step_with_distillation(
 ###################
 
 
-@settings(deadline=None, max_examples=2)
-@given(use_teacher=st.booleans())
-def test_fit_contrastive_smoke(use_teacher):
+@settings(deadline=None)
+@given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
+def test_fit_contrastive_smoke(use_teacher, encoder_type):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
 
     if os.path.exists(out_path):
@@ -673,6 +675,7 @@ def test_fit_contrastive_smoke(use_teacher):
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
+    common_cfg.encoder_type = encoder_type
 
     seen_apply_distill = []
     diag_calls = {"n": 0}
