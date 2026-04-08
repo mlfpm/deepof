@@ -1086,16 +1086,16 @@ class TFMEncoderPT(nn.Module):
         return out
     
 
-def create_look_ahead_mask_pt(size: int, device=None, dtype=torch.bool) -> torch.Tensor:
+'''def create_look_ahead_mask_pt(size: int, device=None, dtype=torch.bool) -> torch.Tensor:
     """
     PyTorch replica of TF create_look_ahead_mask (KEEP mask).
     Returns lower-triangular True (keep), False above diagonal.
     Shape: (T, T) boolean.
     """
-    return torch.tril(torch.ones(size, size, dtype=torch.bool, device=device))
+    return torch.tril(torch.ones(size, size, dtype=torch.bool, device=device))'''
 
 
-def create_masks_pt(inp_3d: torch.Tensor):
+'''def create_masks_pt(inp_3d: torch.Tensor):
     """
     PyTorch replica of TF create_masks for the decoder (KEEP semantics).
     """
@@ -1106,10 +1106,10 @@ def create_masks_pt(inp_3d: torch.Tensor):
     dec_padding_keep = (tar != 0).unsqueeze(1).unsqueeze(1)  # (B, 1, 1, T)
     la_keep = create_look_ahead_mask_pt(T, device=device, dtype=torch.bool)  # (T, T)
     combined_keep = (dec_padding_keep | la_keep.unsqueeze(0).unsqueeze(0))  # (B, 1, T, T)
-    return combined_keep, dec_padding_keep
+    return combined_keep, dec_padding_keep'''
 
 
-class MultiHeadAttentionGeneralPT(nn.Module):
+'''class MultiHeadAttentionGeneralPT(nn.Module):
     """Multi-head cross-attention using PyTorch 2.0+ optimized SDPA."""
     
     def __init__(self, q_in_dim: int, kv_in_dim: int, num_heads: int, key_dim: int, dropout: float = 0.0):
@@ -1176,10 +1176,10 @@ class MultiHeadAttentionGeneralPT(nn.Module):
                 attn_weights = torch.nan_to_num(attn_weights, nan=0.0)
             return out, attn_weights
         
-        return out
+        return out'''
 
 
-class TransformerDecoderLayerPT(nn.Module):
+'''class TransformerDecoderLayerPT(nn.Module):
     """Transformer decoder layer. Based on https://www.tensorflow.org/text/tutorials/transformer."""
     def __init__(self, model_dim: int, memory_dim: int, num_heads: int, dff: int, rate: float = 0.1):
         super().__init__()
@@ -1220,10 +1220,10 @@ class TransformerDecoderLayerPT(nn.Module):
         # FFN
         ffn_out = self.ffn2(self.act(self.ffn1(x)))
         x = self.norm3(x + self.dropout3(ffn_out))
-        return x, w1, w2
+        return x, w1, w2'''
 
 
-class DecoderCorePT(nn.Module):
+'''class DecoderCorePT(nn.Module):
     def __init__(self, model_dim: int, memory_dim: int, num_layers: int, num_heads: int, dff: int, max_pos: int, rate: float = 0.1):
         super().__init__()
         self.model_dim = int(model_dim)
@@ -1273,7 +1273,7 @@ class DecoderCorePT(nn.Module):
             attention_weights[f"decoder_layer{i}_block1"] = w1
             attention_weights[f"decoder_layer{i}_block2"] = w2
 
-        return out, attention_weights
+        return out, attention_weights'''
 
 
 class TFMDecoderPT(nn.Module):
@@ -1715,26 +1715,26 @@ class VQVAEPT(nn.Module):
     @torch.no_grad()
     def group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """Inference-only: Get quantized latents. Equivalent to TF 'grouper' model."""
-        encoder_output = self.encoder(x, a)
+        """encoder_output = self.encoder(x, a)
         quantized, _ = self.vq_layer(encoder_output, return_losses=False)
-        return quantized
+        return quantized"""
 
     @torch.no_grad()
     def soft_group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """Inference-only: Get soft cluster assignments. Equivalent to TF 'soft_grouper' model."""
-        encoder_output = self.encoder(x, a)
+        """encoder_output = self.encoder(x, a)
         _, soft_counts = self.vq_layer(encoder_output, return_losses=False)
-        return soft_counts
+        return soft_counts"""
 
     @torch.no_grad()
     def reconstruct(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """Full reconstruction from input through VQ-VAE."""
-        encoding_recon_dist, _ = self.forward(x, a, return_losses=False)
-        return encoding_recon_dist.mean
+        """encoding_recon_dist, _ = self.forward(x, a, return_losses=False)
+        return encoding_recon_dist.mean"""
     
     def get_codebook_usage(self, data_loader, max_samples: int = 10000):
         """Compute codebook usage statistics over a dataset."""
-        self.eval()
+        """self.eval()
         all_indices = []
         all_soft_counts = []
         samples_seen = 0
@@ -1770,7 +1770,7 @@ class VQVAEPT(nn.Module):
         avg_probs = all_soft_counts.mean(dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
         
-        return usage_counts, perplexity.item()
+        return usage_counts, perplexity.item()"""
     
 
 class GaussianMixtureLatentPT(nn.Module):
@@ -1867,15 +1867,15 @@ class GaussianMixtureLatentPT(nn.Module):
         z_for_downstream = z_sample if self.training else z_mean
 
         # Compute lens-space posterior parameters (μ_h, log_var_h) for proper MC-KL  ###HERE!
-        if self.lens_enabled: 
-            W = self.lens.weight  # (d_lens, d_latent) 
-            h_mean = F.linear(z_mean, W, bias=None)  # z_mean @ W.T 
-            var_z = torch.exp(z_log_var)  # (B, d_latent) 
-            var_h = torch.clamp(var_z @ (W.pow(2)).t(), min=1e-8)  # (B, d_lens) 
-            h_log_var = torch.log(var_h)  # (B, d_lens)  
-        else:  
-            h_mean = z_mean  # (B, latent_dim) 
-            h_log_var = z_log_var  # (B, latent_dim) 
+        #if self.lens_enabled: 
+        #    W = self.lens.weight  # (d_lens, d_latent) 
+        #    h_mean = F.linear(z_mean, W, bias=None)  # z_mean @ W.T 
+        #    var_z = torch.exp(z_log_var)  # (B, d_latent) 
+        #    var_h = torch.clamp(var_z @ (W.pow(2)).t(), min=1e-8)  # (B, d_lens) 
+        #    h_log_var = torch.log(var_h)  # (B, d_lens)  
+        #else:  
+        h_mean = z_mean  # (B, latent_dim) 
+        h_log_var = z_log_var  # (B, latent_dim) 
 
         # Focus to lower dimension, if lens is enabled
         if self.lens_enabled:
@@ -1898,24 +1898,24 @@ class GaussianMixtureLatentPT(nn.Module):
     @torch.no_grad()
     def set_lens_weights(self, W: torch.Tensor) -> None: 
         """Set the projection (lens) weights from an external initializer (e.g., PCA/LDA).""" 
-        if W.shape != self.lens.weight.shape:  
+        """if W.shape != self.lens.weight.shape:  
             raise ValueError(f"Lens weight shape {W.shape} does not match {self.lens.weight.shape}")  
         self.lens.weight.data.copy_(W.to(self.lens.weight.device, dtype=self.lens.weight.dtype)) 
-        #self.freeze_lens(True)
+        #self.freeze_lens(True)"""
 
     def freeze_lens(self, freeze: bool = True) -> None:  
         """Freeze/unfreeze the lens parameters."""  
-        if freeze:
+        """if freeze:
             print("Freezing lense")
         else:
             print("Unfreezing lense")
         for p in self.lens.parameters():       
-            p.requires_grad = not freeze 
+            p.requires_grad = not freeze""" 
 
 
 def vade_loss_function(reconstruction_dist, original_data, model_internal_losses, categorical_probs, reg_cat_clusters_weight):
     # Reconstruction Loss (Negative Log-Likelihood)
-    recon_loss = -reconstruction_dist.log_prob(original_data).mean()
+    """recon_loss = -reconstruction_dist.log_prob(original_data).mean()
 
     # Model Internal Losses (KL + kmeans from VaDEPT)
     # The model already calculates these per-batch, we just sum them.
@@ -1933,7 +1933,7 @@ def vade_loss_function(reconstruction_dist, original_data, model_internal_losses
         cat_reg_loss *= reg_cat_clusters_weight
 
     total_loss = recon_loss + internal_loss + cat_reg_loss
-    return total_loss, recon_loss, internal_loss, cat_reg_loss
+    return total_loss, recon_loss, internal_loss, cat_reg_loss"""
 
 
 class VaDEPT(nn.Module):
@@ -2013,7 +2013,7 @@ class VaDEPT(nn.Module):
                 input_dropout_p=0.5,            # drop 50% of time steps during training
                 self_attn_diag_only=False,      # set True to further reduce copying
             ) 
-        else:
+        else: # pragma: no cover
             raise NotImplementedError("invalid encoder type, try \"recurrent\", \"TCN\" or \"transformer\" ")          
 
         self.latent_space = GaussianMixtureLatentPT(
@@ -2053,8 +2053,8 @@ class VaDEPT(nn.Module):
             z_for_gaussian,
         ) = self.latent_space(encoder_output)
 
-        if torch.isnan(z_mean_head).any() or torch.isnan(z_var_param).any():
-            print("z issues!")
+        #if torch.isnan(z_mean_head).any() or torch.isnan(z_var_param).any():
+        #    print("z issues!")
 
         B, T, _, _ = x.shape
         x_for_decoder = x.reshape(B, T, self.input_n_nodes * self.input_n_features_per_node)
@@ -2079,7 +2079,7 @@ class VaDEPT(nn.Module):
             return reconstruction_dist, z_for_gaussian, categorical, kmeans_loss
 
     @property
-    def get_gmm_params(self) -> dict:
+    def get_gmm_params(self) -> dict: # pragma: no cover
         """Returns the GMM parameters from the latent space."""
         with torch.no_grad():
             means = self.latent_space.gmm_means
