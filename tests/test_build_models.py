@@ -167,11 +167,11 @@ def test_fit_vade_smoke(use_teacher):
 
     orig_step = deepof.clustering.models_new.step_vade
 
-    def wrapped_step(model, batch, ctx):
+    def wrapped_step_vade(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx.criterion, "lambda_scheduler", False)))
         return orig_step(model, batch, ctx)
 
-    deepof.clustering.models_new.step_vade = wrapped_step
+    deepof.clustering.models_new.step_vade = wrapped_step_vade
 
     model_val, model_score, _, _ = deepof.clustering.models_new.fit_VADE(
         train_loader=train_loader,
@@ -197,7 +197,7 @@ def test_fit_vade_smoke(use_teacher):
     assert (True in seen_apply_distill) == use_teacher
 
 
-    deepof.clustering.models_new.step_vqvae_distill = orig_step
+    deepof.clustering.models_new.step_vade = orig_step
     if os.path.exists(out_path):
         rmtree(out_path)
 
@@ -403,7 +403,7 @@ def test_fit_vqvae_smoke(use_teacher):
     orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
     orig_diag = deepof.clustering.models_new._compute_diagnostics
 
-    def wrapped_step(model, batch, ctx):
+    def wrapped_step_vqvae(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
         return orig_step(model, batch, ctx)
 
@@ -419,7 +419,7 @@ def test_fit_vqvae_smoke(use_teacher):
         diag_calls["n"] += 1
         return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
 
-    deepof.clustering.models_new.step_vqvae_distill = wrapped_step
+    deepof.clustering.models_new.step_vqvae_distill = wrapped_step_vqvae
     deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
     deepof.clustering.models_new._compute_diagnostics = fake_diag
 
@@ -681,7 +681,7 @@ def test_fit_contrastive_smoke(use_teacher):
     orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
     orig_diag = deepof.clustering.models_new._compute_diagnostics
 
-    def wrapped_step(model, batch, ctx):
+    def wrapped_step_contrastive(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
         return orig_step(model, batch, ctx)
 
@@ -697,7 +697,7 @@ def test_fit_contrastive_smoke(use_teacher):
         diag_calls["n"] += 1
         return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
 
-    deepof.clustering.models_new.step_contrastive_distill = wrapped_step
+    deepof.clustering.models_new.step_contrastive_distill = wrapped_step_contrastive
     deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
     deepof.clustering.models_new._compute_diagnostics = fake_diag
 
