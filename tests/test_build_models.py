@@ -341,6 +341,95 @@ def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,includ
         rmtree(out_path)
 
 
+def test_save_model_info():
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "save_model_info_test")
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+
+    ckpt_path = os.path.join(out_path, "model_best_val.pt")
+    info_path = os.path.join(out_path, "model_best_val_info.txt")
+
+    # Minimal dummy model
+    model = torch.nn.Linear(4, 4)
+
+    # Minimal configs
+    common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
+    common_cfg.latent_dim = 8
+    common_cfg.n_components = 4
+    common_cfg.encoder_type = "recurrent"
+
+    teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
+    teacher_cfg.lambda_distill = 0.5
+
+    rebuild_spec = {
+        "model_name": "test_model",
+        "latent_dim": 8,
+        "n_components": 4,
+    }
+
+    log_summary = {
+        "final_epoch": 10,
+        "best_val_loss": 0.123,
+    }
+
+    deepof.clustering.models_new.save_model_info(
+        ckpt_path,
+        stage="best_val",
+        epoch=10,
+        train_steps=1000,
+        val_total=0.123,
+        score_value=0.85,
+        extra={"custom_key": "custom_value"},
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg,
+        vade_cfg=None,
+        contrastive_cfg=None,
+        model=model,
+        log_summary=log_summary,
+        rebuild_spec=rebuild_spec,
+        save_weights=True,
+        save_bundle=True,
+    )
+
+    # Checkpoint file should exist
+    assert os.path.isfile(ckpt_path)
+
+    # Info file should exist
+    assert os.path.isfile(info_path)
+
+    # Checkpoint should be a bundle with expected keys
+    bundle = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    assert isinstance(bundle, dict)
+    assert "state_dict" in bundle
+    assert "rebuild_spec" in bundle
+    assert "log_summary" in bundle
+    assert bundle["rebuild_spec"]["latent_dim"] == 8
+    assert bundle["log_summary"]["final_epoch"] == 10
+
+    # State dict should match original model
+    model_reloaded = torch.nn.Linear(4, 4)
+    model_reloaded.load_state_dict(bundle["state_dict"])
+    for p1, p2 in zip(model.parameters(), model_reloaded.parameters()):
+        assert torch.allclose(p1, p2)
+
+    # Info file should contain expected metadata
+    with open(info_path, "r", encoding="utf-8") as f:
+        info_text = f.read()
+
+    assert "stage: best_val" in info_text
+    assert "epoch: 10" in info_text
+    assert "train_steps: 1000" in info_text
+    assert "val_total: 0.123" in info_text
+    assert "score_value: 0.85" in info_text
+    assert "ckpt_contains: bundle" in info_text
+    assert "custom_key: custom_value" in info_text
+    assert "latent_dim" in info_text
+
+    if os.path.exists(out_path):
+        rmtree(out_path)
+
+
 @settings(deadline=None)
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
 def test_fit_vade_smoke(use_teacher,encoder_type):
