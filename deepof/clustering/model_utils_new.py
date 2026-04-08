@@ -133,8 +133,8 @@ class TurtleTeacherCfg:
 class VaDECfg:
     reg_cat_clusters: float = 0.0
     recluster: bool = False
-    freeze_gmm_epochs: int = 0
-    freeze_decoder_epochs: int = 0
+    freeze_gmm_epochs: int = 4
+    freeze_decoder_epochs: int = 2
     prior_loss_weight: float = 0.0
 
     reg_scatter_weight: float = 0.0

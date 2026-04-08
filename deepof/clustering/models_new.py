@@ -6135,7 +6135,7 @@ def _build_edge_from_metainfo(
     return edge_index_global, edge_index_local, (node_names if return_node_names else None)
 
 
-def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
+def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor): # pragma: no cover
     """
     Plots one random batch element as a row of skeletons over time (top: original, bottom: augmented).
     Uses _plot_augmentation._edge_index if available (set by augmentation functions).
@@ -6178,7 +6178,7 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor):
     plt.show()
 
 
-def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
+"""def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
     adj = [[] for _ in range(n_nodes)]
     for u, v in ei.detach().cpu().tolist():
         adj[u].append(v)
@@ -6195,7 +6195,7 @@ def _valid_triplets_from_edge_index(ei: torch.Tensor, n_nodes: int):
                 a_ = nb[i]
                 c_ = nb[j]
                 triplets.append((a_, b, c_))
-    return triplets, adj
+    return triplets, adj"""
 
 
 @dataclass
@@ -6322,17 +6322,17 @@ def _augment_time_shift(
     return x_cut
 
 
-def _augment_full_rotation(
+"""def _augment_full_rotation(
     x: torch.Tensor,             # (B,T,N,3)
     edge_index: torch.Tensor,    # only used for plotting
     max_rot: float = 30.0,
     p: float = 0.5,
     plot: bool = False,
 ) -> torch.Tensor:
-    """
+    
     Rotate the entire graph (all nodes) by a single angle per sample (constant over time).
     Rotation is applied around the per-frame centroid (keeps the skeleton "in place").
-    """
+    
     if max_rot <= 0.0 or p <= 0.0:
         return x
 
@@ -6360,7 +6360,7 @@ def _augment_full_rotation(
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
 
-    return x_aug
+    return x_aug"""
 
 
 def _augment_angle_rotations(

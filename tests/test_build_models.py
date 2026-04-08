@@ -144,6 +144,198 @@ def _tiny_setup(return_angles=False):
 ###################
 
 
+@settings(deadline=None, max_examples=3)
+@given(model_name=st.sampled_from(["vade", "vqvae", "contrastive"]))
+def test_embedding_model_fittingPT(model_name):
+    """
+    Tests that embedding_model_fittingPT:
+    - correctly constructs configs, datasets, loaders, and writer
+    - dispatches to the correct fit function based on model_name
+    Does not actually run training (fit functions are mocked, separate tests are used for that)
+    """
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "embedding_model_fittingPT_test")
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+
+    # Build minimal preprocessed_object that BatchDictDataset can consume
+    # We'll mock BatchDictDataset to avoid actual HDF5 creation
+    train_loader, val_loader, adjacency, meta_info = _tiny_setup()
+
+    # Track which fit function was called and with what arguments
+    fit_calls = {"vade": [], "vqvae": [], "contrastive": []}
+
+    # Dummy return values (model_val, model_score, extra, log_summary)
+    dummy_model = torch.nn.Linear(4, 4)
+    dummy_return = (dummy_model, dummy_model, None, {"dummy": True})
+
+    orig_fit_vade = deepof.clustering.models_new.fit_VADE
+    orig_fit_vqvae = deepof.clustering.models_new.fit_VQVAE
+    orig_fit_contrastive = deepof.clustering.models_new.fit_contrastive
+    orig_batch_dataset = deepof.clustering.models_new.BatchDictDataset
+
+    def fake_fit_vade(train_loader, val_loader, preprocessed_train, adjacency_matrix,
+                        common_cfg, teacher_cfg, vade_cfg, writer):
+        fit_calls["vade"].append({
+            "train_loader": train_loader,
+            "val_loader": val_loader,
+            "adjacency_matrix": adjacency_matrix,
+            "common_cfg": common_cfg,
+            "teacher_cfg": teacher_cfg,
+            "vade_cfg": vade_cfg,
+            "writer": writer,
+        })
+        return dummy_return
+
+    def fake_fit_vqvae(train_loader, val_loader, preprocessed_train, adjacency_matrix,
+                        common_cfg, teacher_cfg, writer):
+        fit_calls["vqvae"].append({
+            "train_loader": train_loader,
+            "val_loader": val_loader,
+            "adjacency_matrix": adjacency_matrix,
+            "common_cfg": common_cfg,
+            "teacher_cfg": teacher_cfg,
+            "writer": writer,
+        })
+        return dummy_return
+
+    def fake_fit_contrastive(train_loader, val_loader, preprocessed_train, adjacency_matrix,
+                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer):
+        fit_calls["contrastive"].append({
+            "train_loader": train_loader,
+            "val_loader": val_loader,
+            "adjacency_matrix": adjacency_matrix,
+            "meta_info": meta_info,
+            "common_cfg": common_cfg,
+            "teacher_cfg": teacher_cfg,
+            "contrastive_cfg": contrastive_cfg,
+            "writer": writer,
+        })
+        return dummy_return
+
+    class FakeBatchDictDataset:
+        """Minimal fake that returns our pre-built tiny loader."""
+        _instance_count = 0
+
+        def __init__(self, *args, **kwargs):
+            FakeBatchDictDataset._instance_count += 1
+            self._is_train = (FakeBatchDictDataset._instance_count % 2 == 1)
+            self._loader = train_loader if self._is_train else val_loader
+            # Copy attributes from underlying dataset
+            self.x_shape = train_loader.dataset.x_shape
+            self.a_shape = train_loader.dataset.a_shape
+
+        def make_loader(self, **kwargs):
+            return self._loader
+
+    FakeBatchDictDataset._instance_count = 0
+
+    deepof.clustering.models_new.fit_VADE = fake_fit_vade
+    deepof.clustering.models_new.fit_VQVAE = fake_fit_vqvae
+    deepof.clustering.models_new.fit_contrastive = fake_fit_contrastive
+    deepof.clustering.models_new.BatchDictDataset = FakeBatchDictDataset
+
+    # Call the outer function
+    result = deepof.clustering.models_new.embedding_model_fittingPT(
+        preprocessed_object=({}, {}),  # empty dicts, mocked anyway
+        adjacency_matrix=adjacency,
+        meta_info=meta_info,
+        encoder_type="recurrent",
+        batch_size=2,
+        latent_dim=4,
+        epochs=1,
+        n_components=4,
+        output_path=out_path,
+        log_history=True,
+        save_weights=False,
+        model_name=model_name,
+        use_turtle_teacher=False,
+        num_workers=0,
+        use_amp=False,
+    )
+
+    # Should return the dummy tuple
+    assert result == dummy_return
+
+    # Exactly one fit function should have been called
+    assert len(fit_calls[model_name]) == 1
+    for other_name in fit_calls:
+        if other_name != model_name:
+            assert len(fit_calls[other_name]) == 0
+
+    # Verify the call received properly constructed objects
+    call = fit_calls[model_name][0]
+
+    # Loaders should be DataLoader instances
+    assert isinstance(call["train_loader"], DataLoader)
+    assert isinstance(call["val_loader"], DataLoader)
+
+    # Adjacency should be passed through
+    assert call["adjacency_matrix"] is adjacency
+
+    # Configs should be properly typed
+   # Verify the call received properly constructed objects
+    call = fit_calls[model_name][0]
+
+    # Loaders should be DataLoader instances
+    assert isinstance(call["train_loader"], DataLoader)
+    assert isinstance(call["val_loader"], DataLoader)
+
+    # Adjacency should be passed through
+    assert call["adjacency_matrix"] is adjacency
+
+    # Common config should have expected attributes and values
+    common_cfg = call["common_cfg"]
+    assert hasattr(common_cfg, "model_name")
+    assert hasattr(common_cfg, "latent_dim")
+    assert hasattr(common_cfg, "n_components")
+    assert hasattr(common_cfg, "epochs")
+    assert hasattr(common_cfg, "encoder_type")
+    assert hasattr(common_cfg, "save_weights")
+
+    assert common_cfg.model_name == model_name
+    assert common_cfg.latent_dim == 4
+    assert common_cfg.n_components == 4
+    assert common_cfg.epochs == 1
+    assert common_cfg.encoder_type == "recurrent"
+    assert common_cfg.save_weights == False
+
+    # Teacher config should have expected attributes
+    teacher_cfg = call["teacher_cfg"]
+    assert hasattr(teacher_cfg, "use_turtle_teacher")
+    assert hasattr(teacher_cfg, "lambda_distill")
+
+    # Model-specific config checks
+    if model_name == "vade":
+        vade_cfg = call["vade_cfg"]
+        assert hasattr(vade_cfg, "reg_cat_clusters")
+        assert hasattr(vade_cfg, "freeze_gmm_epochs")
+    elif model_name == "contrastive":
+        contrastive_cfg = call["contrastive_cfg"]
+        assert hasattr(contrastive_cfg, "temperature")
+        assert hasattr(contrastive_cfg, "contrastive_similarity_function")
+        assert call["meta_info"] is meta_info
+    elif model_name == "vqvae":
+        # no special VQVAE config
+        pass
+
+    # Writer should be a SummaryWriter (log_history=True)
+    from torch.utils.tensorboard import SummaryWriter
+    assert isinstance(call["writer"], SummaryWriter)
+
+    # Clean up writer
+    call["writer"].close()
+
+
+    deepof.clustering.models_new.fit_VADE = orig_fit_vade
+    deepof.clustering.models_new.fit_VQVAE = orig_fit_vqvae
+    deepof.clustering.models_new.fit_contrastive = orig_fit_contrastive
+    deepof.clustering.models_new.BatchDictDataset = orig_batch_dataset
+
+    if os.path.exists(out_path):
+        rmtree(out_path)
+
+
 @settings(deadline=None)
 @given(
     use_teacher=st.booleans(),
@@ -447,7 +639,7 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
 
     common_cfg.output_path = out_path
     common_cfg.epochs = 10
-    common_cfg.save_weights = False
+    common_cfg.save_weights = True
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
@@ -457,6 +649,8 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     teacher_cfg.teacher_inner_steps=10
     teacher_cfg.pca_nodes_dim=4
     teacher_cfg.teacher_batch_size=2
+    teacher_cfg.teacher_refresh_every=5
+
 
 
     seen_apply_distill = []
@@ -687,7 +881,7 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     n_epochs=10
     common_cfg.output_path = out_path
     common_cfg.epochs = n_epochs
-    common_cfg.save_weights = False
+    common_cfg.save_weights = True
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
@@ -969,7 +1163,7 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     n_epochs=10
     common_cfg.output_path = out_path
     common_cfg.epochs = n_epochs
-    common_cfg.save_weights = False
+    common_cfg.save_weights = True
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
