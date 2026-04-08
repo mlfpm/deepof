@@ -44,6 +44,42 @@ class TinyIndexedDataset(Dataset):
         self.a_shape = (T, N, F_edge)
         self.n_videos = n
 
+    def make_loader(
+        self,
+        batch_size: int = 512,
+        shuffle: bool = True,
+        num_workers: int = 0,
+        drop_last: bool = False,
+        iterable_for_h5: bool = True,
+        pin_memory: bool = True,
+        prefetch_factor: int = 0,
+        persistent_workers: Optional[bool] = None,
+        seed: Optional[int] = None,
+        block_shuffle: bool = False,
+        permute_within_block: bool = False,
+    ) -> DataLoader:
+        """Minimal loader compatible with extract_latents / fit_nodes_pca."""
+        if persistent_workers is None:
+            persistent_workers = num_workers > 0
+
+        gen = None
+        if seed is not None:
+            gen = torch.Generator()
+            gen.manual_seed(int(seed))
+
+        # In-memory dataset → no HDF5 iterable needed
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            drop_last=drop_last,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor if num_workers > 0 else None,
+            generator=gen,
+        )
+
     def __len__(self):
         return len(self.X)
 
@@ -163,7 +199,7 @@ def test_fit_vade_smoke(use_teacher):
     deepof.clustering.models_new.step_vqvae_distill = orig_step
     if os.path.exists(out_path):
         rmtree(out_path)
-        
+
 
 @settings(deadline=None)
 @given(
