@@ -3586,6 +3586,7 @@ def maybe_build_turtle_teacher(
         alpha_sample_entropy=teacher_cfg.teacher_alpha_sample_entropy, outer_steps=teacher_cfg.teacher_outer_steps,
         inner_steps=teacher_cfg.teacher_inner_steps, normalize_feats=teacher_cfg.teacher_normalize_feats,
         verbose=True, device=device, head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
+        batch_size = teacher_cfg.teacher_batch_size,
     )
 
     return teacher, tau_star.detach(), views
@@ -4854,6 +4855,7 @@ def embedding_model_fittingPT(
     teacher_head_temp: float = 0.5,
     teacher_task_temp: float = 0.5,
     teacher_alpha_sample_entropy: float = 2.0,
+    teacher_batch_size: int = 2048,
     # Vade pretrain
     kmeans_loss_pretrain: float = 1.0,
     repel_weight_pretrain: float = 0.5,
@@ -4992,6 +4994,7 @@ def embedding_model_fittingPT(
         teacher_refresh_every=(None if teacher_refresh_every is False else teacher_refresh_every),
         teacher_freeze_at=teacher_freeze_at,
         reinit_gmm_on_refresh=reinit_gmm_on_refresh,
+        teacher_batch_size=teacher_batch_size,
     )
 
     vade_cfg = VaDECfg(
@@ -5844,7 +5847,7 @@ def fit_VADE(
 
         print("\n--- Initializing GMM from teacher τ* ---")
         initialize_gmm_from_teacher(model, z_all, tau_star, min_var=0.01)
-        criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill)
+        criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill, lambda_scheduler=lambda_scheduler)
 
         # Save teacher-init checkpoint + info (VaDE only)
         teacher_init_model = deepcopy(unwrap_dp(model))
@@ -5943,6 +5946,7 @@ def fit_VADE(
                 outer_steps=max(200, teacher_cfg.teacher_outer_steps), inner_steps=teacher_cfg.teacher_inner_steps,
                 normalize_feats=teacher_cfg.teacher_normalize_feats, verbose=True, device=device,
                 head_temp=teacher_cfg.teacher_head_temp, task_temp=teacher_cfg.teacher_task_temp,
+                batch_size = teacher_cfg.teacher_batch_size,
             )
             tau_star = tau_star.detach()
             criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill, lambda_scheduler=lambda_scheduler)

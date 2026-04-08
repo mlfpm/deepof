@@ -123,6 +123,7 @@ class TurtleTeacherCfg:
     teacher_refresh_every: Optional[int] = None
     teacher_freeze_at: Optional[int] = 10
     reinit_gmm_on_refresh: bool = False
+    teacher_batch_size: int = 2048
 
 
 @dataclass

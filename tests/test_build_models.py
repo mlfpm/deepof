@@ -98,6 +98,73 @@ def _tiny_setup():
 ###################
 
 
+@settings(deadline=None, max_examples=2)
+@given(use_teacher=st.booleans())
+def test_fit_vade_smoke(use_teacher):
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
+
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+
+    train_loader, val_loader, adjacency, _ = _tiny_setup()
+    common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
+    teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
+    vade_cfg = deepof.clustering.model_utils_new.VaDECfg()
+    writer = DummyWriter()
+
+    common_cfg.output_path = out_path
+    common_cfg.epochs = 1
+    common_cfg.save_weights = False
+    common_cfg.latent_dim = 4
+    common_cfg.n_components = 4
+    common_cfg.diag_max_batches = 1
+    teacher_cfg.use_turtle_teacher=use_teacher
+    teacher_cfg.teacher_outer_steps=10
+    teacher_cfg.teacher_inner_steps=10
+    teacher_cfg.pca_nodes_dim=4
+    teacher_cfg.teacher_batch_size=2
+
+
+    seen_apply_distill = []
+
+    orig_step = deepof.clustering.models_new.step_vade
+
+    def wrapped_step(model, batch, ctx):
+        seen_apply_distill.append(bool(getattr(ctx.criterion, "lambda_scheduler", False)))
+        return orig_step(model, batch, ctx)
+
+    deepof.clustering.models_new.step_vade = wrapped_step
+
+    model_val, model_score, _, _ = deepof.clustering.models_new.fit_VADE(
+        train_loader=train_loader,
+        val_loader=val_loader,
+        preprocessed_train={},
+        adjacency_matrix=adjacency,
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg,
+        vade_cfg=vade_cfg,
+        writer=writer,
+    )
+
+    assert isinstance(model_val, deepof.clustering.models_new.VaDEPT)
+    assert isinstance(model_score, deepof.clustering.models_new.VaDEPT)
+    assert writer.flushed and writer.closed
+    assert seen_apply_distill
+    assert False in seen_apply_distill
+    # no teacher in pretraining
+    if use_teacher:
+        assert np.sum(seen_apply_distill)/len(seen_apply_distill) == 4/6
+    else:
+        assert not any(seen_apply_distill)
+    assert (True in seen_apply_distill) == use_teacher
+
+
+    deepof.clustering.models_new.step_vqvae_distill = orig_step
+    if os.path.exists(out_path):
+        rmtree(out_path)
+        
+
 @settings(deadline=None)
 @given(
     use_gnn=st.booleans(),
@@ -268,6 +335,81 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
 ###################
 # VQVAE TESTS
 ###################
+
+
+@settings(deadline=None, max_examples=2)
+@given(use_teacher=st.booleans())
+def test_fit_vqvae_smoke(use_teacher):
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
+
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+
+    train_loader, val_loader, adjacency, _ = _tiny_setup()
+    common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
+    teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
+    writer = DummyWriter()
+
+    common_cfg.output_path = out_path
+    common_cfg.epochs = 1
+    common_cfg.save_weights = False
+    common_cfg.latent_dim = 4
+    common_cfg.n_components = 4
+    common_cfg.diag_max_batches = 1
+
+
+    seen_apply_distill = []
+    diag_calls = {"n": 0}
+
+    orig_step = deepof.clustering.models_new.step_vqvae_distill
+    orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
+    orig_diag = deepof.clustering.models_new._compute_diagnostics
+
+    def wrapped_step(model, batch, ctx):
+        seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
+        return orig_step(model, batch, ctx)
+
+    def fake_teacher(**kwargs):
+        if not use_teacher:
+            return None, None, None
+        n = kwargs["train_dataset"].n_videos
+        k = kwargs["common_cfg"].n_components
+        tau_star = torch.softmax(torch.randn(n, k), dim=-1)
+        return object(), tau_star, None
+
+    def fake_diag(**kwargs):
+        diag_calls["n"] += 1
+        return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
+
+    deepof.clustering.models_new.step_vqvae_distill = wrapped_step
+    deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
+    deepof.clustering.models_new._compute_diagnostics = fake_diag
+
+    model_val, model_score, _, _ = deepof.clustering.models_new.fit_VQVAE(
+        train_loader=train_loader,
+        val_loader=val_loader,
+        preprocessed_train={},
+        adjacency_matrix=adjacency,
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg,
+        writer=writer,
+    )
+
+    assert isinstance(model_val, deepof.clustering.models_new.VQVAEPT)
+    assert isinstance(model_score, deepof.clustering.models_new.VQVAEPT)
+    assert writer.flushed and writer.closed
+    assert seen_apply_distill
+    assert False in seen_apply_distill
+    assert (True in seen_apply_distill) == use_teacher
+    assert diag_calls["n"] == int(use_teacher)
+
+
+    deepof.clustering.models_new.step_vqvae_distill = orig_step
+    deepof.clustering.models_new.maybe_build_turtle_teacher = orig_teacher
+    deepof.clustering.models_new._compute_diagnostics = orig_diag
+    if os.path.exists(out_path):
+        rmtree(out_path)
 
 
 @settings(deadline=None)
