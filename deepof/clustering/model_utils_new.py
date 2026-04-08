@@ -118,6 +118,9 @@ class TurtleTeacherCfg:
     pca_nodes_dim: int = 32
     pca_edges_dim: int = 32
     pca_angles_dim: int = 32
+    batch_size_nodes: int = 4096
+    batch_size_edges: int = 8192
+    batch_size_angles: int = 8192
 
     # Refresh
     teacher_refresh_every: Optional[int] = None

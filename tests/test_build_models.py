@@ -38,12 +38,18 @@ import deepof.clustering.model_utils_new
 
 
 class TinyIndexedDataset(Dataset):
-    def __init__(self, n=4, T=24, N=11, F_node=3, F_edge=1):
+    def __init__(self, n=4, T=24, N=11, F_node=3, F_edge=1, return_angles=False):
         self.X = torch.randn(n, T, N, F_node)
         self.A = torch.randn(n, T, N, F_edge)
         self.x_shape = (T, N, F_node)
         self.a_shape = (T, N, F_edge)
         self.n_videos = n
+        self.return_angles=return_angles
+        # add angles to dataset
+        if return_angles:
+            self.angles=torch.randn(T, N, F_node)
+            self.angles_shape=(T, N, F_node)
+
 
     def make_loader(
         self,
@@ -88,7 +94,10 @@ class TinyIndexedDataset(Dataset):
         idx_t = torch.tensor(idx, dtype=torch.long)
         # Keep idx and vid equal here because validate_one_epoch_indexed currently
         # reads the 4th returned element as idx
-        return self.X[idx], self.A[idx], idx_t, idx_t
+        if self.return_angles:
+            return self.X[idx], self.A[idx], self.angles[idx], idx_t, idx_t
+        else:
+            return self.X[idx], self.A[idx], idx_t, idx_t
 
 
 class DummyWriter:
@@ -106,8 +115,8 @@ class DummyWriter:
         return lambda *args, **kwargs: None
 
 
-def _tiny_setup():
-    ds = TinyIndexedDataset()
+def _tiny_setup(return_angles=False):
+    ds = TinyIndexedDataset(return_angles=return_angles)
     loader = DataLoader(ds, batch_size=2, shuffle=False)
 
     N = ds.x_shape[1]
@@ -260,6 +269,77 @@ def test_compute_vade_specific_diagnostics():
         torch.nn.Linear(2, 2)
     ) == {}
     
+
+@settings(deadline=None)
+@given(
+    include_nodes_view=st.booleans(),
+    include_edges_view=st.booleans(),
+    include_angles_view=st.booleans(),
+)  
+def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,include_angles_view):
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "test_maybe_build_turtle_teacher")
+   
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    os.makedirs(out_path, exist_ok=True)
+    #include_angles_view=False
+
+    #train_loader, val_loader, adjacency, _ = _tiny_setup(return_angles=include_angles_view)
+    ds = TinyIndexedDataset(return_angles=include_angles_view)
+    common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
+    teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
+    vade_cfg = deepof.clustering.model_utils_new.VaDECfg()
+    writer = DummyWriter()
+
+    common_cfg.output_path = out_path
+    common_cfg.epochs = 1
+    common_cfg.save_weights = False
+    common_cfg.latent_dim = 4
+    common_cfg.n_components = 6
+    common_cfg.diag_max_batches = 1
+    common_cfg.encoder_type="recurrent"
+    common_cfg.batch_size=4
+    teacher_cfg.use_turtle_teacher=True
+    teacher_cfg.teacher_outer_steps=10
+    teacher_cfg.teacher_inner_steps=10
+    teacher_cfg.pca_nodes_dim=4
+    teacher_cfg.pca_angles_dim=4
+    teacher_cfg.pca_edges_dim=4
+    teacher_cfg.batch_size_nodes = 4
+    teacher_cfg.batch_size_edges = 4
+    teacher_cfg.batch_size_angles = 4
+    teacher_cfg.teacher_batch_size=4
+    teacher_cfg.include_latent_view = True
+    teacher_cfg.include_nodes_view = include_nodes_view
+    teacher_cfg.include_edges_view = include_edges_view
+    teacher_cfg.include_angles_view = include_angles_view
+
+    preprocessed_train={}
+    preprocessed_train['vid_1']=(np.random.randn(4, 25, 33),np.random.randn(4, 25, 11),np.random.randn(4, 25, 18))
+
+    teacher, tau_star, teacher_views = deepof.clustering.models_new.maybe_build_turtle_teacher(  
+        teacher_cfg=teacher_cfg,  
+        common_cfg=common_cfg,
+        train_dataset = ds,  
+        preprocessed_train = preprocessed_train,  
+        data_path = out_path, 
+        device = torch.device("cpu"),
+        latent_view=torch.randn(4, 10),
+    )
+    # views are only calculated if selected
+    assert (teacher_views['z'] is not None) == True 
+    assert (teacher_views['pca_pos'] is not None) == include_nodes_view 
+    assert (teacher_views['pca_spd'] is not None) == include_nodes_view
+    assert (teacher_views['pca_edges'] is not None) == include_edges_view
+    assert (teacher_views['pca_angles'] is not None) == include_angles_view
+    # Tau has shape n_samples, n_components
+    assert tau_star.shape == (4,6)
+    # Turtle teacher is actualyl a Turtle teacher
+    assert type(teacher)==deepof.clustering.models_new.TurtleTeacher
+   
+    if os.path.exists(out_path):
+        rmtree(out_path)
+
 
 @settings(deadline=None)
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))

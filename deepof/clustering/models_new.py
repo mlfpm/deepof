@@ -2366,7 +2366,7 @@ def _get_q_vade(
     outputs = model(x, a, return_gmm_params=True)
     q = outputs[2]
 
-    if not torch.is_tensor(q) or q.ndim != 2:
+    if not torch.is_tensor(q) or q.ndim != 2: # pragma: no cover
         raise RuntimeError(
             f"Expected VaDE responsibilities at outputs[2] with shape [B, K], got {type(q)}"
         )
@@ -2444,7 +2444,7 @@ def _compute_vade_specific_diagnostics(model: nn.Module) -> Dict[str, float]:
     """
     base = unwrap_dp(model)
     latent_space = getattr(base, "latent_space", None)
-    if latent_space is None:
+    if latent_space is None: # pragma: no cover
         return {}
 
     out: Dict[str, float] = {}
@@ -2501,7 +2501,7 @@ def _compute_diagnostics(
     Returns:
     Dict[str, float]: Diagnostics dictionary including conf_norm, bal_norm, and alignment_score.
     """
-    if n_components < 2:
+    if n_components < 2: # pragma: no cover
         raise ValueError(f"n_components must be >= 2, got {n_components}")
 
     was_training = model.training
@@ -2521,7 +2521,7 @@ def _compute_diagnostics(
 
         q = q_fn(model, x, a)
 
-        if not torch.is_tensor(q) or q.ndim != 2 or q.size(1) != n_components:
+        if not torch.is_tensor(q) or q.ndim != 2 or q.size(1) != n_components: # pragma: no cover
             raise RuntimeError(
                 f"q_fn must return a [B, {n_components}] tensor, got {tuple(q.shape)}"
             )
@@ -2565,7 +2565,7 @@ def _compute_diagnostics(
 
         if tau_star is not None:
             tau = tau_star.detach().to(device=q_marginal.device, dtype=q_marginal.dtype)
-            if tau.ndim != 2 or tau.size(1) != n_components:
+            if tau.ndim != 2 or tau.size(1) != n_components: # pragma: no cover
                 raise RuntimeError(
                     f"tau_star must have shape [N, {n_components}], got {tuple(tau.shape)}"
                 )
@@ -3114,7 +3114,7 @@ def fit_nodes_pca(
         x, a, *rest = batch
         B, T, N, F = x.shape
 
-        if F < 3:
+        if F < 3: # pragma: no cover
             raise ValueError(f"Expected at least 3 channels (x,y,speed); got F={F}")
 
         pos = x[..., :2]   # [B,T,N,2]
@@ -3554,7 +3554,7 @@ def maybe_build_turtle_teacher(
             train_dataset,
             n_components_pos=teacher_cfg.pca_nodes_dim,
             n_components_spd=teacher_cfg.pca_nodes_dim,
-            batch_size=4096,
+            batch_size=teacher_cfg.batch_size_nodes,
             num_workers=0,
         )
         views["pca_pos"] = pca_pos
@@ -3564,7 +3564,7 @@ def maybe_build_turtle_teacher(
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for teacher (edges) ---")
         pca_edges = extract_pca_edges_view(
-            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=8192, num_workers=0
+            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0
         )
         views["pca_edges"] = pca_edges
 
@@ -3576,7 +3576,7 @@ def maybe_build_turtle_teacher(
             force_rebuild=False, h5_chunk_len=common_cfg.batch_size, return_angles=True
         )
         _, pca_angles_train = fit_angles_pca(
-            angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=8192, num_workers=0 
+            angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=teacher_cfg.batch_size_angles, num_workers=0 
         )
         views["pca_angles"] = pca_angles_train
 
