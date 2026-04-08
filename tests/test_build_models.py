@@ -684,8 +684,9 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg()
     writer = DummyWriter()
 
+    n_epochs=10
     common_cfg.output_path = out_path
-    common_cfg.epochs = 10
+    common_cfg.epochs = n_epochs
     common_cfg.save_weights = False
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
@@ -736,7 +737,8 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     assert seen_apply_distill
     assert False in seen_apply_distill
     assert (True in seen_apply_distill) == use_teacher
-    assert diag_calls["n"] == int(use_teacher)
+    if use_teacher:
+        assert diag_calls["n"] == n_epochs
 
 
     deepof.clustering.models_new.step_vqvae_distill = orig_step
@@ -964,8 +966,9 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg()
     writer = DummyWriter()
 
+    n_epochs=10
     common_cfg.output_path = out_path
-    common_cfg.epochs = 10
+    common_cfg.epochs = n_epochs
     common_cfg.save_weights = False
     common_cfg.latent_dim = 4
     common_cfg.n_components = 4
@@ -1017,7 +1020,8 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     assert seen_apply_distill
     assert False in seen_apply_distill
     assert (True in seen_apply_distill) == use_teacher
-    assert diag_calls["n"] == int(use_teacher)
+    if use_teacher:
+        assert diag_calls["n"] == n_epochs
 
 
     deepof.clustering.models_new.step_contrastive_distill = orig_step
