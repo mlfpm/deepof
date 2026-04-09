@@ -3538,7 +3538,6 @@ def maybe_build_turtle_teacher(
         "pca_spd": None,
         "pca_edges": None,
         "pca_angles": None,
-        "supervised_labels": None,
     }
 
     # Latent view (only for VaDE): include only if explicitly requested
@@ -4889,7 +4888,6 @@ def embedding_model_fittingPT(
     pca_edges_dim: int = 32,
     include_angles_view: bool = True,
     pca_angles_dim: int = 32,
-    include_supervised_view: bool = True,
     reinit_gmm_on_refresh: bool = False,
     # Diagnostics
     diag_max_batches: int = 4,
@@ -4985,7 +4983,6 @@ def embedding_model_fittingPT(
         include_edges_view=include_edges_view,
         include_nodes_view=include_nodes_view,
         include_angles_view=include_angles_view,
-        include_supervised_view=include_supervised_view,
         pca_nodes_dim=pca_nodes_dim,
         pca_edges_dim=pca_edges_dim,
         pca_angles_dim=pca_angles_dim,
@@ -5805,7 +5802,7 @@ def fit_VADE(
     tau_star = None
     teacher_init_model = None  # returned as 3rd output
     # cached views for refresh
-    pca_pos = pca_spd = pca_edges = pca_angles_train = supervised_labels = None
+    pca_pos = pca_spd = pca_edges = pca_angles_train = None
 
     log_summary=_init_log_summary()
     if teacher_cfg.use_turtle_teacher:
@@ -5839,7 +5836,6 @@ def fit_VADE(
         pca_spd = teacher_views.get("pca_spd", None)
         pca_edges = teacher_views.get("pca_edges", None)
         pca_angles_train = teacher_views.get("pca_angles", None)
-        supervised_labels = teacher_views.get("supervised_labels", None)
 
         print("\n--- Initializing GMM from teacher τ* ---")
         initialize_gmm_from_teacher(model, z_all, tau_star, min_var=0.01)
@@ -5931,8 +5927,6 @@ def fit_VADE(
                 views_dict["pca_edges"] = pca_edges.to(device)
             if teacher_cfg.include_angles_view and (pca_angles_train is not None):
                 views_dict["pca_angles"] = pca_angles_train.to(device)
-            if teacher_cfg.include_supervised_view and (supervised_labels is not None):
-                views_dict["supervised_labels"] = supervised_labels.to(device)
 
             # Rerun teacher
             teacher, tau_star = run_turtle_teacher_on_views(
@@ -6307,7 +6301,7 @@ def _augment_time_shift(
 
     x_cut = deepof.clustering.model_utils_new.slice_time_per_sample(x, start, half_len)
 
-    if plot:
+    if plot: # pragma: no cover
         # show what changed (note: this plots only the cut windows)
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(deepof.clustering.model_utils_new.slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
@@ -6435,7 +6429,7 @@ def _augment_angle_rotations(
 
     x_aug[..., 0:2] = coords
 
-    if plot:
+    if plot: # pragma: no cover
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
 
@@ -6481,7 +6475,7 @@ def _augment_noise_xys(
     x_aug[:, :, :, 1] = x_aug[:, :, :, 1] + dy.view(B, 1, N)            # <----
     x_aug[:, :, :, 2] = x_aug[:, :, :, 2] + ds.view(B, 1, N)            # <----
 
-    if plot:
+    if plot: # pragma: no cover
         _plot_augmentation._edge_index = edge_index  # <----
         _plot_augmentation(x, x_aug)                 # <----
 
@@ -6555,7 +6549,7 @@ def _augment_linear_interpolate_segments(
     x_aug = torch.where(mask.unsqueeze(-1).unsqueeze(-1), interp, x_aug)
     # <^^^^ VECTORIZED interpolation <^^^^
 
-    if plot:
+    if plot: # pragma: no cover
         _plot_augmentation._edge_index = edge_index  # <----
         _plot_augmentation(x, x_aug)                 # <----
 

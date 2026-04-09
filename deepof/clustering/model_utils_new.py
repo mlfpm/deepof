@@ -114,7 +114,6 @@ class TurtleTeacherCfg:
     include_edges_view: bool = False
     include_nodes_view: bool = True
     include_angles_view: bool = False
-    include_supervised_view: bool = False
     pca_nodes_dim: int = 32
     pca_edges_dim: int = 32
     pca_angles_dim: int = 32

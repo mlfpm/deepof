@@ -757,12 +757,10 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     teacher_cfg.pca_nodes_dim=4
     teacher_cfg.teacher_batch_size=2
     teacher_cfg.teacher_refresh_every=5
+    teacher_cfg.reinit_gmm_on_refresh=True
     vade_cfg.freeze_gmm_epochs = 4
     vade_cfg.freeze_decoder_epochs = 2
-
-
-
-
+    
     seen_apply_distill = []
 
     orig_step = deepof.clustering.models_new.step_vade
