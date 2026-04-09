@@ -348,7 +348,7 @@ def nce_loss_pt_old(
     future: torch.Tensor,
     similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     temperature: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: #pragma no cover
     """
     Compute the NCE loss function, as described in the paper "A Simple Framework for Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2002.05709).
     """
@@ -1005,7 +1005,7 @@ def embedding_per_video(
     )
 
 
-def _slice_time_per_sample(
+def slice_time_per_sample(
     x: torch.Tensor,          # (B,T,...)
     start: torch.Tensor,      # (B,)
     length: int,

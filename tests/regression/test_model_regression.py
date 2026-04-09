@@ -80,8 +80,8 @@ def _summarize_model(
         half_len = x.shape[1] // 2
         starts = (torch.ones([x.shape[0]], device=device) * half_len // 2).int()
 
-        x = deepof.clustering.model_utils_new._slice_time_per_sample(x, starts, half_len)
-        a = deepof.clustering.model_utils_new._slice_time_per_sample(a, starts, half_len)
+        x = deepof.clustering.model_utils_new.slice_time_per_sample(x, starts, half_len)
+        a = deepof.clustering.model_utils_new.slice_time_per_sample(a, starts, half_len)
 
 
     with torch.no_grad():

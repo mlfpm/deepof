@@ -2423,8 +2423,8 @@ def _get_q_contrastive(
         dtype=torch.long,
     )
 
-    x = deepof.clustering.model_utils_new._slice_time_per_sample(x_full, starts, half_len)
-    a = deepof.clustering.model_utils_new._slice_time_per_sample(a_full, starts, half_len)
+    x = deepof.clustering.model_utils_new.slice_time_per_sample(x_full, starts, half_len)
+    a = deepof.clustering.model_utils_new.slice_time_per_sample(a_full, starts, half_len)
 
     z = model(x, a)
     z = F.normalize(z, dim=1)
@@ -4693,8 +4693,8 @@ def step_contrastive_distill(
     half_len = x_full.shape[1] // 2
     starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
 
-    x = deepof.clustering.model_utils_new._slice_time_per_sample(x_full, starts, half_len)
-    a = deepof.clustering.model_utils_new._slice_time_per_sample(a_full, starts, half_len)
+    x = deepof.clustering.model_utils_new.slice_time_per_sample(x_full, starts, half_len)
+    a = deepof.clustering.model_utils_new.slice_time_per_sample(a_full, starts, half_len)
         
     # Encode via forward for DP compatibility
     z = model(x, a)
@@ -6312,12 +6312,12 @@ def _augment_time_shift(
     start = start.clamp(0, T - half_len)  # keep valid
     # <^^^^ sample shifts <^^^^
 
-    x_cut = deepof.clustering.model_utils_new._slice_time_per_sample(x, start, half_len)
+    x_cut = deepof.clustering.model_utils_new.slice_time_per_sample(x, start, half_len)
 
     if plot:
         # show what changed (note: this plots only the cut windows)
         _plot_augmentation._edge_index = edge_index
-        _plot_augmentation(deepof.clustering.model_utils_new._slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
+        _plot_augmentation(deepof.clustering.model_utils_new.slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
 
     return x_cut
 
