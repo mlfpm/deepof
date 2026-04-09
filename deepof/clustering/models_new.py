@@ -4459,8 +4459,8 @@ def step_vade(
         if loss_dict["reconstruct_loss"] > 50000:
             print("Halt!")
 
-        # EMA update of π from current batch responsibilities 
-        with torch.no_grad():
+        # EMA update of π from current batch responsibilities, currently unused 
+        with torch.no_grad(): # pragma: no cover
             beta = float(getattr(ctx, "pi_ema_beta", 0.0))
             if beta > 0.0 and outputs[2] is not None:
                 q_batch = outputs[2].detach()                 # (B,C)
