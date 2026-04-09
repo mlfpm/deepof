@@ -20,8 +20,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+import deepof.clustering.dataset
 import deepof.clustering.model_utils_new
-from deepof.clustering.dataset import BatchDictDataset
 from copy import deepcopy
 from torch.utils.data import DataLoader
 from torch.amp import autocast
@@ -260,8 +260,8 @@ def step_vade(
             print("Halt!")
 
         # EMA update of π from current batch responsibilities, currently unused 
-        with torch.no_grad():
-            beta = float(getattr(ctx, "pi_ema_beta", 0.01))
+        with torch.no_grad(): # pragma: no cover
+            beta = float(getattr(ctx, "pi_ema_beta", 0.00))
             if beta > 0.0 and outputs[2] is not None:
                 q_batch = outputs[2].detach()                 # (B,C)
                 m = q_batch.mean(dim=0)                       # (C,)
@@ -777,11 +777,11 @@ def embedding_model_fitting(
     else:
         data_path = h5_dataset_folder
     preprocessed_train, preprocessed_val = preprocessed_object
-    train_dataset = BatchDictDataset(
+    train_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_train, data_path, "train_", force_rebuild=False,
         h5_chunk_len=common_cfg.batch_size, supervised_dict=None
     )
-    val_dataset = BatchDictDataset(
+    val_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_val, data_path, "val_", force_rebuild=False,
         h5_chunk_len=common_cfg.batch_size, supervised_dict=None
     )
