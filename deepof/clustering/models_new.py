@@ -1365,7 +1365,7 @@ class VectorQuantizerPT(nn.Module):
 
         # Kmeans loss on flattened 2D tensor
         if self.kmeans and return_losses:
-            kmeans_loss_val = deepof.clustering.Losses.compute_kmeans_loss_pt(flattened, self.kmeans)
+            kmeans_loss_val = deepof.clustering.losses.compute_kmeans_loss_pt(flattened, self.kmeans)
             losses['kmeans_loss'] = kmeans_loss_val
             self.last_kmeans_loss = kmeans_loss_val.item()
 
@@ -1735,7 +1735,7 @@ class GaussianMixtureLatentPT(nn.Module):
         z_final, metrics = self.cluster_control(z_for_downstream, z_cat)
         kmeans_loss = torch.tensor(0.0, device=x.device)
         if self.kmeans_weight > 0:
-            kmeans_loss = deepof.clustering.Losses.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
+            kmeans_loss = deepof.clustering.losses.compute_kmeans_loss_pt(z_final, weight=self.kmeans_weight)
 
         return (z_final, z_cat, metrics["number_of_populated_clusters"], metrics["confidence_in_selected_cluster"], kmeans_loss, h_mean, h_log_var, z_for_gaussian)
 
