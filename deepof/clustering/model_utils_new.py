@@ -209,7 +209,6 @@ def save_model_info(
     log_summary: Optional[Dict[str, Any]] = None,
     rebuild_spec: Optional[Dict[str, Any]] = None,
     save_weights: bool = True,
-    save_bundle: bool = True,   # if True -> saves dict with state_dict + optional spec/log; else raw state_dict
 ) -> None:
     """Saves all config and training information for a freshly trained model (+ optionally the model weights)."""
     info_path = os.path.splitext(ckpt_path)[0] + "_info.txt"
@@ -227,14 +226,11 @@ def save_model_info(
 
     if save_weights and (model is not None):
         lines.append("[checkpoint_format]")
-        if save_bundle:
-            lines.append("ckpt_contains: bundle")
-            keys = ["state_dict"]
-            if rebuild_spec is not None: keys.append("rebuild_spec")
-            if log_summary is not None: keys.append("log_summary")
-            lines.append("bundle_keys: " + ", ".join(keys))
-        else:
-            lines.append("ckpt_contains: state_dict_only")
+        lines.append("ckpt_contains: bundle")
+        keys = ["state_dict"]
+        if rebuild_spec is not None: keys.append("rebuild_spec")
+        if log_summary is not None: keys.append("log_summary")
+        lines.append("bundle_keys: " + ", ".join(keys))
         lines.append("")
 
     # Dump configs (unchanged)
@@ -253,15 +249,13 @@ def save_model_info(
 
     if save_weights and (model is not None):
         m = _unwrap_dp(model)
-        if save_bundle:
-            payload = {"state_dict": m.state_dict()}
-            if rebuild_spec is not None:
-                payload["rebuild_spec"] = rebuild_spec
-            if log_summary is not None:
-                payload["log_summary"] = log_summary
-            torch.save(payload, ckpt_path)
-        else:
-            torch.save(m.state_dict(), ckpt_path)
+        payload = {"state_dict": m.state_dict()}
+        if rebuild_spec is not None:
+            payload["rebuild_spec"] = rebuild_spec
+        if log_summary is not None:
+            payload["log_summary"] = log_summary
+        torch.save(payload, ckpt_path)
+
 
     with open(info_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
