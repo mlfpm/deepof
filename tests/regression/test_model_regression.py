@@ -13,6 +13,8 @@ import random
 from shutil import rmtree
 
 import networkx as nx
+import deepof.clustering.dataset
+import deepof.clustering.training
 from hypothesis import given, settings
 from hypothesis import strategies as st
 import pytest
@@ -51,7 +53,7 @@ def _summarize_model(
 
     preprocessed_train, preprocessed_val = preprocessed_object
 
-    val_dataset = deepof.clustering.models_new.BatchDictDataset(
+    val_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_val,
         data_path,
         "val_",
@@ -216,7 +218,7 @@ def test_vade_full_pipeline_regression(encoder_type):
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
     )
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.models_new.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
@@ -354,7 +356,7 @@ def test_vqvae_full_pipeline_regression(encoder_type):
 
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg()
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.models_new.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
@@ -508,7 +510,7 @@ def test_contrastive_full_pipeline_regression(encoder_type):
         aug_p_rot=0.5,
     )
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.models_new.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,

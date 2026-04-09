@@ -13,6 +13,11 @@ import random
 from shutil import rmtree
 
 import networkx as nx
+import deepof.clustering.dataset
+import deepof.clustering.logging
+import deepof.clustering.losses
+import deepof.clustering.teacher_model
+import deepof.clustering.training
 from hypothesis import given, settings
 from hypothesis import strategies as st
 import pytest
@@ -169,10 +174,10 @@ def test_embedding_model_fittingPT(model_name):
     dummy_model = torch.nn.Linear(4, 4)
     dummy_return = (dummy_model, dummy_model, None, {"dummy": True})
 
-    orig_fit_vade = deepof.clustering.models_new.fit_VADE
-    orig_fit_vqvae = deepof.clustering.models_new.fit_VQVAE
-    orig_fit_contrastive = deepof.clustering.models_new.fit_contrastive
-    orig_batch_dataset = deepof.clustering.models_new.BatchDictDataset
+    orig_fit_vade = deepof.clustering.training.fit_VADE
+    orig_fit_vqvae = deepof.clustering.training.fit_VQVAE
+    orig_fit_contrastive = deepof.clustering.training.fit_contrastive
+    orig_batch_dataset = deepof.clustering.dataset.BatchDictDataset
 
     def fake_fit_vade(train_loader, val_loader, preprocessed_train, adjacency_matrix,
                         common_cfg, teacher_cfg, vade_cfg, writer):
@@ -230,13 +235,13 @@ def test_embedding_model_fittingPT(model_name):
 
     FakeBatchDictDataset._instance_count = 0
 
-    deepof.clustering.models_new.fit_VADE = fake_fit_vade
-    deepof.clustering.models_new.fit_VQVAE = fake_fit_vqvae
-    deepof.clustering.models_new.fit_contrastive = fake_fit_contrastive
-    deepof.clustering.models_new.BatchDictDataset = FakeBatchDictDataset
+    deepof.clustering.training.fit_VADE = fake_fit_vade
+    deepof.clustering.training.fit_VQVAE = fake_fit_vqvae
+    deepof.clustering.training.fit_contrastive = fake_fit_contrastive
+    deepof.clustering.dataset.BatchDictDataset = FakeBatchDictDataset
 
     # Call the outer function
-    result = deepof.clustering.models_new.embedding_model_fittingPT(
+    result = deepof.clustering.training.embedding_model_fittingPT(
         preprocessed_object=({}, {}),  # empty dicts, mocked anyway
         adjacency_matrix=adjacency,
         meta_info=meta_info,
@@ -327,10 +332,10 @@ def test_embedding_model_fittingPT(model_name):
     call["writer"].close()
 
 
-    deepof.clustering.models_new.fit_VADE = orig_fit_vade
-    deepof.clustering.models_new.fit_VQVAE = orig_fit_vqvae
-    deepof.clustering.models_new.fit_contrastive = orig_fit_contrastive
-    deepof.clustering.models_new.BatchDictDataset = orig_batch_dataset
+    deepof.clustering.training.fit_VADE = orig_fit_vade
+    deepof.clustering.training.fit_VQVAE = orig_fit_vqvae
+    deepof.clustering.training.fit_contrastive = orig_fit_contrastive
+    deepof.clustering.dataset.BatchDictDataset = orig_batch_dataset
 
     if os.path.exists(out_path):
         rmtree(out_path)
@@ -368,7 +373,7 @@ def test_compute_diagnostics_smoke(use_teacher, conf_weight):
             torch.randn(len(train_loader.dataset), n_components, device=device), dim=-1
         )
 
-    diag = deepof.clustering.models_new._compute_diagnostics(
+    diag = deepof.clustering.logging.compute_diagnostics(
         model=model,
         dataloader=train_loader,
         q_fn=q_fn,
@@ -445,7 +450,7 @@ def test_compute_vade_specific_diagnostics():
             super().__init__()
             self.latent_space = DummyLatentSpace()
 
-    diag = deepof.clustering.models_new._compute_vade_specific_diagnostics(DummyVaDE())
+    diag = deepof.clustering.logging.compute_vade_specific_diagnostics(DummyVaDE())
 
     assert "diag/gmm_logvar_min" in diag
     assert "diag/gmm_logvar_max" in diag
@@ -457,7 +462,7 @@ def test_compute_vade_specific_diagnostics():
     assert diag["diag/prior_entropy"] > 0.0
 
     # Models without latent_space should simply return {}
-    assert deepof.clustering.models_new._compute_vade_specific_diagnostics(
+    assert deepof.clustering.logging.compute_vade_specific_diagnostics(
         torch.nn.Linear(2, 2)
     ) == {}
     
@@ -509,7 +514,7 @@ def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,includ
     preprocessed_train={}
     preprocessed_train['vid_1']=(np.random.randn(4, 25, 33),np.random.randn(4, 25, 11),np.random.randn(4, 25, 18))
 
-    teacher, tau_star, teacher_views = deepof.clustering.models_new.maybe_build_turtle_teacher(  
+    teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(  
         teacher_cfg=teacher_cfg,  
         common_cfg=common_cfg,
         train_dataset = ds,  
@@ -527,7 +532,7 @@ def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,includ
     # Tau has shape n_samples, n_components
     assert tau_star.shape == (4,6)
     # Turtle teacher is actualyl a Turtle teacher
-    assert type(teacher)==deepof.clustering.models_new.TurtleTeacher
+    assert type(teacher)==deepof.clustering.teacher_model.TurtleTeacher
    
     if os.path.exists(out_path):
         rmtree(out_path)
@@ -643,7 +648,7 @@ def test_save_and_load_model(model_name):
     }
 
     # Save the model
-    deepof.clustering.models_new.save_model_info(
+    deepof.clustering.model_utils_new.save_model_info(
         ckpt_path,
         stage="best_val",
         epoch=10,
@@ -763,15 +768,15 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     
     seen_apply_distill = []
 
-    orig_step = deepof.clustering.models_new.step_vade
+    orig_step = deepof.clustering.training.step_vade
 
     def wrapped_step_vade(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx.criterion, "lambda_scheduler", False)))
         return orig_step(model, batch, ctx)
 
-    deepof.clustering.models_new.step_vade = wrapped_step_vade
+    deepof.clustering.training.step_vade = wrapped_step_vade
 
-    model_val, model_score, _, _ = deepof.clustering.models_new.fit_VADE(
+    model_val, model_score, _, _ = deepof.clustering.training.fit_VADE(
         train_loader=train_loader,
         val_loader=val_loader,
         preprocessed_train={},
@@ -795,7 +800,7 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     assert (True in seen_apply_distill) == use_teacher
 
 
-    deepof.clustering.models_new.step_vade = orig_step
+    deepof.clustering.training.step_vade = orig_step
     if os.path.exists(out_path):
         rmtree(out_path)
 
@@ -827,7 +832,7 @@ def test_vade_backward_step(use_gnn,encoder_type,mode,latent_dim,n_components):
         interaction_regularization=0.0,
         kmeans_loss=1.0,
     ).to(device, non_blocking=True)
-    step_fn = deepof.clustering.models_new.step_vade
+    step_fn = deepof.clustering.training.step_vade
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg(
@@ -852,7 +857,7 @@ def test_vade_backward_step(use_gnn,encoder_type,mode,latent_dim,n_components):
     teacher_cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
     )
 
-    criterion = deepof.clustering.models_new.VadeLoss(
+    criterion = deepof.clustering.losses.VadeLoss(
         common_cfg=common_cfg,
         vade_cfg=vade_cfg,
         teacher_cfg=teacher_cfg,
@@ -911,7 +916,7 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
         interaction_regularization=0.0,
         kmeans_loss=1.0,
     ).to(device, non_blocking=True)
-    step_fn = deepof.clustering.models_new.step_vade
+    step_fn = deepof.clustering.training.step_vade
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
@@ -935,7 +940,7 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
         distill_conf_thresh=0.6,
     )
 
-    criterion = deepof.clustering.models_new.VadeLoss(
+    criterion = deepof.clustering.losses.VadeLoss(
         common_cfg=common_cfg,
         vade_cfg=vade_cfg,
         teacher_cfg=teacher_cfg,
@@ -999,9 +1004,9 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     seen_apply_distill = []
     diag_calls = {"n": 0}
 
-    orig_step = deepof.clustering.models_new.step_vqvae_distill
-    orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
-    orig_diag = deepof.clustering.models_new._compute_diagnostics
+    orig_step = deepof.clustering.training.step_vqvae_distill
+    orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
+    orig_diag = deepof.clustering.logging.compute_diagnostics
 
     def wrapped_step_vqvae(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
@@ -1019,11 +1024,11 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
         diag_calls["n"] += 1
         return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
 
-    deepof.clustering.models_new.step_vqvae_distill = wrapped_step_vqvae
-    deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
-    deepof.clustering.models_new._compute_diagnostics = fake_diag
+    deepof.clustering.training.step_vqvae_distill = wrapped_step_vqvae
+    deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
+    deepof.clustering.logging.compute_diagnostics = fake_diag
 
-    model_val, model_score, _, _ = deepof.clustering.models_new.fit_VQVAE(
+    model_val, model_score, _, _ = deepof.clustering.training.fit_VQVAE(
         train_loader=train_loader,
         val_loader=val_loader,
         preprocessed_train={},
@@ -1043,9 +1048,9 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
         assert diag_calls["n"] == n_epochs
 
 
-    deepof.clustering.models_new.step_vqvae_distill = orig_step
-    deepof.clustering.models_new.maybe_build_turtle_teacher = orig_teacher
-    deepof.clustering.models_new._compute_diagnostics = orig_diag
+    deepof.clustering.training.step_vqvae_distill = orig_step
+    deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
+    deepof.clustering.logging.compute_diagnostics = orig_diag
     if os.path.exists(out_path):
         rmtree(out_path)
 
@@ -1077,7 +1082,7 @@ def test_vqvae_backward_step(use_gnn, encoder_type, latent_dim, n_components):
         kmeans_loss=1.0,
     ).to(device, non_blocking=True)
 
-    step_fn = deepof.clustering.models_new.step_vqvae_distill
+    step_fn = deepof.clustering.training.step_vqvae_distill
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     x = torch.randn(B, T, N, F_node, device=device)
@@ -1166,15 +1171,15 @@ def test_vqvae_backward_step_with_distillation(
         kmeans_loss=1.0,
     ).to(device, non_blocking=True)
 
-    step_fn = deepof.clustering.models_new.step_vqvae_distill
+    step_fn = deepof.clustering.training.step_vqvae_distill
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    distill_head = deepof.clustering.models_new.DiscriminativeHead(
+    distill_head = deepof.clustering.teacher_model.DiscriminativeHead(
         latent_dim=latent_dim,
         n_components=n_components,
     ).to(device)
 
-    lambda_scheduler = deepof.clustering.models_new.Dynamic_weight_manager(
+    lambda_scheduler = deepof.clustering.losses.Dynamic_weight_manager(
         n_batches_per_epoch=1,
         mode=wm_mode,
         warmup_epochs=0,
@@ -1280,9 +1285,9 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     seen_apply_distill = []
     diag_calls = {"n": 0}
 
-    orig_step = deepof.clustering.models_new.step_contrastive_distill
-    orig_teacher = deepof.clustering.models_new.maybe_build_turtle_teacher
-    orig_diag = deepof.clustering.models_new._compute_diagnostics
+    orig_step = deepof.clustering.training.step_contrastive_distill
+    orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
+    orig_diag = deepof.clustering.logging.compute_diagnostics
 
     def wrapped_step_contrastive(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
@@ -1300,11 +1305,11 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
         diag_calls["n"] += 1
         return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
 
-    deepof.clustering.models_new.step_contrastive_distill = wrapped_step_contrastive
-    deepof.clustering.models_new.maybe_build_turtle_teacher = fake_teacher
-    deepof.clustering.models_new._compute_diagnostics = fake_diag
+    deepof.clustering.training.step_contrastive_distill = wrapped_step_contrastive
+    deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
+    deepof.clustering.logging.compute_diagnostics = fake_diag
 
-    model_val, model_score, _, _ = deepof.clustering.models_new.fit_contrastive(
+    model_val, model_score, _, _ = deepof.clustering.training.fit_contrastive(
         train_loader=train_loader,
         val_loader=val_loader,
         preprocessed_train={},
@@ -1326,9 +1331,9 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
         assert diag_calls["n"] == n_epochs
 
 
-    deepof.clustering.models_new.step_contrastive_distill = orig_step
-    deepof.clustering.models_new.maybe_build_turtle_teacher = orig_teacher
-    deepof.clustering.models_new._compute_diagnostics = orig_diag
+    deepof.clustering.training.step_contrastive_distill = orig_step
+    deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
+    deepof.clustering.logging.compute_diagnostics = orig_diag
     if os.path.exists(out_path):
         rmtree(out_path)
 
@@ -1363,7 +1368,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
         beta=0.1,
         tau=0.1,
     ).to(device, non_blocking=True)
-    step_fn = deepof.clustering.models_new.step_contrastive_distill
+    step_fn = deepof.clustering.training.step_contrastive_distill
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
@@ -1386,13 +1391,13 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
     meta_info["node_columns"]=[('A','x'),('B','x'),('C','x'),('D','x'),('E','x'),('F','x'),('G','x'),('H','x'),('I','x'),('J','x'),('K','x')]
     meta_info["edge_columns"]=[('A','B'),('B','C'),('C','D'),('D','E'),('E','F'),('F','G'),('F','H'),('F','I'),('H','J'),('J','K'),('K','H')]
 
-    edge_index_global, edge_index_local, _ = deepof.clustering.models_new._build_edge_from_metainfo(
+    edge_index_global, edge_index_local, _ = deepof.clustering.training._build_edge_from_metainfo(
     meta_info=meta_info,
     device=device,
     n_nodes=N,
     return_local=True,
     )
-    rot_precomp = deepof.clustering.models_new.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device=device)
+    rot_precomp = deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device=device)
 
     x = torch.randn(B, T, N, F_node, device=device)
     a = torch.randn(B, T, E, F_edge, device=device)
@@ -1463,7 +1468,7 @@ def test_contrastive_backward_step_with_distillation(
         tau=0.1,
     ).to(device, non_blocking=True)
 
-    step_fn = deepof.clustering.models_new.step_contrastive_distill
+    step_fn = deepof.clustering.training.step_contrastive_distill
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
@@ -1492,25 +1497,25 @@ def test_contrastive_backward_step_with_distillation(
         ("F", "G"), ("F", "H"), ("F", "I"), ("H", "J"), ("J", "K"), ("K", "H"),
     ]
 
-    edge_index_global, edge_index_local, _ = deepof.clustering.models_new._build_edge_from_metainfo(
+    edge_index_global, edge_index_local, _ = deepof.clustering.training._build_edge_from_metainfo(
         meta_info=meta_info,
         device=device,
         n_nodes=N,
         return_local=True,
     )
-    rot_precomp = deepof.clustering.models_new.build_rotation_precomp(
+    rot_precomp = deepof.clustering.training.build_rotation_precomp(
         edge_index=edge_index_local,
         n_nodes=N,
         device=device,
     )
 
-    distill_head = deepof.clustering.models_new.DiscriminativeHead(
+    distill_head = deepof.clustering.teacher_model.DiscriminativeHead(
         latent_dim=latent_dim,
         n_components=n_components,
     ).to(device)
 
     # Use the real scheduler
-    lambda_scheduler = deepof.clustering.models_new.Dynamic_weight_manager(
+    lambda_scheduler = deepof.clustering.losses.Dynamic_weight_manager(
         n_batches_per_epoch=1,
         mode=wm_mode,
         warmup_epochs=0,
