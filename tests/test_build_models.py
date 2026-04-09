@@ -656,7 +656,6 @@ def test_save_and_load_model(model_name):
         log_summary=log_summary,
         rebuild_spec=rebuild_spec,
         save_weights=True,
-        save_bundle=True,
     )
 
     # Checkpoint and info files should exist

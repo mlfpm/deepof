@@ -288,8 +288,8 @@ def select_contrastive_loss_pt(
     else: # pragma: no cover
         raise ValueError(f"Unknown loss_fn: {loss_fn}")
     
-def l2_normalize(x: torch.Tensor, dim: int = 1, eps: float = 1e-12) -> torch.Tensor:
-    return F.normalize(x, p=2, dim=dim, eps=eps)
+#def l2_normalize(x: torch.Tensor, dim: int = 1, eps: float = 1e-12) -> torch.Tensor:
+#    return F.normalize(x, p=2, dim=dim, eps=eps)
 
 
 def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:

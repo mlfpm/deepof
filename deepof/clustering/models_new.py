@@ -5408,7 +5408,6 @@ def fit_VQVAE(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
@@ -5438,7 +5437,6 @@ def fit_VQVAE(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
         
@@ -5632,7 +5630,6 @@ def fit_contrastive(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"  Saved best VAL model -> {best_path_val} (val: {best_val:.4f})")
 
@@ -5663,7 +5660,6 @@ def fit_contrastive(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
 
@@ -5865,7 +5861,6 @@ def fit_VADE(
                 log_summary=log_summary,
                 rebuild_spec=rebuild_spec,
                 save_weights=common_cfg.save_weights,
-                save_bundle=True,
             )
             print(f"  Saved teacher-init model -> {teacher_init_path}")
 
@@ -6024,7 +6019,6 @@ def fit_VADE(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"Saved best VAL model -> {best_path_val} (val={best_val:.4f})")
 
@@ -6048,7 +6042,6 @@ def fit_VADE(
                     log_summary=log_summary,
                     rebuild_spec=rebuild_spec,
                     save_weights=common_cfg.save_weights,
-                    save_bundle=True,
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (score={best_score:.4f})")
 
