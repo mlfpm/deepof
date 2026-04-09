@@ -947,7 +947,6 @@ class TFMEncoderPT(nn.Module):
                 dff=dff,
                 max_pos=self.W,
                 rate=dropout_rate,
-                return_sequences=False,  # Only need last timestep
             )
             
             # Edge transformer: processes each edge's temporal sequence
@@ -959,7 +958,6 @@ class TFMEncoderPT(nn.Module):
                 dff=dff,
                 max_pos=self.W,
                 rate=dropout_rate,
-                return_sequences=False,  # Only need last timestep
             )
 
             # Spatial GNN block
@@ -988,7 +986,6 @@ class TFMEncoderPT(nn.Module):
                 dff=dff,
                 max_pos=self.W,
                 rate=dropout_rate,
-                return_sequences=False,
             )
             final_in = self.key_dim
 
@@ -3233,14 +3230,14 @@ def fit_angles_pca(
     return ipca, torch.cat(feats_all, dim=0)
 
 
-@torch.no_grad()
+"""@torch.no_grad()
 def extract_pca_angles_view(
     dataset_with_angles: BatchDictDataset,
     n_components: int = 32,
     batch_size: int = 8192,
     num_workers: int = 0,
 ) -> torch.Tensor:
-    """
+    
     Builds an IncrementalPCA view from precomputed angles in the dataset.
     Requires dataset_with_angles to be constructed with return_angles=True.
     
@@ -3252,7 +3249,7 @@ def extract_pca_angles_view(
 
     Returns:
         torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed angle features.
-    """
+    
     assert getattr(dataset_with_angles, "return_angles", False), \
         "extract_pca_angles_view expects a dataset created with return_angles=True."
 
@@ -3289,7 +3286,7 @@ def extract_pca_angles_view(
         Z = ipca.transform(X)
         feats_all.append(torch.from_numpy(Z).float())
 
-    return torch.cat(feats_all, dim=0)  # [N, n_components]
+    return torch.cat(feats_all, dim=0)  # [N, n_components]"""
 
 @torch.no_grad()
 def extract_pca_edges_view(dataset: BatchDictDataset,
