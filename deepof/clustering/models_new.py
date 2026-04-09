@@ -1290,10 +1290,6 @@ class TFMDecoderPT(nn.Module):
         num_heads: int = 4,
         dff: int = 128,
         dropout_rate: float = 0.1,
-        # Legacy params (ignored but kept for compatibility)
-        teacher_forcing_mode: str = "zeros",
-        input_dropout_p: float = 0.0,
-        self_attn_diag_only: bool = False,
     ):
         super().__init__()
         self.W, self.D_in = output_shape
@@ -1627,9 +1623,6 @@ class VQVAEPT(nn.Module):
                 num_heads=8,
                 dff=128,
                 dropout_rate=0.2,
-                teacher_forcing_mode="zeros",
-                input_dropout_p=0.5,
-                self_attn_diag_only=False,
             )
         else: # pragma: no cover
             raise ValueError(f"Unknown encoder_type: {encoder_type}")
@@ -2006,9 +1999,6 @@ class VaDEPT(nn.Module):
                 num_heads=8,
                 dff=128,
                 dropout_rate=0.2,               # a bit more dropout helps
-                teacher_forcing_mode="zeros", # try "zeros" if collapse persists
-                input_dropout_p=0.5,            # drop 50% of time steps during training
-                self_attn_diag_only=False,      # set True to further reduce copying
             ) 
         else: # pragma: no cover
             raise NotImplementedError("invalid encoder type, try \"recurrent\", \"TCN\" or \"transformer\" ")          
@@ -4306,22 +4296,6 @@ def _format_postfix(logs: Dict[str, float], max_items: int = 4) -> Dict[str, str
     return out
 
 
-def apply_decoder_schedule(model: nn.Module, epoch: int):
-    base = unwrap_dp(model)
-    dec = getattr(base, "decoder", None)
-    if dec is None:
-        return
-    if hasattr(dec, "teacher_forcing_mode"):
-        if epoch < 3:
-            dec.teacher_forcing_mode = "zeros"
-            if hasattr(dec, "input_dropout_p"):
-                dec.input_dropout_p = 0.0
-        else:
-            dec.teacher_forcing_mode = "dropout"
-            if hasattr(dec, "input_dropout_p"):
-                dec.input_dropout_p = 0.5
-
-
 def train_one_epoch_indexed(
     model: nn.Module,
     model_name: str,
@@ -5767,7 +5741,6 @@ def fit_VADE(
         # Leave loading bar in last step (for optics)
         if ep == len(range(pre_epochs))-1:
             leave=True
-        apply_decoder_schedule(model, ep)
         pre_logs, _, _ = train_one_epoch_indexed(
             model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_fn,
             device=device, epoch=ep, num_epochs=pre_epochs, scaler=scaler, use_amp=common_cfg.use_amp,
@@ -5880,7 +5853,6 @@ def fit_VADE(
     print("NOTE: some losses are intentionally defined negative and function as rewards.")
     for epoch in range(common_cfg.epochs):
                
-        apply_decoder_schedule(model, epoch)
         base = unwrap_dp(model)
 
         # Freezing/unfreezing of model parts based on user inputs
