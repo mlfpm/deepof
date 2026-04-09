@@ -112,7 +112,7 @@ test:
     - python -m pip install dist/*.whl
     - python -m pip install coverage pytest hypothesis pytest-timeout
     - coverage run --source deepof -m pytest --ignore=tests/regression
-    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,
+    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py, deepof/clustering/losses.py, deepof/clustering/logging.py, deepof/clustering/training.py, deepof/clustering/teacher_model.py,
     - coverage xml -o deepof_cov.xml  
 
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

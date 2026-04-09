@@ -5,27 +5,20 @@
 """Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels."""
 
 import os
-from typing import Any, List, NewType, Tuple, Union, Dict, Callable, Optional
+from typing import Any, NewType, Tuple, Dict, Optional, Mapping
 import copy
 from dataclasses import dataclass, asdict
 import tqdm
 from contextlib import nullcontext
-import math
-
 
 from IPython.display import clear_output
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from torch.distributions import Distribution, TransformedDistribution
-from torch.distributions.transforms import AffineTransform
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
-from deepof.data_loading import get_dt, save_dt
-import deepof.clustering.dataset
-import warnings
+from deepof.data_loading import get_dt
+import deepof.utils
 from deepof.clustering.dataset import reorder_and_reshape
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -187,8 +180,18 @@ def _append_cfg(lines, title: str, cfg) -> None:
     lines.append("")  # spacer
 
 
-def _unwrap_dp(m: nn.Module) -> nn.Module:
-    return m.module if isinstance(m, torch.nn.DataParallel) else m
+def unwrap_dp(model: nn.Module) -> nn.Module:
+    return model.module if isinstance(model, nn.DataParallel) else model
+
+
+def move_to(x, device):
+    if isinstance(x, (list, tuple)):
+        return type(x)(move_to(xx, device) for xx in x)
+    if isinstance(x, Mapping):
+        return {k: move_to(v, device) for k, v in x.items()}
+    if torch.is_tensor(x):
+        return x.to(device, non_blocking=True)
+    return x
 
 
 def save_model_info(
@@ -247,7 +250,7 @@ def save_model_info(
     os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
 
     if save_weights and (model is not None):
-        m = _unwrap_dp(model)
+        m = unwrap_dp(model)
         payload = {"state_dict": m.state_dict()}
         if rebuild_spec is not None:
             payload["rebuild_spec"] = rebuild_spec
@@ -260,447 +263,99 @@ def save_model_info(
         f.write("\n".join(lines))
 
 
-######################################
-### CONTRASTIVE LEARNING UTILITIES
-######################################
-
-def select_contrastive_loss_pt(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: str,
-    loss_fn: str = "nce",
-    temperature: float = 0.1,
-    tau: float = 0.1,
-    beta: float = 0.1,
-    elimination_topk: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    sim_fn = _SIMILARITIES[similarity]
-
-    if loss_fn == "nce":
-        return nce_loss_pt(history, future, sim_fn, temperature)
-    elif loss_fn == "dcl":
-        return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
-    elif loss_fn == "fc":
-        return fc_loss_pt(history, future, sim_fn, temperature, elimination_topk=elimination_topk)
-    elif loss_fn == "hard_dcl":
-        return hard_loss_pt(history, future, sim_fn, temperature, beta=beta, debiased=True, tau_plus=tau)
-    else: # pragma: no cover
-        raise ValueError(f"Unknown loss_fn: {loss_fn}")
-    
-#def l2_normalize(x: torch.Tensor, dim: int = 1, eps: float = 1e-12) -> torch.Tensor:
-#    return F.normalize(x, p=2, dim=dim, eps=eps)
-
-
-def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    # x: (N, D), y: (N, D) -> (N, N)
-    x1 = x.unsqueeze(1)  # (N, 1, D)
-    y1 = y.unsqueeze(0)  # (1, N, D)
-    return F.cosine_similarity(x1, y1, dim=2)
-
-
-def _dot_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    return x @ y.t()
-
-
-def _euclidean_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    x1 = x.unsqueeze(1)  # (N, 1, D)
-    y1 = y.unsqueeze(0)  # (1, N, D)
-    d = torch.sqrt(torch.clamp(((x1 - y1) ** 2).sum(dim=2), min=0.0))
-    s = 1.0 / (1.0 + d)
-    return s
-
-
-def _edit_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    # Matches provided TF code (same as euclidean similarity transform)
-    return _euclidean_similarity_pt(x, y)
-
-
-_SIMILARITIES: Dict[str, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
-    "cosine": _cosine_similarity_pt,
-    "dot": _dot_similarity_pt,
-    "euclidean": _euclidean_similarity_pt,
-    "edit": _edit_similarity_pt,
-}
-
-
-def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
+def recompute_edges(
+    x: torch.Tensor,           # (B, T, N, 3) with [x,y,speed] per node
+    edge_index: torch.Tensor,  # indices pairs of nodes to connect
+) -> torch.Tensor:
     """
-    Extract off-diagonal elements row-wise and reshape to (N, N-1),
-    mirroring TF's boolean_mask+reshape.
-    """
-    N = sim.shape[0]
-    mask = torch.ones((N, N), dtype=torch.bool, device=sim.device)
-    mask.fill_diagonal_(False)
-    flat = sim.reshape(-1)
-    masked = flat[mask.reshape(-1)]
-    return masked.reshape(N, N - 1)
-
-
-def nce_loss_pt_old(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    temperature: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: #pragma no cover
-    """
-    Compute the NCE loss function, as described in the paper "A Simple Framework for Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2002.05709).
-    """
-    N = history.shape[0]
-    sim = similarity(history, future)  # (N, N)
-    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
-
-    neg = _off_diagonal_rows(sim)  # (N, N-1)
-    all_sim = torch.exp(sim / temperature)  # (N, N)
-
-    logits = pos_sim.sum() / all_sim.sum(dim=1)  # (N,)
-    labels = torch.ones_like(logits)
-
-    bce = torch.nn.BCEWithLogitsLoss(reduction="mean")
-    loss = bce(logits, labels)
-
-    mean_sim = torch.diag(sim).mean()
-    mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
-
-def nce_loss_pt(history, future, similarity, temperature=0.1):
-    """
-    Standard NCE loss 
-    """
-    sim = similarity(history, future) / temperature        # (N,N)
-    labels = torch.arange(sim.size(0), device=sim.device)
-    loss = torch.nn.functional.cross_entropy(sim, labels)  # row-wise softmax
-
-    mean_pos = torch.diag(sim).mean() * temperature
-    off = _off_diagonal_rows(sim * temperature)  
-    mean_neg = off.mean() if off.numel() else torch.tensor(0., device=sim.device)
-    return loss, mean_pos, mean_neg
-
-
-def dcl_loss_pt(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    temperature: float = 0.1,
-    debiased: bool = True,
-    tau_plus: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Compute the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
-    N = history.shape[0]
-    sim = similarity(history, future)  # (N, N)
-    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
-
-    neg = _off_diagonal_rows(sim)  # (N, N-1)
-    neg_sim = torch.exp(neg / temperature)  # (N, N-1)
-
-    if debiased:
-        N_eff = N - 1
-        Ng = (-tau_plus * N_eff * pos_sim + neg_sim.sum(dim=-1)) / (1.0 - tau_plus)
-        min_clip = N_eff * math.e ** (-1.0 / temperature)
-        Ng = torch.clamp(Ng, min=min_clip, max=torch.finfo(history.dtype).max)
-    else:
-        Ng = neg_sim.sum(dim=-1)
-
-    loss = (-torch.log(pos_sim / (pos_sim + Ng))).mean()
-
-    mean_sim = torch.diag(sim).mean()
-    mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
-
-
-def fc_loss_pt(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    temperature: float = 0.1,
-    elimination_topk: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Compute the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2004.11362)."""
-    N = history.shape[0]
-    elim = min(elimination_topk, 0.5)
-    k = int(math.ceil(elim * N))
-
-    sim = similarity(history, future) / temperature  # (N, N)
-    pos_sim = torch.exp(torch.diag(sim))  # (N,)
-
-    neg_sim_raw = _off_diagonal_rows(sim)  # (N, N-1)
-    sorted_sim, _ = torch.sort(neg_sim_raw, dim=1)  # ascending
-
-    if k == 0:
-        k = 1
-    keep = (N - 1) - k
-    trimmed = sorted_sim[:, : max(keep, 0)]  # may be empty
-
-    neg_sim = torch.exp(trimmed).sum(dim=1) if trimmed.numel() > 0 else torch.zeros(
-        N, device=sim.device, dtype=sim.dtype
-    )
-
-    loss = (-torch.log(pos_sim / (pos_sim + neg_sim))).mean()
-
-    mean_sim = torch.diag(sim).mean() * temperature
-    mean_neg = trimmed.mean() * temperature if trimmed.numel() > 0 else torch.tensor(
-        0.0, device=sim.device, dtype=sim.dtype
-    )
-    return loss, mean_sim, mean_neg
-
-
-def hard_loss_pt(
-    history: torch.Tensor,
-    future: torch.Tensor,
-    similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    temperature: float,
-    beta: float = 0.0,
-    debiased: bool = True,
-    tau_plus: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Compute the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples" (https://arxiv.org/abs/2011.03343)."""
-    N = history.shape[0]
-    sim = similarity(history, future)  # (N, N)
-
-    pos_sim = torch.exp(torch.diag(sim) / temperature)  # (N,)
-    neg = _off_diagonal_rows(sim)  # (N, N-1)
-    neg_sim = torch.exp(neg / temperature)  # (N, N-1)
-
-    if beta == 0.0:
-        reweight = torch.ones_like(neg_sim)
-    else:
-        denom = neg_sim.mean(dim=1, keepdim=True)
-        reweight = (beta * neg_sim) / denom
-
-    if debiased:
-        N_eff = N - 1
-        Ng = (-tau_plus * N_eff * pos_sim + (reweight * neg_sim).sum(dim=-1)) / (
-            1.0 - tau_plus
-        )
-        min_clip = math.e ** (-1.0 / temperature)
-        Ng = torch.clamp(Ng, min=min_clip, max=torch.finfo(history.dtype).max)
-    else:
-        Ng = neg_sim.sum(dim=-1)
-
-    loss = (-torch.log(pos_sim / (pos_sim + Ng))).mean()
-
-    mean_sim = torch.diag(sim).mean()
-    mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
-
-
-def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.Tensor:
-    """
-    Computes a loss based on the singular values of the Gram matrix of the
-    latent vectors, encouraging orthogonality.     
-    Based on https://arxiv.org/pdf/1610.04794.pdf, and https://www.biorxiv.org/content/10.1101/2020.05.14.095430v3.
-
-    Args:
-        latent_means: The latent vectors from the model (batch_size, latent_dim).
-        weight: The weight to apply to this loss component.
+    Recompute edge distances from node coordinates.
 
     Returns:
-        The calculated scalar loss tensor.
+        a: (B, T, E, 1) where a[..., e, 0] is the Euclidean distance between the
+           two nodes specified by edge_index[e].
     """
-    #Guard for bad inputs
-    #z = torch.nan_to_num(latent_means, nan=0.0, posinf=1e4, neginf=-1e4)
-    #zc = z - z.mean(dim=0, keepdim=True)
-    #std = zc.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-6)
-    #z_norm = zc / std
-    batch_size = float(latent_means.shape[0])
-    gram_matrix = (latent_means.T @ latent_means) / batch_size
+    # vvvvv NEW block vvvvv
+    if x.ndim != 4 or x.size(-1) < 2: # pragma: no cover
+        raise ValueError(f"x must have shape (B,T,N,>=2). Got {tuple(x.shape)}")
+    if edge_index.ndim != 2 or edge_index.size(-1) != 2: # pragma: no cover
+        raise ValueError(f"edge_index must have shape (E,2). Got {tuple(edge_index.shape)}")
+
+    coords = x[..., 0:2]  # (B,T,N,2)
+
+    # Ensure edge_index on same device
+    if edge_index.device != x.device:
+        edge_index = edge_index.to(x.device)
+
+    i = edge_index[:, 0].long()  # (E,)
+    j = edge_index[:, 1].long()  # (E,)
+
+    pi = coords.index_select(dim=2, index=i)  # (B,T,E,2)
+    pj = coords.index_select(dim=2, index=j)  # (B,T,E,2)
+
+    d2 = (pi - pj).pow(2).sum(dim=-1)         # (B,T,E)
+    d = torch.sqrt(torch.clamp(d2, min=1e-12))  # (B,T,E)
+
+    return d.unsqueeze(-1)  # (B,T,E,1)
+
+
+# Unified checkpoint paths per model/run
+def ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
+    ckpt_dir = os.path.join(common_cfg.output_path, "models", model_name.lower(), f"run_{common_cfg.run}")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    best_val_path = os.path.join(ckpt_dir, "best_model_val.pth")
+    best_score_path = os.path.join(ckpt_dir, "best_model_score.pth")
+    teacher_init_path = os.path.join(ckpt_dir, "model_teacher_init.pth")
+    return ckpt_dir, best_val_path, best_score_path, teacher_init_path
+
+
+def check_model_inputs(
+    model_name: Optional[str] = None,
+    encoder_type: Optional[str] = None,
+    kl_annealing_mode: Optional[str] = None,
+    contrastive_similarity_function: Optional[str] = None,
+    contrastive_loss_function: Optional[str] = None, 
+):  # pragma: no cover
+    """
+    Checks and validates enum-like input parameters for various plot functions.
+
+    This function acts as a centralized guard to ensure that all categorical
+    and list-based inputs are valid before being used in downstream logic.
+
+    Args:
+        model_name (str): Name of the model
+        encoder_type (str): Type of encode-decoder pair being used
+        kl_annealing_mode (str): Which function should be used to increase and decrease KL
+        contrastive_similarity_function (str): Which function should be used to calculate similarity between sampels for the contrastive model
+        contrastive_loss_function (str): Which function should be used to calculate the loss for the contrastive model
+    """    
+
+    # =========================================================================
+    # 1. GENERATE LISTS OF VALID OPTIONS
+    # =========================================================================
     
-    # Compute singular values, which are the square roots of the eigenvalues for a symmetric matrix
-    singular_values = torch.linalg.svdvals(gram_matrix.to(float))
-    
-    # Clamp to avoid NaN gradients from sqrt(0)
-    penalization = torch.sqrt(torch.clamp(singular_values, min=1e-9))
+    # --- Statically defined options ---
+    model_opts = ["VaDE", "VQVAE", "Contrastive"]
+    encoder_opts = ["recurrent", "TCN", "transformer"]
+    kl_annealing_mode_opts = ["linear","sigmoid","tf_sigmoid"]
+    contrastive_similarity_function_opts = ["cosine","dot","euclidean","edit"]
+    contrastive_loss_function_ops=["nce","fc", "dlc", "hard_dcl"]
 
-    kmeans_loss = weight * torch.nanmean(penalization[~torch.isinf(penalization)])
-    if torch.isnan(kmeans_loss):
-        return 0.0
-    return kmeans_loss
+    # =========================================================================
+    # 3. CONFIGURE AND RUN VALIDATION CHECKS
+    # Format: (param_name, param_value, valid_options, is_list, custom_error)
+    # =========================================================================
+    validation_checks = [
+        ("model_name", model_name, model_opts, False, None, True, False),
+        ("encoder_type", encoder_type, encoder_opts, False, None, True, False),
+        ("kl_annealing_mode", kl_annealing_mode, kl_annealing_mode_opts, False, None, True, False),
+        ("contrastive_similarity_function", contrastive_similarity_function, contrastive_similarity_function_opts, False, None, True, False),
+        ("contrastive_loss_function", contrastive_loss_function, contrastive_loss_function_ops, False, None, True, False),
+    ]
 
-
-class RecurrentBlockPT(nn.Module):
-    def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
-        super().__init__()
-        self.internal_dim = int(torch.min(torch.tensor([64,latent_dim]))) # Cap maximum internal dimension to avoid tensor size explosion
-        self.latent_dim = latent_dim
-        if bidirectional_merge != "concat":
-            warnings.warn("Bidirectional merge mode defaulting to 'concat'.")
-
-        self.conv1d = nn.Conv1d(
-            in_channels=input_features,
-            out_channels=2 * self.internal_dim,
-            kernel_size=5,
-            padding="same",
-            bias=False,
-        )
-        self.gru1 = nn.GRU(
-            input_size=2 * self.internal_dim,
-            hidden_size=2 * self.internal_dim,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.norm1 = nn.LayerNorm(4 * self.internal_dim, eps=1e-3)
-        self.gru2 = nn.GRU(
-            input_size=4 * self.internal_dim,
-            hidden_size=self.internal_dim,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.norm2 = nn.LayerNorm(2 * self.internal_dim, eps=1e-3)
-        self.projection = nn.Linear(in_features=self.internal_dim*2, out_features=latent_dim*2)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Expect x: (B, T, N, F)
-        B, T, N, _ = x.shape
-
-        # Force input onto the same device as this block's parameters
-        dev = self.conv1d.weight.device
-        x = x.to(dev, non_blocking=True)
-
-        # Stage 1: Conv (TimeDistributed over T)
-        with torch.amp.autocast(device_type=dev.type, enabled=False):
-            x32 = x.float()    
-            conv_in = x32.reshape(B * T, N, -1).permute(0, 2, 1)  # (B*T, F, N)
-            conv_out = F.relu(self.conv1d(conv_in))             # (B*T, 2*latent, N)
-            gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*latent)
-
-            # Mask/lengths for packing
-            mask = (gru1_in.abs().sum(dim=-1) > 0)              # (B*T, N)
-            lengths_cpu = mask.sum(dim=1).to(torch.int64).cpu() # lengths must be CPU for pack_padded_sequence
-            valid_idx_cpu = torch.where(lengths_cpu > 0)[0]     # CPU index for CPU lengths
-            valid_idx = valid_idx_cpu.to(dev)                   # GPU index for GPU tensors
-
-            # Stage 2: First GRU with packing
-            gru1_out_full = torch.zeros(
-                B * T, N, 4 * self.internal_dim, device=gru1_in.device, dtype=gru1_in.dtype
-            )
-            if valid_idx.numel() > 0:
-                packed_input = pack_padded_sequence(
-                    gru1_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
-                )
-                packed_output, _ = self.gru1(packed_input)
-                unpacked_output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=N)
-                # Cast source to buffer dtype to avoid AMP mismatch
-                gru1_out_full[valid_idx] = unpacked_output.to(gru1_out_full.dtype)
-
-            # Stage 3: First LayerNorm
-            norm1_in = gru1_out_full.reshape(B, T, N, -1)
-            norm1_out = self.norm1(norm1_in)
-
-            # Stage 4: Second GRU with packing
-            gru2_in = norm1_out.reshape(B * T, N, -1)
-            gru2_h_n_full = torch.zeros(
-                2, B * T, self.internal_dim, device=gru2_in.device, dtype=gru2_in.dtype
-            )
-            if valid_idx.numel() > 0:
-                packed_input_2 = pack_padded_sequence(
-                    gru2_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
-                )
-                _, h_n_2 = self.gru2(packed_input_2)  # (2, B_valid, latent)
-                # Cast source to buffer dtype to avoid AMP mismatch
-                gru2_h_n_full[:, valid_idx, :] = h_n_2.to(gru2_h_n_full.dtype)
-
-            gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
-
-            # Stage 5: Second LayerNorm
-            norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*latent)
-
-            final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*latent)
-            if self.internal_dim != self.latent_dim:
-                final_output=self.projection(final_output) # restore latent space dependent output shape 
-            if torch.isnan(final_output).any():
-                print("z issues!")
-        return final_output.to(x.dtype)
+    for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
+        deepof.utils.validate_parameter(name, value, options, is_list, error_msg, only_one_of_many, can_be_dict)
 
 
-class AffineTransformedDistribution(TransformedDistribution):
-    """
-    A specific TransformedDistribution for Affine transforms that implements .mean.
-    """
-    def __init__(self, base_distribution, transform):
-        super().__init__(base_distribution, transform)
-
-    @property
-    def mean(self):
-        """
-        Computes the mean of the transformed distribution.
-        E[loc + scale * X] = loc + scale * E[X]
-        """
-        # The transform itself is callable and applies the affine transformation.
-        return self.transforms[0](self.base_dist.mean)
-
-
-class ProbabilisticDecoderPT(nn.Module):
-    """
-    PyTorch translation of the ProbabilisticDecoder, including scaling transform.
-    AMP-safe version: do distribution math in float32, sanitize NaNs/Infs.
-    """
-    def __init__(self, hidden_dim: int, data_dim: int):
-        super().__init__()
-        self.loc_projection = nn.Linear(in_features=hidden_dim, out_features=data_dim)
-
-    def forward(self, hidden: torch.Tensor, validity_mask: torch.Tensor) -> AffineTransformedDistribution:
-        B, T, _ = hidden.shape
-
-        # Linear projection in float32 for numerical stability under AMP
-        hidden_2d = hidden.reshape(B * T, -1).float()
-        loc_params = self.loc_projection(hidden_2d).reshape(B, T, -1)
-
-        # Sanitize to avoid NaN/Inf in distribution parameters
-        loc_params = torch.nan_to_num(loc_params, nan=0.0, posinf=1e6, neginf=-1e6)
-
-        # Build the distribution in float32 (disable autocast to avoid fp16 validator issues)
-        with torch.amp.autocast(device_type=loc_params.device.type, enabled=False):
-            loc32 = loc_params  # already float32
-            scale32 = torch.ones_like(loc32)  # unit variance
-
-            base_dist = torch.distributions.Normal(loc=loc32, scale=scale32, validate_args=False)
-            independent_dist = torch.distributions.Independent(base_dist, 1)
-
-            # Keep transform dtype consistent with distribution dtype
-            scale_transform = validity_mask.unsqueeze(-1).to(dtype=loc32.dtype, device=loc32.device)
-            transform = AffineTransform(loc=0.0, scale=scale_transform)
-
-            final_dist = AffineTransformedDistribution(independent_dist, transform)
-
-        return final_dist
-    
-
-class ClusterControlPT(nn.Module):
-    """
-    Calculates clustering metrics. This is a pass-through layer for the main
-    latent vector `z`, returning it unmodified alongside a dictionary of metrics.
-    """
-    def __init__(self):
-        super().__init__()
-
-    def forward(
-        self, z: torch.Tensor, z_cat: torch.Tensor
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        """
-        Calculates metrics and passes the latent vector `z` through.
-
-        Args:
-            z: The latent vector (batch_size, latent_dim).
-            z_cat: Cluster probabilities (batch_size, n_components).
-
-        Returns:
-            A tuple containing the unmodified `z` and a dictionary of metrics.
-        """
-        confidence, hard_groups = torch.max(z_cat, dim=1)
-        
-        # Calculate the number of unique clusters populated in the batch
-        num_populated = torch.unique(hard_groups).numel()
-        
-        metrics = {
-            "number_of_populated_clusters": torch.tensor(
-                float(num_populated), device=z.device
-            ),
-            "confidence_in_selected_cluster": torch.mean(confidence),
-        }
-        
-        return z, metrics
-    
 def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
@@ -1113,3 +768,39 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
 
     load_report = {"missing": rep.missing_keys, "unexpected": rep.unexpected_keys}
     return model, log_summary, spec, load_report
+
+
+def load_best_checkpoints(
+    model: nn.Module,
+    best_path_val: str,
+    best_path_score: str,
+    device: torch.device,
+    save_weights: bool,
+) -> Tuple[nn.Module, nn.Module]:
+    """
+    Loads the best-val and best-score checkpoints into two separate model copies.
+
+    Returns the best-val model and best-score model, both unwrapped from DataParallel.
+    If a checkpoint does not exist, the corresponding model retains its current weights.
+
+    Args:
+        model (nn.Module): Current model (possibly DataParallel-wrapped).
+        best_path_val (str): Path to the best-validation checkpoint.
+        best_path_score (str): Path to the best-score checkpoint.
+        device (torch.device): Device for loading weights.
+        save_weights (bool): Whether weight saving was enabled during training.
+
+    Returns:
+    Tuple[nn.Module, nn.Module]: (best_val_model, best_score_model), both unwrapped.
+    """
+    model_score = copy.deepcopy(model)
+
+    if save_weights and os.path.exists(best_path_val):
+        ckpt = torch.load(best_path_val, map_location=device, weights_only=False)
+        unwrap_dp(model).load_state_dict(ckpt["state_dict"], strict=False)
+
+    if save_weights and os.path.exists(best_path_score):
+        ckpt = torch.load(best_path_score, map_location=device, weights_only=False)
+        unwrap_dp(model_score).load_state_dict(ckpt["state_dict"], strict=False)
+
+    return unwrap_dp(model), unwrap_dp(model_score)
