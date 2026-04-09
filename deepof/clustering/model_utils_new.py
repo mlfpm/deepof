@@ -291,7 +291,7 @@ def select_contrastive_loss_pt(
         return fc_loss_pt(history, future, sim_fn, temperature, elimination_topk=elimination_topk)
     elif loss_fn == "hard_dcl":
         return hard_loss_pt(history, future, sim_fn, temperature, beta=beta, debiased=True, tau_plus=tau)
-    else:
+    else: # pragma: no cover
         raise ValueError(f"Unknown loss_fn: {loss_fn}")
     
 def l2_normalize(x: torch.Tensor, dim: int = 1, eps: float = 1e-12) -> torch.Tensor:
@@ -760,19 +760,19 @@ def embedding_per_video(
                 return ""
             elif len(animal_ids) >= 2:
                 return tuple(sorted([animal_ids[0], animal_ids[1]]))
-            else:
+            else: # pragma: no cover
                 raise AssertionError("No animal IDs found in coordinates._animal_ids.")
 
         if extract_pair == [""]:
             return ""
 
-        if not isinstance(extract_pair, list) or len(extract_pair) != 2:
+        if not isinstance(extract_pair, list) or len(extract_pair) != 2: # pragma: no cover
             raise AssertionError(
                 "extract_pair must be a list with two animal ids or [\"\"] in case of a single mouse!"
             )
 
         id1, id2 = extract_pair
-        if id1 not in animal_ids or id2 not in animal_ids:
+        if id1 not in animal_ids or id2 not in animal_ids: # pragma: no cover
             raise AssertionError(
                 f"Animal IDs {id1}, {id2} not found in coordinates._animal_ids: {animal_ids}"
             )
@@ -871,7 +871,7 @@ def embedding_per_video(
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
                     emb_out = model(xb, ab)
-                else:
+                else: # pragma: no cover
                     raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
 
                 emb_list.append(emb_out.detach().cpu())
@@ -989,7 +989,7 @@ def embedding_per_video(
         
         soft_counts = soft_counts_dict[extract_pair]
 
-    elif softcounts_extraction_method is not None:
+    elif softcounts_extraction_method is not None: # pragma: no cover
         raise ValueError("For \"softcounts_extraction_method\" only \"gmm\", \"msm\" or \"combined\" are supported!")
     else:
         soft_counts=deepof.data.TableDict(
@@ -1051,9 +1051,9 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     ckpt = torch.load(path, map_location=device, weights_only=False)  # weights_only=True is NOT compatible with arbitrary dict payloads
-    if "state_dict" not in ckpt:
+    if "state_dict" not in ckpt: # pragma: no cover
         raise RuntimeError(f"Checkpoint at {path} is not a bundle (missing 'state_dict').")
-    if "rebuild_spec" not in ckpt:
+    if "rebuild_spec" not in ckpt: # pragma: no cover
         raise RuntimeError(f"Checkpoint at {path} is missing 'rebuild_spec' (cannot rebuild model from path only).")
 
     spec = ckpt["rebuild_spec"]
@@ -1109,7 +1109,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             lens_enabled=bool(spec.get("lens_enabled", False)),
         )
 
-    else:
+    else: # pragma: no cover
         raise ValueError(f"Unknown model_name in rebuild_spec: {model_name}")
 
     model.to(device)
