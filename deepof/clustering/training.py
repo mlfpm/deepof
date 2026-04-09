@@ -49,14 +49,14 @@ from deepof.clustering.logging import (
     average_logs, 
     print_losses, 
     log_epoch_to_tensorboard, 
-    compute_diagnostics, 
     compute_vade_specific_diagnostics, 
     get_q_vade,
     get_q_vqvae,
     get_q_contrastive
 )
 from deepof.clustering.losses import Dynamic_weight_manager, build_optimizer_generic, build_optimizer, VadeLoss, select_contrastive_loss_pt
-from deepof.clustering.teacher_model import DiscriminativeHead, maybe_build_turtle_teacher, extract_latents, initialize_gmm_from_teacher, run_turtle_teacher_on_views
+from deepof.clustering.teacher_model import DiscriminativeHead, extract_latents, initialize_gmm_from_teacher, run_turtle_teacher_on_views
+import deepof.clustering.teacher_model
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -899,7 +899,7 @@ def fit_VQVAE(
 
     # Create teacher
     teacher_cfg.include_latent_view=False
-    teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+    teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
         common_cfg=common_cfg,
         train_dataset=train_loader.dataset,
@@ -968,7 +968,7 @@ def fit_VQVAE(
         score_value = float("nan")
 
         if apply_distill:
-            diag = compute_diagnostics(
+            diag = deepof.clustering.logging.compute_diagnostics(
                 model=model,
                 dataloader=val_loader,
                 q_fn=partial(get_q_vqvae, distill_head=distill_head),
@@ -1111,7 +1111,7 @@ def fit_contrastive(
 
     # Create teacher
     teacher_cfg.include_latent_view=False
-    teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+    teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
         teacher_cfg=teacher_cfg,
         common_cfg=common_cfg,
         train_dataset=train_loader.dataset,
@@ -1184,7 +1184,7 @@ def fit_contrastive(
         score_value = float("nan")
 
         if apply_distill:
-            diag = compute_diagnostics(
+            diag = deepof.clustering.logging.compute_diagnostics(
                 model=model,
                 dataloader=val_loader,
                 q_fn=partial(
@@ -1423,7 +1423,7 @@ def fit_VADE(
 
         # Build teacher for VADE
         teacher_cfg.include_latent_view=True # Vade has a free and useful latent view due to pretraining
-        teacher, tau_star, teacher_views = maybe_build_turtle_teacher(
+        teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
             teacher_cfg=teacher_cfg,    
             common_cfg=common_cfg,        
             train_dataset=train_loader.dataset,
@@ -1561,7 +1561,7 @@ def fit_VADE(
         )
 
         # A ton of diagnostics for printing training progress
-        diag = compute_diagnostics(
+        diag = deepof.clustering.logging.compute_diagnostics(
             model=model,
             dataloader=val_loader,
             q_fn=get_q_vade,
