@@ -677,8 +677,8 @@ class TCNDecoderPT(nn.Module):
         returns: distribution with .mean of shape (B, W, NNF)
         """
         B = g.shape[0]
-        # validity mask code unchanged...
-        if x.dim() == 4:
+        # validity mask
+        if x.dim() == 4: # potentially unnecessary, making a note here
             x_flat = x.view(x.size(0), x.size(1), -1)
         else:
             x_flat = x
@@ -693,11 +693,11 @@ class TCNDecoderPT(nn.Module):
 
         # Repeat, TCN, and prob head as before
         z_rep = z.unsqueeze(1).repeat(1, self.W, 1)  # (B, W, 4*latent)
-        # If you already compute TCN in fp32, keep it; otherwise:
         hidden_seq = self.tcn(z_rep)                 # (B, W, conv_filters)
         return self.prob_decoder(hidden_seq, validity_mask)
-    
+   
 
+'''
 def _has_nonfinite(t: torch.Tensor) -> bool:
     if t is None or not torch.is_floating_point(t):
         return False
@@ -723,6 +723,7 @@ def _safe_pointwise_conv1d(conv1x1: nn.Conv1d, x_bct: torch.Tensor, out_dtype: t
     y = y.to(out_dtype)
     return y
 # ----------------------------------------------
+'''
 
 def _act(name: str) -> nn.Module:
     name = (name or "relu").lower()
@@ -743,7 +744,6 @@ def sinusoidal_positional_encoding(max_len: int, d_model: int, device=None, dtyp
     n_odd = pe[:, 1::2].shape[1]
     pe[:, 1::2] = torch.cos(position * div_term)[:, :n_odd]
     return pe.unsqueeze(0)  # (1, max_len, d_model)
-
 
 #class BatchNorm1dKerasFP32(nn.BatchNorm1d):
 #    """Keras-like BatchNorm with eps=1e-3 and momentum=0.01."""
@@ -845,12 +845,10 @@ class TransformerCorePT(nn.Module):
         dff: int,
         max_pos: int,
         rate: float = 0.1,
-        return_sequences: bool = True,
     ):
         super().__init__()
         self.key_dim = int(key_dim)
         self.max_pos = int(max_pos)
-        self.return_sequences = return_sequences
         self.dropout = nn.Dropout(rate)
 
         # Input projection
@@ -896,10 +894,12 @@ class TransformerCorePT(nn.Module):
         for layer in self.layers:
             y = layer(y, attn_mask=mask)
 
-        if self.return_sequences:
-            return y  # (B, T, key_dim)
-        else:
-            return y[:, -1, :]  # (B, key_dim) - last timestep
+        return y[:, -1, :]  # (B, key_dim) - last timestep
+
+
+
+
+
 
 class TFMEncoderPT(nn.Module):
     """
