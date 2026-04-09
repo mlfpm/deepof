@@ -650,6 +650,9 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     teacher_cfg.pca_nodes_dim=4
     teacher_cfg.teacher_batch_size=2
     teacher_cfg.teacher_refresh_every=5
+    vade_cfg.freeze_gmm_epochs = 4
+    vade_cfg.freeze_decoder_epochs = 2
+
 
 
 
