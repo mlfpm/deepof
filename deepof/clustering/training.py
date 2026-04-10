@@ -571,7 +571,7 @@ def embedding_model_fittingPT(
     include_nodes_view: bool = True,
     pca_nodes_dim: int = 32,
     pca_edges_dim: int = 32,
-    include_angles_view: bool = True,
+    include_angles_view: bool = False,
     pca_angles_dim: int = 32,
     reinit_gmm_on_refresh: bool = False,
     # Diagnostics
