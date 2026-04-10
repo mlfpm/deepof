@@ -1622,7 +1622,7 @@ def fit_VADE(
         )
         # for tuning
         if tuning_mode:
-            max_score = score_value if score_value>max_score else max_score
+            max_score = score_value #if score_value>max_score else max_score
             trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
             if trial.should_prune():
                 raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
