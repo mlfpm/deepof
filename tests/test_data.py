@@ -798,7 +798,7 @@ def test_deep_unsupervised_embedding(table_type):
         scale="standard",
     )
 
-    trained_model = prun.deep_unsupervised_embedding(
+    model_val, model_score, model_part, log_summary = prun.deep_unsupervised_embedding(
         preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
@@ -810,12 +810,14 @@ def test_deep_unsupervised_embedding(table_type):
         batch_size=16,
         interaction_regularization=0.0,
         pretrained=False, # Set to False to train a new model!
+        use_turtle_teacher = False,
     )
 
-    embeddings, soft_counts = deepof.model_utils.embedding_per_video(
+    embeddings, soft_counts = deepof.clustering.model_utils_new.embedding_per_video(
         coordinates=prun,
+        meta_info=meta_info,
         to_preprocess=to_preprocess,
-        model=trained_model,
+        model=model_val,
         animal_id="B",
         global_scaler=global_scaler,
     )

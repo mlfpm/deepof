@@ -3064,7 +3064,7 @@ class Coordinates:
             pretrained = os.path.join(self._project_path, self._project_name, "trained_models","models",pretrained)  
 
         try:
-            trained_models = deepof.clustering.training.embedding_model_fittingPT(
+            model_val, model_score, model_part, log_summary = deepof.clustering.training.embedding_model_fittingPT(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
                 model_name=embedding_model,
@@ -3102,8 +3102,8 @@ class Coordinates:
                 "No pretrained model found for the given parameters. Please train a model first."
             )  # pragma: no cover
 
-        # returns a list of trained tensorflow models
-        return trained_models
+        # returns a list of trained pytorch models
+        return model_val, model_score, model_part, log_summary
 
 
 

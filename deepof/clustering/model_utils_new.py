@@ -360,7 +360,7 @@ def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
     model: str,
-    metainfo: dict,
+    meta_info: dict,
     supervised_annotations: table_dict = None,
     scale: str = "standard",
     animal_id: str = None,
@@ -473,9 +473,9 @@ def embedding_per_video(
                 window_step=1,
                 pretrained_scaler=global_scaler,
                 samples_max=samples_max,
-                dist_standardize=metainfo['dist_standardize'],
-                speed_standardize=metainfo['speed_standardize'] ,
-                coord_standardize=metainfo['coord_standardize'],
+                dist_standardize=meta_info['dist_standardize'],
+                speed_standardize=meta_info['speed_standardize'] ,
+                coord_standardize=meta_info['coord_standardize'],
             )    
 
         else:
@@ -487,9 +487,9 @@ def embedding_per_video(
                 window_step=1,
                 shuffle=False,
                 pretrained_scaler=global_scaler,
-                dist_standardize=metainfo['dist_standardize'],
-                speed_standardize=metainfo['speed_standardize'] ,
-                coord_standardize=metainfo['coord_standardize'],
+                dist_standardize=meta_info['dist_standardize'],
+                speed_standardize=meta_info['speed_standardize'] ,
+                coord_standardize=meta_info['coord_standardize'],
             )
 
         tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
