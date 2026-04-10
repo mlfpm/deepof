@@ -66,8 +66,8 @@ class CommonFitCfg:
     seed: int = None
 
     # Tuning
-    limit_train_batches: Optional[int]
-    limit_val_batches: Optional[int]
+    limit_train_batches: Optional[int] = 1000
+    limit_val_batches: Optional[int] = 1000
 
 
 @dataclass
