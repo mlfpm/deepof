@@ -1304,6 +1304,7 @@ def fit_VADE(
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
     writer: SummaryWriter,
+    tuning_mode: bool = False,
 ):
     
 
@@ -1490,6 +1491,7 @@ def fit_VADE(
     # Inits for training
     best_val = -float("inf") #start negative, as Vade first is expected to get worse validation wise, then top out and get better
     best_score = -float("inf")
+    max_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
     score_tol = 0.01
@@ -1614,6 +1616,8 @@ def fit_VADE(
                 (abs(score_value - best_score) <= score_tol and val_total < best_score_val)
             )
         )
+        # for tuning
+        max_score= score_value if score_value>max_score else max_score
 
         # Save best model based on total validation loss
         if improved_val:
@@ -1668,6 +1672,10 @@ def fit_VADE(
 
     if writer:
         writer.flush(); writer.close()
+
+    if tuning_mode:
+        return unwrap_dp(model_val), unwrap_dp(model_score), teacher_init_model, log_summary, max_score 
+
 
     return unwrap_dp(model_val), unwrap_dp(model_score), teacher_init_model, log_summary    
 
