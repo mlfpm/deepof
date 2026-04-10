@@ -786,7 +786,7 @@ def test_deep_unsupervised_embedding(table_type):
     prun = prun.create(test=True, force=True)
 
     (
-    graph_preprocessed_coords, shapes, adj_matrix, to_preprocess, global_scaler
+    graph_preprocessed_coords, meta_info, adj_matrix, to_preprocess, global_scaler
     ) = prun.get_graph_dataset(
         animal_id="B",  # Comment out for multi-animal embeddings
         center="Center",
@@ -801,13 +801,13 @@ def test_deep_unsupervised_embedding(table_type):
     trained_model = prun.deep_unsupervised_embedding(
         preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
         adjacency_matrix=adj_matrix,
+        meta_info=meta_info,
         embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
         epochs=10,
         encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
         n_components=10,
         latent_dim=8,
         batch_size=16,
-        verbose=True, # Set to True to follow the training loop
         interaction_regularization=0.0,
         pretrained=False, # Set to False to train a new model!
     )
