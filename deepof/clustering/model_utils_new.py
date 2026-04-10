@@ -33,7 +33,7 @@ table_dict = NewType("deepof_table_dict", Any)
 @dataclass
 class CommonFitCfg:
 
-    learning_rate: float = 1e-3
+    learning_rate: float = 3e-4
     # Core identity
     model_name: str = "VaDE"
     encoder_type: str = "recurrent"

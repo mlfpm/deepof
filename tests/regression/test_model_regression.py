@@ -170,6 +170,7 @@ def test_vade_full_pipeline_regression(encoder_type):
     os.makedirs(output_path, exist_ok=True)
 
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg(
+        learning_rate=1e-3,
         model_name="vade",
         encoder_type=encoder_type,
         batch_size=64,
