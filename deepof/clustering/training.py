@@ -938,7 +938,7 @@ def fit_VQVAE(
     if apply_distill:
         lambda_scheduler = Dynamic_weight_manager(
             n_batches_per_epoch,
-            mode=common_cfg.kl_annealing_mode,
+            mode="tf_sigmoid",
             warmup_epochs=0,
             at_max_epochs=teacher_cfg.lambda_decay_start,
             max_weight=teacher_cfg.lambda_distill,
@@ -1150,7 +1150,7 @@ def fit_contrastive(
     if apply_distill:
         lambda_scheduler = Dynamic_weight_manager(
             n_batches_per_epoch,
-            mode=common_cfg.kl_annealing_mode,
+            mode="tf_sigmoid",
             warmup_epochs=0,
             at_max_epochs=teacher_cfg.lambda_decay_start,
             max_weight=teacher_cfg.lambda_distill,

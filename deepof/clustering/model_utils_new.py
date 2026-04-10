@@ -126,7 +126,7 @@ class VaDECfg:
 
     learning_rate_pretrain: float = 1e-3
     gmm_learning_rate: float = 1e-3 
-    pretrain_epochs: int = 10,
+    pretrain_epochs: int = 10
 
     reg_cat_clusters: float = 0.0
     recluster: bool = False
