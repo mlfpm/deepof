@@ -296,7 +296,7 @@ class Project:
         #for later separation into path to source tables and path tables generated with deepof
         self.table_path = table_path
         self.source_table_path = table_path
-        self.trained_path = os.path.jion(project_path, project_name, "trained_models")
+        self.trained_path = os.path.join(project_path, project_name, "trained_models")
 
         # Detect files to load from disk
         self.table_format = table_format
