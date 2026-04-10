@@ -188,11 +188,6 @@ def test_vade_full_pipeline_regression(encoder_type):
         interaction_regularization=0.0,
         kmeans_loss=0.0,
         diag_max_batches=1,
-        kl_annealing_mode="linear",
-        kl_max_weight=1.0,
-        kl_warmup=1,
-        kl_end_weight=1.0,
-        kl_cooldown=1,
         seed=seed,
     )
 
@@ -213,6 +208,11 @@ def test_vade_full_pipeline_regression(encoder_type):
         nonempty_weight_pretrain = 2e-2,
         nonempty_p_pretrain = 2.0,
         nonempty_floor_percent_pretrain = 0.05,
+        kl_annealing_mode="linear",
+        kl_max_weight=1.0,
+        kl_warmup=1,
+        kl_end_weight=1.0,
+        kl_cooldown=1,
     )
 
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
@@ -340,11 +340,6 @@ def test_vqvae_full_pipeline_regression(encoder_type):
         interaction_regularization=0.0,
         kmeans_loss=0.0,
         diag_max_batches=1,
-        kl_annealing_mode="linear",
-        kl_max_weight=1.0,
-        kl_warmup=1,
-        kl_end_weight=1.0,
-        kl_cooldown=1,
         seed=seed,
     )
 
@@ -477,11 +472,6 @@ def test_contrastive_full_pipeline_regression(encoder_type):
         interaction_regularization=0.0,
         kmeans_loss=0.0,
         diag_max_batches=1,
-        kl_annealing_mode="linear",
-        kl_max_weight=1.0,
-        kl_warmup=1,
-        kl_end_weight=1.0,
-        kl_cooldown=1,
         seed=seed,
     )
 

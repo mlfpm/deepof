@@ -1441,7 +1441,7 @@ def fit_VADE(
 
         # Set up lambda schedule (distillation weight)
         lambda_scheduler = Dynamic_weight_manager(
-            n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
+            n_batches_per_epoch, mode=vade_cfg.kl_annealing_mode,
             warmup_epochs=0, at_max_epochs=teacher_cfg.lambda_decay_start, max_weight=teacher_cfg.lambda_distill,
             cooldown_epochs=teacher_cfg.lambda_cooldown, end_weight=teacher_cfg.lambda_end_weight
         )
