@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+import torch
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
@@ -196,7 +196,7 @@ def test_recluster(states):
     ).create(force=True, test=True)
 
     # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
 
     if states == "priors":
         # Define a test matrix of soft counts
@@ -298,7 +298,7 @@ def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animals_in_
 def test_condition_distance_binning(scan_mode, agg, metric):
 
     # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
     # Define a test matrix of soft counts
@@ -352,7 +352,7 @@ def test_fit_normative_global_model(input_data):
 def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
 
     # Define a test embedding dictionary and derive supervised annotations from it
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
     supervised_annotations= TableDict({i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}, typ='supervised')
     for key in supervised_annotations.keys():
@@ -413,7 +413,7 @@ def test_compute_transition_matrix_per_condition(
 ):
 
     # Define a test embedding dictionary
-    embedding = {i: tf.random.normal(shape=(100, 10)) for i in range(10)}
+    embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
     # Define a test matrix of soft counts
