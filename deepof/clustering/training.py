@@ -54,7 +54,7 @@ from deepof.clustering.logging import (
     get_q_vqvae,
     get_q_contrastive
 )
-from deepof.clustering.losses import Dynamic_weight_manager, build_optimizer_generic, build_optimizer, VadeLoss, select_contrastive_loss_pt
+from deepof.clustering.losses import Dynamic_weight_manager, build_optimizer_generic, build_optimizer_vade, VadeLoss, select_contrastive_loss_pt
 from deepof.clustering.teacher_model import DiscriminativeHead, extract_latents, initialize_gmm_from_teacher, run_turtle_teacher_on_views
 import deepof.clustering.teacher_model
 
@@ -505,18 +505,20 @@ def embedding_model_fittingPT(
     n_components: int,
     # Logging/IO
     output_path: str,
+    learning_rate: float = 1e-3,
     log_history: bool = True,
     data_path: str = ".",
     pretrained: Optional[str] = None,
     save_weights: bool = True,
     run: int = 0,
     # VaDE-specific
-    kl_annealing_mode: str = "tf_sigmoid",
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
     freeze_gmm_epochs: int = 0,
     freeze_decoder_epochs: int = 0,
     prior_loss_weight: float = 0.0,
+    gmm_learning_rate: float = 1e-3,
+    learning_rate_pretrain: float = 1e-3,
     # Regularization knobs
     interaction_regularization: float = 0.0,
     kmeans_loss: float = 0.0,
@@ -541,6 +543,7 @@ def embedding_model_fittingPT(
     teacher_alpha_sample_entropy: float = 2.0,
     teacher_batch_size: int = 2048,
     # Vade pretrain
+    pretrain_epochs: int = 10,
     kmeans_loss_pretrain: float = 1.0,
     repel_weight_pretrain: float = 0.5,
     repel_length_scale_pretrain: float = 0.5,
@@ -548,10 +551,16 @@ def embedding_model_fittingPT(
     nonempty_p_pretrain: float = 2.0,
     nonempty_floor_percent_pretrain: float = 0.05,
     # KL cap
+    kl_annealing_mode: str = "tf_sigmoid",
     kl_max_weight: float = 1,
     kl_warmup: int = 5,
     kl_end_weight: float = 0.2,
     kl_cooldown: int = 5,
+    kl_annealing_mode_pretrain: str = "tf_sigmoid",
+    kl_max_weight_pretrain: float = 0.2,
+    kl_warmup_pretrain: int = 15,
+    kl_end_weight_pretrain: float = 0.2,
+    kl_cooldown_pretrain: int = 10,
     reg_scatter_weight: float = 0,
     temporal_cohesion_weight: float = 0,
     reg_scatter_beta: float = 1.0,
@@ -619,6 +628,7 @@ def embedding_model_fittingPT(
         latent_dim=latent_dim,
         epochs=epochs,
         n_components=n_components,
+        learning_rate=learning_rate,
         output_path=output_path,
         data_path=data_path,
         log_history=log_history,
@@ -631,11 +641,6 @@ def embedding_model_fittingPT(
         interaction_regularization=interaction_regularization,
         kmeans_loss=kmeans_loss,
         diag_max_batches=diag_max_batches,
-        kl_annealing_mode=kl_annealing_mode,
-        kl_max_weight=kl_max_weight,
-        kl_warmup=kl_warmup,
-        kl_end_weight=kl_end_weight,
-        kl_cooldown=kl_cooldown,
         seed=0, 
     )
 
@@ -684,7 +689,10 @@ def embedding_model_fittingPT(
         recluster=recluster,
         freeze_gmm_epochs=freeze_gmm_epochs,
         freeze_decoder_epochs=freeze_decoder_epochs,
+        gmm_learning_rate=gmm_learning_rate,
+        learning_rate_pretrain=learning_rate_pretrain,
         prior_loss_weight=prior_loss_weight,
+        pretrain_epochs=pretrain_epochs,
 
         reg_scatter_weight=reg_scatter_weight,
         temporal_cohesion_weight=temporal_cohesion_weight,
@@ -703,6 +711,18 @@ def embedding_model_fittingPT(
         nonempty_weight_pretrain = nonempty_weight_pretrain,
         nonempty_p_pretrain = nonempty_p_pretrain,
         nonempty_floor_percent_pretrain = nonempty_floor_percent_pretrain,
+
+        kl_annealing_mode=kl_annealing_mode,
+        kl_max_weight=kl_max_weight,
+        kl_warmup=kl_warmup,
+        kl_end_weight=kl_end_weight,
+        kl_cooldown=kl_cooldown,
+
+        kl_annealing_mode_pretrain=kl_annealing_mode_pretrain,
+        kl_max_weight_pretrain=kl_max_weight_pretrain,
+        kl_warmup_pretrain=kl_warmup_pretrain,
+        kl_end_weight_pretrain=kl_end_weight_pretrain,
+        kl_cooldown_pretrain=kl_cooldown_pretrain,
     )
 
     contrastive_cfg = ContrastiveCfg(
@@ -926,7 +946,7 @@ def fit_VQVAE(
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-    optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+    optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
     # Set up best-val and best-score saving
@@ -1138,7 +1158,7 @@ def fit_contrastive(
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-    optimizer = build_optimizer_generic(model, distill_head, base_lr=3e-4, weight_decay=1e-4)
+    optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
     # Set up best-val and best-score saving
@@ -1314,7 +1334,7 @@ def fit_VADE(
         model = nn.DataParallel(model)
 
     # More setup
-    optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
+    optimizer = build_optimizer_vade(model=model, base_lr=vade_cfg.learning_rate_pretrain, gmm_lr=0.0) #gmm learnign rate is not used in pretraining
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
     n_batches_per_epoch = len(train_loader)
 
@@ -1359,11 +1379,11 @@ def fit_VADE(
 
     print("\n--- Pretraining (reconstruction and setting up the latent space) ---")
     unwrap_dp(model).set_pretrain_mode(True)
-    pre_epochs = min(10, max(1, common_cfg.epochs))
+    pre_epochs = vade_cfg.pretrain_epochs
     ctx = SimpleNamespace(criterion=criterion, scheduler=None, scheduler_per_batch=True)
     kl_scheduler = Dynamic_weight_manager(
-        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-        warmup_epochs=15, max_weight=0.2, cooldown_epochs=10, end_weight=0.2
+        n_batches_per_epoch, mode=vade_cfg.kl_annealing_mode_pretrain,
+        warmup_epochs=vade_cfg.kl_warmup_pretrain, max_weight=vade_cfg.kl_max_weight_pretrain, cooldown_epochs=vade_cfg.kl_cooldown_pretrain, end_weight=vade_cfg.kl_end_weight_pretrain
     )
     criterion.set_kl_scheduler(kl_scheduler)
 
@@ -1390,13 +1410,13 @@ def fit_VADE(
     criterion.set_mode("main")
     # New KL schedule
     kl_scheduler = Dynamic_weight_manager(
-        n_batches_per_epoch, mode=common_cfg.kl_annealing_mode,
-        warmup_epochs=common_cfg.kl_warmup, max_weight=common_cfg.kl_max_weight,
-        cooldown_epochs=common_cfg.kl_cooldown, end_weight=common_cfg.kl_end_weight
+        n_batches_per_epoch, mode=vade_cfg.kl_annealing_mode,
+        warmup_epochs=vade_cfg.kl_warmup, max_weight=vade_cfg.kl_max_weight,
+        cooldown_epochs=vade_cfg.kl_cooldown, end_weight=vade_cfg.kl_end_weight
     )
     criterion.set_kl_scheduler(kl_scheduler)
     
-    optimizer = build_optimizer(model=model, base_lr=1e-3, gmm_lr=1e-3)
+    optimizer = build_optimizer_vade(model=model, base_lr=common_cfg.learning_rate, gmm_lr=vade_cfg.gmm_learning_rate)
 
     # VaDE unified checkpoint paths
     _, best_path_val, best_path_score, teacher_init_path = ckpt_paths("vade", common_cfg=common_cfg)

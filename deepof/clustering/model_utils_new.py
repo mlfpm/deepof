@@ -32,6 +32,8 @@ table_dict = NewType("deepof_table_dict", Any)
 
 @dataclass
 class CommonFitCfg:
+
+    learning_rate: float = 1e-3
     # Core identity
     model_name: str = "VaDE"
     encoder_type: str = "recurrent"
@@ -59,15 +61,13 @@ class CommonFitCfg:
     interaction_regularization: float = 0.0
     kmeans_loss: float = 0.0
 
-    kl_annealing_mode: str = "tf_sigmoid"
-    kl_max_weight: float = 1.0
-    kl_warmup: int = 5
-    kl_end_weight: float = 0.2
-    kl_cooldown: int = 5
-
     # Diagnostics
     diag_max_batches: int = 4
     seed: int = None
+
+    # Tuning
+    limit_train_batches: Optional[int]
+    limit_val_batches: Optional[int]
 
 
 @dataclass
@@ -123,6 +123,11 @@ class TurtleTeacherCfg:
 
 @dataclass
 class VaDECfg:
+
+    learning_rate_pretrain: float = 1e-3
+    gmm_learning_rate: float = 1e-3 
+    pretrain_epochs: int = 10,
+
     reg_cat_clusters: float = 0.0
     recluster: bool = False
     freeze_gmm_epochs: int = 0.0
@@ -146,6 +151,20 @@ class VaDECfg:
     nonempty_weight_pretrain: float = 2e-2
     nonempty_p_pretrain: float = 2.0
     nonempty_floor_percent_pretrain: float = 0.05
+
+    kl_annealing_mode: str = "tf_sigmoid"
+    kl_max_weight: float = 1.0
+    kl_warmup: int = 5
+    kl_end_weight: float = 0.2
+    kl_cooldown: int = 5
+
+    kl_annealing_mode_pretrain: str = "tf_sigmoid"
+    kl_max_weight_pretrain: float = 0.2
+    kl_warmup_pretrain: int = 15
+    kl_end_weight_pretrain: float = 0.2
+    kl_cooldown_pretrain: int = 10
+
+
 
 
 

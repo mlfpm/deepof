@@ -813,7 +813,7 @@ def build_optimizer_generic(
     return torch.optim.Adam(params, lr=base_lr, weight_decay=weight_decay)
 
 
-def build_optimizer(
+def build_optimizer_vade(
     model: nn.Module,
     base_lr: float = 3e-4,
     gmm_lr: float = 1e-4,    #3e-4 * 0.33       
