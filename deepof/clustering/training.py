@@ -18,6 +18,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import optuna
 
 
 import deepof.clustering.dataset
@@ -1304,9 +1305,12 @@ def fit_VADE(
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
     writer: SummaryWriter,
-    tuning_mode: bool = False,
+    trial: optuna.Trial = None,
 ):
     
+    tuning_mode=False
+    if trial is not None:
+        tuning_mode=True
 
     ###############
     # Set up
@@ -1617,7 +1621,11 @@ def fit_VADE(
             )
         )
         # for tuning
-        max_score= score_value if score_value>max_score else max_score
+        if tuning_mode:
+            max_score = score_value if score_value>max_score else max_score
+            trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
 
         # Save best model based on total validation loss
         if improved_val:
