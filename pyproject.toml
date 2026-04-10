@@ -20,26 +20,13 @@ llvmlite = "^0.42.0"
 shap = "^0.44.1"
 networkx = "^2.8.7"
 seglearn = "^1.2.5"
-keras-tuner = "^1.4.7"
-tensorflow-macos = {version = "2.14.1", markers="platform_machine == 'arm64' or platform_system == 'darwin' or platform_system == 'Darwin'"}
-tensorflow = {version = "2.14.1", markers="platform_machine != 'arm64' or (platform_system == 'darwin' and platform_system != 'Darwin')"}
-keras-tcn-macos = {version = "^1.0", markers="platform_machine == 'arm64' or platform_system == 'darwin' or platform_system == 'Darwin'"}
-keras-tcn = {version = "^3.5.0", markers="platform_machine != 'arm64' or (platform_system == 'darwin' and platform_system != 'Darwin')"}
-tensorflow-probability = "0.22.1"
-tensorflow-io-gcs-filesystem = [
-    {version = "0.31.0", markers = "sys_platform != 'darwin' and sys_platform != 'Darwin'"},
-    {version = "0.37.1", markers = "sys_platform == 'darwin' or sys_platform == 'Darwin'"}
-]
-tensorflow-addons = "0.22.0"
 tifffile = "^2022.8.12"
 umap-learn = "^0.5.3"
 ipywidgets = "^8.0.2"
 openpyxl = "^3.0.10"
-kaleido = "0.2.1"
 av = "12.3.0"
 imblearn = "^0.0"
 lxml = "^4.9.1"
-spektral = "1.3.1"
 imageio-ffmpeg = "^0.4.7"
 statannotations = "^0.5.0"
 joblib = "^1.2.0"
@@ -59,7 +46,6 @@ torchvision = [
     {version="0.23.0", source="PyPI", markers="sys_platform != 'linux'"},
     {version="0.23.0", source="pytorch-cpu", markers="sys_platform == 'linux'"}
 ]
-keras = "2.14.0"
 natsort = "8.4.0"
 statsmodels = "^0.14.2"
 twine = "5.1.1"

@@ -71,7 +71,6 @@ import psutil
 
 import umap
 from natsort import os_sorted
-from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import (
@@ -84,10 +83,8 @@ from tqdm import tqdm
 
 import deepof.annotation_utils
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context, DistanceUnit
-import deepof.model_utils
-import deepof.models
 #import deepof.clustering.models_new
-#import deepof.clustering.model_utils_new
+import deepof.clustering.training
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
@@ -299,7 +296,7 @@ class Project:
         #for later separation into path to source tables and path tables generated with deepof
         self.table_path = table_path
         self.source_table_path = table_path
-        self.trained_path = resource_filename(__name__, "trained_models")
+        self.trained_path = os.path.jion(project_path, project_name, "trained_models")
 
         # Detect files to load from disk
         self.table_format = table_format
@@ -2791,7 +2788,7 @@ class Coordinates:
             )  # pragma: no cover
         
         # get immobility classifer
-        self._trained_model_path = resource_filename(__name__, "trained_models")    
+        self._trained_model_path = os.path.join(self._project_path, self._project_name, "trained_models",)  
         immobility_estimator = deepof.utils.load_precompiled_model(
             None,
             download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
@@ -3062,42 +3059,20 @@ class Coordinates:
         ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
         ###
-        # Improve after refactor
-        # Select path to apropriate pretrained model
+        # get full pretrained model path
         if pretrained:
-            pretrained_path = os.path.join(
-                self._project_path,
-                self._project_name,
-                "Trained_models",
-                "trained_weights",
-            )
-            pretrained = os.path.join(
-                pretrained_path,
-                (
-                    pretrained
-                    if isinstance(pretrained, str)
-                    else [
-                        w
-                        for w in os.listdir(pretrained_path)
-                        if embedding_model in w
-                        and encoder_type in w
-                        and "encoding={}".format(latent_dim) in w
-                        and "k={}".format(n_components)
-                    ][0]
-                ),
-            )
+            pretrained = os.path.join(self._project_path, self._project_name, "trained_models","models",pretrained)  
 
         try:
-            trained_models = deepof.model_utils.embedding_model_fitting(
+            trained_models = deepof.clustering.training.embedding_model_fittingPT(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
-                embedding_model=embedding_model,
+                model_name=embedding_model,
                 encoder_type=encoder_type,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
                 epochs=epochs,
                 log_history=log_history,
-                log_hparams=log_hparams,
                 n_components=n_components,
                 kmeans_loss=kmeans_loss,
                 temperature=temperature,
@@ -3113,10 +3088,7 @@ class Coordinates:
                 ),
                 data_path=os.path.join(self._project_path, self._project_name, 'Tables'),
                 pretrained=pretrained,
-                save_checkpoints=save_checkpoints,
-                save_weights=save_weights,
-                input_type=input_type,
-                bin_info=bin_info,
+                save_weights=save_checkpoints,
                 run=run,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup=kl_warmup,

@@ -10,7 +10,6 @@ import ast
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-import tensorflow as tf
 from typing import Any, List, NewType, Tuple, Union
 import warnings
 from .data_manager import DataManager, sanitize_table_name

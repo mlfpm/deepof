@@ -427,7 +427,7 @@ def average_logs(logs_list: Iterable[Dict[str, float]]) -> Dict[str, float]:
 
 
 def log_epoch_to_tensorboard(
-    writer: Optional[SummaryWriter],
+    writer: Optional[object],
     train_logs: Dict[str, float],
     val_logs: Dict[str, float],
     epoch: int,

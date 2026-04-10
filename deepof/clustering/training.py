@@ -1336,10 +1336,10 @@ def fit_VADE(
     # Load pretrained model if available + early return
     if common_cfg.pretrained:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
-        unwrap_dp(model).load_state_dict(torch.load(common_cfg.pretrained, map_location=device, weights_only=False))
+        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
         if writer:
             writer.flush(); writer.close()
-        return unwrap_dp(model), unwrap_dp(model), None
+        return unwrap_dp(model), None, None
 
 
     ###############
