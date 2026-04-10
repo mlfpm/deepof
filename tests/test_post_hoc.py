@@ -354,7 +354,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
     # Define a test embedding dictionary and derive supervised annotations from it
     embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
-    supervised_annotations= TableDict({i: pd.DataFrame(embedding[i].numpy()) for i in range(10)}, typ='supervised')
+    supervised_annotations= TableDict({i: pd.DataFrame(embedding[i]) for i in range(10)}, typ='supervised')
     for key in supervised_annotations.keys():
         supervised_annotations[key].columns=pd.Index(["speed","1","2","3","4","5","6","7","8","9"])
 
