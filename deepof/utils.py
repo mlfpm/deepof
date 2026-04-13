@@ -43,6 +43,7 @@ from tqdm import tqdm
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
+import deepof.legacy_smote_handling
 import deepof.utils
 
 
@@ -2906,14 +2907,7 @@ def load_precompiled_model(path, download_path, model_path, model_name):
         predictor = SamPredictor(sam)
     # Immobility estimator model
     elif path.endswith(".pkl"):
-        with open(
-            os.path.join(
-            path,
-            ),
-            "rb",
-        ) as est:
-            predictor = pickle.load(est)
-
+        predictor = deepof.legacy_smote_handling.load_pickle_compat(path)
     return predictor
 
 

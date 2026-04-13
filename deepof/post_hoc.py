@@ -26,8 +26,6 @@ import shap
 import tqdm
 import umap
 from catboost import CatBoostClassifier
-from unittest.mock import MagicMock, patch
-
 
 
 from joblib import Parallel, delayed
@@ -45,12 +43,11 @@ from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.mixture import GaussianMixture
-from sklearn.base import BaseEstimator
-from sklearn.neighbors import NearestNeighbors
 from sklearn.pipeline import Pipeline
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 import torch
+
+from deepof.legacy_smote_handling import SimpleSMOTE, ResampledClassifier
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, CONTINUOUS_BEHAVIORS
 import deepof.data
@@ -380,7 +377,7 @@ def get_supervised_chaos(
     quality_threshold: float = 0.75,
     frac_bps_below: float = 0.5,
     chaos_suffix: str = "chaos",
-):  # pragma: no cover
+):  
     """Create a supervised-annotations-like table dict containing only quality-based chaos labels.
 
     Args:
@@ -453,7 +450,7 @@ def add_chaos_gates(
     supervised_chaos,
     extract_pair,
     window_size: int,
-):  # pragma: no cover
+):  
     """Combine regular and chaos-specific soft counts gate-wise.
 
     Args:
@@ -559,7 +556,7 @@ def _cache_embeddings(
     coordinates,
     embeddings,
     keys: list,
-) -> Tuple[Dict[str, np.ndarray], Dict[str, int]]:  # pragma: no cover
+) -> Tuple[Dict[str, np.ndarray], Dict[str, int]]:  
     """Cache embeddings in memory (unless very large project) and return lengths."""
     Z_by_key = (
         {k: np.asarray(get_dt(embeddings, k), dtype=np.float32) for k in keys}
@@ -575,7 +572,7 @@ def _cache_embeddings(
     }
     return Z_by_key, emb_len
 
-def _get_Z(Z_by_key: dict, embeddings: dict, key: str) -> np.ndarray:  # pragma: no cover
+def _get_Z(Z_by_key: dict, embeddings: dict, key: str) -> np.ndarray: 
     """Retrieve embedding array for a key, loading from disk if not cached."""
     Z = Z_by_key.get(key)
     if Z is None:
@@ -583,7 +580,7 @@ def _get_Z(Z_by_key: dict, embeddings: dict, key: str) -> np.ndarray:  # pragma:
     return Z
 
 
-def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]:  # pragma: no cover
+def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]: 
     mask = np.asarray(mask, dtype=bool)
     idx = np.flatnonzero(mask)
     if idx.size == 0:
@@ -602,7 +599,7 @@ def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]: 
     return runs
 
 
-def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:  # pragma: no cover
+def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray: 
     """Extract PCCA soft memberships (n_active, n_macrostates) from a deeptime MSM."""
     pcca = msm_model.pcca(int(n_macrostates))
     for attr in ("memberships", "chi"):
@@ -611,7 +608,7 @@ def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:  # pragma: n
     raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.")
 
 
-def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray:  # pragma: no cover
+def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray: 
     """Apply a uniform moving-average along axis 0 (frames) of a 2-D softcount matrix."""
     if win is None or win <= 1 or P.shape[0] < win:
         return P
@@ -628,7 +625,7 @@ def _get_gating_series_and_gates(
     window_size: int,
     supervised_annotations=None,
     embedding_gates: Any = "Center",
-) -> Tuple[Dict[str, Dict], list]:  # pragma: no cover
+) -> Tuple[Dict[str, Dict], list]:  
     """Return per-key gating series and the gate labels used downstream."""
     dist_series_dict = get_pairwise_distances(
         coordinates,
@@ -657,7 +654,7 @@ def compute_gate_edges(
     M_gates: int = 3,
     embedding_gates: Any = "Center",
     fixed_edges: Optional[list] = None,
-) -> Optional[Dict[Any, np.ndarray]]:  # pragma: no cover
+) -> Optional[Dict[Any, np.ndarray]]: 
     """
     Precompute bin edges for distance-gated extraction.
 
@@ -716,7 +713,7 @@ def _build_gate_masks(
     M_gates: int,
     supervised_annotations=None,
     gate_edges: Optional[Dict[Any, np.ndarray]] = None,
-) -> Dict[Any, Dict[int, Dict[str, np.ndarray]]]:  # pragma: no cover
+) -> Dict[Any, Dict[int, Dict[str, np.ndarray]]]:  
     """Build per-(gate, bin, key) masks exactly as in the original code."""
     gate_masks: Dict[Any, Dict[int, Dict[str, np.ndarray]]] = {}
 
@@ -758,7 +755,7 @@ def _build_gate_masks(
     return gate_masks
 
 
-def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray:  # pragma: no cover
+def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.ndarray: 
     """Reservoir-sample up to n rows from a list of 2-D arrays without full concat."""
     rng = np.random.default_rng(seed)
     total = sum(s.shape[0] for s in segments)
@@ -791,7 +788,7 @@ def get_pairwise_distances(
     supervised_annotations=None,
     embedding_gates: Any = "Nose",
     behavior_combinations: bool = True,
-) -> Dict[str, Dict]:  # pragma: no cover
+) -> Dict[str, Dict]: 
     """
     Per-window gating series: pairwise distances OR behavior-combination codes.
 
@@ -888,7 +885,7 @@ def get_pairwise_distances(
 
     return out
 
-def _gate_to_tag(gate: Any) -> str:  # pragma: no cover
+def _gate_to_tag(gate: Any) -> str:  
     """Convert a gate key to a filesystem-safe tag."""
     if isinstance(gate, tuple):
         return "_".join(map(str, gate))
@@ -911,7 +908,7 @@ def get_contrastive_soft_counts_gmm(
     random_state: int = 0,
     embedding_gates: Any = "Center",
     temporal_smooth_win: Optional[int] = 3,
-):  # pragma: no cover
+):  
     """
     Distance/behavior-gated GMM decoder.
 
@@ -1076,7 +1073,7 @@ def get_contrastive_soft_counts_msm_pcca(
     n_micro: int = 400,
     min_micro_per_macro: int = 3,
     lagtime: int = 3,
-):  # pragma: no cover
+):  
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
 
@@ -2605,101 +2602,3 @@ def explain_clusters(
     )
 
     return shap_values, explainer, processed_stats
-
-
-class SimpleSMOTE(BaseEstimator):
-    """Small, dependency-free replacement for the SMOTE-like resampler.
-    """
-
-    def __init__(self, k_neighbors=5, random_state=None):
-        self.k_neighbors = k_neighbors
-        self.random_state = random_state
-
-    def fit_resample(self, X, y):
-        rng = np.random.RandomState(self.random_state)
-        X = np.asarray(X)
-        y = np.asarray(y)
-
-        classes, counts = np.unique(y, return_counts=True)
-        max_count = counts.max()
-
-        X_out = [X]
-        y_out = [y]
-
-        for cls, n_cls in zip(classes, counts):
-            n_to_gen = max_count - n_cls
-            if n_to_gen <= 0:
-                continue
-
-            Xc = X[y == cls]
-            n_samples = Xc.shape[0]
-
-            # If too few points to do kNN within class, just duplicate
-            if n_samples < 2:
-                idx = rng.randint(0, n_samples, size=n_to_gen)
-                X_syn = Xc[idx]
-                y_syn = np.full(n_to_gen, cls)
-                X_out.append(X_syn)
-                y_out.append(y_syn)
-                continue
-
-            k = min(self.k_neighbors, n_samples - 1)
-            nn = NearestNeighbors(n_neighbors=k + 1)
-            nn.fit(Xc)
-            neigh_idx = nn.kneighbors(Xc, return_distance=False)[:, 1:]  # exclude itself
-
-            X_syn = np.empty((n_to_gen, X.shape[1]), dtype=X.dtype)
-            for i in range(n_to_gen):
-                a = rng.randint(0, n_samples)
-                b = rng.choice(neigh_idx[a])
-                lam = rng.rand()
-                X_syn[i] = Xc[a] + lam * (Xc[b] - Xc[a])
-
-            y_syn = np.full(n_to_gen, cls)
-            X_out.append(X_syn)
-            y_out.append(y_syn)
-
-        return np.vstack(X_out), np.concatenate(y_out)
-    
-
-class ResampledClassifier(BaseEstimator, ClassifierMixin):
-    """Wrap a classifier; resample (X, y) inside fit before training."""
-
-    def __init__(self, estimator, resampler=None):
-        self.estimator = estimator
-        self.resampler = resampler
-
-    def fit(self, X, y, **fit_params):
-        X, y = check_X_y(X, y, accept_sparse=False)
-        self.estimator_ = clone(self.estimator)
-
-        if self.resampler is None:
-            Xr, yr = X, y
-        else:
-            self.resampler_ = clone(self.resampler)
-            Xr, yr = self.resampler_.fit_resample(X, y)
-
-        self.estimator_.fit(Xr, yr, **fit_params)
-        # for sklearn scorers / inspection
-        self.classes_ = getattr(self.estimator_, "classes_", np.unique(yr))
-        return self
-
-    def predict(self, X):
-        check_is_fitted(self, "estimator_")
-        X = check_array(X, accept_sparse=False)
-        return self.estimator_.predict(X)
-
-    def predict_proba(self, X):
-        check_is_fitted(self, "estimator_")
-        X = check_array(X, accept_sparse=False)
-        return self.estimator_.predict_proba(X)
-
-    def decision_function(self, X):
-        check_is_fitted(self, "estimator_")
-        X = check_array(X, accept_sparse=False)
-        return self.estimator_.decision_function(X)
-
-    def score(self, X, y, **params):
-        check_is_fitted(self, "estimator_")
-        X = check_array(X, accept_sparse=False)
-        return self.estimator_.score(X, y, **params)
