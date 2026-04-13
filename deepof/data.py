@@ -3061,7 +3061,7 @@ class Coordinates:
         ###
         # get full pretrained model path
         if pretrained:
-            pretrained = os.path.join(self._project_path, self._project_name, "trained_models","models",pretrained)  
+            pretrained = os.path.join(self._project_path, self._project_name, "Trained_models","models",pretrained)  
 
         try:
             model_val, model_score, model_part, log_summary = deepof.clustering.training.embedding_model_fittingPT(
