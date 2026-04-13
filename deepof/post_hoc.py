@@ -44,6 +44,7 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.mixture import GaussianMixture
 from sklearn.pipeline import Pipeline
+from sklearn.base import clone
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 import torch
 
@@ -159,7 +160,7 @@ def get_contrastive_soft_counts(
     soft_counts: Optional[Dict[str, np.ndarray]] = None,
     min_confidence: Optional[float] = 0.75,
     prior_weight: float = 1.0,
-):
+): # pragma: no cover  #legacy code
     """Extract soft counts for contrastive model.
 
     If `soft_counts` is provided, it is used as a per-frame prior over states (clusters),
@@ -2580,18 +2581,20 @@ def explain_clusters(
 
     """
     # Pass the data through the scaler and oversampler before computing SHAP values
-    processed_stats = full_cluster_clf.named_steps["normalization"].transform(
-        chunk_stats.values
-    )
-    processed_stats = full_cluster_clf.named_steps["oversampling"].fit_resample(
-        processed_stats, hard_counts
-    )[0]
-    processed_stats = pd.DataFrame(processed_stats, columns=chunk_stats.columns)
+    scaler = full_cluster_clf.named_steps["normalization"]
+    clfwrap = full_cluster_clf.named_steps["classifier"]
 
-    # Get SHAP values for the given model
+    X_scaled = scaler.transform(chunk_stats.values)
+
+    resampler = getattr(clfwrap, "resampler_", None) or getattr(clfwrap, "resampler", None)
+    if resampler is not None:
+        X_scaled, _ = clone(resampler).fit_resample(X_scaled, hard_counts)
+
+    processed_stats = pd.DataFrame(X_scaled, columns=chunk_stats.columns)
+
     n_clusters = len(np.unique(hard_counts))
     explainer = shap.KernelExplainer(
-        full_cluster_clf.named_steps["classifier"].predict_proba,
+        clfwrap.predict_proba,  # this expects scaled input
         data=shap.kmeans(processed_stats, n_clusters),
         normalize=False,
     )

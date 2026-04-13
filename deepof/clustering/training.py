@@ -901,6 +901,14 @@ def fit_VQVAE(
         "use_gnn": True,
         "interaction_regularization": common_cfg.interaction_regularization,
     }
+    
+    # Load pretrained model if available + early return
+    if common_cfg.pretrained:
+        print(f"Loading pretrained weights from {common_cfg.pretrained}")
+        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
+        if writer:
+            writer.flush(); writer.close()
+        return unwrap_dp(model), None, None, log_summary
 
     # Create model
     model = VQVAEPT(
@@ -1102,6 +1110,14 @@ def fit_contrastive(
         "use_gnn": True,
         "interaction_regularization": common_cfg.interaction_regularization,
     }
+
+    # Load pretrained model if available + early return
+    if common_cfg.pretrained:
+        print(f"Loading pretrained weights from {common_cfg.pretrained}")
+        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
+        if writer:
+            writer.flush(); writer.close()
+        return unwrap_dp(model), None, None, log_summary
 
     # Create model
     model = ContrastivePT(
