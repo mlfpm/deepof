@@ -15,8 +15,8 @@ from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 from sklearn.cluster import MiniBatchKMeans
 from scipy.ndimage import uniform_filter1d
-#from deeptime.markov import TransitionCountEstimator
-#from deeptime.markov.msm import MaximumLikelihoodMSM
+from deeptime.markov import TransitionCountEstimator
+from deeptime.markov.msm import MaximumLikelihoodMSM
 import types
 
 import numpy as np
@@ -27,12 +27,7 @@ import tqdm
 import umap
 from catboost import CatBoostClassifier
 from unittest.mock import MagicMock, patch
-#with patch.dict(sys.modules, {'SMOTE': MagicMock(), 'Pipeline': MagicMock()}):
-#    import SMOTE
-#    import Pipeline
 
-from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline
 
 
 from joblib import Parallel, delayed
@@ -50,6 +45,11 @@ from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.mixture import GaussianMixture
+from sklearn.base import BaseEstimator
+from sklearn.neighbors import NearestNeighbors
+from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 import torch
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, CONTINUOUS_BEHAVIORS
@@ -2510,8 +2510,10 @@ def train_supervised_cluster_detectors(
     cluster_clf = Pipeline(
         [
             ("normalization", StandardScaler()),
-            ("oversampling", SMOTE()),
-            ("classifier", CatBoostClassifier(verbose=(verbose > 2))),
+            ("classifier", ResampledClassifier(
+                estimator=CatBoostClassifier(verbose=(verbose > 2)),
+                resampler=SimpleSMOTE(random_state=42),
+            )),
         ]
     )
 
@@ -2536,8 +2538,10 @@ def train_supervised_cluster_detectors(
     full_cluster_clf = Pipeline(
         [
             ("normalization", StandardScaler()),
-            ("oversampling", SMOTE()),
-            ("classifier", CatBoostClassifier(verbose=(verbose > 2))),
+            ("classifier", ResampledClassifier(
+                estimator=CatBoostClassifier(verbose=(verbose > 2)),
+                resampler=SimpleSMOTE(random_state=42),
+            )),
         ]
     )
     if verbose:
@@ -2601,3 +2605,101 @@ def explain_clusters(
     )
 
     return shap_values, explainer, processed_stats
+
+
+class SimpleSMOTE(BaseEstimator):
+    """Small, dependency-free replacement for the SMOTE-like resampler.
+    """
+
+    def __init__(self, k_neighbors=5, random_state=None):
+        self.k_neighbors = k_neighbors
+        self.random_state = random_state
+
+    def fit_resample(self, X, y):
+        rng = np.random.RandomState(self.random_state)
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        classes, counts = np.unique(y, return_counts=True)
+        max_count = counts.max()
+
+        X_out = [X]
+        y_out = [y]
+
+        for cls, n_cls in zip(classes, counts):
+            n_to_gen = max_count - n_cls
+            if n_to_gen <= 0:
+                continue
+
+            Xc = X[y == cls]
+            n_samples = Xc.shape[0]
+
+            # If too few points to do kNN within class, just duplicate
+            if n_samples < 2:
+                idx = rng.randint(0, n_samples, size=n_to_gen)
+                X_syn = Xc[idx]
+                y_syn = np.full(n_to_gen, cls)
+                X_out.append(X_syn)
+                y_out.append(y_syn)
+                continue
+
+            k = min(self.k_neighbors, n_samples - 1)
+            nn = NearestNeighbors(n_neighbors=k + 1)
+            nn.fit(Xc)
+            neigh_idx = nn.kneighbors(Xc, return_distance=False)[:, 1:]  # exclude itself
+
+            X_syn = np.empty((n_to_gen, X.shape[1]), dtype=X.dtype)
+            for i in range(n_to_gen):
+                a = rng.randint(0, n_samples)
+                b = rng.choice(neigh_idx[a])
+                lam = rng.rand()
+                X_syn[i] = Xc[a] + lam * (Xc[b] - Xc[a])
+
+            y_syn = np.full(n_to_gen, cls)
+            X_out.append(X_syn)
+            y_out.append(y_syn)
+
+        return np.vstack(X_out), np.concatenate(y_out)
+    
+
+class ResampledClassifier(BaseEstimator, ClassifierMixin):
+    """Wrap a classifier; resample (X, y) inside fit before training."""
+
+    def __init__(self, estimator, resampler=None):
+        self.estimator = estimator
+        self.resampler = resampler
+
+    def fit(self, X, y, **fit_params):
+        X, y = check_X_y(X, y, accept_sparse=False)
+        self.estimator_ = clone(self.estimator)
+
+        if self.resampler is None:
+            Xr, yr = X, y
+        else:
+            self.resampler_ = clone(self.resampler)
+            Xr, yr = self.resampler_.fit_resample(X, y)
+
+        self.estimator_.fit(Xr, yr, **fit_params)
+        # for sklearn scorers / inspection
+        self.classes_ = getattr(self.estimator_, "classes_", np.unique(yr))
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self, "estimator_")
+        X = check_array(X, accept_sparse=False)
+        return self.estimator_.predict(X)
+
+    def predict_proba(self, X):
+        check_is_fitted(self, "estimator_")
+        X = check_array(X, accept_sparse=False)
+        return self.estimator_.predict_proba(X)
+
+    def decision_function(self, X):
+        check_is_fitted(self, "estimator_")
+        X = check_array(X, accept_sparse=False)
+        return self.estimator_.decision_function(X)
+
+    def score(self, X, y, **params):
+        check_is_fitted(self, "estimator_")
+        X = check_array(X, accept_sparse=False)
+        return self.estimator_.score(X, y, **params)
