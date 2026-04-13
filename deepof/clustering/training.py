@@ -1364,7 +1364,7 @@ def fit_VADE(
         model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
         if writer:
             writer.flush(); writer.close()
-        return unwrap_dp(model), None, None
+        return unwrap_dp(model), None, None, log_summary
 
 
     ###############
