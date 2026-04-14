@@ -503,9 +503,9 @@ def embedding_model_fittingPT(
     batch_size: int,
     latent_dim: int,
     epochs: int,
-    n_components: int,
-    # Logging/IO
     output_path: str,
+    # Logging/IO
+    n_components: int = 10,
     learning_rate: float = 1e-3,
     log_history: bool = True,
     data_path: str = ".",
@@ -568,7 +568,7 @@ def embedding_model_fittingPT(
     repel_weight: float = 0,
     repel_length_scale: float = 1.0,
     # TF-style cluster term
-    tf_cluster_weight: float = 0.0,
+    main_clustering_loss: float = 0.0,
     nonempty_weight: float = 2e-2,
     nonempty_floor_percent: float = 0.05,
     nonempty_p: float = 2.0,
@@ -701,7 +701,7 @@ def embedding_model_fittingPT(
         repel_weight=repel_weight,
         repel_length_scale=repel_length_scale,
 
-        tf_cluster_weight=tf_cluster_weight,
+        tf_cluster_weight=main_clustering_loss,
         nonempty_weight=nonempty_weight,
         nonempty_floor_percent=nonempty_floor_percent,
         nonempty_p=nonempty_p,

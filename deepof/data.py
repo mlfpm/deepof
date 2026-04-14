@@ -2520,15 +2520,20 @@ class Coordinates:
             else:
                 feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
 
+            # Sorting everything
+            nodes = sorted(graph.nodes())
+            edges = sorted(tuple(sorted(e)) for e in graph.edges())
+            adj_matrix = nx.adjacency_matrix(graph, nodelist=nodes).todense() #adj_matrix in new node order
+
             node_feature_names = (
-                [(i, "x") for i in list(graph.nodes())]
-                + [(i, "y") for i in list(graph.nodes())]
-                + list(graph.nodes())
+                [(i, "x") for i in nodes]
+                + [(i, "y") for i in nodes]
+                + nodes
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
             speed_feature_names = (
-                list(graph.nodes())
+                nodes
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
@@ -2549,7 +2554,7 @@ class Coordinates:
             
 
             inner_link_bool_mask = []
-            for e in [tuple(sorted(e)) for e in list(graph.edges)]:
+            for e in [tuple(sorted(e)) for e in edges]:
                 for j, f in enumerate(edge_feature_names):
                     if e == f:
                         edge_sorting_indices.append(j)
@@ -2626,7 +2631,7 @@ class Coordinates:
             return (
                 to_preprocess,
                 metainfo,
-                nx.adjacency_matrix(graph).todense(),
+                adj_matrix,
                 tab_dict,
                 global_scaler,
             )
@@ -2654,9 +2659,9 @@ class Coordinates:
                     dataset = (
                         tab[:, ~feature_names.isin(edge_feature_names)][
                             :, node_sorting_indices
-                        ].reshape([tab.shape[0], len(graph.nodes()), -1], order="F"),
+                        ].reshape([tab.shape[0], len(nodes), -1], order="F"),
                         deepof.utils.edges_to_weighted_adj(
-                            nx.adj_matrix(graph).todense(),
+                            adj_matrix,
                             tab[:, feature_names.isin(edge_feature_names)][
                                 :, edge_sorting_indices
                             ],
@@ -2679,7 +2684,7 @@ class Coordinates:
             metainfo['dist_standardize'] = dist_standardize
             metainfo['speed_standardize'] = speed_standardize
             metainfo['coord_standardize'] = coord_standardize
-            return to_preprocess, metainfo, nx.adjacency_matrix(graph).todense(), tab_dict, None
+            return to_preprocess, metainfo, adj_matrix, tab_dict, None
                 
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:
@@ -3426,7 +3431,7 @@ class TableDict(dict):
         keys=np.array(list(current_table_dict.keys()))
 
         if isinstance(test_videos,int):
-            #rng = np.random.seed(42)
+            rng = np.random.seed(42)
             test_indices = np.random.choice(
                 range(len(current_table_dict)), test_videos, replace=False, 
             )
@@ -3543,6 +3548,7 @@ class TableDict(dict):
             save_as_paths = coordinates._very_large_project
 
         keys_list = list(self.keys())
+        keys_list = sorted(self.keys())
         animal_ids = coordinates._animal_ids
         
         bin_info = _preprocess_time_bins(
@@ -3866,7 +3872,7 @@ class TableDict(dict):
             return raw_data[0], raw_data[1] if len(raw_data) > 1 else None
         return raw_data, None
 
-    def _get_sample_indices(self, table: Union[np.ndarray, pd.DataFrame], n_windows: int, no_nans: bool) -> np.ndarray:
+    def _get_sample_indices(self, table: Union[np.ndarray, pd.DataFrame], n_windows: int, no_nans: bool, rng = None) -> np.ndarray:
         """
         Generates a contiguous block of sample indices for a single table.
         
@@ -3892,7 +3898,9 @@ class TableDict(dict):
         max_start = len(source_table) - n_windows_to_sample
         
         # Select a random start position
-        start = np.random.randint(low=0, high=max(1, max_start + 1))
+        if rng is None:
+            rng = np.random.default_rng(0)  # or raise
+        start = rng.integers(low=0, high=max(1, max_start + 1))
         end = start + n_windows_to_sample
 
         # Map the relative slice back to the original table's indices
