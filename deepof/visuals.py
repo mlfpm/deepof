@@ -34,7 +34,7 @@ import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt, _suppress_warning
-from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS, DistanceUnit, TimeUnit
+from deepof.config import ROI_COLORS, ARENA_COLOR, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS, DistanceUnit, TimeUnit, VALID_NEST_POSITIONS
 from deepof.export_video import (
     VideoExportConfig,   
     output_annotated_video,
@@ -95,6 +95,7 @@ def plot_heatmaps(
     in_roi_criterion: str = "Center",
     # Others
     display_arena: bool = True,
+    nest_position: dict = None,
     xlim: float = None,
     ylim: float = None,
     extrapolate_heatmap: bool = True,
@@ -123,6 +124,7 @@ def plot_heatmaps(
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         display_rois (bool): Display the active ROI, if a ROI was selected. Defaults to True.              
         display_arena (bool): whether to plot a dashed line with an overlying arena perimeter. Defaults to True.
+        nest_position (dict): maps experiment IDs to nest corner ("top-left", "top-right", "bottom-left", "bottom-right"); flips coords so nest is always top-left. Defaults to None.
         xlim (float): x-axis limits.
         ylim (float): y-axis limits.
         extrapolate_heatmap (bool): show full heatmap including extrapolated parts (default=True)
@@ -150,6 +152,11 @@ def plot_heatmaps(
     )
     if isinstance(bodyparts,str):
         bodyparts=[bodyparts]
+
+    if nest_position is not None:
+        invalid = {k: v for k, v in nest_position.items() if v not in VALID_NEST_POSITIONS}
+        if invalid:
+            raise ValueError(f"Invalid nest_position values: {invalid}." f"Must be one of: {sorted(VALID_NEST_POSITIONS)}")
 
     coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, animals_in_roi=animals_in_roi)
 
@@ -198,6 +205,18 @@ def plot_heatmaps(
         
         #cut slice from table
         tab=tab.iloc[bin_info_time[key]]
+
+        # Apply nest position flip for this experiment
+        if nest_position is not None and key in nest_position:
+            corner = nest_position[key]
+            flip_x = corner in {"top-right", "bottom-right"}
+            flip_y = corner in {"bottom-left", "bottom-right"}
+            tab = tab.copy()
+            for bp in tab.columns.get_level_values(0).unique():
+                if flip_x:
+                    tab[(bp, "x")] = -tab[(bp, "x")]
+                if flip_y:
+                    tab[(bp, "y")] = -tab[(bp, "y")]
 
         #append table
         sampled_tabs.append(tab)

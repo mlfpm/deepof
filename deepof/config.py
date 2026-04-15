@@ -16,6 +16,7 @@ SYMMETRIC_BEHAVIORS=["nose2nose","sidebyside","sidereside"]
 ASYMMETRIC_BEHAVIORS=["nose2tail","nose2body","following"]
 CONTINUOUS_BEHAVIORS=["distance","cum-distance","speed"]
 CONTINUOUS_UNITS=["[mm]", "[mm]", "[mm/s]"]
+VALID_NEST_POSITIONS = {"top-left", "top-right", "bottom-left", "bottom-right"}
 
 ROI_COLORS = [(204, 20, 20),
        (204, 131, 20),
