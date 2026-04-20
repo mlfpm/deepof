@@ -2866,6 +2866,12 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
     return columns_to_keep
 
 
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Trying to unpickle estimator StandardScaler from version 1.2.0 when using version 1.7.2.",
+        "Trying to unpickle estimator NearestNeighbors from version 1.2.0 when using version 1.7.2."
+    ]
+)
 def load_precompiled_model(path, download_path, model_path, model_name):
     """Loads model for automatic arena segmentation"""
 

@@ -257,6 +257,7 @@ class Project:
         video_format: str = ".mp4",
         video_scale: str = None,
         number_of_rois: int = 0,
+        frame_rate: float = None,
         fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
@@ -459,7 +460,7 @@ class Project:
         self.likelihood_tolerance = likelihood_tol
         self.model = model
         self.smooth_alpha = smooth_alpha
-        self.frame_rate = None
+        self.frame_rate = frame_rate
         self.video_format = video_format
         self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -1154,7 +1155,8 @@ class Project:
         # load video info
         first_key=list(self.videos.keys())[0]
         current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
-        self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS))
+        if self.frame_rate is None:
+            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS))
         current_video_cap.release()
 
         # load table info
