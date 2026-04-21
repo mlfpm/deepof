@@ -2776,12 +2776,16 @@ class Coordinates:
         self,
         center: str = "Center",
         align: str = "Spine_1",
+        custom_behaviors: list[deepof.annotation_utils.DeepOF_behavior] = None,
+        custom_behavior_inputs: dict = {}
     ) -> table_dict:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
         Args:
             center (str): Body part to center coordinates on. "Center" by default.
             align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
+            custom_behaviors (list[DeepOF_behavior]): a list of custom DeepOF_behavior objects. Added at the beginning of supervised behaviors if provided
+            custom_behavior_inputs (dict): a dictionary containing additional information you need for your custom behaviors
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
@@ -2915,6 +2919,8 @@ class Coordinates:
                     center=center,
                     params=params,
                     run_numba=self._run_numba,
+                    custom_behaviors = custom_behaviors,
+                    custom_behavior_inputs = custom_behavior_inputs
                 )
 
                 supervised_tags.index = tag_index
