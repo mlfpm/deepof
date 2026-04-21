@@ -40,6 +40,11 @@ from deepof.export_video import (
     output_annotated_video,
     output_videos_per_cluster, 
 )
+from deepof.utils import (
+    get_supervised_behaviors_in_roi,
+    get_unsupervised_behaviors_in_roi,
+    get_behavior_frames_in_roi,
+)
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
@@ -52,9 +57,6 @@ from deepof.visuals_utils import (
     _get_polygon_coords,
     _scatter_embeddings,
     get_behavior_colors,
-    get_supervised_behaviors_in_roi,
-    get_unsupervised_behaviors_in_roi,
-    get_behavior_frames_in_roi,
     _apply_rois_to_bin_info,
     BGR_to_hex,
     _preprocess_transitions,
@@ -393,7 +395,7 @@ def _plot_experiment_gantt(
     if isinstance(behaviors_to_plot, str):
         behaviors_to_plot=[behaviors_to_plot]
     if  behaviors_to_plot is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
-        behaviors_to_plot = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot)
+        behaviors_to_plot, _ = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot, custom_behaviors=coordinates._custom_behaviors)
 
 
     if animals_in_roi is None or roi_mode == "behaviorwise":
@@ -493,7 +495,7 @@ def _plot_experiment_gantt(
             gantt = np.concatenate([gantt, additional_checkpoints], axis=0)
 
     # set colors with number of available features to keep color consitent if only a subset is selected
-    colors = get_behavior_colors(behaviors_to_plot, coordinates._animal_ids)
+    colors = get_behavior_colors(behaviors_to_plot, coordinates._animal_ids, coordinates._custom_behaviors)
 
     # apply time and roi bins to data 
     if plot_type == "unsupervised":
@@ -1748,7 +1750,7 @@ def count_all_events(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         tab = get_dt(tab_dict,key,load_range=load_range)
         
         # in case tab is a numpy array (soft_counts), transform numpy array in analogous pandas datatable
@@ -3451,7 +3453,7 @@ def export_annotated_video(
     if isinstance(behaviors, str):
         behaviors=[behaviors]
     if  behaviors is not None and all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors]) and len(np.unique(behaviors))==len(behaviors):
-        behaviors = deepof.visuals_utils.generate_behavior_combinations(behaviors)
+        behaviors, _ = deepof.visuals_utils.generate_behavior_combinations(behaviors, custom_behaviors=coordinates._custom_behaviors)
     # Create video config
     video_export_config = VideoExportConfig(
         display_time=display_time,
@@ -3828,7 +3830,7 @@ def plot_behavior_trends(
     if isinstance(behaviors_to_plot, str):
         behaviors_to_plot=[behaviors_to_plot]
     if  all([behavior_to_plot in coordinates._animal_ids for behavior_to_plot in behaviors_to_plot]) and len(np.unique(behaviors_to_plot))==len(behaviors_to_plot):
-        behaviors_to_plot = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot)
+        behaviors_to_plot, _ = deepof.visuals_utils.generate_behavior_combinations(behaviors_to_plot, custom_behaviors=coordinates._custom_behaviors)
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
     elif roi_number is None:
@@ -4686,16 +4688,16 @@ def return_supervised_summary(
             supervised_binned=supervised_exp.iloc[multi_bin_info[bin][exp_id]['time']]
 
             if roi_number is not None:
-                supervised_binned=deepof.visuals_utils.get_supervised_behaviors_in_roi(supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode)
+                supervised_binned=deepof.utils.get_supervised_behaviors_in_roi(supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode)
 
-            supervised_binary = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False)
+            supervised_binary, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False, custom_behaviors=coordinates._custom_behaviors)
 
             # behaviors in seconds
             frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
             df_row=[frame_row_info, frame_row_behavior_1]
 
             for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
-                supervised_behavior = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior])
+                supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior],  custom_behaviors=coordinates._custom_behaviors)
 
                 continuous_mean, converted_unit=deepof.visuals_utils.scale_units(
                     coordinates, 

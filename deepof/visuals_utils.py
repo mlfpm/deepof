@@ -24,14 +24,16 @@ from natsort import os_sorted
 from scipy.interpolate import interp1d
 
 
-import deepof.annotation_utils
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
 from deepof.config import (
     PROGRESS_BAR_FIXED_WIDTH,
     ONE_ANIMAL_COLOR_MAP,
-    TWO_ANIMALS_COLOR_MAP,
+    TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL,
+    TWO_ANIMALS_COLOR_MAP_DIRECTIONAL,
+    CUSTOM_BEHAVIOR_COLOR_MAP,
+    CONTINUOUS_COLOR_MAP,
     DEEPOF_8_BODYPARTS,
     DEEPOF_11_BODYPARTS,
     DEEPOF_14_BODYPARTS,
@@ -45,6 +47,8 @@ from deepof.config import (
     DistanceUnit,
     TimeUnit,
 )
+from deepof.annotation_utils import DeepOF_behavior, Behavior_scope, Behavior_output
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -109,7 +113,7 @@ def RGB_to_hex(bgr_color):
     r, g, b = bgr_color[0], bgr_color[1], bgr_color[2]
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
-def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None):
+def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None, custom_behaviors: List[DeepOF_behavior] =None):
     """
     Gets corresponding colors for all supervised behaviors or clusters within behaviors list.
 
@@ -166,31 +170,30 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     # Set supervised colors
     #######
 
-    # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=SINGLE_BEHAVIORS
-    symmetric_behaviors=SYMMETRIC_BEHAVIORS
-    asymmetric_behaviors=ASYMMETRIC_BEHAVIORS
+    # Behavior name lists. 
+    single_behaviors=list(ONE_ANIMAL_COLOR_MAP.keys())
+    symmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL.keys())
+    asymmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_DIRECTIONAL.keys())
 
-    # create names of supervised behaviors from animal ids and raw behavior names in correct order
+    # Create name-color dictionaries for all in the current setting possible behaviors
     if animal_ids is None or animal_ids[0]=='':
-        supervised = single_behaviors
-        color_map = ONE_ANIMAL_COLOR_MAP
-    elif len(animal_ids)==1:
-        supervised = single_behaviors
-        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
-        color_map = ONE_ANIMAL_COLOR_MAP
-    else:
-        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
-        color_map = TWO_ANIMALS_COLOR_MAP
+        supervised = single_behaviors              
+        supervised_colors = {key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
 
-    supervised_max = 1
-    if len(supervised) > 0:
-        supervised_max = len(supervised)
-    # Generate color map of appropriate length
-    supervised_colors = np.tile(
-        color_map,
-        int(np.ceil(supervised_max / len(color_map))),
-    )
+        # append custom behaviors
+        supervised = [custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+        supervised_colors.update({custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+
+    elif len(animal_ids)==1:
+        supervised = [animal_ids[0] + behavior for behavior in single_behaviors]            
+        supervised_colors = {animal_ids[0] + "_" + key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
+
+        # append custom behaviors
+        supervised = [animal_ids[0] + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+        supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+
+    else:
+        supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, False, custom_behaviors)
 
     # Select appropriate color for all given behaviors
     colors=[]
@@ -198,80 +201,115 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         if behavior in clusters:
             colors.append(cluster_colors[int(re.search(r'\d+', behavior)[0])])
         elif behavior in supervised:
-            colors.append(supervised_colors[supervised.index(behavior)])
+            colors.append(supervised_colors[behavior])
         else:
             colors.append(None)
 
     return colors
 
 
-def generate_behavior_combinations(animal_ids, symmetric_behaviors=True, asymmetric_behaviors=True, single_behaviors=True, continuous_behaviors=True):
-    """
-    Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
+def generate_behavior_combinations(
+    animal_ids,
+    symmetric_behaviors=True,
+    asymmetric_behaviors=True,
+    single_behaviors=True,
+    continuous_behaviors=True,
+    custom_behaviors: List[DeepOF_behavior] = None,
+):
+    """Return (result_list, color_dict) with full column names and their colors."""
+    custom_behaviors = custom_behaviors or []
 
-    Args:
-        animal_ids (list): List of strings representing animal IDs.
-        symmetric_behaviors (list): List of symmetric paired behaviors.
-        asymmetric_behaviors (list): List of asymmetric paired behaviors.
-        single_behaviors (list): List of single mouse behaviors.
+    # Resolve behavior lists (built-ins + customs by scope)
+    sym = list(SYMMETRIC_BEHAVIORS) if symmetric_behaviors is True else []
+    asym = list(ASYMMETRIC_BEHAVIORS) if asymmetric_behaviors is True else []
+    single = list(SINGLE_BEHAVIORS) if single_behaviors is True else []
+    cont = list(CONTINUOUS_BEHAVIORS) if continuous_behaviors is True else []
 
-    Returns:
-        list: A list of strings with the combined animal IDs and behaviors.
-    """
+    if isinstance(symmetric_behaviors, list):
+        sym = symmetric_behaviors
+    if isinstance(asymmetric_behaviors, list):
+        asym = asymmetric_behaviors
+    if isinstance(single_behaviors, list):
+        single = single_behaviors
+    if isinstance(continuous_behaviors, list):
+        cont = continuous_behaviors
+
+    # Add custom behaviors by scope
+    for b in custom_behaviors:
+        if b.scope == Behavior_scope.PAIR_NONDIRECTIONAL:
+            sym.append(b.name)
+        elif b.scope == Behavior_scope.PAIR:
+            asym.append(b.name)
+        elif b.scope == Behavior_scope.INDIVIDUAL:
+            (cont if b.output_kind == Behavior_output.CONTINUOUS else single).append(b.name)
+
+    ids = [""] if animal_ids is None else [f"{aid}_" for aid in animal_ids]
+    n = len(ids)
+
+    # Custom color lookup (user-provided .color or from palette)
+    custom_colors = {}
+    palette = itertools.cycle(CUSTOM_BEHAVIOR_COLOR_MAP.values())
+    for b in custom_behaviors:
+        custom_colors[b.name] = b.color if b.color is not None else next(palette)
+
     result = []
-    # Defaults for boolean true false inputs if no list of names is given
-    if symmetric_behaviors==True:
-        symmetric_behaviors = SYMMETRIC_BEHAVIORS
-    elif symmetric_behaviors==False:
-        symmetric_behaviors=[]
-    if asymmetric_behaviors==True:
-        asymmetric_behaviors = ASYMMETRIC_BEHAVIORS
-    elif asymmetric_behaviors==False:
-        asymmetric_behaviors=[]
-    if single_behaviors==True:
-        single_behaviors = SINGLE_BEHAVIORS
-    elif single_behaviors==False:
-        single_behaviors=[]
-    if continuous_behaviors==True:   
-        continuous_behaviors=CONTINUOUS_BEHAVIORS
-    elif continuous_behaviors==False:
-        continuous_behaviors=[]
+    color_dict = {}
 
-    if animal_ids is None:
-        animal_ids=[""]
-    else:
-        animal_ids=[id + "_" for id in animal_ids]
+    # Symmetric (nondirectional) pairs
+    for beh in sym:
+        col = custom_colors.get(beh, TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL.get(beh))
+        for a, b in itertools.combinations(ids, 2):
+            key = f"{a}{b}{beh}"
+            result.append(key)
+            color_dict[key] = col if isinstance(col, str) else col[0]
 
-    
-    # Process symmetric paired behaviors
-    for behavior in symmetric_behaviors:
-        for pair in itertools.combinations(animal_ids, 2):
-            # Sort the pair to ensure consistent order and avoid duplicates
-            sorted_pair = sorted(pair)
-            combined = f"{sorted_pair[0]}{sorted_pair[1]}{behavior}"
-            result.append(combined)
-    
-    # Process asymmetric paired behaviors
-    for behavior in asymmetric_behaviors:
-        for pair in itertools.permutations(animal_ids, 2):
-            combined = f"{pair[0]}{pair[1]}{behavior}"
-            result.append(combined)
-    
-    # Process single mouse behaviors
-    for animal_id in animal_ids:
-        for behavior in single_behaviors:
-            if behavior != "missing" and behavior not in CONTINUOUS_BEHAVIORS:
-                combined = f"{animal_id}{behavior}"
-                result.append(combined)
-    
-    # Add missing
-    if "missing" in single_behaviors:            
-        result = result + [id + "missing" for id in animal_ids] 
-    # Add continuous behaviors
-    for cont_behavior in continuous_behaviors:
-        result = result + [id + cont_behavior for id in animal_ids]           
-    
-    return result
+    # Asymmetric (directional) pairs
+    for beh in asym:
+        c = custom_colors.get(beh, TWO_ANIMALS_COLOR_MAP_DIRECTIONAL.get(beh))
+        c0, c1 = c if isinstance(c, (tuple, list)) else (c, c)
+        remember=[]
+        for a, b in itertools.permutations(ids, 2):
+            key = f"{a}{b}{beh}"
+            result.append(key)
+            color_dict[key] = c0 if b+a not in remember else c1
+            remember.append(a+b)
+
+    # Single-mouse behaviors
+    for i, aid in enumerate(ids):
+        for beh in single:
+            if beh == "missing":
+                continue
+            key = f"{aid}{beh}"
+            result.append(key)
+
+            c = custom_colors.get(beh, ONE_ANIMAL_COLOR_MAP.get(beh))
+            if isinstance(c, (tuple, list)):
+                color_dict[key] = c[0] if n <= 1 else c[i % 2]
+            else:
+                color_dict[key] = c
+
+    # Special case for missing (if requested)
+    if "missing" in single:
+        for i, aid in enumerate(ids):
+            key = f"{aid}missing"
+            result.append(key)
+            c0, c1 = ONE_ANIMAL_COLOR_MAP["missing"]
+            color_dict[key] = c0 if n <= 1 else (c0 if i % 2 == 0 else c1)
+            
+    # continuous-mouse behaviors
+    for i, aid in enumerate(ids):
+        for beh in cont:
+
+            key = f"{aid}{beh}"
+            result.append(key)
+
+            c = custom_colors.get(beh, CONTINUOUS_COLOR_MAP.get(beh))
+            if isinstance(c, (tuple, list)):
+                color_dict[key] = c[0] if n <= 1 else c[i % 2]
+            else:
+                color_dict[key] = c
+
+    return result, color_dict
 
 
 def calculate_average_arena(
@@ -1191,185 +1229,6 @@ def _apply_rois_to_bin_info(
                 bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
             
     return bin_info
-
-
-def _get_mousevise_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-):
-    """Filter out all frames in which the requested animals are not inside of the ROI"""
-    
-    # get list of masks for all animals
-    masks = [local_bin_info[aid] for aid in animal_ids]
-    if not masks:
-        return cur_supervised # No animals to filter by, return as is
-    
-    # Fancy numpy operation
-    combined_mask = np.logical_and.reduce(masks)
-    
-    # Apply the combined mask to the entire DataFrame at once.
-    cur_supervised.loc[~combined_mask, :] = np.nan
-    return cur_supervised  
-
-
-
-def _get_behaviorwise_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-):
-    """Filter out all frames in which the requested animals that take part in each individual behavior are not inside of the ROI"""
-
-    def _get_col_base_name(col: Any) -> str:
-        """Safely gets the first level of a column name, handling MultiIndex."""
-        return col[0] if isinstance(col, tuple) else col
-
-    # 1. Determine which columns are relevant (involve at least one target_id).
-    # This list comprehension is more direct than the original nested loop.
-    valid_cols = {
-        col for col in cur_supervised.columns 
-        if any(_get_col_base_name(col).startswith(animal_id) for animal_id in animal_ids)
-    }
-
-    # 2. Invalidate all columns that do not involve any of the target animals.
-    invalid_cols = cur_supervised.columns.difference(list(valid_cols))
-    if not invalid_cols.empty:
-        cur_supervised[invalid_cols] = np.nan
-
-    if not valid_cols:
-        return cur_supervised # No relevant columns to process further.
-
-    # 3. Apply ROI masks animal by animal, but only to their relevant columns.
-    for animal_id, roi_mask in local_bin_info.items():
-        if animal_id == "time":
-            continue
-        # if there is more than one mosue, add underscores
-        animal_id_suffix = animal_id
-        if len(local_bin_info)>2:
-            animal_id_suffix = animal_id + "_"
-            
-        # Find which of the valid_cols are associated with the current animal_id
-        cols_for_this_animal = [
-            col for col in valid_cols 
-            if (animal_id_suffix) in _get_col_base_name(col)
-        ]
-        
-        if cols_for_this_animal:
-            # Apply the specific ROI mask for this animal to its columns.
-            cur_supervised.loc[~roi_mask, cols_for_this_animal] = np.nan
-            
-    return cur_supervised
-    
-
-def get_supervised_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-    roi_mode: str = "mousewise",
-):
-    """Filter supervised behaviors based on rois given by animal_ids.
-
-    Args:
-        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
- 
-    Returns:
-        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
-    """
-    
-    # Check and reformat input
-    if not animal_ids:
-        return cur_supervised  
-    animal_ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids)
-
-    cur_supervised=copy.copy(cur_supervised)
-
-    # Filter 
-    if roi_mode=="mousewise":
-        cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
-    elif roi_mode == "behaviorwise":
-        cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
-    else:
-        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
-            
-    return cur_supervised
-
-
-def get_unsupervised_behaviors_in_roi(
-        cur_unsupervised: np.array,
-        local_bin_info: dict,
-        animal_ids: str, 
-):
-    """Filter unsupervised behaviors based on rois given by animal_ids.
-
-    Args:
-        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-    
-    Returns:
-        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
-    """
-
-    cur_unsupervised=copy.copy(cur_unsupervised)
-    if type(animal_ids)==str:
-        animal_ids=[animal_ids]
-    elif animal_ids is None:
-        animal_ids=[""] 
-
-    if len(cur_unsupervised.shape)==1:
-        for aid in animal_ids:
-            cur_unsupervised[~local_bin_info[aid]]=-1    
-    else:
-        for aid in animal_ids: 
-            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
-
-    return cur_unsupervised
-
-
-def get_behavior_frames_in_roi(
-    behavior: str,
-    local_bin_info: dict,
-    animal_ids: Union[str, list],        
-):
-    """Filter unsupervised behaviors based on rois given by animal_ids.
-
-    Args:
-        behavior (str): Behavior for which frames in ROi get determined.
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-    
-    Returns:
-        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
-    """
-
-    if isinstance(animal_ids, str):
-        animal_ids=[animal_ids]
-    elif animal_ids is None:
-        animal_ids=[""]   
-
-    local_bin_info = copy.copy(local_bin_info)
-    frames = copy.copy(local_bin_info["time"])
-
-    is_supervised_behavior = False
-    if behavior is not None:
-        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
-       
-    if is_supervised_behavior:
-        for aid in local_bin_info.keys():
-            if aid == "time":
-                continue
-            if aid + "_" in behavior:
-                frames[~local_bin_info[aid]]=-1
-    else:
-        for aid in animal_ids:
-            frames[~local_bin_info[aid]]=-1
-    
-    frames=frames[frames >= 0]
-    return frames
     
 
 def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):

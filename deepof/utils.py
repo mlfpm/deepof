@@ -1018,7 +1018,7 @@ def count_transitions(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         # Create empty tab, in case load range does not contain any valid frames
         if load_range is not None and len(load_range)==0:
             meta_info = get_dt(tab_dict,key,only_metainfo=True)
@@ -1760,6 +1760,185 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
             mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
 
     return mask
+
+
+def _get_mousevise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals are not inside of the ROI"""
+    
+    # get list of masks for all animals
+    masks = [local_bin_info[aid] for aid in animal_ids]
+    if not masks:
+        return cur_supervised # No animals to filter by, return as is
+    
+    # Fancy numpy operation
+    combined_mask = np.logical_and.reduce(masks)
+    
+    # Apply the combined mask to the entire DataFrame at once.
+    cur_supervised.loc[~combined_mask, :] = np.nan
+    return cur_supervised  
+
+
+
+def _get_behaviorwise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals that take part in each individual behavior are not inside of the ROI"""
+
+    def _get_col_base_name(col: Any) -> str:
+        """Safely gets the first level of a column name, handling MultiIndex."""
+        return col[0] if isinstance(col, tuple) else col
+
+    # 1. Determine which columns are relevant (involve at least one target_id).
+    # This list comprehension is more direct than the original nested loop.
+    valid_cols = {
+        col for col in cur_supervised.columns 
+        if any(_get_col_base_name(col).startswith(animal_id) for animal_id in animal_ids)
+    }
+
+    # 2. Invalidate all columns that do not involve any of the target animals.
+    invalid_cols = cur_supervised.columns.difference(list(valid_cols))
+    if not invalid_cols.empty:
+        cur_supervised[invalid_cols] = np.nan
+
+    if not valid_cols:
+        return cur_supervised # No relevant columns to process further.
+
+    # 3. Apply ROI masks animal by animal, but only to their relevant columns.
+    for animal_id, roi_mask in local_bin_info.items():
+        if animal_id == "time":
+            continue
+        # if there is more than one mosue, add underscores
+        animal_id_suffix = animal_id
+        if len(local_bin_info)>2:
+            animal_id_suffix = animal_id + "_"
+            
+        # Find which of the valid_cols are associated with the current animal_id
+        cols_for_this_animal = [
+            col for col in valid_cols 
+            if (animal_id_suffix) in _get_col_base_name(col)
+        ]
+        
+        if cols_for_this_animal:
+            # Apply the specific ROI mask for this animal to its columns.
+            cur_supervised.loc[~roi_mask, cols_for_this_animal] = np.nan
+            
+    return cur_supervised
+    
+
+def get_supervised_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+    roi_mode: str = "mousewise",
+):
+    """Filter supervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+ 
+    Returns:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
+    """
+    
+    # Check and reformat input
+    if not animal_ids:
+        return cur_supervised  
+    animal_ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids)
+
+    cur_supervised=copy.copy(cur_supervised)
+
+    # Filter 
+    if roi_mode=="mousewise":
+        cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    elif roi_mode == "behaviorwise":
+        cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    else:
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
+            
+    return cur_supervised
+
+
+def get_unsupervised_behaviors_in_roi(
+        cur_unsupervised: np.array,
+        local_bin_info: dict,
+        animal_ids: str, 
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
+    """
+
+    cur_unsupervised=copy.copy(cur_unsupervised)
+    if type(animal_ids)==str:
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""] 
+
+    if len(cur_unsupervised.shape)==1:
+        for aid in animal_ids:
+            cur_unsupervised[~local_bin_info[aid]]=-1    
+    else:
+        for aid in animal_ids: 
+            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
+
+    return cur_unsupervised
+
+
+def get_behavior_frames_in_roi(
+    behavior: str,
+    local_bin_info: dict,
+    animal_ids: Union[str, list],        
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        behavior (str): Behavior for which frames in ROi get determined.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
+    """
+
+    if isinstance(animal_ids, str):
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""]   
+
+    local_bin_info = copy.copy(local_bin_info)
+    frames = copy.copy(local_bin_info["time"])
+
+    is_supervised_behavior = False
+    if behavior is not None:
+        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
+       
+    if is_supervised_behavior:
+        for aid in local_bin_info.keys():
+            if aid == "time":
+                continue
+            if aid + "_" in behavior:
+                frames[~local_bin_info[aid]]=-1
+    else:
+        for aid in animal_ids:
+            frames[~local_bin_info[aid]]=-1
+    
+    frames=frames[frames >= 0]
+    return frames
 
 
 # noinspection PyArgumentList

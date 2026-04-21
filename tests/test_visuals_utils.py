@@ -39,6 +39,8 @@ from deepof.visuals_utils import (
     cohend,
     _preprocess_time_bins,
     _apply_rois_to_bin_info,
+)
+from deepof.utils import (
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
@@ -111,7 +113,7 @@ def test_get_behavior_colors(experiment_type):
     behaviors=list(supervised['test'].keys())
 
     # remove continuous behaviors (they currently do not get a color attributed)
-    continuous_behaviors=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
+    continuous_behaviors, _=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
     behaviors=list(set(behaviors)-set(continuous_behaviors))
 
     colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)

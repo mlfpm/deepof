@@ -201,7 +201,7 @@ def output_videos_per_cluster(
                     
                     if roi_number is not None:
                         behavior_for_roi = behavior if roi_mode == "behaviorwise" else None
-                        frames_in_roi = deepof.visuals_utils.get_behavior_frames_in_roi(
+                        frames_in_roi = deepof.utils.get_behavior_frames_in_roi(
                             behavior=behavior_for_roi, local_bin_info=bin_info[exp_id],
                             animal_ids=animals_in_roi,
                         )
@@ -231,8 +231,8 @@ def output_videos_per_cluster(
         
         clear_output()
     
-    if hasattr(deepof.visuals_utils.get_behavior_frames_in_roi, '_warning_issued'):
-        deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
+    if hasattr(deepof.utils.get_behavior_frames_in_roi, '_warning_issued'):
+        deepof.utils.get_behavior_frames_in_roi._warning_issued = False
 
 
 def output_videos_per_cluster_old(
@@ -398,7 +398,7 @@ def output_videos_per_cluster_old(
                         behavior_in=behaviors[0]
                     else:
                         behavior_in=None
-                    frames=deepof.visuals_utils.get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
+                    frames=deepof.utils.get_behavior_frames_in_roi(behavior=behavior_in, local_bin_info=bin_info[key], animal_ids=animals_in_roi)
                 else:
                     frames=bin_info[key]["time"]          
 
@@ -430,7 +430,7 @@ def output_videos_per_cluster_old(
         out.release()
         #to not flood the output with loading bars
         clear_output()
-    deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
+    deepof.utils.get_behavior_frames_in_roi._warning_issued = False
 
 
 def _prepare_behavior_dataframe(
@@ -657,7 +657,7 @@ def output_annotated_video(
 
     # --- Drawing & Annotation Parameter Setup ---
     params = VideoExportProps()
-    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, behavior_df)
+    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, behavior_df, coordinates._custom_behaviors)
     behavior_counters = np.zeros(len(behaviors))
 
     # Pre-calculate text size for layout purposes
@@ -867,7 +867,7 @@ def output_annotated_video_old(
     x = 10  # 10 pixels from left
     y = 10 + text_height_time  # 10 pixels from top (accounting for text height)
     padding = 5
-    bg_color = deepof.visuals_utils.get_behavior_colors(behaviors, tab)
+    bg_color = deepof.visuals_utils.get_behavior_colors(behaviors, tab, coordinates._custom_behaviors)
 
     diff_frames = np.diff(frames)
     for i in (tqdm(range(len(frames)), desc=f"{'Exporting behavior video':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="Frame")) if display_loading_bar else range(len(frames)):

@@ -1473,6 +1473,7 @@ class Coordinates:
         self._run_numba = run_numba
         self._very_large_project = very_large_project
         self._version = version
+        self._custom_behaviors = None
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -2798,6 +2799,9 @@ class Coordinates:
             This is not supported by the current version of deepof"""
             )  # pragma: no cover
         
+        deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_inputs)
+        self._custom_behaviors=deepof.annotation_utils.assign_custom_behavior_colors(custom_behaviors)
+
         # get immobility classifer
         self._trained_model_path = os.path.join(self._project_path, self._project_name, "trained_models",)  
         immobility_estimator = deepof.utils.load_precompiled_model(

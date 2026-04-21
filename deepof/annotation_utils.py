@@ -8,10 +8,10 @@ import os
 import copy
 import pickle
 import warnings
-from itertools import combinations
+from itertools import combinations, cycle
 from typing import Any, List, NewType, Union, Tuple, Callable, Optional, Mapping
 from enum import Enum, auto
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numba as nb
 import numpy as np
@@ -22,13 +22,14 @@ from natsort import os_sorted
 from shapely.geometry import Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-import requests
+import re
 
 import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
 from deepof.data_loading import get_dt, _suppress_warning
 import xgboost #as xgb
+from deepof.config import SINGLE_BEHAVIORS, SYMMETRIC_BEHAVIORS,ASYMMETRIC_BEHAVIORS,CONTINUOUS_BEHAVIORS,CUSTOM_BEHAVIOR_COLOR_MAP
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
@@ -45,7 +46,7 @@ class Behavior_scope(Enum):
     INDIVIDUAL = auto()
     PAIR = auto()
     PAIR_NONDIRECTIONAL = auto()
-    GLOBAL = auto()
+    #GLOBAL = auto() #may be added later on
 
 
 class Behavior_output(Enum):
@@ -66,6 +67,7 @@ class BehaviorContext:
     frame_rate: float
     arena_type: Any
     arena_params: Any
+    roi_dict: dict
 
     # core tables
     raw_coords: pd.DataFrame
@@ -145,6 +147,10 @@ class DeepOF_behavior:
     scope: Behavior_scope
     output_kind: Behavior_output
     compute: BehaviorFn
+    
+
+    # Optional: assign a user defined hex color. If None, a color from deepof.config.CUSTOM_BEHAVIOR_COLOR_MAP will be assigned
+    color: Optional[str] = None
 
     # Optional: override postprocess; if None, use default_postprocess(...)
     postprocess: Optional[PostprocessFn] = None
@@ -154,6 +160,9 @@ class DeepOF_behavior:
 
     # Optional: ordering control (e.g., keep speed measures last)
     order: int = 0
+
+    def set_color(self, color: Optional[str]) -> "DeepOF_behavior":
+        return replace(self, color=color)
 
     def column_name(self, ctx: BehaviorContext, animal_ids: animal_ids) -> str:
         if self.scope is Behavior_scope.INDIVIDUAL:
@@ -1384,6 +1393,7 @@ def supervised_tagging(
         frame_rate=coord_object._frame_rate,
         arena_type=coord_object._arena,
         arena_params=coord_object._arena_params[key],
+        roi_dict=coord_object._roi_dicts[key],
 
         raw_coords = raw_coords,
         coords = coords,
@@ -1680,6 +1690,50 @@ def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, thresh
     # Check rows where any relevant column is below the threshold
     proximity_mask = (df[relevant_cols] < threshold).any(axis=1)
     return proximity_mask.astype(int).to_numpy()
+
+
+def validate_custom_behaviors(custom_behaviors: list[DeepOF_behavior] = None, custom_behavior_inputs: dict = {}): 
+
+    if custom_behaviors is None:
+        return None
+    if custom_behaviors is not None and (not isinstance(custom_behaviors,list) or not isinstance(custom_behaviors[0], DeepOF_behavior)): # pragma: no cover
+        raise ValueError("\"custom_behaviors\" need to be a list of DeepOF_behavior objects or None!")
+    if not isinstance(custom_behavior_inputs,dict): # pragma: no cover
+        raise ValueError("\"custom_behavior_inputs\" needs to be a dictionary!")
+    CUSTOM_BEHAVIORS=[]
+    for custom_behavior in custom_behaviors:
+        if "_" in custom_behavior.name: # pragma: no cover
+            raise ValueError("No \"_\" allowed in behavior names. Use \"-\" instead")
+        if not custom_behavior.scope==Behavior_scope.INDIVIDUAL and custom_behavior.output_kind==Behavior_output.CONTINUOUS: # pragma: no cover
+            raise NotImplementedError("Currently continuous behaviors are only supported for individuals!")
+        if (custom_behavior.name in SINGLE_BEHAVIORS or custom_behavior.name in SYMMETRIC_BEHAVIORS or 
+        custom_behavior.name in ASYMMETRIC_BEHAVIORS or custom_behavior.name in CONTINUOUS_BEHAVIORS): # pragma: no cover
+            raise ValueError(f"The behavior name {custom_behavior.name} is already in use!")
+        if custom_behavior.name in CUSTOM_BEHAVIORS: # pragma: no cover
+            raise ValueError(f"All your custom behaviors need unique names. The name {custom_behavior.name} occurs at least twice!")
+        CUSTOM_BEHAVIORS.append(custom_behavior.name)
+
+
+def assign_custom_behavior_colors(custom_behaviors: list[DeepOF_behavior] = None):
+    """Returns a list of hex colors (same order as custom_behaviors), uses user defined colors if available"""
+
+    if custom_behaviors is None:
+        return None
+
+    pal = cycle(list(CUSTOM_BEHAVIOR_COLOR_MAP.values()))
+    for idx, custom_behavior in enumerate(custom_behaviors): 
+
+        if custom_behavior.color is not None and isinstance(custom_behavior.color, str) and re.search(r'^#(?:[0-9a-fA-F]{3}){1,2}$', custom_behavior.color):
+            continue
+        else:
+            custom_behaviors[idx] = custom_behavior.set_color(next(pal))
+    
+    return custom_behaviors
+
+    
+        
+
+    
     
 
 if __name__ == "__main__":

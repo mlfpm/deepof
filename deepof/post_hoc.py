@@ -53,7 +53,6 @@ from deepof.legacy_smote_handling import SimpleSMOTE, ResampledClassifier
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, CONTINUOUS_BEHAVIORS
 import deepof.data
 import deepof.utils
-import deepof.visuals_utils
 from deepof.data_loading import get_dt, save_dt
 
 
@@ -1546,7 +1545,7 @@ def get_time_on_cluster(
         hard_counts = deepof.utils.row_nanargmax(preloaded[key])
 
         if roi_number is not None:
-            hard_counts = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
+            hard_counts = deepof.utils.get_unsupervised_behaviors_in_roi(hard_counts, bin_info[key], animals_in_roi)
             hard_counts=hard_counts[hard_counts >= 0]
         
         
@@ -1558,7 +1557,7 @@ def get_time_on_cluster(
                 k: v / sum(list(hard_count_counters[key].values())) for k, v in hard_count_counters[key].items()
                 }
     #reset function warning
-    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
+    deepof.utils.get_unsupervised_behaviors_in_roi._warning_issued = False
             
     # Aggregate all videos in a dataframe
     counter_df = pd.DataFrame(hard_count_counters).T.fillna(0)
@@ -1641,9 +1640,9 @@ def get_aggregated_embedding(
         
         current_embedding = preloaded[key]
         if roi_number is not None and type(current_embedding) == pd.DataFrame:
-            current_embedding = deepof.visuals_utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
+            current_embedding = deepof.utils.get_supervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi, roi_mode)
         elif roi_number is not None and type(current_embedding) == np.ndarray:
-            current_embedding = deepof.visuals_utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
+            current_embedding = deepof.utils.get_unsupervised_behaviors_in_roi(current_embedding, bin_info[key], animals_in_roi)
 
         # currently suboptimal, will be improved in a future version 
         if not type(current_embedding) == pd.DataFrame:  
@@ -1689,7 +1688,7 @@ def get_aggregated_embedding(
     
     agg_embedding = agg_embedding_clean.reindex(agg_embedding.index)
 
-    deepof.visuals_utils.get_unsupervised_behaviors_in_roi._warning_issued = False
+    deepof.utils.get_unsupervised_behaviors_in_roi._warning_issued = False
 
     return agg_embedding
 
@@ -1927,7 +1926,7 @@ def enrichment_across_conditions(
             #load and cut current data set
             current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
             if roi_number is not None:
-                current_sa=deepof.visuals_utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,roi_mode)
+                current_sa=deepof.utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,roi_mode)
 
             #only keep speed column or only drop speed column
             if plot_speed:
@@ -2034,7 +2033,7 @@ def compute_transition_matrix_per_condition(
         #Determine load range
         load_range = bin_info[key]["time"]
         if roi_number is not None:
-            load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+            load_range=deepof.utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
 
         #load requested range from current soft counts
         current_sc = get_dt(soft_counts, key, load_range=load_range)
@@ -2058,7 +2057,7 @@ def compute_transition_matrix_per_condition(
         else:
             transitions_dict[key] = transitions
     # Reset warning
-    deepof.visuals_utils.get_behavior_frames_in_roi._warning_issued = False
+    deepof.utils.get_behavior_frames_in_roi._warning_issued = False
 
     # Normalize rows if specified
     if normalize:

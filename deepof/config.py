@@ -6,8 +6,44 @@ suppress_warnings_context = ContextVar('suppress_warnings', default=True)
 
 
 PROGRESS_BAR_FIXED_WIDTH = 30
-ONE_ANIMAL_COLOR_MAP = ['#1f77b4','#17becf', '#9467bd', '#bcbd22', '#d62728', '#8c564b', '#ff7f0e', '#2ca02c', '#7f7f7f'] #9 colors
-TWO_ANIMALS_COLOR_MAP = ['#081ee4', '#aa2e47', '#d62246', '#179c79', '#06d6a0', '#0b565f', '#028090', '#c4a31e', '#f1c40f', '#1f77b4','#17becf', '#9467bd', '#bcbd22', '#d62728', '#8c564b', '#ff7f0e', '#2ca02c', '#aec7e8', '#9edae5','#c5b0d5', '#dbdb8d','#ff9896','#c49c94','#ffbb78','#98df8a', '#7f7f7f', '#c7c7c7'] #27 colors
+ONE_ANIMAL_COLOR_MAP = { 
+    "climb-arena": ('#1f77b4', '#aec7e8'),
+    "sniff-arena": ('#17becf', '#9edae5'),
+    "immobility": ('#9467bd', '#c5b0d5'),
+    "stat-lookaround": ('#bcbd22', '#dbdb8d'),
+    "stat-active": ('#d62728', '#ff9896'),
+    "stat-passive": ('#8c564b', '#c49c94'),
+    "moving": ('#ff7f0e', '#ffbb78'),
+    "sniffing": ('#2ca02c', '#98df8a'),
+    "missing": ('#7f7f7f', '#c7c7c7'),
+} 
+TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL = {
+    "nose2nose": '#081ee4',
+    "sidebyside": '#aa2e47',
+    "sidereside":  '#d62246',
+}
+TWO_ANIMALS_COLOR_MAP_DIRECTIONAL = {
+    "nose2tail": ('#179c79', '#06d6a0'),
+    "nose2body": ('#0b565f','#028090'),
+    "following": ('#c4a31e','#f1c40f'),
+}
+CONTINUOUS_COLOR_MAP = {
+    "distance": ("#1f1f1f", "#9e9e9e"),
+    "cum-distance": ("#2b2b2b", "#b0b0b0"),
+    "speed": ("#141414", "#8a8a8a"),
+}
+CUSTOM_BEHAVIOR_COLOR_MAP = {
+    "custom_0": ("#0B3C5D", "#6A9AC8"), # deep navy
+    "custom_1": ("#004B23", "#4D9E6F"), # forest green
+    "custom_2": ("#6A040F", "#C15F7A"), # dark burgundy
+    "custom_3": ("#3A0CA3", "#9B7ED9"), # deep royal purple
+    "custom_4": ("#7209B7", "#B78CE8"), # violet
+    "custom_5": ("#9A3412", "#E39E7A"), # burnt orange
+    "custom_6": ("#7F4F24", "#C9A47F"), # brown
+    "custom_7": ("#8F7A00", "#D9C25C"), # dark mustard
+    "custom_8": ("#006D77", "#4EB8C2"), # deep teal
+    "custom_9": ("#37474F", "#7A9EB3"), # slate gray
+}
 DEEPOF_8_BODYPARTS = ['Center', 'Left_ear', 'Left_fhip', 'Nose', 'Right_ear', 'Right_fhip', 'Tail_base', 'Tail_tip']
 DEEPOF_11_BODYPARTS = ['Center', 'Left_bhip', 'Left_ear', 'Left_fhip', 'Nose', 'Right_bhip', 'Right_ear', 'Right_fhip', 'Spine_1', 'Spine_2', 'Tail_base']
 DEEPOF_14_BODYPARTS = ['Center', 'Left_bhip', 'Left_ear', 'Left_fhip', 'Nose', 'Right_bhip', 'Right_ear', 'Right_fhip', 'Spine_1', 'Spine_2', 'Tail_1', 'Tail_2', 'Tail_base', 'Tail_tip']
@@ -15,6 +51,7 @@ SINGLE_BEHAVIORS=["climb-arena", "sniff-arena", "immobility", "stat-lookaround",
 SYMMETRIC_BEHAVIORS=["nose2nose","sidebyside","sidereside"]
 ASYMMETRIC_BEHAVIORS=["nose2tail","nose2body","following"]
 CONTINUOUS_BEHAVIORS=["distance","cum-distance","speed"]
+CUSTOM_BEHAVIORS=[]
 CONTINUOUS_UNITS=["[mm]", "[mm]", "[mm/s]"]
 
 ROI_COLORS = [(204, 20, 20),
