@@ -618,7 +618,7 @@ class Project:
 
         if is_multi_animal:
             # Update animal IDs and adapt table for the pipeline
-            self.animal_ids = list(table.loc["individuals"].unique())
+            assert [id in self.animal_ids for id in  list(table.loc["individuals"].unique())], f"Error! some of your animal ids are not present in table {key}!"
             table.loc["bodyparts"] = table.loc["individuals"] + "_" + table.loc["bodyparts"]
             table.drop("individuals", axis=0, inplace=True)
         

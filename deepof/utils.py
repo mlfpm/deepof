@@ -486,18 +486,20 @@ def connect_mouse(
     final_graph = connectivities[0]
     for g in range(1, len(connectivities)):
         final_graph = nx.compose(final_graph, connectivities[g])
+
+    for a, b in combinations(animal_ids, 2):
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g - 1]), "{}_Nose".format(animal_ids[g])
+            "{}_Nose".format(a), "{}_Nose".format(b)
         )
         final_graph.add_edge(
-            "{}_Tail_base".format(animal_ids[g - 1]),
-            "{}_Tail_base".format(animal_ids[g]),
+            "{}_Tail_base".format(a),
+            "{}_Tail_base".format(b),
         )
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g]), "{}_Tail_base".format(animal_ids[g - 1])
+            "{}_Nose".format(a), "{}_Tail_base".format(b)
         )
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g - 1]), "{}_Tail_base".format(animal_ids[g])
+            "{}_Nose".format(b), "{}_Tail_base".format(a)
         )
 
     return final_graph

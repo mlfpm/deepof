@@ -181,16 +181,18 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         supervised_colors = {key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
 
         # append custom behaviors
-        supervised = [custom_behavior.name for custom_behavior in custom_behaviors] + supervised
-        supervised_colors.update({custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+        if custom_behaviors is not None:
+            supervised = [custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+            supervised_colors.update({custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
 
     elif len(animal_ids)==1:
         supervised = [animal_ids[0] + behavior for behavior in single_behaviors]            
         supervised_colors = {animal_ids[0] + "_" + key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
 
         # append custom behaviors
-        supervised = [animal_ids[0] + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
-        supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+        if custom_behaviors is not None:
+            supervised = [animal_ids[0] + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+            supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
 
     else:
         supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, False, custom_behaviors)
