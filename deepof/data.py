@@ -2808,11 +2808,13 @@ class Coordinates:
         
         deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_inputs)
         self._custom_behaviors=deepof.annotation_utils.assign_custom_behavior_colors(custom_behaviors)
-        self._custom_continuous_behavior_names=[ #collect custom continous behaviors
-            custom_behavior.name for 
-            custom_behavior in self._custom_behaviors 
-            if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
-        ]
+        self._custom_continuous_behavior_names=[]
+        if self._custom_behaviors is not None:
+            self._custom_continuous_behavior_names=[ #collect custom continous behaviors
+                custom_behavior.name for 
+                custom_behavior in self._custom_behaviors 
+                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+            ]
 
         # get immobility classifer
         self._trained_model_path = os.path.join(self._project_path, self._project_name, "trained_models",)  

@@ -4697,16 +4697,20 @@ def return_supervised_summary(
             frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
             df_row=[frame_row_info, frame_row_behavior_1]
 
-            all_cont_beh = CONTINUOUS_BEHAVIORS+[ #re-collect custom continous names to ensure nothing got misaligned
-                custom_behavior.name for 
-                custom_behavior in coordinates._custom_behaviors 
-                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
-            ]
-            all_cont_units = CONTINUOUS_UNITS+[ #collect custom continous units
-                custom_behavior.unit for 
-                custom_behavior in coordinates._custom_behaviors 
-                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
-            ]
+            if coordinates._custom_behaviors is not None:
+                all_cont_beh = CONTINUOUS_BEHAVIORS+[ #re-collect custom continous names to ensure nothing got misaligned
+                    custom_behavior.name for 
+                    custom_behavior in coordinates._custom_behaviors 
+                    if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+                ]
+                all_cont_units = CONTINUOUS_UNITS+[ #collect custom continous units
+                    custom_behavior.unit for 
+                    custom_behavior in coordinates._custom_behaviors 
+                    if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+                ]
+            else:
+                all_cont_beh = CONTINUOUS_BEHAVIORS
+                all_cont_units = CONTINUOUS_UNITS
 
             for behavior, unit in zip(all_cont_beh, all_cont_units):
                 supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior],  custom_behaviors=coordinates._custom_behaviors)
