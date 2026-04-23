@@ -972,7 +972,8 @@ def count_transitions(
     silence_diagonal: bool = False,
     aggregate: str = True,
     normalize: str = True,
-    diagonal_behavior_counting: str = "Transitions"
+    diagonal_behavior_counting: str = "Transitions",
+    custom_continuous_behavior_names: list = [],
 ):
     """
     Count transitions between successive behaviors for all experiments in tab_dict.
@@ -992,6 +993,7 @@ def count_transitions(
             - "Time": Total time where behavior is active
             - "Events": number of instances of the behavior occuring 
             - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.
+        custom_continuous_behavior_names (list): list of potentially added names of custom continuous behaviors (should get sorted out)
 
     Returns:
         transitions_dict (dict): Dictionary of transition matrices. Keys:
@@ -1044,7 +1046,7 @@ def count_transitions(
         
         # Drop non-binary columns (e.g. speed column in supervised)
         for col in columns:
-            if col.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+            if col.endswith(tuple(CONTINUOUS_BEHAVIORS+custom_continuous_behavior_names)):
                 tab=tab.drop(columns=[col])
 
         # Update columns

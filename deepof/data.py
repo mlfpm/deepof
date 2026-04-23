@@ -167,6 +167,10 @@ def load_project(
         coordinates = pickle.load(handle)
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
+    # Small fix for compatibility of pre 0.9 versions
+    if not (hasattr(coordinates, "_custom_behaviors")):
+            coordinates._custom_behaviors = None
+            coordinates._custom_continuous_behavior_names=[]
     # Error for not compatible versions
     if not (hasattr(coordinates, "_run_numba")): 
 
@@ -1476,6 +1480,7 @@ class Coordinates:
         self._very_large_project = very_large_project
         self._version = version
         self._custom_behaviors = None
+        self._custom_continuous_behavior_names=[]
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -2803,6 +2808,11 @@ class Coordinates:
         
         deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_inputs)
         self._custom_behaviors=deepof.annotation_utils.assign_custom_behavior_colors(custom_behaviors)
+        self._custom_continuous_behavior_names=[ #collect custom continous behaviors
+            custom_behavior.name for 
+            custom_behavior in self._custom_behaviors 
+            if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+        ]
 
         # get immobility classifer
         self._trained_model_path = os.path.join(self._project_path, self._project_name, "trained_models",)  

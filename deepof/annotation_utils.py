@@ -147,6 +147,7 @@ class DeepOF_behavior:
     scope: Behavior_scope
     output_kind: Behavior_output
     compute: BehaviorFn
+    unit: Optional[str] = "a.u."
     
 
     # Optional: assign a user defined hex color. If None, a color from deepof.config.CUSTOM_BEHAVIOR_COLOR_MAP will be assigned

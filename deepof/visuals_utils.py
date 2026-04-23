@@ -183,7 +183,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         # append custom behaviors
         if custom_behaviors is not None:
             supervised = [custom_behavior.name for custom_behavior in custom_behaviors] + supervised
-            supervised_colors.update({custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+            supervised_colors.update({custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
 
     elif len(animal_ids)==1:
         supervised = [animal_ids[0] + behavior for behavior in single_behaviors]            
@@ -192,7 +192,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         # append custom behaviors
         if custom_behaviors is not None:
             supervised = [animal_ids[0] + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
-            supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color for custom_behavior in custom_behaviors})
+            supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
 
     else:
         supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, False, custom_behaviors)
@@ -1913,7 +1913,8 @@ def _preprocess_transitions(
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None), 
         normalize=normalize,
-        diagonal_behavior_counting=diagonal_behavior_counting
+        diagonal_behavior_counting=diagonal_behavior_counting,
+        custom_continuous_behavior_names=coordinates._custom_continuous_behavior_names,
     )
 
     return grouped_transitions, columns, combined_columns, exp_conditions, normalize

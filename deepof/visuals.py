@@ -461,7 +461,7 @@ def _plot_experiment_gantt(
         behavior_ids = [
             col
             for col in data_frame.columns
-            if not col.endswith(tuple(CONTINUOUS_BEHAVIORS))
+            if not col.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names))
         ]
 
     # only keep valid ids
@@ -1077,6 +1077,7 @@ def plot_enrichment(
         animals_in_roi = animals_in_roi,
         normalize = normalize,
         roi_mode=roi_mode,
+        custom_continuous_behavior_names=coordinates._custom_continuous_behavior_names,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
@@ -3525,7 +3526,7 @@ def export_annotated_video(
             )
         elif "all" in behaviors and supervised_annotations is not None:
             behaviors = list(cur_tab.columns) 
-            behaviors = [behavior for behavior in behaviors if not behavior.endswith(tuple(CONTINUOUS_BEHAVIORS))]
+            behaviors = [behavior for behavior in behaviors if not behavior.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names))]
             cluster_names = behaviors
         elif behaviors is None:
             behaviors = list(cur_tab.columns)
@@ -3991,7 +3992,7 @@ def plot_behavior_trends(
                     val_mask = ~np.isnan(vals)
 
                     # continuous behaviors get normalized based on the sum of all behavior
-                    if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+                    if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names)):
                         # time-weighted average speed
                         behavior_timebin = (
                             np.average(vals[val_mask])
@@ -4093,8 +4094,8 @@ def plot_behavior_trends(
         )
 
         # --- axis labels ---
-        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS)):
-            candidates = [s for s in CONTINUOUS_BEHAVIORS if behavior_to_plot.endswith(s)]
+        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names)):
+            candidates = [s for s in CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names if behavior_to_plot.endswith(s)]
             closest_suffix = max(candidates, key=len)
             ylabel = f"{behavior_to_plot} [avg. {closest_suffix}]"
         elif normalize:
@@ -4696,7 +4697,18 @@ def return_supervised_summary(
             frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
             df_row=[frame_row_info, frame_row_behavior_1]
 
-            for behavior, unit in zip(CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS):
+            all_cont_beh = CONTINUOUS_BEHAVIORS+[ #re-collect custom continous names to ensure nothing got misaligned
+                custom_behavior.name for 
+                custom_behavior in coordinates._custom_behaviors 
+                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+            ]
+            all_cont_units = CONTINUOUS_UNITS+[ #collect custom continous units
+                custom_behavior.unit for 
+                custom_behavior in coordinates._custom_behaviors 
+                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+            ]
+
+            for behavior, unit in zip(all_cont_beh, all_cont_units):
                 supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior],  custom_behaviors=coordinates._custom_behaviors)
 
                 continuous_mean, converted_unit=deepof.visuals_utils.scale_units(

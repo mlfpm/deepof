@@ -1883,6 +1883,7 @@ def enrichment_across_conditions(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     normalize: bool = False,
+    custom_continuous_behavior_names: list = [],
 ):
     """Compute the population of each cluster across conditions.
 
@@ -1896,6 +1897,7 @@ def enrichment_across_conditions(
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         normalize (bool): Whether to normalize the population of each cluster across conditions.
+        custom_continuous_behavior_names (list): list of potentially added names of custom continuous behaviors (should get sorted out)
 
     Returns:
         A long format dataframe with the population of each cluster across conditions.
@@ -1932,7 +1934,7 @@ def enrichment_across_conditions(
             if plot_speed:
                 selected_columns = [col for col in current_sa.columns if col.endswith("speed")]
             else:
-                selected_columns = [col for col in current_sa.columns if not col.endswith(tuple(CONTINUOUS_BEHAVIORS))]
+                selected_columns = [col for col in current_sa.columns if not col.endswith(tuple(CONTINUOUS_BEHAVIORS+custom_continuous_behavior_names))]
 
             table = current_sa[selected_columns]
 
