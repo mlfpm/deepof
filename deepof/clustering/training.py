@@ -1805,7 +1805,7 @@ def _plot_augmentation(x_in: torch.Tensor, x_aug: torch.Tensor): # pragma: no co
     T = xin.size(0)
 
     dx = 2.5  # horizontal offset per frame
-    fig, ax = plt.subplots(2, 1, figsize=(min(28, 1.2 * T), 6), sharey=True)
+    fig, ax = plt.subplots(2, 1, figsize=(min(28, 2.4 * T), 12), sharey=True)
 
     def draw_row(ax_, X, title):
         for t in range(T):

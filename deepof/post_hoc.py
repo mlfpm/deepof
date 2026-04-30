@@ -2106,7 +2106,7 @@ def compute_steady_state(
     return steady_states
 
 
-def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
+def compute_UMAP(embeddings, cluster_assignments, random_state=0):  # pragma: no cover
     """Compute UMAP embeddings for visualization purposes."""
     
     # Check if clusters have collapsed
@@ -2117,12 +2117,23 @@ def compute_UMAP(embeddings, cluster_assignments):  # pragma: no cover
     )
     concat_embeddings = lda.fit_transform(embeddings, cluster_assignments)
 
-    red = umap.UMAP(
+    if random_state is None:
+        n_jobs=-1
+    else:
+        n_jobs=1
+
+    reducers = umap.UMAP(
         min_dist=0.99,
         n_components=2,
-    ).fit(concat_embeddings)
+        random_state=random_state,
+        n_jobs=n_jobs,
+        transform_seed=random_state,
+        init="random",
+    )
+    
+    Z = reducers.fit_transform(concat_embeddings)
 
-    return lda, red
+    return Z
 
 
 def align_deepof_kinematics_with_unsupervised_labels(

@@ -2394,6 +2394,7 @@ def plot_embeddings(
     samples: int = 500,
     show_aggregated_density: bool = True,
     colour_by: str = "cluster",
+    umap_random_state: int = 0,
     ax: Any = None,
     save: bool = False,
 ):
@@ -2421,6 +2422,7 @@ def plot_embeddings(
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', 'exp_id' or, if supervised behaviors are given, also any supervised behavior.
+        umap_random_state (int): Random state of Umap, default 0. If None, no fixed random state is selected (different U-map representation every time)
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -2452,6 +2454,12 @@ def plot_embeddings(
         )
     if type(animals_in_roi)==str:
         animals_in_roi=[animals_in_roi]
+    palette=None
+    if colour_by[0]=="cluster" and aggregate_experiments is None:
+        palette="tab20"
+    elif colour_by[0]=="exp_id" and aggregate_experiments is None:
+        palette="viridis"
+
     # prevents crash due to axis issues
     if (
         not aggregate_experiments
@@ -2546,9 +2554,9 @@ def plot_embeddings(
                 valid_samples[key]=bin_info[key]["time"]
             current_emb=current_emb[valid_samples[key]]
 
-
+            np.random.seed(seed=umap_random_state)
             sample_ids = np.random.choice(
-                range(current_emb.shape[0]), samples, replace=False
+                range(current_emb.shape[0]), samples, replace=False,
             )
             samples_dict[key] = sample_ids
             #reduced section is kept in memory
@@ -2592,10 +2600,15 @@ def plot_embeddings(
         behavior_names="None"
         behavior_labels_fin=pd.Series(range(0,len(cluster_assignments)))
         behavior_labels_fin[:]=''
-        if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_cond","exp_id"]:
+        hue_order=None
+        if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_condition","exp_id"]:
             # Concatenate experiments and align experimental conditions
             behavior_names = colour_by
+            behavior_colors=deepof.visuals_utils.get_behavior_colors(behavior_names, animal_ids=coordinates._animal_ids)
+            for name, color in zip(behavior_names,behavior_colors):
+                assert color is not None, f"Error! For behavior {name} no corresponding color could be found! Check spelling!"
             for k in range(len(behavior_names)):
+                
                 behavior_labels = np.concatenate(
                     [get_dt(sup_annots_to_plot,key)[behavior_names[k]] 
                         for key in sup_annots_to_plot],
@@ -2603,16 +2616,22 @@ def plot_embeddings(
                 )
                 behavior_labels[np.isnan(behavior_labels)]=0 #set possible nans to zero
                 behavior_labels_fin[behavior_labels.astype(bool)==True]=behavior_names[k]
+            
             colour_by="behaviors"
+
+
+            palette = dict(zip(behavior_names, behavior_colors))
+            palette[''] = "white"
+            hue_order = [''] + behavior_names
         else:
             colour_by=colour_by[0]
 
         # Reduce the dimensionality of the embeddings using UMAP. Set n_neighbors to a large
         # value to see a more global picture
-        reducers = deepof.post_hoc.compute_UMAP(concat_embeddings, cluster_assignments)
-        reduced_embeddings = reducers[1].transform(
-            reducers[0].transform(concat_embeddings)
-        )
+        reduced_embeddings = deepof.post_hoc.compute_UMAP(concat_embeddings, cluster_assignments, umap_random_state)
+        #reduced_embeddings = reducers[1].fit_transform(
+        #    reducers[0].fit_transform(concat_embeddings)
+        #)
 
         # Generate unifier dataset using the reduced embeddings, experimental conditions
         # and the corresponding break lengths and cluster assignments
@@ -2711,12 +2730,11 @@ def plot_embeddings(
         y="{}-2".format("PCA" if aggregate_experiments else "UMAP"),
         ax=ax,
         hue=hue,
+        hue_order=hue_order,
         size=None,
         s=(50 if not aggregate_experiments else 100),
         edgecolor="black",
-        palette=(
-            None if aggregate_experiments or colour_by == "exp_condition" else "tab20"
-        ),
+        palette=palette,
     )
 
     if aggregate_experiments and show_aggregated_density:
@@ -2812,6 +2830,7 @@ def animate_skeleton(
     selected_cluster: Optional[np.ndarray] = None,
     display_arena: bool = True,
     legend: bool = True,
+    umap_random_state: int = 0,
     save: Optional[Union[bool, str]] = None,
     dpi: int = 100,
 ):
@@ -2838,6 +2857,7 @@ def animate_skeleton(
         selected_cluster (np.ndarray, optional): Cluster to filter.
         display_arena (bool): Whether to plot a dashed line with an overlying arena perimeter.
         legend (bool): Whether to add a color-coded legend to multi-animal plots.
+        umap_random_state (int): Random state of Umap, default 0. If None, no fixed random state is selected (different U-map representation every time)
         save (bool or str, optional): If not None, save the animation. If a string is provided, it is added as a suffix in the auto-generated file name.
         dpi (int): Dots per inch of the figure to create.
 
@@ -2970,6 +2990,7 @@ def animate_skeleton(
             min_confidence,
             min_bout_duration,
             selected_cluster,
+            umap_random_state=umap_random_state,
         )
 
     # After _process_animation_data, recompute the x/y arrays used for animation

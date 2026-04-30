@@ -513,6 +513,7 @@ def _process_animation_data(
     min_confidence: float,
     min_bout_duration: int,
     selected_cluster: np.ndarray,
+    umap_random_state: int = 0,
 ):
     """Auxiliary function to process data for animation outputs.
 
@@ -523,6 +524,7 @@ def _process_animation_data(
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
+        umap_random_state (int): Random state of Umap, default 0. If None, no fixed random state is selected (different U-map representation every time)
 
         Returns:
         coords (table_dict): position data afetr preprocessing
@@ -551,8 +553,8 @@ def _process_animation_data(
     confidence_indices = full_confidence_indices.copy()
 
     # Reduce full embeddings to 2D UMAP
-    reducers = deepof.post_hoc.compute_UMAP(cur_embeddings, hard_counts)
-    twoDim_embeddings = reducers[1].transform(reducers[0].transform(cur_embeddings))
+    twoDim_embeddings = deepof.post_hoc.compute_UMAP(cur_embeddings, hard_counts, umap_random_state)
+    #twoDim_embeddings = reducers[1].fit_transform(reducers[0].fit_transform(cur_embeddings))
 
 
     # Ensure that shapes are matching
