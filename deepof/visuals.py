@@ -2812,6 +2812,7 @@ def return_embedding_evaluation(
     supervised_annotations: "table_dict",
     include_behaviors: list = None,
     window_size: int = None,
+    alignment_mode: str = "any",
     minimum_number_of_positives: int = 200,
     random_state: int = 0,
 ) -> "pd.DataFrame":
@@ -2826,7 +2827,8 @@ def return_embedding_evaluation(
         embeddings (table_dict): Experiment ID → embedding array (T, D).
         supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
         include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
-        window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        window_size (int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        alignment_mode (str): How embedding windows and supervised detections should be aligned. Can be "center" (embedding window is labled as the behavior that occurs in its central frame) or "any" (embedding window is labled as the behavior(s) that occur in an of its frames). 
         minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
         random_state (int): random state used for computations for reproducibility. Default is 0
 
@@ -2838,6 +2840,7 @@ def return_embedding_evaluation(
         embeddings=embeddings,
         supervised_annotations=supervised_annotations,
         include_behaviors=include_behaviors,
+        alignment_mode=alignment_mode,
         window_size=window_size,
         minimum_number_of_positives=minimum_number_of_positives,
         random_state=random_state,
@@ -2850,6 +2853,7 @@ def plot_embedding_evaluation(
     supervised_annotations: "table_dict",
     include_behaviors: list = None,
     window_size: int = None,
+    alignment_mode: str = "any",
     minimum_number_of_positives: int = 200,
     random_state: int = 0,
 ) -> plt.Figure:
@@ -2864,6 +2868,7 @@ def plot_embedding_evaluation(
         supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
         include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
         window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        alignment_mode (str): How embedding windows and supervised detections should be aligned. Can be "center" (embedding window is labled as the behavior that occurs in its central frame) or "any" (embedding window is labled as the behavior(s) that occur in an of its frames).         
         minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
         random_state (int): random state used for computations for reproducibility. Default is 0
 
@@ -2876,6 +2881,7 @@ def plot_embedding_evaluation(
         supervised_annotations=supervised_annotations,
         include_behaviors=include_behaviors,
         window_size=window_size,
+        alignment_mode=alignment_mode,
         minimum_number_of_positives=minimum_number_of_positives,
         random_state=random_state,
     )

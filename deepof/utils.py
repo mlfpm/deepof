@@ -1998,7 +1998,7 @@ def align_trajectories(
     return aligned_trajs
 
 
-def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size=None, mode="center"):
+def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size=None, alignment_mode="center"):
     """returns mid-sections of current embedding and supervised_annotations at key"""
 
     assert key in embeddings.keys() and key in supervised_annotations.keys(), "No mebeddings-supervised alignment possible! Key not found in at least one of both table dicts!"
@@ -2015,14 +2015,14 @@ def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size
     center = window_size // 2  # for even W, this is the right-of-center convention
     start = center
     end = start + cur_embeddings.shape[0]
-    if mode=="center":
+    if alignment_mode=="center":
         # Pick the label at the window center for each window.
         center = window_size // 2  # for even W, this is the right-of-center convention
         start = center
         end = start + cur_embeddings.shape[0]
         cur_supervised_aligned = cur_supervised.iloc[start:end].reset_index(drop=True)
 
-    elif mode=="any":
+    elif alignment_mode=="any":
 
         # Per-window OR for binary labels: trailing rolling max over each window.
         cur_supervised_aligned = (
