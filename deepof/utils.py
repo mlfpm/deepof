@@ -14,7 +14,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
-from typing import Any, List, NewType, Tuple, Union, Optional
+from typing import Any, List, NewType, Tuple, Union, Optional, Dict
 
 # For optional verification plots, will probably be removed later
 from matplotlib import pyplot as plt
@@ -37,6 +37,10 @@ from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import average_precision_score
+from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import StratifiedKFold
 from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
@@ -1994,6 +1998,49 @@ def align_trajectories(
     return aligned_trajs
 
 
+def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size=None, mode="center"):
+    """returns mid-sections of current embedding and supervised_annotations at key"""
+
+    assert key in embeddings.keys() and key in supervised_annotations.keys(), "No mebeddings-supervised alignment possible! Key not found in at least one of both table dicts!"
+
+    cur_embeddings = get_dt(embeddings,key)
+    cur_supervised = get_dt(supervised_annotations, key)
+
+    assert cur_embeddings.shape[0]<cur_supervised.shape[0], "Error! Labels exceed windows!"
+
+    if window_size is None:
+        window_size=cur_supervised.shape[0]-cur_embeddings.shape[0]+1
+
+    # cut out middle section to align with windows, strict cutting
+    center = window_size // 2  # for even W, this is the right-of-center convention
+    start = center
+    end = start + cur_embeddings.shape[0]
+    if mode=="center":
+        # Pick the label at the window center for each window.
+        center = window_size // 2  # for even W, this is the right-of-center convention
+        start = center
+        end = start + cur_embeddings.shape[0]
+        cur_supervised_aligned = cur_supervised.iloc[start:end].reset_index(drop=True)
+
+    elif mode=="any":
+
+        # Per-window OR for binary labels: trailing rolling max over each window.
+        cur_supervised_aligned = (
+            cur_supervised
+            .rolling(window=window_size, min_periods=window_size)  # trailing window (aligns with window start after reset)
+            .max()
+            .reset_index(drop=True)
+        ) 
+        cur_supervised_aligned = cur_supervised_aligned.iloc[start:end].reset_index(drop=True)  #.iloc[window_size-1:window_size-1+cur_embeddings.shape[0]].reset_index(drop=True)
+
+    else:
+        raise NotImplementedError("Error, only \"center\" and \"any\" modes are available")
+
+    assert cur_embeddings.shape[0]==cur_supervised_aligned.shape[0], "Error! Alignment unsuccessful!"
+
+    return cur_embeddings, cur_supervised_aligned
+    
+
 def load_table(
     tab: str,
     table_path: str,
@@ -3432,6 +3479,137 @@ def gmm_model_selection(
                 best_bic_gmm = res[0][0]
 
     return bic, m_bic, best_bic_gmm
+
+
+def compute_compactness(
+    Z_pos: np.ndarray,
+    Z_all: np.ndarray,
+    eps: float = 1e-12,
+) -> Dict[str, float]:
+    """Compute compactness of positive-class embeddings relative to all embeddings.
+
+    Uses the trace of the covariance matrix as a spread measure.  Lower values
+    indicate tighter clustering of positive samples.
+
+    Args:
+        Z_pos: Positive-class embeddings, shape (N_pos, D).
+        Z_all: All embeddings, shape (N_all, D).
+        eps: Guard against division by zero.
+
+    Returns:
+        dict: ``trace_cov_pos`` – absolute trace covariance of positives;
+              ``trace_cov_pos_norm_global`` – ratio of positive to global trace.
+    """
+    tr_p = float(np.trace(np.cov(Z_pos.astype(np.float64, copy=False), rowvar=False)))
+    tr_a = float(np.trace(np.cov(Z_all.astype(np.float64, copy=False), rowvar=False)))
+    return {"trace_cov_pos": tr_p, "trace_cov_pos_norm_global": tr_p / max(eps, tr_a)}
+
+
+def compute_separability_logreg(
+    X: np.ndarray,
+    y: np.ndarray,
+    n_splits: int = 5,
+    seed: int = 0,
+    C: float = 1.0,
+    max_train: int = 100_000,
+) -> Dict[str, float]:
+    """Compute class separability via logistic-regression average precision (AP).
+
+    Performs stratified *k*-fold cross-validation with a balanced logistic
+    regression classifier and returns mean ± std of the AP score.
+
+    Args:
+        X: Feature matrix, shape (N, D).
+        y: Binary labels in {0, 1}, shape (N,).
+        n_splits: Number of CV folds.
+        seed: Random seed for reproducibility.
+        C: Inverse regularisation strength.
+        max_train: Maximum samples used (balanced subsample).
+
+    Returns:
+        dict: ``ap_mean``, ``ap_std``, ``n_used``.  Values are NaN when only
+              one class is present.
+    """
+    yb = (y > 0.5).astype(np.int32)
+    if yb.min() == yb.max():
+        return {"ap_mean": float("nan"), "ap_std": float("nan"), "n_used": 0}
+
+    rng = np.random.default_rng(seed)
+    idx_pos, idx_neg = np.where(yb == 1)[0], np.where(yb == 0)[0]
+    n_pos, n_neg = len(idx_pos), len(idx_neg)
+    n_target = min(max_train, n_pos + n_neg)
+    n_pos_t = int(round(n_target * n_pos / (n_pos + n_neg)))
+    n_neg_t = n_target - n_pos_t
+
+    idx = np.concatenate([
+        rng.choice(idx_pos, size=min(n_pos_t, n_pos), replace=False),
+        rng.choice(idx_neg, size=min(n_neg_t, n_neg), replace=False),
+    ])
+    rng.shuffle(idx)
+
+    Xs, ys = X[idx].astype(np.float64), yb[idx]
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    aps = []
+    for tr, te in skf.split(Xs, ys):
+        sc = StandardScaler()
+        Xtr, Xte = sc.fit_transform(Xs[tr]), sc.transform(Xs[te])
+        clf = LogisticRegression(C=C, max_iter=2000, class_weight="balanced", solver="lbfgs")
+        clf.fit(Xtr, ys[tr])
+        aps.append(average_precision_score(ys[te], clf.predict_proba(Xte)[:, 1]))
+
+    return {"ap_mean": float(np.mean(aps)), "ap_std": float(np.std(aps)), "n_used": int(len(idx))}
+
+
+def compute_knn_agreement(
+    X: np.ndarray,
+    y: np.ndarray,
+    k: int = 25,
+    seed: int = 0,
+    max_points: int = 50_000,
+    max_pos_queries: int = 10_000,
+    metric: str = "cosine",
+) -> Dict[str, float]:
+    """Compute kNN label agreement for positive-class samples.
+
+    For each positive sample, reports the fraction of its *k* nearest neighbours
+    that are also positive.  Higher values indicate better clustering.
+
+    Args:
+        X: Feature matrix, shape (N, D).
+        y: Binary labels in {0, 1}, shape (N,).
+        k: Number of nearest neighbours.
+        seed: Random seed for subsampling.
+        max_points: Maximum reference-set size.
+        max_pos_queries: Maximum positive query points.
+        metric: Distance metric for kNN.
+
+    Returns:
+        dict: ``k``, ``pos_knn_agree_mean``, ``pos_knn_agree_std``,
+              ``n_ref``, ``n_pos_queries``.
+    """
+    yb = (y > 0.5).astype(np.int32)
+    idx_pos = np.where(yb == 1)[0]
+    if idx_pos.size == 0 or X.shape[0] < k + 2:
+        return {"k": int(k), "pos_knn_agree_mean": float("nan"),
+                "pos_knn_agree_std": float("nan"), "n_ref": 0, "n_pos_queries": 0}
+
+    rng = np.random.default_rng(seed)
+    idx_all = np.arange(X.shape[0])
+    idx_ref = rng.choice(idx_all, size=min(max_points, idx_all.size), replace=False) if idx_all.size > max_points else idx_all
+    idx_q = rng.choice(idx_pos, size=min(max_pos_queries, idx_pos.size), replace=False) if idx_pos.size > max_pos_queries else idx_pos
+
+    X_ref, y_ref = X[idx_ref].astype(np.float32), yb[idx_ref]
+    X_q = X[idx_q].astype(np.float32)
+
+    nn = NearestNeighbors(n_neighbors=min(k + 1, X_ref.shape[0]), metric=metric)
+    nn.fit(X_ref)
+    neigh = nn.kneighbors(X_q, return_distance=False)
+    neigh_k = neigh[:, 1:min(k + 1, neigh.shape[1])]  # drop self-match
+
+    frac_pos = y_ref[neigh_k].mean(axis=1)
+    return {"k": int(k), "pos_knn_agree_mean": float(frac_pos.mean()),
+            "pos_knn_agree_std": float(frac_pos.std()),
+            "n_ref": int(X_ref.shape[0]), "n_pos_queries": int(X_q.shape[0])}
 
 
 # RESULT ANALYSIS FUNCTIONS #

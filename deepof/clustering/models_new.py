@@ -634,7 +634,7 @@ class TCNEncoderPT(nn.Module):
 
             enc = torch.cat([x_nodes_g.reshape(B, -1), x_edges_g.reshape(B, -1)], dim=-1)
         else:
-            # Non-GNN unchanged
+            # Non-GNN 
             x_flat = x.view(B, W, N * F_node)        # (B, W, N*NF)
             enc = self.flat_tcn(x_flat)              # (B, C)
 

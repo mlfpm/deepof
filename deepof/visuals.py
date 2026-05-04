@@ -2422,7 +2422,7 @@ def plot_embeddings(
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
         colour_by (str): hue by which to colour the embeddings. Can be one of 'cluster' (default), 'exp_condition', 'exp_id' or, if supervised behaviors are given, also any supervised behavior.
-        umap_random_state (int): Random state of Umap, default 0. If None, no fixed random state is selected (different U-map representation every time)
+        umap_random_state (int): Random state of Umap and sampled samples for Umap plot, default 0. If None, no fixed random state is selected (different U-map representation every time)
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
@@ -2803,6 +2803,132 @@ def plot_embeddings(
         plt.title(title, fontsize=15)
         plt.tight_layout()
         plt.show()
+
+
+
+def return_embedding_evaluation(
+    coordinates: "coordinates",
+    embeddings: "table_dict",
+    supervised_annotations: "table_dict",
+    include_behaviors: list = None,
+    window_size: int = None,
+    minimum_number_of_positives: int = 200,
+    random_state: int = 0,
+) -> "pd.DataFrame":
+    """Return embedding-quality metrics for all detected binary behaviors.
+
+    Computes compactness, logistic-regression separability (AP), and kNN
+    label agreement for each binary behavior column found in
+    *supervised_annotations*.
+
+    Args:
+        coordinates (coordinates): deepOF project.
+        embeddings (table_dict): Experiment ID → embedding array (T, D).
+        supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
+        include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
+        window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
+        random_state (int): random state used for computations for reproducibility. Default is 0
+
+    Returns:
+        pd.DataFrame: One row per behavior with metric columns.
+    """
+    return deepof.visuals_utils._preprocess_embedding_evaluation(
+        coordinates=coordinates,
+        embeddings=embeddings,
+        supervised_annotations=supervised_annotations,
+        include_behaviors=include_behaviors,
+        window_size=window_size,
+        minimum_number_of_positives=minimum_number_of_positives,
+        random_state=random_state,
+    )
+
+
+def plot_embedding_evaluation(
+    coordinates: "coordinates",
+    embeddings: "table_dict",
+    supervised_annotations: "table_dict",
+    include_behaviors: list = None,
+    window_size: int = None,
+    minimum_number_of_positives: int = 200,
+    random_state: int = 0,
+) -> plt.Figure:
+    """Plot embedding-quality scores for all detected binary behaviors.
+
+    Creates a grid of bar plots (one per behavior) showing compactness,
+    average precision, and kNN agreement, all normalised to [0, 1].
+
+    Args:
+        coordinates (coordinates): deepOF project.
+        embeddings (table_dict): Experiment ID → embedding array (T, D).
+        supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
+        include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
+        window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
+        random_state (int): random state used for computations for reproducibility. Default is 0
+
+    Returns:
+        matplotlib.figure.Figure: The figure containing the plots.
+    """
+    df = deepof.visuals_utils._preprocess_embedding_evaluation(
+        coordinates=coordinates,
+        embeddings=embeddings,
+        supervised_annotations=supervised_annotations,
+        include_behaviors=include_behaviors,
+        window_size=window_size,
+        minimum_number_of_positives=minimum_number_of_positives,
+        random_state=random_state,
+    )
+
+    n_beh = len(df)
+    if n_beh == 0:
+        return None
+
+    # Aim for a roughly square grid
+    nrows,ncols=deepof.visuals_utils.get_square_shape_for_gridlike_plot(n_beh)
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.8 * ncols, 3.8 * nrows))
+    axes = np.atleast_2d(axes).ravel()
+
+    colors = ["#4C78A8", "#72B7B2", "#F58518"]
+    labels = ["compact", "AP", "kNN"]
+
+    for i, (_, row) in enumerate(df.iterrows()):
+        ax = axes[i]
+        beh = row["behavior"]
+
+        # Compactness: lower → better; invert via 1/(1+x)
+        comp_norm = row.get("trace_cov_pos_norm_global", np.nan)
+        compact_good = (1.0 / (1.0 + comp_norm)) if np.isfinite(comp_norm) else np.nan
+
+        ap = row.get("ap_mean", np.nan)
+        knn_agree = row.get("pos_knn_agree_mean", np.nan)
+ 
+        vals = np.array([compact_good, ap, knn_agree], dtype=float)
+
+        ax.bar(np.arange(3), np.nan_to_num(vals, nan=0.0),
+               color=colors, width=0.65, edgecolor="black", linewidth=0.8)
+
+        for j, v in enumerate(vals):
+            txt = "nan" if not np.isfinite(v) else f"{v:.2f}"
+            ax.text(j, 0.02 + (0.0 if not np.isfinite(v) else v), txt,
+                    ha="center", va="bottom", fontsize=9)
+
+        ax.set_xticks([0, 1, 2])
+        ax.set_xticklabels(labels)
+        ax.set_ylim(0.0, 1.0)
+        ax.set_ylabel("score (0–1)")
+        ax.grid(axis="y", alpha=0.25)
+
+        # Set title
+        ax.set_title(beh)
+
+    # Hide unused subplots
+    for i in range(n_beh, len(axes)):
+        axes[i].set_visible(False)
+
+    plt.tight_layout()
+
 
 
 # noinspection PyTypeChecker

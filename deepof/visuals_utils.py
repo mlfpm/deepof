@@ -212,10 +212,10 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
 
 def generate_behavior_combinations(
     animal_ids,
-    symmetric_behaviors=True,
-    asymmetric_behaviors=True,
-    single_behaviors=True,
-    continuous_behaviors=True,
+    symmetric_behaviors: Union[bool, List]=True,
+    asymmetric_behaviors: Union[bool, List]=True,
+    single_behaviors: Union[bool, List]=True,
+    continuous_behaviors: Union[bool, List]=True,
     custom_behaviors: List[DeepOF_behavior] = None,
 ):
     """Return (result_list, color_dict) with full column names and their colors."""
@@ -448,6 +448,152 @@ def _filter_embeddings(
         }
 
     return embeddings, soft_counts, supervised_annotations, concat_hue
+
+
+def _preprocess_embedding_evaluation(
+    coordinates: "coordinates",
+    embeddings: "table_dict",
+    supervised_annotations: "table_dict",
+    include_behaviors: list = None,
+    window_size: int = None,
+    minimum_number_of_positives: int = 200,
+    random_state: int = 0,
+) -> pd.DataFrame:
+    """Compute embedding-quality metrics for every detected binary behavior.
+
+    Detects binary behavior columns in *supervised_annotations*, aligns them
+    with the corresponding embeddings, and computes compactness, logistic-
+    regression separability, and kNN label agreement for each behavior.
+
+    Args:
+        coordinates (coordinates): deepOF project (reserved for future metadata).
+        embeddings (table_dict): Experiment ID → embedding array (T, D).
+        supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
+        include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
+        window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
+        random_state (int): random state used for computations for reproducibility. Default is 0
+
+    Returns:
+        pd.DataFrame: One row per behavior with all metric columns.
+    """
+
+    # get all continuous behaviors
+    continuous_behaviors=[]
+    if coordinates._custom_behaviors is not None:
+        for custom_behavior in coordinates._custom_behaviors:
+            if custom_behavior.output_kind==Behavior_output.CONTINUOUS:
+                continuous_behaviors.append(custom_behavior.name)
+    continuous_behaviors = continuous_behaviors+CONTINUOUS_BEHAVIORS
+
+    first_key=list(supervised_annotations.keys())[0]
+    all_behaviors=get_dt(supervised_annotations, first_key, only_metainfo=True)['columns']
+    noncontinuous_behaviors = [behavior for behavior in all_behaviors if str.split(behavior,'_')[-1] not in continuous_behaviors ]
+
+    if include_behaviors is None:
+        behaviors, _ = generate_behavior_combinations(
+            coordinates._animal_ids, 
+            single_behaviors=["stat-active","stat-passive","moving","stat-lookaround","sniff-arena","climb-arena"],
+            symmetric_behaviors=["nose2nose","sidebyside"],
+            asymmetric_behaviors=["following"],
+            continuous_behaviors=False,
+        )
+        # re-sort behaviors to nicer order
+        behavior_order = ["moving", "stat-active", "stat-passive", "stat-lookaround", "sniff-arena", "climb-arena", "nose2nose", "sidebyside", "following"]
+        rank = {s: i for i, s in enumerate(behavior_order)}
+        resorted_behaviors = os_sorted(behaviors, key=lambda x: rank[x.rsplit("_", 1)[-1]])
+
+        include_behaviors = resorted_behaviors
+
+    noncontinuous_behaviors = [behavior for behavior in include_behaviors if behavior in noncontinuous_behaviors]
+
+    # Global embedding pool for compactness normalisation
+    Z_all = np.concatenate(
+        [np.asarray(get_dt(embeddings, k), np.float32) for k in embeddings],
+        axis=0,
+    )
+        
+    # Sample aligned embeddings and labels
+    Xs, ys = [], {}
+    for key in embeddings.keys():
+
+        current_emb, current_sup = deepof.utils.align_embeddings_at_key(
+            embeddings=embeddings,
+            supervised_annotations=supervised_annotations,
+            key=key,
+            window_size=window_size,
+            mode="any",  
+        )
+
+        np.random.seed(seed=0)
+        sample_ids = np.random.choice(
+            range(current_emb.shape[0]), np.min([current_emb.shape[0], 1000]), replace=False,
+        )
+
+        Xs.append(current_emb[sample_ids])
+
+        for beh in noncontinuous_behaviors:
+
+            if beh not in ys.keys():
+                ys[beh]=[]
+            
+            ys[beh].append(np.asarray(current_sup[beh].iloc[sample_ids], dtype=np.float32))
+    
+    X = np.concatenate(Xs, axis=0)
+    y = {beh: np.concatenate(ys[beh], axis=0) for beh in noncontinuous_behaviors}
+
+    # Calculate metrics per behavior
+    rows = []
+    for beh in tqdm(noncontinuous_behaviors, desc="Evaluating embeddings", unit="behavior"):
+
+        yb = (y[beh] > 0.5)
+        n = int(X.shape[0]) if X.size > 0 else 0
+        n_pos = int(yb.sum()) if y[beh].size > 0 else 0
+        pos_rate = float(n_pos / max(1, n)) if n > 0 else float("nan")
+
+        row = {"behavior": beh, "n_windows": n, "pos_windows": n_pos, "pos_rate": pos_rate}
+
+        # Too few positives → NaN metrics
+        if n_pos < minimum_number_of_positives or X.size == 0:
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! Not enough instances found of behavior {beh} within supervised_annotations.\n"
+                f"Found {n_pos}, needed {minimum_number_of_positives}. You can adjust \"minimum_number_of_positives\" but measures may become imprecise."
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+            row.update({k: float("nan") for k in [
+                "trace_cov_pos", "trace_cov_pos_norm_global",
+                "ap_mean", "ap_std"]})
+            row.update({"ap_n_used": 0, "knn_k": 25,
+                        "pos_knn_agree_mean": float("nan"),
+                        "pos_knn_agree_std": float("nan"),
+                        "knn_n_ref": 0, "knn_n_pos_queries": 0})
+            rows.append(row)
+            continue
+
+        Z_pos = X[yb]
+
+        comp = deepof.utils.compute_compactness(Z_pos, Z_all)
+        row["trace_cov_pos"] = comp["trace_cov_pos"]
+        row["trace_cov_pos_norm_global"] = comp["trace_cov_pos_norm_global"]
+
+        sep = deepof.utils.compute_separability_logreg(X, y[beh], seed=random_state)
+        row["ap_mean"] = sep["ap_mean"]
+        row["ap_std"] = sep["ap_std"]
+        row["ap_n_used"] = sep["n_used"]
+
+        knn = deepof.utils.compute_knn_agreement(X, y[beh], seed=random_state)
+        row["knn_k"] = knn["k"]
+        row["pos_knn_agree_mean"] = knn["pos_knn_agree_mean"]
+        row["pos_knn_agree_std"] = knn["pos_knn_agree_std"]
+        row["knn_n_ref"] = knn["n_ref"]
+        row["knn_n_pos_queries"] = knn["n_pos_queries"]
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
 
 
 def _get_polygon_coords(data, animal_id=""):
