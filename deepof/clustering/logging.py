@@ -341,7 +341,7 @@ def _update_log_summary(log_summary: dict, train_logs: dict, val_logs: dict):
                 if key=="train" or key=="val" or key=="test":
                     continue
                 value = logs.get(key, np.nan)
-                log_summary[key].append(value)
+                log_summary[key]=value
         # Append losses to training / testing dicts
         for key in log_summary[data_type].keys():
             value = logs.get(key, np.nan)
