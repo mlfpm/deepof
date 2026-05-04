@@ -458,6 +458,7 @@ def _preprocess_embedding_evaluation(
     window_size: int = None,
     alignment_mode: str = "any",
     minimum_number_of_positives: int = 200,
+    normalize: bool = True,
     random_state: int = 0,
 ) -> pd.DataFrame:
     """Compute embedding-quality metrics for every detected binary behavior.
@@ -474,8 +475,9 @@ def _preprocess_embedding_evaluation(
         window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
         alignment_mode (str): How embedding windows and supervised detections should be aligned. Can be "center" (embedding window is labled as the behavior that occurs in its central frame) or "any" (embedding window is labled as the behavior(s) that occur in an of its frames).         
         minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
+        normalize (bool): Normalizes ap and knn based on positive rate. 
         random_state (int): random state used for computations for reproducibility. Default is 0
-
+        
     Returns:
         pd.DataFrame: One row per behavior with all metric columns.
     """
@@ -579,11 +581,14 @@ def _preprocess_embedding_evaluation(
         comp = deepof.utils.compute_compactness(Z_pos, Z_all)
         row["trace_cov_pos"] = comp["trace_cov_pos"]
         row["trace_cov_pos_norm_global"] = comp["trace_cov_pos_norm_global"]
-
+        
         sep = deepof.utils.compute_separability_logreg(X, y[beh], seed=random_state)
         row["ap_mean"] = sep["ap_mean"]
         row["ap_std"] = sep["ap_std"]
         row["ap_n_used"] = sep["n_used"]
+        if normalize: 
+            row["ap_mean"] = float(np.clip((row["ap_mean"] - pos_rate) / (1.0 - pos_rate), 0.0, 1.0))
+            row["ap_std"] = float(row["ap_std"] / (1.0 - pos_rate)) if np.isfinite(row["ap_std"]) else float("nan")
 
         knn = deepof.utils.compute_knn_agreement(X, y[beh], seed=random_state)
         row["knn_k"] = knn["k"]
@@ -591,6 +596,9 @@ def _preprocess_embedding_evaluation(
         row["pos_knn_agree_std"] = knn["pos_knn_agree_std"]
         row["knn_n_ref"] = knn["n_ref"]
         row["knn_n_pos_queries"] = knn["n_pos_queries"]
+        if normalize:
+            row["pos_knn_agree_mean"] = float(np.clip((row["pos_knn_agree_mean"] - pos_rate) / (1.0 - pos_rate), 0.0, 1.0))
+            row["pos_knn_agree_std"] = float(row["pos_knn_agree_std"] / (1.0 - pos_rate)) if np.isfinite(row["pos_knn_agree_std"]) else float("nan")
 
         rows.append(row)
 
