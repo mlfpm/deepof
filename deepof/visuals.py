@@ -2903,7 +2903,7 @@ def plot_embedding_evaluation(
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.8 * ncols, 3.8 * nrows))
     axes = np.atleast_2d(axes).ravel()
 
-    colors = ["#4C78A8", "#72B7B2", "#F58518"]
+    colors =  ['#A52A2A', '#3A5A40','#A3B18A']
     labels = ["compact", "AP", "kNN"]
 
     for i, (_, row) in enumerate(df.iterrows()):

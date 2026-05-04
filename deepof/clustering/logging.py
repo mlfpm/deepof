@@ -301,10 +301,11 @@ def compute_diagnostics(
     return out
 
 
-def init_log_summary():
+def init_log_summary(model_name: str):
     """Initialize distionary structure of losses to collect"""
 
     log_summary={}
+    log_summary['model_type']=model_name
     for data_type in ['train','val']:
         log_summary[data_type]={}
         log_summary[data_type]['total_loss']=[]

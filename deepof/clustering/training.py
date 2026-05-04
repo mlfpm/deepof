@@ -966,7 +966,7 @@ def fit_VQVAE(
     score_value = float("nan")
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
     score_tol = 0.01
-    log_summary=init_log_summary()
+    log_summary=init_log_summary(model_name)
 
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
@@ -1186,7 +1186,7 @@ def fit_contrastive(
     score_value = float("nan")
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
     score_tol = 0.01
-    log_summary=init_log_summary()
+    log_summary=init_log_summary(model_name)
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
@@ -1447,7 +1447,7 @@ def fit_VADE(
     # cached views for refresh
     pca_pos = pca_spd = pca_edges = pca_angles_train = None
 
-    log_summary=init_log_summary()
+    log_summary=init_log_summary(model_name)
     if teacher_cfg.use_turtle_teacher:
         print("\n--- Extracting latents for teacher ---")
         z_all = extract_latents(
