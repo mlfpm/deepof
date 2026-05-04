@@ -2495,6 +2495,7 @@ def plot_embeddings(
         )
 
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    hue_order=None
     
 
     # Filter embeddings, soft_counts and supervised_annotations based on the provided keys and experimental condition
@@ -2600,7 +2601,6 @@ def plot_embeddings(
         behavior_names="None"
         behavior_labels_fin=pd.Series(range(0,len(cluster_assignments)))
         behavior_labels_fin[:]=''
-        hue_order=None
         if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_condition","exp_id"]:
             # Concatenate experiments and align experimental conditions
             behavior_names = colour_by
