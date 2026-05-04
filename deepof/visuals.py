@@ -2943,6 +2943,113 @@ def plot_embedding_evaluation(
     plt.tight_layout()
 
 
+def plot_training_metrics(log_summary: dict) -> dict:
+    """Plot training curves from a log_summary dict.
+
+    Plots model dependent metrics
+
+    Args:
+        log_summary (dict): log info dictionary output from model fitting.
+
+    """
+    plt.style.use("seaborn-v0_8-darkgrid")
+
+    model_type = str(log_summary.get("model_type", "unknown"))
+    figs = {}
+
+    # ---------- Plot 1: alignment metrics ----------
+    conf = np.asarray(log_summary.get("val", {}).get("conf_norm", []), dtype=float)
+    bal = np.asarray(log_summary.get("val", {}).get("bal_norm", []), dtype=float)
+    score = np.asarray(log_summary.get("val", {}).get("alignment_score", []), dtype=float)
+
+    if score.size > 0 and np.isfinite(score).any():
+        epochs = np.arange(1, score.size + 1)
+        fig, ax = plt.subplots(figsize=(10, 4.6))
+
+        ax.plot(epochs, conf, label="Confidence", color="#1f77b4", linewidth=2)
+        ax.plot(epochs, bal, label="Balance", color="#ff7f0e", linewidth=2)
+        ax.plot(epochs, score, label="Score (Alignment)", color="#2ca02c", linewidth=2)
+
+        # Mark best score
+        best_ep = int(np.nanargmax(score) + 1)
+        best_val = float(np.nanmax(score))
+        ax.scatter(best_ep, best_val, color="#2ca02c", s=80, zorder=5,
+                   label=f"Best score = {best_val:.3f} @ Epoch {best_ep}")
+
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Metric value")
+        ax.set_title(f"Alignment metrics ({model_type})")
+        ax.legend(loc="best", frameon=True)
+        fig.tight_layout()
+        figs["alignment"] = fig
+
+
+    # ---------- Plot 2: pos/neg similarities (contrastive only) ----------
+    if model_type == "contrastive":
+        tr_pos = np.asarray(log_summary.get("train", {}).get("pos_similarity", []), dtype=float)
+        tr_neg = np.asarray(log_summary.get("train", {}).get("neg_similarity", []), dtype=float)
+        va_pos = np.asarray(log_summary.get("val", {}).get("pos_similarity", []), dtype=float)
+        va_neg = np.asarray(log_summary.get("val", {}).get("neg_similarity", []), dtype=float)
+
+        n = max(tr_pos.size, tr_neg.size, va_pos.size, va_neg.size)
+        if n > 0:
+            fig, ax = plt.subplots(figsize=(10, 4.8))
+
+            if tr_pos.size:
+                ax.plot(np.arange(1, tr_pos.size + 1), tr_pos, label="Train +sim", color="#2ca02c", linewidth=2)
+            if tr_neg.size:
+                ax.plot(np.arange(1, tr_neg.size + 1), tr_neg, label="Train -sim", color="#d62728", linewidth=2)
+            if va_pos.size:
+                ax.plot(np.arange(1, va_pos.size + 1), va_pos, label="Val +sim", color="#2ca02c", linewidth=2, linestyle="--")
+            if va_neg.size:
+                ax.plot(np.arange(1, va_neg.size + 1), va_neg, label="Val -sim", color="#d62728", linewidth=2, linestyle="--")
+
+            # Mark best train separation (pos - neg)
+            m = min(tr_pos.size, tr_neg.size)
+            if m > 0 and np.isfinite(tr_pos[:m]).any() and np.isfinite(tr_neg[:m]).any():
+                sep = tr_pos[:m] - tr_neg[:m]
+                best_ep = int(np.nanargmax(sep) + 1)
+                ax.vlines(best_ep, tr_neg[best_ep - 1], tr_pos[best_ep - 1],
+                          colors="gray", linestyles=":", linewidth=2,
+                          label=f"Best sep = {sep[best_ep - 1]:.3f} @ Epoch {best_ep}")
+
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Similarity")
+            ax.set_title("Positive vs negative similarities (train & val)")
+            ax.legend(loc="best", frameon=True)
+            fig.tight_layout()
+            figs["similarities"] = fig
+
+    # ---------- Plot 3: train vs validation loss ----------
+    train_total = np.asarray(log_summary.get("train", {}).get("total_loss", []), dtype=float)
+    val_total = np.asarray(log_summary.get("val", {}).get("total_loss", []), dtype=float)
+
+    if train_total.size > 0 or val_total.size > 0:
+        fig, ax = plt.subplots(figsize=(10, 4.8))
+        if train_total.size > 0:
+            ep_tr = np.arange(1, train_total.size + 1)
+            ax.plot(ep_tr, train_total, label="Train loss", color="#1f77b4", linewidth=2)
+        if val_total.size > 0:
+            ep_va = np.arange(1, val_total.size + 1)
+            ax.plot(ep_va, val_total, label="Validation loss", color="#ff7f0e", linewidth=2)
+
+            # Mark best val loss
+            if np.isfinite(val_total).any():
+                best_ep = int(np.nanargmin(val_total) + 1)
+                best_val = float(np.nanmin(val_total))
+                ax.scatter(best_ep, best_val, color="#ff7f0e", s=80, zorder=5,
+                           label=f"Best val loss = {best_val:.3f} @ Epoch {best_ep}")
+
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.set_title(f"Train vs validation loss ({model_type})")
+        ax.legend(loc="best", frameon=True)
+        fig.tight_layout()
+        figs["loss"] = fig
+
+
+    return figs
+
 
 # noinspection PyTypeChecker
 def animate_skeleton(
