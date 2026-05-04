@@ -1312,6 +1312,8 @@ class Project:
 
         previous_project = load_project(project_to_extend)
 
+        assert previous_project._number_of_rois == self.number_of_rois, f"Cannot extend, number of ROIs must match. Your previous project has {previous_project._number_of_rois} ROIs, your new project has {self.number_of_rois} rois!"
+
         assert (
             os.path.abspath(os.path.join(previous_project._project_path,previous_project._project_name)) == os.path.abspath(os.path.join(self.project_path,self.project_name))
             ), ("The project to be extended and the project used for extension\n"
