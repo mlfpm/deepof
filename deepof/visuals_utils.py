@@ -245,7 +245,7 @@ def generate_behavior_combinations(
         elif b.scope == Behavior_scope.INDIVIDUAL:
             (cont if b.output_kind == Behavior_output.CONTINUOUS else single).append(b.name)
 
-    ids = [""] if animal_ids is None else [f"{aid}_" for aid in animal_ids]
+    ids = [""] if (animal_ids is None or (isinstance(animal_ids,list) and len(animal_ids[0])==0) or (isinstance(animal_ids,str) and len(animal_ids)==0)) else [f"{aid}_" for aid in animal_ids]
     n = len(ids)
 
     # Custom color lookup (user-provided .color or from palette)
