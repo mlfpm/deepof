@@ -186,7 +186,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
             supervised_colors.update({custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
 
     elif len(animal_ids)==1:
-        supervised = [animal_ids[0] + behavior for behavior in single_behaviors]            
+        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]            
         supervised_colors = {animal_ids[0] + "_" + key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
 
         # append custom behaviors
