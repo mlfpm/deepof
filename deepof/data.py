@@ -2815,7 +2815,7 @@ class Coordinates:
             self._custom_continuous_behavior_names=[ #collect custom continous behaviors
                 custom_behavior.name for 
                 custom_behavior in self._custom_behaviors 
-                if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+                if custom_behavior.output_type==deepof.annotation_utils.Behavior_output.CONTINUOUS
             ]
 
         # get immobility classifer

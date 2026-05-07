@@ -44,7 +44,7 @@ table_dict = NewType("deepof_table_dict", Any)
 
 class Behavior_scope(Enum):
     INDIVIDUAL = auto()
-    PAIR = auto()
+    PAIR_DIRECTIONAL = auto()
     PAIR_NONDIRECTIONAL = auto()
     #GLOBAL = auto() #may be added later on
 
@@ -98,7 +98,7 @@ class BehaviorContext:
     def iter_subjects(self, scope: Behavior_scope):
         if scope is Behavior_scope.INDIVIDUAL:
             yield from self.animal_ids
-        elif scope is Behavior_scope.PAIR:
+        elif scope is Behavior_scope.PAIR_DIRECTIONAL:
             # only makes sense if >=2 animals; combinations([]) is empty anyway
             yield from combinations(self.animal_ids, 2)
         elif scope is Behavior_scope.GLOBAL:
@@ -145,7 +145,7 @@ class DeepOF_behavior:
     """
     name: str
     scope: Behavior_scope
-    output_kind: Behavior_output
+    output_type: Behavior_output
     compute: BehaviorFn
     unit: Optional[str] = "a.u."
     
@@ -169,7 +169,7 @@ class DeepOF_behavior:
         if self.scope is Behavior_scope.INDIVIDUAL:
             animal_id = animal_ids  # type: ignore[assignment]
             return f"{ctx.prefix(animal_id)}{self.name}"
-        if self.scope is Behavior_scope.PAIR:
+        if self.scope is Behavior_scope.PAIR_DIRECTIONAL:
             a, b = animal_ids  # type: ignore[misc]
             return f"{a}_{b}_{self.name}"
         if self.scope is Behavior_scope.GLOBAL:
@@ -198,7 +198,7 @@ class DeepOF_behavior:
             if self.postprocess is not None:
                 y = np.asarray(self.postprocess(y, ctx, animal_ids))
             else:
-                y = postprocess_median_filtering(y, ctx, self.output_kind)
+                y = postprocess_median_filtering(y, ctx, self.output_type)
 
             return y
 
@@ -1411,48 +1411,48 @@ def supervised_tagging(
 
     behavior_nose2nose = DeepOF_behavior(
         name="nose2nose",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_nose2nose,
         requires=("raw_coords",),
     )
 
     behavior_sidebyside = DeepOF_behavior(
         name="sidebyside",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_sidebyside,
         requires=("raw_coords",),
     )
 
     behavior_sidereside = DeepOF_behavior(
         name="sidereside",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_sidereside,
         requires=("raw_coords",),
     )
 
     behavior_nose2tail = DeepOF_behavior(
         name="nose2tail",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_nose2tail,
         requires=("raw_coords",),
     )
 
     behavior_nose2body = DeepOF_behavior(
         name="nose2body",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_nose2body,
         requires=("raw_coords",),
     )
 
     behavior_following = DeepOF_behavior(
         name="following",
-        scope=Behavior_scope.PAIR,
-        output_kind=Behavior_output.BINARY,
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
         compute=compute_following,
         postprocess=postprocess_following,
         requires=("dists", "raw_coords", "speeds"),
@@ -1461,7 +1461,7 @@ def supervised_tagging(
     behavior_climb_arena = DeepOF_behavior(
         name="climb-arena",
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_climb_arena,
         requires=("raw_coords",),
     )
@@ -1469,7 +1469,7 @@ def supervised_tagging(
     behavior_sniff_arena = DeepOF_behavior(
         name="sniff-arena",
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_sniff_arena,
         requires=("raw_coords", "speeds"),
     )
@@ -1477,7 +1477,7 @@ def supervised_tagging(
     behavior_immobility = DeepOF_behavior(
         name="immobility",
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_immobility,
         postprocess=postprocess_identity,  
     )
@@ -1485,7 +1485,7 @@ def supervised_tagging(
     behavior_stat_lookaround = DeepOF_behavior(
         name="stat-lookaround",
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_stat_lookaround,
         postprocess=postprocess_identity,  
     )
@@ -1493,7 +1493,7 @@ def supervised_tagging(
     behavior_detect_activity = DeepOF_behavior(
         name="detect_activity",  # mutlti-behavior, name is not used in column naming for dict outputs
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_detect_activity,
         postprocess=postprocess_identity, 
     )
@@ -1501,7 +1501,7 @@ def supervised_tagging(
     behavior_sniffing = DeepOF_behavior(
         name="sniffing",
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.BINARY,
+        output_type=Behavior_output.BINARY,
         compute=compute_sniffing,
         postprocess=postprocess_identity,  
     )
@@ -1509,7 +1509,7 @@ def supervised_tagging(
     behavior_continuous = DeepOF_behavior(
         name="continuous",  # mutlti-behavior, name is not used in column naming for dict outputs
         scope=Behavior_scope.INDIVIDUAL,
-        output_kind=Behavior_output.CONTINUOUS,
+        output_type=Behavior_output.CONTINUOUS,
         compute=compute_continuous_measures,
         postprocess=postprocess_identity, 
     )
@@ -1596,7 +1596,7 @@ def supervised_tagging(
                         # Pairs of directional behaviors (inverted order for other behavior direction)
                         tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_" + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, animal_pair)
                     
-                    elif custom_behavior.scope is Behavior_scope.PAIR:
+                    elif custom_behavior.scope is Behavior_scope.PAIR_DIRECTIONAL:
 
                         # Pairs of directional behaviors (inverted order for other behavior direction)
                         tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_" + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, animal_pair)
@@ -1705,7 +1705,7 @@ def validate_custom_behaviors(custom_behaviors: list[DeepOF_behavior] = None, cu
     for custom_behavior in custom_behaviors:
         if "_" in custom_behavior.name: # pragma: no cover
             raise ValueError("No \"_\" allowed in behavior names. Use \"-\" instead")
-        if not custom_behavior.scope==Behavior_scope.INDIVIDUAL and custom_behavior.output_kind==Behavior_output.CONTINUOUS: # pragma: no cover
+        if not custom_behavior.scope==Behavior_scope.INDIVIDUAL and custom_behavior.output_type==Behavior_output.CONTINUOUS: # pragma: no cover
             raise NotImplementedError("Currently continuous behaviors are only supported for individuals!")
         if (custom_behavior.name in SINGLE_BEHAVIORS or custom_behavior.name in SYMMETRIC_BEHAVIORS or 
         custom_behavior.name in ASYMMETRIC_BEHAVIORS or custom_behavior.name in CONTINUOUS_BEHAVIORS): # pragma: no cover

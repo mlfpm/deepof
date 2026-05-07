@@ -240,10 +240,10 @@ def generate_behavior_combinations(
     for b in custom_behaviors:
         if b.scope == Behavior_scope.PAIR_NONDIRECTIONAL:
             sym.append(b.name)
-        elif b.scope == Behavior_scope.PAIR:
+        elif b.scope == Behavior_scope.PAIR_DIRECTIONAL:
             asym.append(b.name)
         elif b.scope == Behavior_scope.INDIVIDUAL:
-            (cont if b.output_kind == Behavior_output.CONTINUOUS else single).append(b.name)
+            (cont if b.output_type == Behavior_output.CONTINUOUS else single).append(b.name)
 
     ids = [""] if (animal_ids is None or (isinstance(animal_ids,list) and len(animal_ids[0])==0) or (isinstance(animal_ids,str) and len(animal_ids)==0)) else [f"{aid}_" for aid in animal_ids]
     n = len(ids)
