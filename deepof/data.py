@@ -2787,7 +2787,7 @@ class Coordinates:
         center: str = "Center",
         align: str = "Spine_1",
         custom_behaviors: list[deepof.annotation_utils.DeepOF_behavior] = None,
-        custom_behavior_inputs: dict = {}
+        custom_behavior_context: dict = {}
     ) -> table_dict:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
@@ -2795,7 +2795,7 @@ class Coordinates:
             center (str): Body part to center coordinates on. "Center" by default.
             align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
             custom_behaviors (list[DeepOF_behavior]): a list of custom DeepOF_behavior objects. Added at the beginning of supervised behaviors if provided
-            custom_behavior_inputs (dict): a dictionary containing additional information you need for your custom behaviors
+            custom_behavior_context (dict): a dictionary containing additional information you need for your custom behaviors
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
@@ -2808,7 +2808,7 @@ class Coordinates:
             This is not supported by the current version of deepof"""
             )  # pragma: no cover
         
-        deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_inputs)
+        deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_context)
         self._custom_behaviors=deepof.annotation_utils.assign_custom_behavior_colors(custom_behaviors)
         self._custom_continuous_behavior_names=[]
         if self._custom_behaviors is not None:
@@ -2940,7 +2940,7 @@ class Coordinates:
                     params=params,
                     run_numba=self._run_numba,
                     custom_behaviors = custom_behaviors,
-                    custom_behavior_inputs = custom_behavior_inputs
+                    custom_behavior_context = custom_behavior_context
                 )
 
                 supervised_tags.index = tag_index

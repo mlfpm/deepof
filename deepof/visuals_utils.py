@@ -109,9 +109,17 @@ def BGR_to_hex(bgr_color):
     r, g, b = bgr_color[2], bgr_color[1], bgr_color[0]
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
-def RGB_to_hex(bgr_color):
-    r, g, b = bgr_color[0], bgr_color[1], bgr_color[2]
+def RGB_to_hex(rgb_color):
+    r, g, b = rgb_color[0], rgb_color[1], rgb_color[2]
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
+
+def RGB_to_BGR(rgb_color):
+    r, g, b = rgb_color[0], rgb_color[1], rgb_color[2]
+    return tuple([b,g,r])
+
+def BGR_to_RGB(bgr_color):
+    b, g, r = bgr_color[0], bgr_color[1], bgr_color[2]
+    return tuple([r,g,b])
 
 def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None, custom_behaviors: List[DeepOF_behavior] =None):
     """
@@ -2278,7 +2286,6 @@ def _preprocess_mouse_roi_interaction(
                     inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
                     dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
 
-                # Match old semantics:
                 # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
                 # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI
                 valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)

@@ -1349,7 +1349,7 @@ def supervised_tagging(
     params: dict = {},
     run_numba: bool = False,
     custom_behaviors: list[DeepOF_behavior] = None,
-    custom_behavior_inputs: dict = {}
+    custom_behavior_context: dict = {}
 ) -> pd.DataFrame:
     """Output a dataframe with the registered motives per frame.
 
@@ -1369,7 +1369,7 @@ def supervised_tagging(
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
         custom_behaviors (list[DeepOF_behavior]): a list of custom DeepOF_behavior objects. Added at the beginning of supervised behaviors if provided
-        custom_behavior_inputs (dict): a dictionary containing additional information you need for your custom behaviors
+        custom_behavior_context (dict): a dictionary containing additional information you need for your custom behaviors
         
     Returns:
         tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time
@@ -1577,7 +1577,7 @@ def supervised_tagging(
     behavior_ctx.extra["main_body"] = main_body
     behavior_ctx.extra["immobility_estimator"]=immobility_estimator
     behavior_ctx.extra["mouse_lens"] = mouse_lens
-    behavior_ctx.extra.update(custom_behavior_inputs)
+    behavior_ctx.extra.update(custom_behavior_context)
         
     # Get all animal ID combinations
     animal_pairs = list(combinations(animal_ids, 2))

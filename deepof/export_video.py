@@ -29,8 +29,8 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, BODYPART_COLORS
-from deepof.visuals_utils import hex_to_BGR, BGR_to_hex, RGB_to_hex
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, BODYPART_COLORS, ROI_COLORS
+from deepof.visuals_utils import hex_to_BGR, BGR_to_hex, RGB_to_hex, RGB_to_BGR, BGR_to_RGB
 
 
 
@@ -51,6 +51,7 @@ class VideoExportConfig:
     display_markers: bool = False
     display_mouse_labels: bool = False
     display_loading_bar: bool = True
+    display_roi: int = None
     supervised_export: bool = True
 
 
@@ -252,7 +253,6 @@ def _prepare_behavior_dataframe(
 
 def _draw_arena(
     frame: np.ndarray,
-    arena_type: str,
     arena_params: Any,
     params: VideoExportProps
 ):
@@ -276,6 +276,30 @@ def _draw_arena(
             color=params.arena_color,
             thickness=params.arena_thickness,
         )
+
+def _draw_roi(
+    frame: np.ndarray,
+    roi_number: int,
+    roi_polygon: np.array,
+    params: VideoExportProps
+):
+    """Draws the roi on the frame."""
+    
+    roi_color=ROI_COLORS[roi_number]
+    alpha=0.3
+    
+    cv2.polylines(
+        img=frame,
+        pts=[np.array(roi_polygon, dtype=np.int32)],
+        isClosed=True,
+        color=roi_color,
+        thickness=params.arena_thickness,
+    )        
+    overlay = frame.copy()
+    pts = np.array(roi_polygon, dtype=np.int32).reshape((-1, 1, 2))
+    cv2.fillPoly(overlay, [pts], roi_color)           
+    # Blend overlay with original frame
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
 
 def _draw_markers(
@@ -481,6 +505,10 @@ def output_annotated_video(
                 tuple(np.array(arena_params[1]) * scaling_ratio),
                 arena_params[2],
             )
+    if video_export_config.display_roi is not None:
+        arena_params = coordinates._arena_params[experiment_id]
+        scaled_roi = np.array(coordinates._roi_dicts[experiment_id][video_export_config.display_roi]) * scaling_ratio
+
     if video_export_config.display_markers or video_export_config.display_mouse_labels:
         scaled_coords = cur_coords * scaling_ratio
 
@@ -503,7 +531,10 @@ def output_annotated_video(
 
             # Annotations drawn BEFORE resizing
             if video_export_config.display_arena:
-                _draw_arena(frame, coordinates._arena, scaled_arena_params, params)
+                _draw_arena(frame, scaled_arena_params, params)
+            
+            if video_export_config.display_roi is not None:
+                _draw_roi(frame, video_export_config.display_roi, scaled_roi , params)
             
             if video_export_config.display_markers:
                 _draw_markers(frame, scaled_coords.iloc[frame_idx], coordinates._animal_ids, params)
