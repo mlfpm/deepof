@@ -285,7 +285,7 @@ def _draw_roi(
 ):
     """Draws the roi on the frame."""
     
-    roi_color=ROI_COLORS[roi_number]
+    roi_color=ROI_COLORS[roi_number-1]
     alpha=0.3
     
     cv2.polylines(
