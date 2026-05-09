@@ -157,3 +157,4 @@ tutorials:
     - papermill docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb custom_labels_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_roi_tutorial.ipynb roi_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_behaviors_tutorial.ipynb custom_behaviors_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_model_types_tutorial.ipynb model_types_output.ipynb

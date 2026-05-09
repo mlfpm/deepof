@@ -3106,7 +3106,7 @@ class Coordinates:
                 latent_dim=latent_dim,
                 epochs=epochs,
                 log_history=log_history,
-                n_components=n_components,
+                n_clusters=n_components,
                 kmeans_loss=kmeans_loss,
                 temperature=temperature,
                 contrastive_similarity_function=contrastive_similarity_function,

@@ -247,7 +247,7 @@ def test_embedding_model_fittingPT(model_name):
         batch_size=2,
         latent_dim=4,
         epochs=1,
-        n_components=4,
+        n_clusters=4,
         output_path=out_path,
         log_history=True,
         save_weights=False,

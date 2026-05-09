@@ -505,7 +505,7 @@ def embedding_model_fittingPT(
     epochs: int,
     output_path: str,
     # Logging/IO
-    n_components: int = 10,
+    n_clusters: int = 10,
     learning_rate: float = 1e-3,
     log_history: bool = True,
     data_path: str = ".",
@@ -521,7 +521,7 @@ def embedding_model_fittingPT(
     gmm_learning_rate: float = 1e-3,
     learning_rate_pretrain: float = 1e-3,
     # Regularization knobs
-    interaction_regularization: float = 0.0,
+    interaction_regularization: float = 0.0003,
     kmeans_loss: float = 0.0,
     # System
     num_workers: int = 0,
@@ -628,7 +628,7 @@ def embedding_model_fittingPT(
         batch_size=batch_size,
         latent_dim=latent_dim,
         epochs=epochs,
-        n_components=n_components,
+        n_components=n_clusters,
         learning_rate=learning_rate,
         output_path=output_path,
         data_path=data_path,

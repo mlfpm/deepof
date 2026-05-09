@@ -9,6 +9,7 @@ from typing import Any, NewType, Tuple, Dict, Optional, Mapping
 import copy
 from dataclasses import dataclass, asdict
 import tqdm
+import warnings
 from contextlib import nullcontext
 
 from IPython.display import clear_output
@@ -708,6 +709,41 @@ def _materialize_encoder(model, x_shape, a_shape, device):
     _ = model.encoder(x, a)   # sufficient to build encoder.spatial_gnn_block params
 
 
+def print_model_info(ckpt_path: str) -> None:
+    """
+    If present, print the contents of a sibling info file:
+      [same_name_as_model_file]_info.txt
+
+    Example:
+      /path/to/model.pt  ->  /path/to/model_info.txt
+    """
+    from pathlib import Path
+
+    p = Path(ckpt_path)
+    info_path = p.with_name(f"{p.stem}_info.txt")
+
+    if not info_path.exists():
+        warning_message = (
+            "\033[38;5;208m\n"
+            "Warning! No info file has been found to denote model specifications!."
+            "\033[0m"
+        )
+        warnings.warn(warning_message)
+        return
+
+    text = info_path.read_text(encoding="utf-8")
+    text = text.strip()
+    if not text:
+        return
+
+    rule = "=" * 88
+    print("\n" + rule)
+    print(f"Model info: {info_path}")
+    print("-" * 88)
+    print(text)
+    print(rule + "\n")
+
+
 def load_model_from_ckpt(path: str, device=None, strict: bool = False):
     """
     Load a single model checkpoint saved via save_model_info(..., save_bundle=True)
@@ -716,6 +752,9 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Print info file (if available)
+    print_model_info(path)
 
     ckpt = torch.load(path, map_location=device, weights_only=False)  # weights_only=True is NOT compatible with arbitrary dict payloads
     if "state_dict" not in ckpt: # pragma: no cover
@@ -728,6 +767,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
     log_summary = ckpt.get("log_summary", {})
 
     model_name = spec["model_name"].lower()
+    log_summary['model_type']=model_name
 
     # --- rebuild ---
     if model_name == "vqvae":
