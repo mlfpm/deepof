@@ -239,7 +239,7 @@ def test_embedding_model_fittingPT(model_name):
     deepof.clustering.dataset.BatchDictDataset = FakeBatchDictDataset
 
     # Call the outer function
-    result = deepof.clustering.training.embedding_model_fittingPT(
+    result = deepof.clustering.training.train_deepof_model(
         preprocessed_object=({}, {}),  # empty dicts, mocked anyway
         adjacency_matrix=adjacency,
         meta_info=meta_info,

@@ -495,7 +495,7 @@ def step_contrastive_distill(
     return StepResult(loss=total, logs=logs)
 
 
-def embedding_model_fittingPT(
+def train_deepof_model(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
     meta_info: dict,
@@ -745,7 +745,7 @@ def embedding_model_fittingPT(
         aug_p_rot=aug_p_rot,
     )
 
-    return embedding_model_fitting(
+    return train_deepof_model_base(
         preprocessed_object, 
         adjacency_matrix,
         meta_info,
@@ -758,7 +758,7 @@ def embedding_model_fittingPT(
 
    
 
-def embedding_model_fitting(
+def train_deepof_model_base(
     preprocessed_object: Tuple[dict, dict],
     adjacency_matrix: np.ndarray,
     meta_info: dict,

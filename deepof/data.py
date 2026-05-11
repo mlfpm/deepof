@@ -3074,16 +3074,16 @@ class Coordinates:
         #get available memory -10% as buffer
         available_mem=psutil.virtual_memory().available*0.9
         #calculate maximum number of rows that fit in memory based on table info 
-        N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
-        if samples_max is None:
-            samples_max=N_rows_max
-        elif samples_max>N_rows_max:
-            warning_message = (
-            "\033[38;5;208m\n"
-            "Warning! The selected number of samples may exceed your available memory."
-            "\033[0m"
-        )
-            warnings.warn(warning_message)
+        #N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
+        #if samples_max is None:
+        #    samples_max=N_rows_max
+        #elif samples_max>N_rows_max:
+        #    warning_message = (
+        #    "\033[38;5;208m\n"
+        #    "Warning! The selected number of samples may exceed your available memory."
+        #    "\033[0m"
+        #)
+        #    warnings.warn(warning_message)
 
         bin_info=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[0], samples_max=samples_max)
         bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
@@ -3097,7 +3097,7 @@ class Coordinates:
             pretrained = os.path.join(self._project_path, self._project_name, "Trained_models","models",pretrained)  
 
         try:
-            model_val, model_score, model_part, log_summary = deepof.clustering.training.embedding_model_fittingPT(
+            model_val, model_score, model_part, log_summary = deepof.clustering.training.train_deepof_model(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
                 model_name=embedding_model,

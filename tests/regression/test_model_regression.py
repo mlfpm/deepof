@@ -219,7 +219,7 @@ def test_vade_full_pipeline_regression(encoder_type):
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
     )
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.train_deepof_model_base(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
@@ -352,7 +352,7 @@ def test_vqvae_full_pipeline_regression(encoder_type):
 
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg()
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.train_deepof_model_base(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
@@ -501,7 +501,7 @@ def test_contrastive_full_pipeline_regression(encoder_type):
         aug_p_rot=0.5,
     )
 
-    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.embedding_model_fitting(
+    model_val, model_score, teacher_init_model, log_summary = deepof.clustering.training.train_deepof_model_base(
         preprocessed_object=preprocessed_object,
         adjacency_matrix=adj_matrix,
         meta_info=meta_info,
