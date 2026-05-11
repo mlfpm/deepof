@@ -1347,7 +1347,10 @@ def _preprocess_time_bins(
     # --- 3. Post-processing: Validation and Downsampling ---
     _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)
 
-    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
+    if samples_max is not None:
+        final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
+    else:
+        final_bins = result.bin_info
 
     return final_bins
 

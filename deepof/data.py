@@ -3072,7 +3072,7 @@ class Coordinates:
         pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
 
         #get available memory -10% as buffer
-        available_mem=psutil.virtual_memory().available*0.9
+        #available_mem=psutil.virtual_memory().available*0.9
         #calculate maximum number of rows that fit in memory based on table info 
         #N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
         #if samples_max is None:
