@@ -805,7 +805,7 @@ def test_deep_unsupervised_embedding(table_type):
         embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
         epochs=10,
         encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
-        n_components=10,
+        n_clusters=10,
         latent_dim=8,
         batch_size=16,
         interaction_regularization=0.0,
