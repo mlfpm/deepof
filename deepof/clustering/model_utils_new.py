@@ -182,12 +182,12 @@ class ContrastiveCfg:
     aug_p_shift: float = 0.8
     aug_max_rot: int = 30
     aug_n_rot: int = 4
-    aug_p_rot: float = 0.8
+    aug_p_rot: float = 0.0
     aug_max_interp: int = 8
     aug_min_interp: int = 3        
     aug_p_interp: float = 0.3
     aug_noise_sigma: float = 0.03
-    aug_p_noise: float = 1.0
+    aug_p_noise: float = 0.0
 
 def _append_cfg(lines, title: str, cfg) -> None:
     if cfg is None:

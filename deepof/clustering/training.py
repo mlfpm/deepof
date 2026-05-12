@@ -882,8 +882,13 @@ def fit_VQVAE(
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     writer: SummaryWriter,
+    trial: optuna.Trial = None,
 ):
     
+    tuning_mode=False
+    if trial is not None:
+        tuning_mode=True
+
     # Some setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
@@ -1048,6 +1053,12 @@ def fit_VQVAE(
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
             )
         )
+        # for tuning
+        if tuning_mode:
+            max_score = score_value #if score_value>max_score else max_score
+            trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
 
         if improved_score and epoch > score_start_epoch:
             best_score = score_value
@@ -1078,6 +1089,9 @@ def fit_VQVAE(
     if writer:
         writer.flush(); writer.close()
 
+    if tuning_mode:
+        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
+
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
 
 
@@ -1091,8 +1105,13 @@ def fit_contrastive(
     teacher_cfg: TurtleTeacherCfg,
     contrastive_cfg: ContrastiveCfg,
     writer: SummaryWriter,
+    trial: optuna.Trial = None,
 ):
     
+    tuning_mode=False
+    if trial is not None:
+        tuning_mode=True
+
     # Some setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
@@ -1220,6 +1239,13 @@ def fit_contrastive(
         v_total = float(val_logs.get("total_loss", float("inf")))
         score_value = float("nan")
 
+        # for tuning
+        if tuning_mode:
+            max_score = val_logs['pos_similarity']-val_logs['neg_similarity'] #if score_value>max_score else max_score
+            trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
+
         if apply_distill:
             diag = deepof.clustering.logging.compute_diagnostics(
                 model=model,
@@ -1308,6 +1334,9 @@ def fit_contrastive(
 
     if writer:
         writer.flush(); writer.close()
+
+    if tuning_mode:
+        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
 
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary   
 
