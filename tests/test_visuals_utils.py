@@ -45,7 +45,7 @@ from deepof.utils import (
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
 )
-from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 
 # TESTING SOME AUXILIARY FUNCTIONS #

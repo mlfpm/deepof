@@ -21,6 +21,7 @@ from hypothesis.extra import numpy as hnp
 import deepof.data
 import deepof.post_hoc
 from deepof.data import TableDict
+from tests.test_objects.test_objects import get_embeddings_tab_dict
 
 
 ''' test for old implementation
@@ -135,14 +136,10 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
 
     # Define a test embedding dictionary
     keys=prun._tables.keys()
-    embeddings = {key: np.random.normal(size=(100-window_size+1, 10)) for key in keys}
+    n=100-window_size+1
+    m=10
 
-    embeddings=deepof.data.TableDict(
-        embeddings,
-        typ="unsupervised_embedding",
-        table_path=None, 
-        exp_conditions=None,
-    )
+    embeddings=get_embeddings_tab_dict(keys, n_min=n, n_max=n, m_min=m, m_max=m)
 
     gate_edges=deepof.post_hoc.compute_gate_edges(
         prun,
@@ -216,14 +213,10 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
 
     # Define a test embedding dictionary
     keys=prun._tables.keys()
-    embeddings = {key: np.random.normal(size=(100-window_size+1, 10)) for key in keys}
+    n=100-window_size+1
+    m=10
 
-    embeddings=deepof.data.TableDict(
-        embeddings,
-        typ="unsupervised_embedding",
-        table_path=None, 
-        exp_conditions=None,
-    )
+    embeddings=get_embeddings_tab_dict(keys, n_min=n, n_max=n, m_min=m, m_max=m)
 
     gate_edges=deepof.post_hoc.compute_gate_edges(
         prun,

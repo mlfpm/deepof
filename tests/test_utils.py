@@ -28,7 +28,7 @@ from typing import Any, List, NewType, Tuple, Union
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
-from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 # AUXILIARY FUNCTIONS #
 
