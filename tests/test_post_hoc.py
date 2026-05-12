@@ -180,6 +180,87 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
 
 
 @settings(deadline=None, max_examples=25)
+@given(N_clusters_per_gate=st.sampled_from([3, 2]), M_gates=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
+def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,exp_type):
+
+
+    animal_ids = [""]
+    animal_pair=''
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+        animal_pair=('B','W')
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    embeddings = {key: np.random.normal(size=(100-window_size+1, 10)) for key in keys}
+
+    embeddings=deepof.data.TableDict(
+        embeddings,
+        typ="unsupervised_embedding",
+        table_path=None, 
+        exp_conditions=None,
+    )
+
+    gate_edges=deepof.post_hoc.compute_gate_edges(
+        prun,
+        animal_ids,
+        window_size=window_size,
+        M_gates=M_gates,
+        embedding_gates=distance_bp,
+    )
+    
+    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
+        prun,
+        embeddings,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        N_clusters_per_gate=N_clusters_per_gate,
+        M_gates=M_gates,
+        embedding_gates=distance_bp,
+        gate_edges=gate_edges,
+    )
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", exp_type, "deepof_project"
+        )
+    )
+    
+    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
+    assert all([np.round(np.sum(soft_counts_out[animal_pair][key]))==100-window_size+1 for key in soft_counts_out[animal_pair].keys()])
+
+    # Check if the states determined correspond to the requested states
+    if exp_type=="test_single_topview":
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
+    else:
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
+
+
+@settings(deadline=None, max_examples=25)
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
 
