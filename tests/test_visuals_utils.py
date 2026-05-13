@@ -212,7 +212,7 @@ def test_filter_embeddings(keys,exp_condition):
 
 @settings(deadline=None, max_examples=25)
 @given(
-    include_behaviors=st.one_of(st.just(["B_moving"]),st.just(["B_moving","B_stat-active","B_stat-passive"])),
+    include_behaviors=st.one_of(st.just(None),st.just(["B_moving"]),st.just(["B_moving","B_stat-active","B_stat-passive"])),
     window_size=st.integers(5,10),
     alignment_mode=st.one_of(st.just("any"),st.just("center")),
     minimum_number_of_positives=st.integers(5,100),
@@ -257,8 +257,10 @@ def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment
     n=100-window_size+1
     m=10
 
+    n_behaviors=len(include_behaviors) if include_behaviors is not None else 12
+
     embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
-    supervised_annotations=get_supervised_tab_dict_instance(keys, col_names=include_behaviors, n_min=100, n_max=100, m_min=len(include_behaviors), m_max=len(include_behaviors))
+    supervised_annotations=get_supervised_tab_dict_instance(keys, col_names=include_behaviors, n_min=100, n_max=100, m_min=n_behaviors, m_max=n_behaviors)
 
     eval=_preprocess_embedding_evaluation(
         coordinates=prun,
@@ -277,16 +279,21 @@ def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment
         )
     )
 
-    # All behaviors occur in evaluation data
-    assert all([beh in list(eval.behavior) for beh in include_behaviors])
+    # empty case: as none of teh default behaviors are in our supervised behaviors, we get an empty dataframe back
+    if include_behaviors is None:
+        assert isinstance( eval, pd.DataFrame)
+        assert len(eval)==0     
+    else:
+        # All behaviors occur in evaluation data
+        assert all([beh in list(eval.behavior) for beh in include_behaviors])
 
-    # Number of total findows corresponds to widnows fitting into frames in project 
-    assert eval.n_windows[0]==(100-window_size+1)*2
+        # Number of total findows corresponds to widnows fitting into frames in project 
+        assert eval.n_windows[0]==(100-window_size+1)*2
 
-    # Parameters are in expected range
-    assert all([ np.isnan(trace_cov_pos_norm_global) or (trace_cov_pos_norm_global>=0 and trace_cov_pos_norm_global<=1.1) for trace_cov_pos_norm_global in list(eval.trace_cov_pos_norm_global)]) 
-    assert all([ np.isnan(ap_mean) or (ap_mean>=0 and ap_mean<=1) for ap_mean in list(eval.ap_mean)]) 
-    assert all([ np.isnan(pos_knn_agree_mean) or (pos_knn_agree_mean>=0 and pos_knn_agree_mean<=1) for pos_knn_agree_mean in list(eval.pos_knn_agree_mean)]) 
+        # Parameters are in expected range
+        assert all([ np.isnan(trace_cov_pos_norm_global) or (trace_cov_pos_norm_global>=0 and trace_cov_pos_norm_global<=1.1) for trace_cov_pos_norm_global in list(eval.trace_cov_pos_norm_global)]) 
+        assert all([ np.isnan(ap_mean) or (ap_mean>=0 and ap_mean<=1) for ap_mean in list(eval.ap_mean)]) 
+        assert all([ np.isnan(pos_knn_agree_mean) or (pos_knn_agree_mean>=0 and pos_knn_agree_mean<=1) for pos_knn_agree_mean in list(eval.pos_knn_agree_mean)])
 
 
 @given(
