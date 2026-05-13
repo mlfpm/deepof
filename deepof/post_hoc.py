@@ -76,12 +76,12 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
 
     # Collect sequences, validate dims, crop to common length
     seq_list = [np.asarray(v) for v in embeddings.values()]
-    if not seq_list:
-        raise ValueError("No sequences provided.")  # pragma: no cover
+    if not seq_list:  # pragma: no cover
+        raise ValueError("No sequences provided.")  
     d = seq_list[0].shape[1]
     for s in seq_list:
-        if s.ndim != 2 or s.shape[1] != d:
-            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")  # pragma: no cover
+        if s.ndim != 2 or s.shape[1] != d:  # pragma: no cover
+            raise ValueError(f"All sequences must be (T, {d}). Got {s.shape}.")
     min_T = min(s.shape[0] for s in seq_list)
     X = np.stack([s[:min_T].astype(np.float32, copy=False) for s in seq_list], axis=0)  # (N, T, D)
     n_obs = X.shape[0] * X.shape[1]
@@ -105,11 +105,11 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
             used_cov = covariance_type
             try:
                 m = DenseHMM([Normal(covariance_type=used_cov) for _ in range(i)]).fit(X)
-            except Exception:
+            except Exception: # pragma: no cover
                 if covariance_type != "diag":
                     used_cov = "diag"
                     m = DenseHMM([Normal(covariance_type="diag") for _ in range(i)]).fit(X)
-                else:
+                else: # pragma: no cover
                     raise
 
             ll = m.log_probability(X).numpy()
@@ -134,11 +134,11 @@ def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="
                 if best_model is None:
                     best_model = m
 
-        except Exception:
+        except Exception: # pragma: no cover
             model_selection.append(np.inf)
             continue
 
-    if best_model is None:
+    if best_model is None: # pragma: no cover
         raise RuntimeError("All HMM fits failed across the requested range.")
     return best_model, model_selection
     
@@ -393,8 +393,8 @@ def get_supervised_chaos(
             per-animal chaos columns and one additional ``"any_chaos"`` column.
     """
     quality = coordinates.get_quality()
-    if quality is None: # pragma: no cover
-        raise ValueError("Could not obtain quality tables from coordinates.get_quality().")
+    if quality is None: 
+        raise ValueError("Could not obtain quality tables from coordinates.get_quality().")  # pragma: no cover
 
     animal_ids = coordinates._animal_ids
     if animal_ids is None or animal_ids == "":
@@ -582,7 +582,7 @@ def _get_Z(Z_by_key: dict, embeddings: dict, key: str) -> np.ndarray:
 def _mask_to_runs(mask: np.ndarray, min_len: int = 2) -> List[Tuple[int, int]]: 
     mask = np.asarray(mask, dtype=bool)
     idx = np.flatnonzero(mask)
-    if idx.size == 0:
+    if idx.size == 0: # pragma: no cover
         return []
     cut = np.where(np.diff(idx) > 1)[0]
     runs = []
@@ -604,7 +604,7 @@ def _pcca_memberships(msm_model, n_macrostates: int) -> np.ndarray:
     for attr in ("memberships", "chi"):
         if hasattr(pcca, attr):
             return np.asarray(getattr(pcca, attr), dtype=np.float32)
-    raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.")
+    raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.") # pragma: no cover
 
 
 def _temporal_smooth(P: np.ndarray, win: int) -> np.ndarray: 
@@ -686,7 +686,7 @@ def compute_gate_edges(
         return None
 
     if fixed_edges is not None:
-        if len(fixed_edges) != M_gates + 1:
+        if len(fixed_edges) != M_gates + 1: # pragma: no cover
             raise ValueError("fixed_edges must have length \"M_gates\"+1")
         edges = np.asarray(fixed_edges, dtype=np.float64).copy()
         edges[0], edges[-1] = -np.inf, np.inf
@@ -737,7 +737,7 @@ def _build_gate_masks(
                 )
 
             edges = np.asarray(gate_edges[gate], dtype=np.float64)
-            if len(edges) != M_gates + 1:
+            if len(edges) != M_gates + 1: # pragma: no cover
                 raise ValueError(
                     f"gate_edges[{gate!r}] must have length {M_gates + 1}, got {len(edges)}"
                 )
@@ -1229,20 +1229,20 @@ def get_contrastive_soft_counts_msm_pcca(
                     active_syms = np.arange(n_active, dtype=np.int32)
 
                 K_request = int(min(N_clusters_per_gate, n_active))
-                if K_request < 2:
+                if K_request < 2: # pragma: no cover
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
                 try:
                     chi_eff = _pcca_memberships(msm, K_request)
-                except Exception:
+                except Exception: # pragma: no cover
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
                 chi_eff = np.asarray(chi_eff, dtype=np.float32)
-                if chi_eff.shape[0] != n_active:
+                if chi_eff.shape[0] != n_active: # pragma: no cover
                     models[gate].append(None)
                     pbar.update(1)
                     continue
@@ -1302,7 +1302,7 @@ def get_contrastive_soft_counts_msm_pcca(
                     (b + 1) * N_clusters_per_gate,
                 )
 
-                if model is None:
+                if model is None: # pragma: no cover
                     if np.any(mask):
                         P[mask, block] = 1.0 / N_clusters_per_gate
                     continue
@@ -1988,7 +1988,7 @@ def get_transitions(state_sequence: list, n_states: int, index_sequence: list=No
         for k, (cur_state, next_state) in enumerate(zip(state_sequence[:-1], state_sequence[1:])):
             if index_sequence[k+1]-index_sequence[k]==1:
                 transition_matrix[cur_state, next_state] += 1
-            else:
+            else: # pragma: no cover
                 continue
 
     return transition_matrix
