@@ -566,7 +566,7 @@ def _preprocess_embedding_evaluation(
         row = {"behavior": beh, "n_windows": n, "pos_windows": n_pos, "pos_rate": pos_rate}
 
         # Too few positives → NaN metrics
-        if n_pos < minimum_number_of_positives or X.size == 0:
+        if n_pos < minimum_number_of_positives or X.size == 0: # pragma: no cover
             warning_message = (
                 "\033[38;5;208m\n"
                 f"Warning! Not enough instances found of behavior {beh} within supervised_annotations.\n"

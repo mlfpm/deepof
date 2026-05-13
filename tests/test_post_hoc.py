@@ -100,8 +100,15 @@ def test_get_contrastive_soft_counts(states):
 
 
 @settings(deadline=None, max_examples=25)
-@given(N_clusters_per_gate=st.sampled_from([3, 2]), M_gates=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
-def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size,distance_bp,exp_type):
+@given(
+    N_clusters_per_gate=st.sampled_from([3, 2]),
+    M_gates=st.sampled_from([1, 2]), 
+    window_size=st.sampled_from([6, 12]),
+    distance_bp=st.sampled_from(["Nose", "Center"]),
+    sample_size=st.one_of(st.just(100),st.just(200000)),
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"])
+    )
+def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type):
 
 
     animal_ids = [""]
@@ -158,6 +165,7 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
         M_gates=M_gates,
         embedding_gates=distance_bp,
         gate_edges=gate_edges,
+        sample_size=sample_size,
     )
 
     rmtree(
@@ -177,8 +185,15 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
 
 
 @settings(deadline=None, max_examples=25)
-@given(N_clusters_per_gate=st.sampled_from([3, 2]), M_gates=st.sampled_from([1, 2]), window_size=st.sampled_from([6, 12]),distance_bp=st.sampled_from(["Nose", "Center"]),exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]))
-def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,exp_type):
+@given(
+    N_clusters_per_gate=st.sampled_from([3, 2]),
+    M_gates=st.sampled_from([1, 2]), 
+    window_size=st.sampled_from([6, 12]),
+    distance_bp=st.sampled_from(["Nose", "Center"]),
+    sample_size=st.one_of(st.just(100),st.just(200000)),
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    )
+def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type):
 
 
     animal_ids = [""]
@@ -235,6 +250,7 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         M_gates=M_gates,
         embedding_gates=distance_bp,
         gate_edges=gate_edges,
+        sample_size=sample_size,
     )
 
     rmtree(
@@ -251,7 +267,6 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
     else:
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
-
 
 @settings(deadline=None, max_examples=25)
 @given(
