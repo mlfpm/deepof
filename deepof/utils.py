@@ -2796,11 +2796,11 @@ def extract_windows(
             # Extrakt raw windows
             if aggregate is None:
                 pass
-            # take average of window as label
+            # take mid point of window as label
             elif aggregate=="mid":
                 mid = tab.shape[1] // 2
                 tab=tab[:, mid:mid+1, :]  
-            # take mid point of window as label
+            # take average of window as label
             elif aggregate=="mean":
                 tab=tab.mean(axis=1)
                 tab = tab[:, None, :]

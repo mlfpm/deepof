@@ -2377,8 +2377,12 @@ class Coordinates:
             (f"_{int(time())}" if timestamp else ""),
         )
 
-        with open(pkl_out, "wb") as handle:
-            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        if file is None:
+            with open(pkl_out, "wb") as handle:
+                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(pkl_out, "wb") as handle:
+                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
     @deepof.data_loading._suppress_warning(
