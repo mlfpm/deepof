@@ -37,7 +37,8 @@ def get_soft_counts(draw, n_min=1, n_max=50, m_min=1, m_max=10):
     return raw / raw.sum(axis=1, keepdims=True)
 
 # Generate embeddings
-def get_embeddings_tab_dict(keys, draw, n_min=1, n_max=50, m_min=1, m_max=10):
+@st.composite
+def get_embeddings_tab_dict(draw, keys, n_min=1, n_max=50, m_min=1, m_max=10):
 
     n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
     emb_dict={}
@@ -60,3 +61,85 @@ def get_supervised_tables(draw, n_min=1, n_max=50, m_min=1, m_max=10):
     data = draw(arrays(np.int8, (n, m), elements=st.integers(min_value=0, max_value=1)))
     cols = [f"col_{i}" for i in range(m)]  # unique column names
     return pd.DataFrame(data, columns=cols)
+
+
+# Generate embeddings
+@st.composite
+def get_embeddings_tab_dict(draw, keys, n_min=1, n_max=50, m_min=1, m_max=10):
+
+    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    emb_dict={}
+    for key in keys:
+        emb_dict[key]=draw(arrays(np.float32, (n, m), elements=st.floats(-3.0, 3.0, allow_nan=False, allow_infinity=False, width=32)))
+
+    return deepof.data.TableDict(
+        emb_dict,
+        typ="unsupervised_embedding",
+        table_path=None, 
+        exp_conditions=None,
+    )
+
+
+# Generate supervised tabdicts
+@st.composite
+def get_supervised_tab_dict(draw, keys, col_names=None, n_min=1, n_max=50, m_min=1, m_max=10):
+
+    if col_names is not None:
+        assert len(col_names)==m_min and len(col_names)==m_max, "For this test-object if custom column names are given, number of columns must match with number of names"
+    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    sup_dict={}
+    for key in keys:
+        data=draw(arrays(np.int8, (n, m), elements=st.integers(min_value=0, max_value=1)))
+        if col_names is None:
+            cols = [f"col_{i}" for i in range(m)]
+        else:
+            cols=col_names
+        sup_dict[key]=pd.DataFrame(data, columns=cols)
+
+    return deepof.data.TableDict(
+        sup_dict,
+        typ="supervised_annotations",
+        table_path=None, 
+        exp_conditions=None,
+    )
+
+
+def get_embeddings_tab_dict_instance(keys, n_min=1, n_max=50, m_min=1, m_max=10):
+    n = np.random.randint(n_min, n_max + 1)
+    m = np.random.randint(m_min, m_max + 1)
+
+    emb_dict = {}
+    for key in keys:
+        emb_dict[key] = np.random.uniform(-3.0, 3.0, size=(n, m)).astype(np.float32)
+
+    return deepof.data.TableDict(
+        emb_dict,
+        typ="unsupervised_embedding",
+        table_path=None,
+        exp_conditions=None,
+    )
+
+
+def get_supervised_tab_dict_instance(keys, col_names=None, n_min=1, n_max=50, m_min=1, m_max=10):
+    n = np.random.randint(n_min, n_max + 1)
+    m = np.random.randint(m_min, m_max + 1)
+
+    if col_names is not None:
+        assert len(col_names) == m, \
+            f"Expected {m} column names, got {len(col_names)}"
+
+    sup_dict = {}
+    for key in keys:
+        data = np.random.randint(0, 2, size=(n, m)).astype(np.int8)
+        if col_names is None:
+            cols = [f"col_{i}" for i in range(m)]
+        else:
+            cols = col_names
+        sup_dict[key] = pd.DataFrame(data, columns=cols)
+
+    return deepof.data.TableDict(
+        sup_dict,
+        typ="supervised_annotations",
+        table_path=None,
+        exp_conditions=None,
+    )

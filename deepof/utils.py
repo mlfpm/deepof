@@ -2006,7 +2006,7 @@ def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size
     cur_embeddings = get_dt(embeddings,key)
     cur_supervised = get_dt(supervised_annotations, key)
 
-    assert cur_embeddings.shape[0]<cur_supervised.shape[0], "Error! Labels exceed windows!"
+    assert cur_embeddings.shape[0]<=cur_supervised.shape[0], "Error! Labels exceed windows!"
 
     if window_size is None:
         window_size=cur_supervised.shape[0]-cur_embeddings.shape[0]+1

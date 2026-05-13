@@ -45,7 +45,7 @@ from deepof.utils import (
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
 )
-from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables, get_embeddings_tab_dict_instance, get_supervised_tab_dict_instance
 
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -207,6 +207,85 @@ def test_filter_embeddings(keys,exp_condition):
         assert concat_hue == comp_list
     assert embeddings.keys()==soft_counts.keys()
     assert embeddings.keys()==supervised_annotations.keys()
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    include_behaviors=st.one_of(st.just(["B_moving"]),st.just(["B_moving","B_stat-active","B_stat-passive"])),
+    window_size=st.integers(5,10),
+    alignment_mode=st.one_of(st.just("any"),st.just("center")),
+    minimum_number_of_positives=st.integers(5,100),
+    normalize=st.booleans(),
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    )
+def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment_mode,minimum_number_of_positives,normalize,exp_type):
+
+
+    animal_ids = [""]
+    animal_pair=''
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+        animal_pair=('B','W')
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    n=100-window_size+1
+    m=10
+
+    embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
+    supervised_annotations=get_supervised_tab_dict_instance(keys, col_names=include_behaviors, n_min=100, n_max=100, m_min=len(include_behaviors), m_max=len(include_behaviors))
+
+    eval=_preprocess_embedding_evaluation(
+        coordinates=prun,
+        embeddings=embeddings,
+        supervised_annotations=supervised_annotations,
+        include_behaviors=include_behaviors,
+        window_size=window_size,
+        alignment_mode=alignment_mode,
+        minimum_number_of_positives = minimum_number_of_positives,
+        normalize=normalize,
+    ) 
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", exp_type, "deepof_project"
+        )
+    )
+
+    # All behaviors occur in evaluation data
+    assert all([beh in list(eval.behavior) for beh in include_behaviors])
+
+    # Number of total findows corresponds to widnows fitting into frames in project 
+    assert eval.n_windows[0]==(100-window_size+1)*2
+
+    # Parameters are in expected range
+    assert all([ np.isnan(trace_cov_pos_norm_global) or (trace_cov_pos_norm_global>=0 and trace_cov_pos_norm_global<=1.1) for trace_cov_pos_norm_global in list(eval.trace_cov_pos_norm_global)]) 
+    assert all([ np.isnan(ap_mean) or (ap_mean>=0 and ap_mean<=1) for ap_mean in list(eval.ap_mean)]) 
+    assert all([ np.isnan(pos_knn_agree_mean) or (pos_knn_agree_mean>=0 and pos_knn_agree_mean<=1) for pos_knn_agree_mean in list(eval.pos_knn_agree_mean)]) 
 
 
 @given(
