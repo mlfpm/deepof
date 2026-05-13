@@ -979,7 +979,7 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
 def test_fit_vqvae_smoke(use_teacher, encoder_type):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
-
+   
     if os.path.exists(out_path):
         rmtree(out_path)
     os.makedirs(out_path, exist_ok=True)
@@ -1004,7 +1004,6 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
 
     orig_step = deepof.clustering.training.step_vqvae_distill
     orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
-    orig_diag = deepof.clustering.logging.compute_diagnostics
 
     def wrapped_step_vqvae(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
@@ -1024,9 +1023,8 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
 
     deepof.clustering.training.step_vqvae_distill = wrapped_step_vqvae
     deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
-    deepof.clustering.logging.compute_diagnostics = fake_diag
 
-    model_val, model_score, _, _ = deepof.clustering.training.fit_VQVAE(
+    model_val, model_score, _, logs = deepof.clustering.training.fit_VQVAE(
         train_loader=train_loader,
         val_loader=val_loader,
         preprocessed_train={},
@@ -1043,12 +1041,11 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     assert False in seen_apply_distill
     assert (True in seen_apply_distill) == use_teacher
     if use_teacher:
-        assert diag_calls["n"] == n_epochs
+        assert len(logs["train"]['total_loss']) == n_epochs
 
 
     deepof.clustering.training.step_vqvae_distill = orig_step
     deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
-    deepof.clustering.logging.compute_diagnostics = orig_diag
     if os.path.exists(out_path):
         rmtree(out_path)
 
@@ -1285,7 +1282,6 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
 
     orig_step = deepof.clustering.training.step_contrastive_distill
     orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
-    orig_diag = deepof.clustering.logging.compute_diagnostics
 
     def wrapped_step_contrastive(model, batch, ctx):
         seen_apply_distill.append(bool(getattr(ctx, "apply_distill", False)))
@@ -1305,9 +1301,8 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
 
     deepof.clustering.training.step_contrastive_distill = wrapped_step_contrastive
     deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
-    deepof.clustering.logging.compute_diagnostics = fake_diag
 
-    model_val, model_score, _, _ = deepof.clustering.training.fit_contrastive(
+    model_val, model_score, _, logs = deepof.clustering.training.fit_contrastive(
         train_loader=train_loader,
         val_loader=val_loader,
         preprocessed_train={},
@@ -1326,12 +1321,11 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     assert False in seen_apply_distill
     assert (True in seen_apply_distill) == use_teacher
     if use_teacher:
-        assert diag_calls["n"] == n_epochs
+        assert len(logs["train"]['total_loss']) == n_epochs
 
 
     deepof.clustering.training.step_contrastive_distill = orig_step
     deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
-    deepof.clustering.logging.compute_diagnostics = orig_diag
     if os.path.exists(out_path):
         rmtree(out_path)
 
