@@ -39,6 +39,7 @@ from deepof.visuals_utils import (
     cohend,
     _preprocess_time_bins,
     _apply_rois_to_bin_info,
+    _preprocess_embedding_evaluation,
 )
 from deepof.utils import (
     get_supervised_behaviors_in_roi,
