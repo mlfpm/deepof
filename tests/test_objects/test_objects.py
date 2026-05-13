@@ -120,6 +120,24 @@ def get_embeddings_tab_dict_instance(keys, n_min=1, n_max=50, m_min=1, m_max=10)
     )
 
 
+def get_soft_counts_tab_dict_instance(keys, n_min=1, n_max=50, m_min=1, m_max=10):
+    n = np.random.randint(n_min, n_max + 1)
+    m = np.random.randint(m_min, m_max + 1)
+
+    soft_counts_dict = {}
+    for key in keys:
+
+        soft_counts_raw = np.random.uniform(0, 1.0, size=(n, m)).astype(np.float32)
+        soft_counts_dict[key] = soft_counts_raw / soft_counts_raw.sum(axis=1, keepdims=True)
+
+    return deepof.data.TableDict(
+        soft_counts_dict,
+        typ="soft_counts",
+        table_path=None,
+        exp_conditions=None,
+    )
+
+
 def get_supervised_tab_dict_instance(keys, col_names=None, n_min=1, n_max=50, m_min=1, m_max=10):
     n = np.random.randint(n_min, n_max + 1)
     m = np.random.randint(m_min, m_max + 1)

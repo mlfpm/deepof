@@ -21,7 +21,7 @@ from hypothesis.extra import numpy as hnp
 import deepof.data
 import deepof.post_hoc
 from deepof.data import TableDict
-from tests.test_objects.test_objects import get_embeddings_tab_dict_instance
+from tests.test_objects.test_objects import get_embeddings_tab_dict_instance, get_soft_counts_tab_dict_instance
 
 
 ''' test for old implementation
@@ -251,6 +251,89 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
     else:
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    m_soft_counts=st.integers(5,10),
+    n_rows=st.integers(50,100),
+    quality_threshold=st.floats(0,1,allow_nan=False),
+    frac_bps_below=st.floats(0,1,allow_nan=False),
+    window_size=st.integers(5,10),
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    )
+def test_add_chaos_gates(m_soft_counts,n_rows,quality_threshold,frac_bps_below,window_size,exp_type):
+
+    animal_ids = [""]
+    animal_pair=''
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+        animal_pair=('B','W')
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    m_soft_counts
+    n_rows=100-window_size+1
+    soft_counts={}
+    soft_counts_chaos={}
+
+    soft_counts['behavior_combinations']=get_soft_counts_tab_dict_instance(keys, n_min=n_rows, n_max=n_rows, m_min=m_soft_counts, m_max=m_soft_counts)
+
+    supervised_chaos=deepof.post_hoc.get_supervised_chaos(coordinates=prun,quality_threshold=quality_threshold,frac_bps_below=frac_bps_below)
+    m_soft_counts_chaos=supervised_chaos[list(keys)[0]].shape[1]
+    #double dict length to similate no-chaos/chaos gating split
+    soft_counts_chaos['behavior_combinations']=get_soft_counts_tab_dict_instance(keys, n_min=n_rows, n_max=n_rows, m_min=m_soft_counts_chaos, m_max=m_soft_counts_chaos) 
+    soft_counts_chaos['behavior_combinations']={key: np.concatenate([tab,tab],axis=1) for key, tab in soft_counts_chaos['behavior_combinations'].items()}
+
+    combined_soft_counts=deepof.post_hoc.add_chaos_gates(
+        coordinates=prun,
+        soft_counts_dict=soft_counts,
+        soft_counts_chaos_dict=soft_counts_chaos,
+        supervised_chaos=supervised_chaos,
+        window_size=window_size,
+    ) 
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", exp_type, "deepof_project"
+        )
+    )
+
+    # All behaviors occur in evaluation data (only anychaos gets added)
+    assert all(
+        sc.shape[1] == (m_soft_counts + m_soft_counts_chaos)
+        for sc in combined_soft_counts["behavior_combinations"].values()
+    )
+
+    # Soft counts still sum to 1
+    assert all(
+        np.isclose(np.sum(sc), n_rows, atol=1e-05)
+        for sc in combined_soft_counts["behavior_combinations"].values()
+    )
 
 
 @settings(deadline=None, max_examples=25)

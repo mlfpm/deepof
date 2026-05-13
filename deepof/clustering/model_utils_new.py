@@ -652,7 +652,6 @@ def embedding_per_video(
                 soft_counts_dict=soft_counts_dict, 
                 soft_counts_chaos_dict=soft_counts_chaos_dict,
                 supervised_chaos=supervised_chaos, 
-                extract_pair=extract_pair,
                 window_size=window_size)
         
         soft_counts = soft_counts_dict[extract_pair]

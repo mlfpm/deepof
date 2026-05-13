@@ -393,13 +393,13 @@ def get_supervised_chaos(
             per-animal chaos columns and one additional ``"any_chaos"`` column.
     """
     quality = coordinates.get_quality()
-    if quality is None:
+    if quality is None: # pragma: no cover
         raise ValueError("Could not obtain quality tables from coordinates.get_quality().")
 
     animal_ids = coordinates._animal_ids
     if animal_ids is None or animal_ids == "":
         animal_ids = [""]
-    else:
+    elif len(animal_ids)>1:
         animal_ids = [aid + "_" for aid in animal_ids]
     keys = list(coordinates._tables.keys())
     table_path = os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
@@ -415,7 +415,7 @@ def get_supervised_chaos(
         for mid in animal_ids:
             cols = [c for c in q_df.columns if str(c).startswith(f"{mid}")]
 
-            if len(cols) == 0:
+            if len(cols) == 0: # pragma: no cover
                 raise ValueError("Provided animal_id is not in quality table!")
             else:
                 arr = q_df.loc[:, cols].to_numpy(dtype=np.float32, copy=True)
@@ -448,7 +448,6 @@ def add_chaos_gates(
     soft_counts_dict,
     soft_counts_chaos_dict,
     supervised_chaos,
-    extract_pair,
     window_size: int,
 ):  
     """Combine regular and chaos-specific soft counts gate-wise.
@@ -493,7 +492,7 @@ def add_chaos_gates(
 
             # Check shapes
             n_windows = sc1.shape[0]
-            if sc2.shape[0] != n_windows or not(ann_used.shape[0] >= n_windows):
+            if sc2.shape[0] != n_windows or not(ann_used.shape[0] >= n_windows): # pragma: no cover
                 raise ValueError(
                     f"Soft_counts and soft_counts_chaos must have same length, annotations must have same lenght or longer (Error at key{key!r}): "
                     f"{sc1.shape[0]} vs {sc2.shape[0]} vs {ann.shape[0]}"
@@ -507,7 +506,7 @@ def add_chaos_gates(
                     np.ones(window_size, dtype=np.float32),
                     mode="valid",
                 ) > 0
-                if win.shape[0] != n_windows:
+                if win.shape[0] != n_windows: # pragma: no cover
                     raise ValueError(
                         f"Convolved length mismatch for key {key!r}, column {col!r}: "
                         f"{win.shape[0]} vs expected {n_windows}"
@@ -524,7 +523,7 @@ def add_chaos_gates(
 
             # keep only the chaotic half from the chaos extractor
             n_cols_chaos = sc2.shape[1]
-            if n_cols_chaos % 2 != 0:
+            if n_cols_chaos % 2 != 0: # pragma: no cover
                 raise ValueError(
                     f"Chaos soft counts for key {key!r} have an odd number of columns "
                     f"({n_cols_chaos}); expected two equally sized chaos/non-chaos blocks."
