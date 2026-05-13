@@ -103,7 +103,7 @@ class BehaviorContext:
             yield from combinations(self.animal_ids, 2)
         elif scope is Behavior_scope.GLOBAL:
             yield None
-        else:
+        else:  # pragma: no cover
             raise ValueError(f"Unknown behavior_scope: {scope}")
 
 
@@ -174,13 +174,13 @@ class DeepOF_behavior:
             return f"{a}_{b}_{self.name}"
         if self.scope is Behavior_scope.GLOBAL:
             return self.name
-        raise ValueError(f"Unsupported scope: {self.scope}")
+        raise ValueError(f"Unsupported scope: {self.scope}")  # pragma: no cover
 
     def annotate_behavior(self, ctx: BehaviorContext, animal_ids: animal_ids) -> np.ndarray:
         # optional dependency checks
         for attr in self.requires:
-            if not hasattr(ctx, attr):
-                raise AttributeError(f"Behavior '{self.name}' requires ctx.{attr} to exist")
+            if not hasattr(ctx, attr): # pragma: no cover 
+                raise AttributeError(f"Behavior '{self.name}' requires ctx.{attr} to exist") 
 
         res = self.compute(ctx, animal_ids)
 
@@ -623,7 +623,7 @@ def climb_arena(
                 deepof.utils.point_in_polygon(nose.values, Polygon(arena).buffer(tol))
             )
 
-    else:
+    else:  # pragma: no cover
         raise NotImplementedError(
             "Supported values for arena_type are ['polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect']"
         )
@@ -730,7 +730,7 @@ def sniff_object(
         # (not in smaller polygon and [not not] in larger polygon)
         nosing = nosing_min & (~nosing_max)
 
-    else:
+    else:  # pragma: no cover
         raise NotImplementedError
         
     speed = speed_dframe[animal_id + center_name] < tol_speed

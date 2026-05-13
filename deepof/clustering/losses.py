@@ -282,7 +282,7 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
     penalization = torch.sqrt(torch.clamp(singular_values, min=1e-9))
 
     kmeans_loss = weight * torch.nanmean(penalization[~torch.isinf(penalization)])
-    if torch.isnan(kmeans_loss):
+    if torch.isnan(kmeans_loss):  # pragma: no cover
         return 0.0
     return kmeans_loss
 
