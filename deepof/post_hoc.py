@@ -807,8 +807,8 @@ def get_pairwise_distances(
         gating = "distances"
         animal_pairs = list(combinations(list(animal_ids), 2))
 
+    # use supervised_annotations for gating
     elif animal_ids and supervised_annotations is not None:
-        # FIX: sorted list, not set → deterministic bit-coding
         if isinstance(embedding_gates, str):
             embedding_gates = [embedding_gates]
         requested = sorted(set(embedding_gates))
@@ -818,9 +818,9 @@ def get_pairwise_distances(
         valid = [b for b in requested if b in available]
         dropped = [b for b in requested if b not in available]
 
-        if dropped:
+        if dropped: # pragma: no cover
             print(f"[gating] Dropped unavailable behaviors: {dropped}")
-        if not valid:
+        if not valid: # pragma: no cover
             print("[gating] No valid behaviors remain; falling back to no gating.")
         else:
             gating = "behaviors"
@@ -837,7 +837,7 @@ def get_pairwise_distances(
             for a_id, b_id in animal_pairs:
                 # FIX: validate columns exist
                 cx = (f"{a_id}_{embedding_gates}", "x")
-                if cx not in tab.columns:
+                if cx not in tab.columns: # pragma: no cover
                     raise KeyError(
                         f"Bodypart column {cx} not found in table '{key}'. "
                         f"Available: {[c for c in tab.columns if c[1]=='x'][:10]}..."
@@ -850,7 +850,7 @@ def get_pairwise_distances(
 
                 dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
 
-                # FIX: guard against all-NaN
+                # Guard against all-NaN
                 mask = np.isfinite(dist_raw)
                 if mask.any():
                     idx = np.arange(dist_raw.size)

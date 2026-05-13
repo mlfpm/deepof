@@ -106,9 +106,10 @@ def test_get_contrastive_soft_counts(states):
     window_size=st.sampled_from([6, 12]),
     distance_bp=st.sampled_from(["Nose", "Center"]),
     sample_size=st.one_of(st.just(100),st.just(200000)),
-    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"])
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    use_supervised_gates=st.booleans(),
     )
-def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type):
+def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates):
 
 
     animal_ids = [""]
@@ -139,7 +140,12 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        frame_rate=25,
     ).create(force=True, test=True)
+
+    supervised_annotations= None
+    if use_supervised_gates:
+        supervised_annotations = prun.supervised_annotation()
 
     # Define a test embedding dictionary
     keys=prun._tables.keys()
@@ -148,13 +154,22 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
 
     embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
 
-    gate_edges=deepof.post_hoc.compute_gate_edges(
-        prun,
-        animal_ids,
-        window_size=window_size,
-        M_gates=M_gates,
-        embedding_gates=distance_bp,
-    )
+    if use_supervised_gates:
+        gate_edges = None
+        # overwrite distance_bp with behavior gate
+        if not exp_type=="test_single_topview":
+            distance_bp = "B_moving"
+        else:
+            distance_bp = "moving"
+        animal_pair = 'behavior_combinations'
+    else:
+        gate_edges=deepof.post_hoc.compute_gate_edges(
+            prun,
+            animal_ids,
+            window_size=window_size,
+            M_gates=M_gates,
+            embedding_gates=distance_bp,
+        )
     
     soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts_gmm(
         prun,
@@ -163,6 +178,7 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
         window_size=window_size,
         N_clusters_per_gate=N_clusters_per_gate,
         M_gates=M_gates,
+        supervised_annotations=supervised_annotations,
         embedding_gates=distance_bp,
         gate_edges=gate_edges,
         sample_size=sample_size,
@@ -192,8 +208,9 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     distance_bp=st.sampled_from(["Nose", "Center"]),
     sample_size=st.one_of(st.just(100),st.just(200000)),
     exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    use_supervised_gates=st.booleans(),
     )
-def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type):
+def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates):
 
 
     animal_ids = [""]
@@ -224,7 +241,12 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         video_format=".mp4",
         table_format=".h5",
         exp_conditions={"test": "test_cond", "test2": "test_cond"},
+        frame_rate=25,
     ).create(force=True, test=True)
+
+    supervised_annotations= None
+    if use_supervised_gates:
+        supervised_annotations = prun.supervised_annotation()
 
     # Define a test embedding dictionary
     keys=prun._tables.keys()
@@ -233,13 +255,23 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
 
     embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
 
-    gate_edges=deepof.post_hoc.compute_gate_edges(
-        prun,
-        animal_ids,
-        window_size=window_size,
-        M_gates=M_gates,
-        embedding_gates=distance_bp,
-    )
+    if use_supervised_gates:
+        gate_edges = None
+        # overwrite distance_bp with behavior gate
+        if not exp_type=="test_single_topview":
+            distance_bp = "B_moving"
+        else:
+            distance_bp = "moving"
+        animal_pair = 'behavior_combinations'
+    else:
+        gate_edges=deepof.post_hoc.compute_gate_edges(
+            prun,
+            animal_ids,
+            window_size=window_size,
+            M_gates=M_gates,
+            embedding_gates=distance_bp,
+        )
+
     
     soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
         prun,
@@ -248,6 +280,7 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         window_size=window_size,
         N_clusters_per_gate=N_clusters_per_gate,
         M_gates=M_gates,
+        supervised_annotations=supervised_annotations,
         embedding_gates=distance_bp,
         gate_edges=gate_edges,
         sample_size=sample_size,
@@ -267,6 +300,7 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
     else:
         assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
+
 
 @settings(deadline=None, max_examples=25)
 @given(

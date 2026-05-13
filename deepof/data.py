@@ -1162,7 +1162,7 @@ class Project:
         first_key=list(self.videos.keys())[0]
         current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
         if self.frame_rate is None:
-            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS))
+            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS)) 
         current_video_cap.release()
 
         # load table info
