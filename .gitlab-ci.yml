@@ -145,7 +145,7 @@ tutorials:
     - pip install papermill
     - pip install -q -e . --timeout=100 --progress-bar off
     - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
-    - curl -L --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/8msoodYMiDX8gcK/download
+    - curl -L --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/TbSrod2fm5jbHfL/download
     - unzip tutorial_files.zip
 
   script:
