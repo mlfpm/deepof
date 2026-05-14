@@ -95,17 +95,6 @@ class BehaviorContext:
         """Convenience: ctx.bp("A","Nose")->"A_Nose"; ctx.bp("","Nose")->"Nose"."""
         return f"{animal_id}_{bodypart}" if animal_id else bodypart
 
-    def iter_subjects(self, scope: Behavior_scope):
-        if scope is Behavior_scope.INDIVIDUAL:
-            yield from self.animal_ids
-        elif scope is Behavior_scope.PAIR_DIRECTIONAL:
-            # only makes sense if >=2 animals; combinations([]) is empty anyway
-            yield from combinations(self.animal_ids, 2)
-        elif scope is Behavior_scope.GLOBAL:
-            yield None
-        else:  # pragma: no cover
-            raise ValueError(f"Unknown behavior_scope: {scope}")
-
 
 def postprocess_median_filtering(y: np.ndarray, ctx: BehaviorContext, behavior_output: Behavior_output) -> np.ndarray:
     """Default postprocessing for most binary behaviors.
@@ -1695,7 +1684,7 @@ def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, thresh
 
 def validate_custom_behaviors(custom_behaviors: list[DeepOF_behavior] = None, custom_behavior_inputs: dict = {}): 
 
-    if custom_behaviors is None:
+    if custom_behaviors is None or custom_behaviors == []:
         return None
     if custom_behaviors is not None and (not isinstance(custom_behaviors,list) or not isinstance(custom_behaviors[0], DeepOF_behavior)): # pragma: no cover
         raise ValueError("\"custom_behaviors\" need to be a list of DeepOF_behavior objects or None!")
