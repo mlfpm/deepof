@@ -141,8 +141,8 @@ tutorials:
 
   before_script:
     - apt update
-    - apt install -y curl unzip
-    - pip install papermill
+    - apt install -y curl unzip 
+    - pip install papermill ipykernel
     - pip install -q -e . --timeout=100 --progress-bar off
     - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
     - curl -L --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/TbSrod2fm5jbHfL/download
