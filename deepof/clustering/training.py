@@ -53,7 +53,8 @@ from deepof.clustering.logging import (
     compute_vade_specific_diagnostics, 
     get_q_vade,
     get_q_vqvae,
-    get_q_contrastive
+    get_q_contrastive,
+    compute_diagnostics
 )
 from deepof.clustering.losses import Dynamic_weight_manager, build_optimizer_generic, build_optimizer_vade, VadeLoss, select_contrastive_loss_pt
 from deepof.clustering.teacher_model import DiscriminativeHead, extract_latents, initialize_gmm_from_teacher, run_turtle_teacher_on_views
@@ -127,6 +128,9 @@ def train_one_epoch_indexed(
         batch = move_to(batch, device) 
         x, a = batch[0], batch[1]              # <----
         idx = batch[-2]   # assume dataset returns (x, a)
+        labels=None
+        if len(batch)==5:
+            labels = batch[2]
         B = x.size(0)
         #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
@@ -150,7 +154,7 @@ def train_one_epoch_indexed(
             optimizer.zero_grad(set_to_none=True)
         else:
             res = step_fn(model, batch_idx, SimpleNamespace(
-                train=True, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
+                train=True, epoch=epoch, labels=labels, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
             ))
             optimizer.zero_grad(set_to_none=True)
             res.loss.backward()
@@ -205,11 +209,14 @@ def validate_one_epoch_indexed(
         x, a = batch[0], batch[1]
         idx = batch[-2]
         B = x.size(0)
+        labels=None
+        if len(batch)==5:
+            labels = batch[2]
         #idx = torch.arange(seen, seen + B, device=x.device, dtype=torch.long)
         seen += B
 
         res = step_fn(model, (x, a, idx), SimpleNamespace(
-            train=False, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
+            train=False, epoch=epoch, labels=labels, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
         ))
         logs_accum.append(res.logs)
 
@@ -390,6 +397,84 @@ def _soft_ce_logits(logits: torch.Tensor, soft_targets: torch.Tensor, eps: float
     return per_sample
 
 
+def label_separation_score(
+    embeddings: torch.Tensor,  # [B, H]
+    labels: torch.Tensor,      # [B, 1, L] or [B, L] in {0,1} or [0,1]
+    pos_thr: float = 0.5,
+    neg_thr: float = 0.5,
+    min_pos: int = 2,
+    min_neg: int = 2,
+    normalize_embeddings: bool = True,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """
+    Returns ONE scalar score per batch (higher = better separation).
+
+    For each behavior/label l:
+      positives: y[:,l] >= pos_thr
+      negatives: y[:,l] <= neg_thr
+      ignore ambiguous values in between
+
+    Score_l = ||mu_pos - mu_neg||^2 / (within_dispersion + eps)
+    Final score = weighted average over valid labels (weighted by used sample count).
+
+    If no label has enough pos & neg samples, returns 0.0.
+    """
+    if embeddings.ndim != 2:
+        raise ValueError(f"embeddings must be [B,H], got {tuple(embeddings.shape)}")
+
+    # labels -> [B, L]
+    if labels.ndim == 3 and labels.shape[1] == 1:
+        Y = labels.squeeze(1)
+    elif labels.ndim == 2:
+        Y = labels
+    else:
+        raise ValueError(f"labels must be [B,1,L] or [B,L], got {tuple(labels.shape)}")
+
+    B, H = embeddings.shape
+    if Y.shape[0] != B:
+        raise ValueError("embeddings and labels must have the same batch size")
+
+    X = embeddings
+    if normalize_embeddings:
+        X = torch.nn.functional.normalize(X, p=2, dim=-1)
+
+    Y = Y.to(dtype=X.dtype)
+
+    pos = (Y >= pos_thr).to(X.dtype)  # [B,L]
+    neg = (Y <= neg_thr).to(X.dtype)  # [B,L]
+
+    n_pos = pos.sum(dim=0)  # [L]
+    n_neg = neg.sum(dim=0)  # [L]
+    valid = (n_pos >= min_pos) & (n_neg >= min_neg)
+
+    if not torch.any(valid):
+        return X.new_tensor(0.0)
+
+    # Centroids: [L,H]
+    sum_pos = pos.T @ X
+    sum_neg = neg.T @ X
+    mu_pos = sum_pos / (n_pos.unsqueeze(1) + eps)
+    mu_neg = sum_neg / (n_neg.unsqueeze(1) + eps)
+
+    between = ((mu_pos - mu_neg) ** 2).sum(dim=1)  # [L], >= 0
+
+    # Within dispersion using: sum||x-mu||^2 = sum||x||^2 - n||mu||^2
+    x2 = (X ** 2).sum(dim=1)          # [B]
+    sum_x2_pos = pos.T @ x2           # [L]
+    sum_x2_neg = neg.T @ x2           # [L]
+    mu_pos2 = (mu_pos ** 2).sum(dim=1)
+    mu_neg2 = (mu_neg ** 2).sum(dim=1)
+
+    within_sum = (sum_x2_pos - n_pos * mu_pos2).clamp_min(0) + (sum_x2_neg - n_neg * mu_neg2).clamp_min(0)
+    within_mean = within_sum / (n_pos + n_neg + eps)  # [L], >= 0
+
+    per_label = between / (within_mean + eps)  # [L]
+
+    weights = (n_pos + n_neg)                  # [L]
+    score = (per_label[valid] * weights[valid]).sum() / (weights[valid].sum() + eps)
+    return score
+
 
 def step_contrastive_distill(
     model: nn.Module,  # ContrastivePT or DataParallel(ContrastivePT)
@@ -436,6 +521,11 @@ def step_contrastive_distill(
     # Encode via forward for DP compatibility
     z = model(x, a)
     z_aug = model(x_aug, a_aug)
+
+    labels = getattr(ctx, "labels", None) 
+    seperability=torch.tensor(0)
+    if labels is not None:
+        seperability=label_separation_score(z,labels)
 
     # Normalize row-wise
     z = torch.nn.functional.normalize(z, dim=1)
@@ -491,6 +581,7 @@ def step_contrastive_distill(
         "pos_similarity": float(pos_mean.detach().item()),
         "neg_similarity": float(neg_mean.detach().item()),
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
+        "seperability": float(seperability.detach().item())
     }
     return StepResult(loss=total, logs=logs)
 
@@ -1002,7 +1093,7 @@ def fit_VQVAE(
         score_value = float("nan")
 
         if apply_distill:
-            diag = deepof.clustering.logging.compute_diagnostics(
+            diag = compute_diagnostics(
                 model=model,
                 dataloader=val_loader,
                 q_fn=partial(get_q_vqvae, distill_head=distill_head),
@@ -1206,6 +1297,7 @@ def fit_contrastive(
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
     score_tol = 0.01
     log_summary=init_log_summary(model_name)
+    max_score=-np.inf
 
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
@@ -1241,13 +1333,13 @@ def fit_contrastive(
 
         # for tuning
         if tuning_mode:
-            max_score = val_logs['pos_similarity']-val_logs['neg_similarity'] #if score_value>max_score else max_score
+            max_score = score_value if score_value>max_score else max_score
             trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
             if trial.should_prune():
                 raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
 
         if apply_distill:
-            diag = deepof.clustering.logging.compute_diagnostics(
+            diag = compute_diagnostics(
                 model=model,
                 dataloader=val_loader,
                 q_fn=partial(
@@ -1264,9 +1356,9 @@ def fit_contrastive(
                 max_batches=common_cfg.diag_max_batches,
             )
             val_logs.update(diag)
-            score_value = float(val_logs["alignment_score"])
+            #score_value = float(val_logs["alignment_score"])
         else:
-            val_logs["alignment_score"] = float("nan")
+            val_logs["alignment_score"] = score_value #float("nan")
             val_logs["conf_norm"] = float("nan")
             val_logs["bal_norm"] = float("nan")
 
@@ -1632,7 +1724,7 @@ def fit_VADE(
         )
 
         # A ton of diagnostics for printing training progress
-        diag = deepof.clustering.logging.compute_diagnostics(
+        diag = compute_diagnostics(
             model=model,
             dataloader=val_loader,
             q_fn=get_q_vade,
