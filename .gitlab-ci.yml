@@ -136,7 +136,7 @@ tutorials:
       - deepof_custom_labels_tutorial.ipynb
 
   image:
-    name: lucasmiranda42/deepof
+    name: python:3.9.14
     entrypoint: [""]
 
   before_script:
