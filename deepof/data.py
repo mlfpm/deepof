@@ -4022,5 +4022,5 @@ class TableDict(dict):
     
 
 if __name__ == "__main__":
-    # Remove excessive logging from tensorflow
+    # Remove excessive logging
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
