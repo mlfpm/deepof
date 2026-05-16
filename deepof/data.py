@@ -764,29 +764,13 @@ class Project:
 
                 # 4. Add Time Index
                 if self.frame_rate:
-                    #self._update_progress(pbar, "Updating time index", key)
-                    #ätime_index = pd.to_timedelta(np.arange(len(table)) / self.frame_rate, unit="s")
-                    #table.index = time_index.map(lambda t: str(t.round('ms'))[7:])
 
+                    freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
                     table.index = pd.timedelta_range(
-                        "00:00:00",
-                        pd.to_timedelta(
-                            int(np.round(table.shape[0] // self.frame_rate)), unit="sec"
-                        ),
-                        periods=table.shape[0] + 1,
-                        closed="left",
-                    ).map(lambda t: str(t)[7:])
-
-                    #freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
-                    #time_index = pd.timedelta_range(
-                    #    start="0s",
-                    #    periods=len(table),
-                    #    freq=f"{freq_in_nanoseconds}ns"
-                    #)
-                    # Perform rounding on the ENTIRE index at once. This is a fast, vectorized operation.
-                    #rounded_index = time_index.round('ms')
-                    # Now, apply the string conversion. The slow .map() is now doing the minimum work.
-                    #table.index = rounded_index.map(lambda t: str(t)[7:])
+                        start="0s",
+                        periods=table.shape[0],
+                        freq=f"{freq_in_nanoseconds}ns"
+                    ).round('ms').map(lambda t: str(t)[7:])
 
                 # 5. Split coordinates from likelihood and filter bodyparts
                 self._update_progress(pbar, "Filter bodyparts", key)
