@@ -63,6 +63,7 @@ import warnings
 from shutil import rmtree
 from time import time
 from typing import Any, Dict, List, NewType, Tuple, Union, Optional
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
@@ -562,9 +563,106 @@ class Project:
         """Returns angles table_dict"""
         return self._angles
 
+
+    def save_arena_data(self, arena_path: str, arena_params: dict = None, roi_dicts: dict = None, scales: dict = None, video_resolution: dict = None) -> None:
+        """Save ROI dictionaries, arena parameters, and scales as a single pickle file.
+
+        Args:
+            arena_path (str): Output path to the .pkl file.
+            arena_params (dict): arena info.
+            roi_dicts (dict) roi info.
+            scales (dict) scaling info.
+
+        """
+        arena_path = Path(arena_path)
+        arena_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # All three must share identical first-level keys
+        k1, k2, k3, k4 = set(roi_dicts.keys()), set(arena_params.keys()), set(scales.keys()), set(video_resolution.keys())
+        if not (k1 == k2 == k3):
+            raise ValueError(
+                "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
+            )
+
+        payload = {"roi_dicts": roi_dicts, "arena_params": arena_params, "scales": scales, "video_resolution": video_resolution}
+
+        with arena_path.open("wb") as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    def load_arena_data(
+        self, arena_path: str, load_also_rois: bool = False
+    ) -> Tuple[Dict, Dict, Dict, Dict]:
+        """Load ROI dictionaries, arena parameters, and scales from a pickle file, with checks.
+
+        Args:
+            arena_path (str): Path to the .pkl file to load.
+            load_also_rois (bool): If False, skip ROI loading/validation and return roi_dicts as None.
+
+        Returns:
+            (roi_dicts, arena_params, scales):
+                roi_dicts is None if load_arena_only is True, otherwise the (possibly truncated) ROI dict.
+                arena_params and scales are always returned.
+        """
+        # Check if exists
+        arena_path = Path(arena_path)
+        if not arena_path.exists() or not arena_path.is_file():
+            raise FileNotFoundError(f"Arena file not found: {arena_path}")
+
+        with arena_path.open("rb") as f:
+            data = pickle.load(f)
+
+        # Extract data
+        if isinstance(data, dict) and {"roi_dicts", "arena_params", "scales"} <= set(data.keys()):
+            roi_dicts = data["roi_dicts"]
+            arena_params = data["arena_params"]
+            scales = data["scales"]
+            video_resolution = data["video_resolution"]
+        elif isinstance(data, (tuple, list)) and len(data) == 3:
+            roi_dicts, arena_params, scales, video_resolution = data
+        else:
+            raise ValueError(
+                "Invalid arena pickle format. Expected dict with keys "
+                "{'roi_dicts','arena_params','scales'} or a (roi_dicts, arena_params, scales) tuple."
+            )
+        
+        expected_keys=set(arena_params.keys())
+        assert (set(roi_dicts.keys()) == expected_keys == set(scales.keys()) == set(video_resolution.keys())), "Arena objects have deviatin keys, could not load arena info." 
+        assert expected_keys == set(self.tables.keys()), "Keys of Arena objects do not match project keys, could not load arena info"
+
+        # If arena-only: skip ROI checks and do not return ROI dicts
+        if not load_also_rois:
+            return None, arena_params, scales, video_resolution
+
+        # 3) ROI count check (based on first video key)
+        available_rois = list(roi_dicts[list(roi_dicts.keys())[0]].keys())
+        n_available = len(available_rois)
+        n_expected = int(getattr(self, "number_of_rois"))
+
+        if n_available != n_expected:
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! ROI count mismatch in loaded arena file.\n"
+                f"File contains {n_available} ROI(s), but self.number_of_rois is {n_expected}.\n"
+                f"{'Only the first ' + str(n_expected) + ' ROI(s) will be loaded.' if n_expected < n_available else 'All available ROI(s) will be loaded.'}"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+
+        # If too many: truncate consistently across all videos, preserving insertion order
+        if n_expected < n_available:
+            keep = set(available_rois[:n_expected])
+            roi_dicts = {
+                vkey: {rkey: arr for rkey, arr in roi_dicts[vkey].items() if rkey in keep}
+                for vkey in roi_dicts
+            }
+
+        return roi_dicts, arena_params, scales, video_resolution
+
     def get_arena(
         self,
         tables: dict,
+        arena_path: str = None,
         debug: str = False,
         test: bool = False,
     ) -> np.array:
@@ -572,6 +670,7 @@ class Project:
 
         Args:
             tables (dict): dictionary containing coordinate tables
+            arena_path: str, path to saved arena data, will try to load arena and ROI data if not None.
             debug (str): if True, saves intermediate results to disk
             test (bool): if True, runs the function in test mode
 
@@ -579,19 +678,38 @@ class Project:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
 
         """
-        #if verbose:
-        #    print("Detecting arena...")
+        
+        # arena loading functionality
+        arena_params, roi_dicts, scales = None, None, None
+        skip_detection = False
+        if arena_path is not None:
+           
+            load_also_rois=deepof.arena_utils.confirm_action(
+                f"Do you want to also load the ROIs?\n" 
+                    )
+            roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
+            if roi_dicts is not None or self.number_of_rois==0:
+                skip_detection=True
+        
+        if not skip_detection:
+            scales, arena_params, roi_dicts, video_resolution = deepof.arena_utils.get_arenas(
+                self,
+                self.arena,
+                self.arena_dims,
+                self.number_of_rois,
+                self.segmentation_path,
+                self.video_path,
+                self.videos,
+                test,
+                arena_params=arena_params,
+                roi_dicts=roi_dicts,
+                scales=scales,
+            )   
 
-        return deepof.arena_utils.get_arenas(
-            self,
-            self.arena,
-            self.arena_dims,
-            self.number_of_rois,
-            self.segmentation_path,
-            self.video_path,
-            self.videos,
-            test,
-        )
+        # Save arena data seperately    
+        self.save_arena_data(os.path.join(self.project_path, self.project_name, "Coordinates", "arena_data.pkl"), arena_params, roi_dicts, scales, video_resolution)
+
+        return scales, arena_params, roi_dicts, video_resolution
 
 
     def _update_progress(self, pbar: tqdm, step: str, key: str):
@@ -1132,6 +1250,7 @@ class Project:
         self,
         verbose: bool = True,
         force: bool = False,
+        arena_path: str = None,
         debug: bool = True,
         test: bool = False,
         _to_extend: coordinates = None,
@@ -1141,6 +1260,7 @@ class Project:
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
             force (bool): If True, overwrites existing project. Defaults to False.
+            arena_path: str, path to saved arena data, will try to load arena and ROI data if not None.
             debug (bool): If True, saves arena detection images to disk. Defaults to False.
             test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
             _to_extend (coordinates): Coordinates object to extend with the current dataset. For internal usage only.
@@ -1179,7 +1299,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.roi_dicts, self.video_resolution = self.get_arena(
-            tables, debug, test
+            tables, arena_path, debug, test
         )
 
         tables=self.scale_tables(tables)

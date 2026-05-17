@@ -97,12 +97,17 @@ def get_arenas(
 
         
 
-    """
-    # if valid rois, arena parameters AND scales are given, these can be used for editing, otehrwise start anew
-    if arena_params is not None and roi_dicts is not None and scales is not None:
+    """    
+    # if valid rois, arena parameters AND scales are given, these can be used for editing, otherwise start anew
+    enable_automatic_detection = True
+    if arena_params is not None and scales is not None:
         # Scale back to pixel for corect display
         arena_params = _scale_arenas_to_pixel(arena_params, scales, arena)
-        roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)        
+        if roi_dicts is not None:
+            roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)  
+        else:
+            roi_dicts = {}  
+        enable_automatic_detection=False    
     else:
         scales = {}
         arena_params = {}
@@ -291,8 +296,8 @@ def get_arenas(
                 
             vid_idx = 0
             key = list(videos.keys())[0]
-            if not test:
-                arena_corners, _, arena_dist, _ , _, exit_flag_arena, _ = extract_polygonal_arena_coordinates(
+            if not test and enable_automatic_detection:
+                arena_corners, _, _, _ , _, exit_flag_arena, _ = extract_polygonal_arena_coordinates(
                     os.path.join(video_path, videos[key]),
                     arena,
                     vid_idx,
@@ -315,43 +320,52 @@ def get_arenas(
             arena_dists={}
             for key in videos.keys():    
                 
-                arena_parameters_raw, h, w = automatically_recognize_arena(
-                    videos=videos,
-                    vid_key=key,
-                    path=video_path,
-                    arena_type=arena,
-                    arena_reference=arena_reference,
-                    segmentation_model=segmentation_model,
-                )
+                if enable_automatic_detection:
+                    arena_parameters_raw, h, w = automatically_recognize_arena(
+                        videos=videos,
+                        vid_key=key,
+                        path=video_path,
+                        arena_type=arena,
+                        arena_reference=arena_reference,
+                        segmentation_model=segmentation_model,
+                    )
 
-                if "polygonal" in arena:
+                    if "polygonal" in arena:
 
-                    arena_parameters=arena_parameters_raw.astype(int)
-                    arena_parameters = simplify_polygon(arena_parameters, n_points=len(arena_reference))
+                        arena_parameters=arena_parameters_raw.astype(int)
+                        arena_parameters = simplify_polygon(arena_parameters, n_points=len(arena_reference))
 
-                    closest_side_points = closest_side(arena_parameters, arena_reference[:2])
+                        closest_side_points = closest_side(arena_parameters, arena_reference[:2])
 
-                    arena_dist=dist(*closest_side_points)
+                        arena_dist=dist(*closest_side_points)
 
 
-                elif "circular" in arena:
-                    # arena_parameters_raw here contain the coordinates of the center of the arena,
-                    # the absolute diameter measured from the video in pixels, and
-                    # the provided diameter in mm (1 -default- equals not provided)
+                    elif "circular" in arena:
+                        # arena_parameters_raw here contain the coordinates of the center of the arena,
+                        # the absolute diameter measured from the video in pixels, and
+                        # the provided diameter in mm (1 -default- equals not provided)
 
-                    arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
+                        arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
 
-                    arena_parameters = extract_corners_from_arena(arena_parameters_raw).astype(int)
+                        arena_parameters = extract_corners_from_arena(arena_parameters_raw).astype(int)
 
-                scales[key]=[
-                        *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
-                        arena_dist,
-                        arena_dims,
-                    ]
+                    scales[key]=[
+                            *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
+                            arena_dist,
+                            arena_dims,
+                        ]
+                    arena_dists[key] = arena_dist                           
+                    arena_params[key]=arena_parameters
+                    video_resolution[key]=(h, w)
+                else:
+                    current_video_cap = cv2.VideoCapture(os.path.join(video_path, videos[key]))
+                    h = int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-                arena_dists[key] = arena_dist                           
-                arena_params[key]=arena_parameters
-                video_resolution[key]=(h, w)
+                    #scales[key] # already set
+                    arena_dists[key] = scales[key][1]
+                    #arena_params[key] already set
+                    video_resolution[key]=(h, w)
                 pbar.update()
 
             vid_idx=0        
