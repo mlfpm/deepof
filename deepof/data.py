@@ -685,7 +685,8 @@ class Project:
         if arena_path is not None:
            
             load_also_rois=deepof.arena_utils.confirm_action(
-                f"Do you want to also load the ROIs?\n" 
+                f"Do you want to additionally load the saved ROIs?\n" 
+                f"If you cancel, only the arenas get loaded." 
                     )
             roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
             if roi_dicts is not None or self.number_of_rois==0:
