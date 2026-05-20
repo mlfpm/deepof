@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepof"
-version = "0.8.5"
+version = "0.9.0"
 description = ""
 authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>", "patrick_schlegel <patrick_schlegel@psych.mpg.de>"]
 readme = "README.md"
@@ -96,7 +96,7 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.bumpver]
-current_version = "0.8.5"
+current_version = "0.9.0"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
