@@ -1257,6 +1257,17 @@ class Project:
         if verbose:
             print("Setting up project directories...")
 
+        # Overwrite warning
+        if os.path.exists(os.path.join(self.project_path, self.project_name) and not test and DISPLAY_AVAILABLE):
+            overwrite_project=deepof.arena_utils.confirm_action(
+                f"A project already exists at the given path and name!\n"
+                f"Do you want to overwrite this old project with a new one?" 
+            )
+            if not overwrite_project:
+                print("Loading old project instead...")
+                return load_project(os.path.join(self.project_path, self.project_name))
+            print("Overwriting old project...")
+        
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
             rmtree(os.path.join(self.project_path, self.project_name))
 
