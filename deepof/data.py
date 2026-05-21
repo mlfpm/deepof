@@ -89,7 +89,7 @@ import deepof.clustering.training
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
-from deepof.visuals_utils import _preprocess_time_bins
+from deepof.visuals_utils import _preprocess_time_bins, time_to_seconds, seconds_to_time
 from deepof.data_loading import get_dt, save_dt
 from concurrent.futures import ThreadPoolExecutor
 
@@ -113,6 +113,7 @@ def load_project(
         iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
+        start_markers: dict = None,
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
@@ -140,6 +141,7 @@ def load_project(
         iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
         exclude_bodyparts (list): list of bodyparts to exclude from analysis.
         exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+        start_markers (dict): dictionary with experiment IDs as keys and start markers as values.
         remove_outliers (bool): whether outliers should be removed during project creation.
         interpolation_limit (int): maximum number of missing frames to interpolate.
         interpolation_std (int): maximum number of standard deviations to interpolate.
@@ -207,6 +209,7 @@ def load_project(
             iterative_imputation=iterative_imputation,
             exclude_bodyparts = coordinates._excluded,
             exp_conditions=coordinates._exp_conditions,
+            start_markers=None,
             remove_outliers = remove_outliers,
             interpolation_limit = interpolation_limit,
             interpolation_std = interpolation_std,
@@ -246,6 +249,7 @@ class Project:
         iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: Union[str, dict] = None,
+        start_markers: Union[str, dict] = None,
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
@@ -273,7 +277,8 @@ class Project:
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
             iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
-            exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+            exp_conditions Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and experimental conditions as values.
+            start_markers Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and start markers as values
             remove_outliers (bool): whether outliers should be removed during project creation.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
@@ -382,6 +387,14 @@ class Project:
                 f"The sampling rate of some of your videos differ. The maximum difference is {min_key}: {min_val} fps and {max_key}: {max_val} fps! Proceed with cauthion"
                 f"\033[0m"
             )
+        # Get frame rate
+        first_key=list(self.videos.keys())[0]
+        current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
+        if frame_rate is None:
+            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS)) 
+        else:
+            self.frame_rate = frame_rate
+        current_video_cap.release()
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -459,13 +472,16 @@ class Project:
             self.load_exp_conditions(exp_conditions)
         else:
             self.exp_conditions = exp_conditions
+        if isinstance(start_markers, str):
+            self.load_start_markers(start_markers)
+        else:
+            self.start_markers = start_markers
         self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
         self.model = model
         self.smooth_alpha = smooth_alpha
-        self.frame_rate = frame_rate
         self.video_format = video_format
         self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -531,6 +547,36 @@ class Project:
             raise OSError(
                 "Project already exists. Delete it or specify a different name."
             )  # pragma: no cover
+
+
+    def load_start_markers(self, filepath): # pragma: no cover
+        """Load start markers analogous to experimental conditions and do some checks"""
+        start_markers = self._load_conditions_csv(filepath)
+        # some validity checks
+        for key in start_markers.keys():
+            for marker in start_markers[key].columns:
+                raw = copy.copy(start_markers[key][marker].iloc[0])
+                # clean quotes
+                if isinstance(raw, str):
+                    start_point = raw.strip().strip('"').strip("'")
+                else:
+                    start_point = raw
+                # validate allowed types    
+                is_frame = isinstance(start_point, (int, np.integer))
+                is_time = isinstance(start_point, str) and re.fullmatch(
+                    r"\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?",
+                    start_point
+                ) is not None
+                # Convert to uniform time format
+                if is_frame:
+                    start_point = seconds_to_time(start_point/self.frame_rate, cut_milliseconds=False)
+                
+                assert is_frame or is_time, (
+                    'Start markers need to be integers for frames or deepOF time points '
+                    '(format "xx:xx:xx.xxx")!'
+                )
+                start_markers[key][marker].iloc[0] = start_point
+        self.start_markers=start_markers
     
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
@@ -539,6 +585,17 @@ class Project:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
+        exp_conditions = self._load_conditions_csv(filepath)
+        # some validity checks
+        for key in exp_conditions.keys():
+            for condition in exp_conditions[key].columns:
+                condition_instance=exp_conditions[key][condition].iloc[0]
+                assert isinstance(condition_instance, str), "Condition values need to be strings!"     
+
+        self.exp_conditions = exp_conditions
+    
+    def _load_conditions_csv(self, filepath):
+        """Loads condition objects (experiment conditions, start markers) from a csv file"""
         exp_conditions = pd.read_csv(filepath, index_col=0)
         exp_conditions = {
             exp_id: pd.DataFrame(
@@ -546,7 +603,9 @@ class Project:
             ).T
             for exp_id in exp_conditions.iloc[:, 0]
         }
-        self.exp_conditions = exp_conditions
+        for key in exp_conditions.keys():
+            assert isinstance(exp_conditions[key], pd.DataFrame) and exp_conditions[key].shape[0]==1, "Conditions could not be loaded!"
+        return exp_conditions
 
     @property
     def distances(self):
@@ -1274,13 +1333,6 @@ class Project:
         if not os.path.exists(os.path.join(self.project_path, self.project_name)):
             self.set_up_project_directory(debug=debug)
 
-        # load video info
-        first_key=list(self.videos.keys())[0]
-        current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
-        if self.frame_rate is None:
-            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS)) 
-        current_video_cap.release()
-
         # load table info
         tables, quality = self.preprocess_tables()
 
@@ -1288,6 +1340,10 @@ class Project:
             assert (
                 tables.keys() == self.exp_conditions.keys()
             ), "experimental IDs in exp_conditions do not match"
+        if self.start_markers is not None:
+            assert (
+                tables.keys() == self.start_markers.keys()
+            ), "start marker IDs in start_markers do not match"
 
         distances = None
         angles = None
@@ -1338,6 +1394,10 @@ class Project:
                     **_to_extend._exp_conditions,
                     **self.exp_conditions,
                 }
+                self.start_markers = {
+                    **_to_extend._start_markers,
+                    **self.start_markers,
+                }
             except TypeError:
                 pass
 
@@ -1355,6 +1415,7 @@ class Project:
             excluded_bodyparts=self.exclude_bodyparts,
             frame_rate=self.frame_rate,
             exp_conditions=self.exp_conditions,
+            start_markers = self.start_markers,
             path=self.project_path,
             quality=quality,
             scales=self.scales,
@@ -1532,6 +1593,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        start_markers: dict = None,
         number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
@@ -1562,6 +1624,7 @@ class Coordinates:
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
+            start_markers (dict): Dictionary containing the start markers of the experiment. See deepof.data.Project for more information.
             number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
@@ -1578,6 +1641,7 @@ class Coordinates:
         self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
+        self._start_markers = start_markers
         self._frame_rate = frame_rate
         self._path = path
         self._quality = quality
@@ -1695,6 +1759,7 @@ class Coordinates:
             connectivity=self._connectivity,
             polar=polar,
             exp_conditions=self._exp_conditions,
+            start_markers=self._start_markers,
         )
 
 
@@ -2010,6 +2075,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -2127,6 +2193,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -2236,6 +2303,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                start_markers=self._start_markers,
             )
 
             return areas
@@ -2305,12 +2373,26 @@ class Coordinates:
 
         return out
 
-    def get_start_times(self):
+    def get_start_times(self, start_marker=None):
         """Returns the start time for each table in a dictionary"""
         start_times = {}
-        for key in self._tables:
-            start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+        # Trivial case with starts being at table starts
+        if start_marker is None:
+            for key in self._tables:
+                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+        # take start times from markers
+        else:
+            for key in self._tables:
+                start_time = self._start_markers[key][start_marker].iloc[0]
+                end_time=get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+                assert (
+                    np.round(time_to_seconds(start_time)*self._frame_rate) < np.round(time_to_seconds(end_time)*self._frame_rate), 
+                    f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
+                )
+                start_times[key] = start_time
+        
         return start_times
+
 
     def get_end_times(self):
         """Returns the end time for each table in a dictionary"""
@@ -2319,17 +2401,44 @@ class Coordinates:
             end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
         return end_times
 
-    def get_table_lengths(self):
+    def get_table_lengths(self, tab_dict_for_binning=None, start_marker=None):
         """Returns the length for each table in a dictionary"""
-        table_lengths = {}
-        for key in self._tables:
-            table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
+        full_table_lengths = {}
+        table_lengths={}
+
+        # Get dict of full table lenghts
+        if tab_dict_for_binning is None:
+            full_table_lengths[key] = {key: get_dt(self._tables,key, only_metainfo=True)['num_rows']
+                for key in self._tables
+            }   
+        # Get full table lengths from provided tab dict instead
+        else:
+            full_table_lengths = {
+                k: int(get_dt(tab_dict_for_binning, k, only_metainfo=True)['shape'][0])
+                for k in tab_dict_for_binning
+            }
+
+        # shorten full table lengths according to start positions (if given)
+        if start_marker is None:
+            table_lengths = full_table_lengths
+        else:
+            for key in self._tables:
+                start_time = self._start_markers[key][start_marker].iloc[0]
+                start_frame=np.round(time_to_seconds(start_time)*self._frame_rate)
+                shortened_table_len=np.round(full_table_lengths[key]-start_frame).astype(int)
+                assert shortened_table_len > 0, f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
+                table_lengths[key]=shortened_table_len
         return table_lengths
 
     @property
     def get_exp_conditions(self):
         """Return the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
+    
+    @property
+    def get_start_markers(self):
+        """Return the stored dictionary with start markers per subject."""
+        return self._start_markers
 
     def get_condition_values(self, exp_cond):
         conditions=[]
@@ -2339,6 +2448,38 @@ class Coordinates:
         assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
         return list(np.unique(conditions))
 
+    def load_start_markers(self, filepath): # pragma: no cover
+        """Load start markers analogous to experimental conditions and do some checks"""
+        start_markers = self._load_conditions_csv(filepath)
+        # some validity checks
+        for key in start_markers.keys():
+            for marker in start_markers[key].columns:
+                raw = copy.copy(start_markers[key][marker].iloc[0])
+                # clean quotes
+                if isinstance(raw, str):
+                    start_point = raw.strip().strip('"').strip("'")
+                else:
+                    start_point = raw
+                # validate allowed types    
+                is_frame = isinstance(start_point, (int, np.integer))
+                is_time = isinstance(start_point, str) and re.fullmatch(
+                    r"\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?",
+                    start_point
+                ) is not None
+                # Convert to uniform time format
+                if is_frame:
+                    start_point = seconds_to_time(start_point/self._frame_rate, cut_milliseconds=False)
+                
+                assert ((is_frame or is_time),
+                    'Start markers need to be integers for frames or deepOF time points '
+                    '(format "xx:xx:xx.xxx")!'
+                )
+                start_markers[key][marker].iloc[0] = start_point
+        self.start_markers=start_markers
+
+        # Save loaded conditions within project
+        self.save(timestamp=False)
+    
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
 
@@ -2346,6 +2487,20 @@ class Coordinates:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
+        exp_conditions = self._load_conditions_csv(filepath)
+        # some validity checks
+        for key in exp_conditions.keys():
+            for condition in exp_conditions[key].columns:
+                condition_instance=exp_conditions[key][condition].iloc[0]
+                assert isinstance(condition_instance, str), "Condition values need to be strings!"     
+
+        self.exp_conditions = exp_conditions
+
+        # Save loaded conditions within project
+        self.save(timestamp=False)
+    
+    def _load_conditions_csv(self, filepath):
+        """Loads condition objects (experiment conditions, start markers) from a csv file"""
         exp_conditions = pd.read_csv(filepath, index_col=0)
         exp_conditions = {
             exp_id: pd.DataFrame(
@@ -2353,11 +2508,10 @@ class Coordinates:
             ).T
             for exp_id in exp_conditions.iloc[:, 0]
         }
-        self._exp_conditions = exp_conditions
-
-        # Save loaded conditions within project
-        self.save(timestamp=False)
-
+        for key in exp_conditions.keys():
+            assert isinstance(exp_conditions[key], pd.DataFrame) and exp_conditions[key].shape[0]==1, "Conditions could not be loaded!"
+        return exp_conditions
+    
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
@@ -3278,6 +3432,7 @@ class TableDict(dict):
         connectivity: nx.Graph = None,
         polar: bool = None,
         exp_conditions: dict = None,
+        start_markers: dict = None,
         shapes: Dict = {},
     ):
         """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
@@ -3295,6 +3450,7 @@ class TableDict(dict):
             connectivity (nx.Graph): Bodypart graph of a mouse.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+            start_markers (dict): dictionary with experiment IDs as keys and start markers as values.
             shapes (Dict): Dictionary containing the shapes of all stored tables
 
         """
@@ -3307,6 +3463,7 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._animal_ids = animal_ids
         self._exp_conditions = exp_conditions
+        self._start_markers = start_markers
         self._table_path = table_path
         self._shapes = shapes
 
@@ -3408,6 +3565,7 @@ class TableDict(dict):
             connectivity = self._connectivity,
             polar = self._polar,
             exp_conditions=self._exp_conditions,
+            start_markers=self._start_markers,
         )
 
     def _prepare_projection(self) -> np.ndarray:

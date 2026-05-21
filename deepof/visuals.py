@@ -251,6 +251,7 @@ def plot_gantt(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -274,6 +275,7 @@ def plot_gantt(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        start_marker (str): name of start marker to be used for binning. Defaults to None, which leads to all signals starting at the actual 0.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse                  
@@ -297,6 +299,7 @@ def plot_gantt(
         bin_index=bin_index,
         bin_size=bin_size,
         precomputed_bins=precomputed_bins,
+        start_marker=start_marker,
         samples_max=samples_max,
         # Visualization parameters
         soft_counts=soft_counts,
@@ -320,6 +323,7 @@ def plot_gantt(
         bin_index=bin_index,
         bin_size=bin_size,
         precomputed_bins=precomputed_bins,
+        start_marker=start_marker,
         samples_max=samples_max,
         # Visualization parameters
         soft_counts=soft_counts,
@@ -343,6 +347,7 @@ def _plot_experiment_gantt(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -366,6 +371,7 @@ def _plot_experiment_gantt(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        start_marker (str): name of start marker to be used for binning. Defaults to None, which leads to all signals starting at the actual 0.       
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
@@ -386,6 +392,7 @@ def _plot_experiment_gantt(
         supervised_annotations=supervised_annotations,
         soft_counts=soft_counts,
         experiment_ids=experiment_id,
+        start_markers=start_marker,
         behaviors=behaviors_to_plot,
         animals_in_roi = animals_in_roi,
         roi_number=roi_number,
@@ -423,6 +430,7 @@ def _plot_experiment_gantt(
         bin_index, 
         precomputed_bins=precomputed_bins, 
         experiment_id=experiment_id, 
+        start_marker=start_marker,
         tab_dict_for_binning=supervised_annotations, 
         samples_max=samples_max,
         )
@@ -438,6 +446,7 @@ def _plot_experiment_gantt(
         bin_index, 
         precomputed_bins=precomputed_bins, 
         experiment_id=experiment_id, 
+        start_marker=start_marker,
         tab_dict_for_binning=soft_counts, 
         samples_max=samples_max,
         )
@@ -451,7 +460,6 @@ def _plot_experiment_gantt(
 
     # get indices to be plotted
     bin_indices=bin_info[experiment_id]["time"]
-
 
     # set behavior ids
     if plot_type == "unsupervised":
@@ -538,6 +546,7 @@ def _plot_experiment_gantt(
         n_available_instances=n_base_features,
         instances_to_plot=behaviors_to_plot,
         colors=colors,
+        bin_info=bin_info,
         bin_indices=bin_indices,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
@@ -553,6 +562,7 @@ def _plot_behavior_gantt(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -576,6 +586,7 @@ def _plot_behavior_gantt(
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
         bin_size (Union[int,str]): bin size for time filtering.
         precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored. Note: providing precomputed bins with gaps will result in an incorrect time vector depiction.
+        start_marker (str): name of start marker to be used for binning. Defaults to None, which leads to all signals starting at the actual 0.       
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded 
@@ -603,6 +614,7 @@ def _plot_behavior_gantt(
         soft_counts=soft_counts,
         behaviors=behavior_id,
         experiment_ids=experiments_to_plot,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
@@ -630,6 +642,7 @@ def _plot_behavior_gantt(
         coordinates, 
         bin_size, 
         bin_index, 
+        start_marker=start_marker,
         precomputed_bins=precomputed_bins, 
         tab_dict_for_binning=supervised_annotations, 
         samples_max=samples_max,
@@ -643,6 +656,7 @@ def _plot_behavior_gantt(
         coordinates, 
         bin_size, 
         bin_index, 
+        start_marker=start_marker,
         precomputed_bins=precomputed_bins, 
         tab_dict_for_binning=soft_counts, 
         samples_max=samples_max,
@@ -666,17 +680,12 @@ def _plot_behavior_gantt(
     else:
         experiments_to_plot = all_experiments
 
-    # get common indices between all selected experiments
-    bin_indices=bin_info[list(bin_info.keys())[0]]["time"]
-    max_index=np.max(bin_indices)
-    for exp_id in experiments_to_plot:
-        if max_index > np.max(bin_info[exp_id]["time"]):
-            max_index=np.max(bin_info[exp_id]["time"])
-            bin_indices=bin_info[exp_id]["time"][bin_info[exp_id]["time"]<max_index]
-    
-    for exp_id in bin_info.keys():
-        for id in bin_info[exp_id].keys():
-            bin_info[exp_id][id]=bin_info[exp_id][id][0:len(bin_indices)]
+    # get bin_indices for plot visualization. 0 is either at true 0 or, if a start_marker is given, at the start_marker
+    first_key=list(bin_info.keys())[0]
+    start_frame=0
+    if start_marker is not None:
+        start_frame=(np.round(time_to_seconds(coordinates.get_start_markers[first_key][start_marker].iloc[0])*coordinates._frame_rate)).astype(int)
+    bin_indices=bin_info[first_key]['time']-start_frame 
 
     # set gantt matrix
     n_available_experiments = len(all_experiments)
@@ -703,25 +712,26 @@ def _plot_behavior_gantt(
     rows = 0
     for exp_id in range(n_available_experiments):
 
+        exp_key=all_experiments[exp_id]
         # skip if feature is not selected for plotting
-        if all_experiments[exp_id] not in experiments_to_plot:
+        if exp_key not in experiments_to_plot:
             continue
 
         # fill gantt row
         if plot_type == "unsupervised":
 
-            hard_counts = get_dt(soft_counts,all_experiments[exp_id]).argmax(axis=1)
+            hard_counts = get_dt(soft_counts,exp_key).argmax(axis=1)
             cluster_no = int(re.search(r'\d+', behavior_id).group()) if re.search(r'\d+', behavior_id) else None
-            time_binned = hard_counts[bin_indices]
+            time_binned = hard_counts[bin_info[exp_key]['time']]
             if roi_number is not None:
-                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[all_experiments[exp_id]], animals_in_roi)
+                time_binned = get_unsupervised_behaviors_in_roi(time_binned, bin_info[exp_key], animals_in_roi)
             gantt[rows] = time_binned == cluster_no
 
         elif plot_type == "supervised":
 
-            supervised_binned = pd.DataFrame(get_dt(supervised_annotations,all_experiments[exp_id])[behavior_id].iloc[bin_indices])
+            supervised_binned = pd.DataFrame(get_dt(supervised_annotations,exp_key)[behavior_id].iloc[bin_info[exp_key]['time']])
             if roi_number is not None:
-                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[all_experiments[exp_id]], animals_in_roi, roi_mode)
+                supervised_binned=get_supervised_behaviors_in_roi(supervised_binned, bin_info[exp_key], animals_in_roi, roi_mode)
             gantt[rows] = supervised_binned[behavior_id]
 
         gantt[rows][gantt[rows]>0]+=rows
@@ -739,6 +749,7 @@ def _plot_behavior_gantt(
         n_available_instances=n_available_experiments,
         instances_to_plot=experiments_to_plot,
         colors=colors,
+        bin_info=bin_info,
         bin_indices=bin_indices,
         additional_checkpoints=additional_checkpoints,
         signal_overlay=signal_overlay,
@@ -756,7 +767,8 @@ def gantt_plotter(
     instances_to_plot: list,
     colors: list,
     # Time selection parameters
-    bin_indices: np.ndarray,
+    bin_info: dict,
+    bin_indices: (np.ndarray),
     additional_checkpoints: pd.DataFrame = None,
     signal_overlay: pd.Series = None,
     ax: Any = None,
@@ -772,14 +784,15 @@ def gantt_plotter(
         n_available_instances (int): number of all possibly available instances (may be behaviors or experiments)
         instances_to_plot (list): selected instances for plotting as a list (may be behaviors or experiments)
         colors (list): list of color hexcodes for plotting
+        bin_info (dict): A dictionary containing start and end positions or indices of all sections for given embeddings and ROIs
         bin_indices (np.ndarray): indices to plot
         additional_checkpoints (pd.DataFrame): table with additional checkpoints to plot.
         signal_overlay (pd.Series): overlays a continuous signal with all selected behaviors. None by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
 
-    """
-  
+    """ 
+
     #only add "white" as base color if there are frames with no behaviors
     gantt_matrix[np.isnan(gantt_matrix)] = 0
     if (gantt_matrix==0).any():
@@ -822,8 +835,8 @@ def gantt_plotter(
             # mirror on x axis as it get's mirrored again during plotting
             standard_signal=-(standard_signal-1)
             plt.plot(
-                signal_overlay.index[0 : len(bin_indices)],
-                standard_signal[bin_indices] + rows,
+                signal_overlay.index[0 : len(bin_info[exp_id]['time'])],
+                standard_signal[bin_info[exp_id]['time']] + rows,
                 color="black",
             )
 

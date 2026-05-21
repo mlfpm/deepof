@@ -440,6 +440,7 @@ class Pseudo_Coordinates:
         self._frame_rate = frame_rate
         self._start_times = {}
         self._table_lengths = {}  
+        start_marker = None,
         
         # set start time as time strings
         for i, start_time in enumerate(start_times_raw):
@@ -449,7 +450,7 @@ class Pseudo_Coordinates:
         # set lengths as a minimum of start time + 10 seconds
         for i, start_time in enumerate(start_times_raw):
             min_length = 120 * frame_rate
-            self._table_lengths[f"key{i + 1}"] = int(min_length)
+            self._table_lengths[f"key{i + 1}"] = int(time_to_seconds(self._start_times[f"key{i + 1}"])* frame_rate) + int(min_length)
 
 
     def add_table_lengths(self, lengths):
@@ -457,10 +458,10 @@ class Pseudo_Coordinates:
         for i, length in enumerate(lengths):
             self._table_lengths[f"key{i + 1}"] = int(length)
 
-    def get_start_times(self):
+    def get_start_times(self, start_marker=None):
         return self._start_times
 
-    def get_table_lengths(self):
+    def get_table_lengths(self, tab_dict_for_binning=None, start_marker=None):
         return self._table_lengths
 
 

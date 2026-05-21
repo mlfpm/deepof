@@ -996,26 +996,32 @@ class _BinningResult(NamedTuple):
 
 
 def _get_bins_from_precomputed(
-    precomputed_bins: np.ndarray, table_lengths: dict[str, int]
+    precomputed_bins: np.ndarray, start_frames: dict[str, int], table_lengths: dict[str, int]
 ) -> _BinningResult:
     """Strategy for when precomputed bins are provided."""
     bin_info = {}
     end_too_late = {key: False for key in table_lengths}
+    start_too_late = {key: False for key in table_lengths}
 
     for key, length in table_lengths.items():
         arr = np.full(length, False, dtype=bool)
-        effective_len = min(length, len(precomputed_bins))
+        effective_len = min(length-start_frames[key], len(precomputed_bins))
+        
+        if effective_len <= 0:
+            effective_len=0
+            start_too_late[key] = True
+
         arr[:effective_len] = precomputed_bins[:effective_len]
-        bin_info[key] = np.where(arr)[0]
+        bin_info[key] = np.where(arr)[0]+start_frames[key]
 
         if len(precomputed_bins) > length:
             end_too_late[key] = True
 
-    return _BinningResult(bin_info, {}, end_too_late, {})
+    return _BinningResult(bin_info, start_too_late, end_too_late, {}, len(precomputed_bins))
 
 
 def _get_bins_from_frames(
-    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+    bin_size: int, bin_index: int, start_frames: dict[str, int], table_lengths: dict[str, int], frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = bin_size
@@ -1035,15 +1041,15 @@ def _get_bins_from_frames(
         if end_frame > length:
             end_too_late[key] = True
 
-        bin_start = min(length, start_frame)
-        bin_end = min(length, end_frame)
+        bin_start = min(length, start_frame+start_frames[key])
+        bin_end = min(length, end_frame+start_frames[key])
         bin_info[key] = np.arange(bin_start, bin_end)
 
     return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
 
 
 def _get_bins_from_integers(
-    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+    bin_size: int, bin_index: int, start_frames: dict[str, int], table_lengths: dict[str, int], frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = int(round(bin_size * frame_rate))
@@ -1063,16 +1069,16 @@ def _get_bins_from_integers(
         if end_frame > length:
             end_too_late[key] = True
 
-        bin_start = min(length, start_frame)
-        bin_end = min(length, end_frame)
+        bin_start = min(length, start_frame+start_frames[key])
+        bin_end = min(length, end_frame+start_frames[key])
         bin_info[key] = np.arange(bin_start, bin_end)
 
     return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
 
 
 def _get_bins_from_strings(
-    bin_size_str: str, bin_index_str: str, table_lengths: dict[str, int],
-    start_times: dict[str, str], frame_rate: float
+    bin_size_str: str, bin_index_str: str, start_frames: dict[str, int], table_lengths: dict[str, int],
+    frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as time strings."""
     bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
@@ -1087,20 +1093,15 @@ def _get_bins_from_strings(
     bin_index_sec = time_to_seconds(bin_index_str)
 
     for key, length in table_lengths.items():
-        exp_start_sec = time_to_seconds(start_times[key])
-        start_offset_frames = int(round((bin_index_sec - exp_start_sec) * frame_rate))
+        bin_start_raw = int(round((bin_index_sec) * frame_rate))
 
-        if start_offset_frames < 0:
-            truncated_len_sec = (start_offset_frames + bin_size_frames) / frame_rate
-            pre_start_warnings[key] = seconds_to_time(max(0, truncated_len_sec))
-        
-        if start_offset_frames >= length:
+        if bin_start_raw >= length:
             start_too_late[key] = True
         
-        bin_start = np.clip(start_offset_frames, 0, length)
-        bin_end = np.clip(start_offset_frames + bin_size_frames, 0, length)
+        bin_start = np.clip(bin_start_raw+start_frames[key], 0, length)
+        bin_end = np.clip(bin_start + bin_size_frames, 0, length)
         
-        if start_offset_frames + bin_size_frames > length:
+        if bin_start + bin_size_frames > length:
             end_too_late[key] = True
 
         bin_info[key] = np.arange(bin_start, bin_end)
@@ -1108,9 +1109,12 @@ def _get_bins_from_strings(
     return _BinningResult(bin_info, start_too_late, end_too_late, pre_start_warnings, bin_size_frames)
 
 
-def _get_full_range_bins(table_lengths: dict[str, int]) -> _BinningResult:
+def _get_full_range_bins(start_frames: dict[str, int], table_lengths: dict[str, int]) -> _BinningResult:
     """Strategy to use the full time range for each experiment."""
-    bin_info = {key: np.arange(length) for key, length in table_lengths.items()}
+    bin_info = {}
+    for key in start_frames.keys():
+        bin_info[key] = np.arange(start_frames[key], table_lengths[key]-start_frames[key])
+    
     return _BinningResult(bin_info, {}, {}, {})
 
 
@@ -1156,6 +1160,18 @@ def _downsample_bins(
 
     return downsampled_info
 
+
+def _align_bin_lengths(
+    result: Any,
+):
+    """Makes sure that all bins have the same length"""
+    min_len = min(len(arr) for arr in result.bin_info.values())
+    for key in result.bin_info:
+        result.bin_info[key] = result.bin_info[key][:min_len] 
+    
+    return result
+
+    
 
 def _validate_and_warn(
     result: Any,
@@ -1231,6 +1247,7 @@ def _preprocess_time_bins(
     precomputed_bins: Optional[np.ndarray] = None,
     tab_dict_for_binning: Optional[table_dict] = None,
     experiment_id: Optional[str] = None,
+    start_marker: Optional[str] = None,
     samples_max: int = 20000,
     down_sample: bool = True,
     given_in_frames=False,
@@ -1254,6 +1271,7 @@ def _preprocess_time_bins(
         tab_dict_for_binning: Optional table dictionary to use as a reference for
                               video lengths. Defaults to `coordinates`.
         experiment_id: If specified, processing is limited to this single experiment.
+        start_marker: If specified, starting point of bins is chosen relativ to start_marker.
         samples_max: Maximum number of samples to return per experiment. Data is
                      downsampled or cut if the selection is larger.
         down_sample: If True, use uniform downsampling. If False, cut the data
@@ -1285,19 +1303,14 @@ def _preprocess_time_bins(
             if warned is not None:
                 warned.add("precomputed_ignores_args")
 
-    start_times = coordinates.get_start_times()
-    if tab_dict_for_binning:
-        table_lengths = {
-            k: int(get_dt(tab_dict_for_binning, k, only_metainfo=True)['shape'][0])
-            for k in tab_dict_for_binning
-        }
-    else:
-        table_lengths = coordinates.get_table_lengths()
+    start_times = coordinates.get_start_times(start_marker=start_marker)
+    start_frames = {key: np.round(time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
+    table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
 
     if experiment_id:
         if experiment_id not in table_lengths:
             raise KeyError(f"Experiment ID '{experiment_id}' not found.")
-        start_times = {experiment_id: start_times[experiment_id]}
+        start_frames = {experiment_id: start_frames[experiment_id]}
         table_lengths = {experiment_id: table_lengths[experiment_id]}
 
     # --- 2. Strategy Selection and Execution ---
@@ -1305,7 +1318,7 @@ def _preprocess_time_bins(
     result = None
 
     if precomputed_bins is not None:
-        result = _get_bins_from_precomputed(precomputed_bins, table_lengths)
+        result = _get_bins_from_precomputed(precomputed_bins, start_frames, table_lengths)
     
     elif isinstance(bin_size, int) and isinstance(bin_index, int) and given_in_frames:
         result = _get_bins_from_frames(
@@ -1314,17 +1327,17 @@ def _preprocess_time_bins(
 
     elif isinstance(bin_size, int) and isinstance(bin_index, int):
         result = _get_bins_from_integers(
-            bin_size, bin_index, table_lengths, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif (isinstance(bin_size, str) and re.match(TIME_STR_PATTERN, bin_size) and
           isinstance(bin_index, str) and re.match(TIME_STR_PATTERN, bin_index)):
         result = _get_bins_from_strings(
-            bin_size, bin_index, table_lengths, start_times, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif bin_size is None and bin_index is None:
-        result = _get_full_range_bins(table_lengths)
+        result = _get_full_range_bins(start_frames, table_lengths)
 
     else:
         if warned is None or "invalid_format_default" not in warned:
@@ -1343,8 +1356,11 @@ def _preprocess_time_bins(
             samples_max=samples_max, down_sample=down_sample,
             warned=warned,
         )
+    
+    # --- 3. Post-processing (a): ensuring bin length alignment ---
+    result = _align_bin_lengths(result)
 
-    # --- 3. Post-processing: Validation and Downsampling ---
+    # --- 4. Post-processing (b): Validation and Downsampling ---
     _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)
 
     if samples_max is not None:
@@ -1576,6 +1592,7 @@ def _check_enum_inputs(
     soft_counts: Optional[table_dict] = None,
     origin: Optional[str] = None,
     experiment_ids: Optional[Union[List[str],dict[List[str]]]] = None,
+    start_markers: Optional[Union[List[str],dict[List[str]]]] = None,
     exp_condition: Optional[str] = None,
     exp_condition_order: Optional[List[str]] = None,
     condition_values: Optional[List[str]] = None,
@@ -1635,6 +1652,7 @@ def _check_enum_inputs(
     experiment_ids = _to_list_if_str(experiment_ids)
     exp_condition_order = _to_list_if_str(exp_condition_order)
     condition_values = _to_list_if_str(condition_values)
+    start_markers = _to_list_if_str(start_markers)
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
     in_roi_bodyparts = _to_list_if_str(in_roi_bodyparts)
@@ -1665,6 +1683,10 @@ def _check_enum_inputs(
         exp_cond_opts = np.unique(np.concatenate(all_conditions)).tolist()
         if exp_condition in exp_cond_opts:
             cond_val_opts = [str(v) for v in coordinates.get_condition_values(exp_condition)]
+    start_marker_opts = []
+    if coordinates.get_start_markers:
+        all_markers = [start_marker.columns.values for start_marker in coordinates.get_start_markers.values()]
+        start_marker_opts = np.unique(np.concatenate(all_markers)).tolist()
 
     all_bps = []
     for key, table in coordinates._tables.items():
@@ -1706,6 +1728,7 @@ def _check_enum_inputs(
         ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True, False),
         ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False, False),
         ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True, False),
+        ("start_markers", start_markers, start_marker_opts, True, "No start markers available; check 'start_markers'.", True, False),
         ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True, False),
         ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False, False),
         ("bodyparts", bodyparts, bodypart_opts, True, None, False, False),
