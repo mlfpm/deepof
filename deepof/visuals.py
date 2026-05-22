@@ -968,6 +968,7 @@ def plot_enrichment(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int =100000,
     # ROI functionality
     roi_number: int = None,
@@ -1020,6 +1021,7 @@ def plot_enrichment(
         coordinates,
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode = roi_mode,
@@ -1065,7 +1067,7 @@ def plot_enrichment(
     if supervised_annotations is not None:
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
+            tab_dict_for_binning=supervised_annotations, start_marker=start_marker, samples_max=samples_max,
         )
     else:
         tab_dict_for_binning = soft_counts
@@ -1074,7 +1076,7 @@ def plot_enrichment(
         
         bin_info_time = _preprocess_time_bins(
             coordinates, bin_size, bin_index, precomputed_bins, 
-            tab_dict_for_binning=tab_dict_for_binning, samples_max=samples_max,
+            tab_dict_for_binning=tab_dict_for_binning, start_marker=start_marker, samples_max=samples_max,
         )
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
@@ -4049,6 +4051,7 @@ def plot_behavior_trends(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    start_marker: str = None,
     samples_max=2000000,
     # ROI functionality
     roi_number: int = None,
@@ -4105,6 +4108,7 @@ def plot_behavior_trends(
         soft_counts=soft_counts,
         exp_condition=exp_condition,
         condition_values=condition_values,
+        start_markers=start_marker,
         behaviors=behaviors_to_plot,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
@@ -4164,8 +4168,13 @@ def plot_behavior_trends(
             "This function only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
+    latest_start=0
+    if start_marker is not None:
+        start_positions_dict=coordinates.get_start_marker_values(start_marker)
+        latest_start=int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+    
     L_shortest = min(
-        get_dt(table_dicts,key,only_metainfo=True)['num_rows'] for key in table_dicts.keys()
+        get_dt(table_dicts,key,only_metainfo=True)['num_rows']-latest_start for key in table_dicts.keys()
     )
 
     #####
@@ -4173,7 +4182,7 @@ def plot_behavior_trends(
     ##### 
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, start_marker=start_marker)
     n_time_bins=len(custom_time_bins)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
@@ -4184,7 +4193,7 @@ def plot_behavior_trends(
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, start_marker=start_marker, samples_max=int(samples_max/len(custom_time_bins)),
         tab_dict_for_binning=table_dicts, given_in_frames=True, warned=warned,
         )
 
@@ -4934,7 +4943,7 @@ def return_supervised_summary(
     )
 
     # Prepare bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin

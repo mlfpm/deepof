@@ -2411,6 +2411,17 @@ class Coordinates:
                 conditions.append(self._exp_conditions[key][exp_cond].iloc[0]) 
         assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
         return list(np.unique(conditions))
+    
+    def get_start_marker_values(self, start_marker, return_frames=True):
+        starts={}
+        marker_dict=self.get_start_markers
+        for key in marker_dict.keys():
+            assert start_marker in marker_dict[key], f"given start_marker is missing at key {key}"
+            cur_start=marker_dict[key][start_marker].iloc[0]
+            if return_frames:
+                cur_start=np.round(time_to_seconds(cur_start)*self._frame_rate).astype(int)
+            starts[key]=cur_start
+        return starts
 
     def load_start_markers(self, filepath): # pragma: no cover
         """Load start markers analogous to experimental conditions and do some checks"""

@@ -764,7 +764,8 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
-def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
+def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4, start_marker=None):
+
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -2190,7 +2191,7 @@ def _preprocess_mouse_roi_interaction(
     )
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
+    custom_time_bins, hide_time_bins = build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
     multi_bin_info={}
