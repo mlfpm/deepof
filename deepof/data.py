@@ -2498,7 +2498,7 @@ class Coordinates:
                 condition_instance=exp_conditions[key][condition].iloc[0]
                 assert isinstance(condition_instance, str), "Condition values need to be strings!"     
 
-        self.exp_conditions = exp_conditions
+        self._exp_conditions = exp_conditions
 
         # Save loaded conditions within project
         self.save(timestamp=False)
