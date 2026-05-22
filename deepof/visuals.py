@@ -44,13 +44,13 @@ from deepof.utils import (
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
+    seconds_to_time,
+    time_to_seconds,
 )
 from deepof.visuals_utils import (
     _check_enum_inputs,
     plot_arena,
     heatmap,
-    seconds_to_time,
-    time_to_seconds,
     _preprocess_time_bins,
     _filter_embeddings,
     _process_animation_data,

@@ -27,10 +27,8 @@ import warnings
 import deepof.data
 import deepof.visuals_utils
 from deepof.data import TableDict
-from deepof.utils import connect_mouse
+from deepof.utils import connect_mouse, time_to_seconds, seconds_to_time
 from deepof.visuals_utils import (
-    time_to_seconds,
-    seconds_to_time,
     calculate_average_arena,
     _filter_embeddings,
     _get_polygon_coords,

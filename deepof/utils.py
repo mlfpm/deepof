@@ -713,6 +713,103 @@ def set_missing_animals(
     return tab_dict
 
 
+def time_to_seconds(time_string: str) -> float:
+    """Compute seconds as float based on a time string.
+
+    Args:
+        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
+
+    Returns:
+        seconds (float): time in seconds
+    """
+    seconds = None
+    if re.match(r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?$", time_string) is not None:
+        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
+        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
+        seconds=np.round(seconds * 10**9) / 10**9
+
+    return seconds
+
+
+def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
+    """Compute a time string based on seconds as float.
+
+    Args:
+        seconds (float): time in seconds
+        cut_milliseconds (bool): decides if milliseconds should be part of the output, defaults to True
+
+    Returns:
+        time_string (str): time string (format HH:MM:SS or HH:MM:SS.SSS...)
+    """
+    time_string = None
+    _hours = np.floor(seconds / 3600)
+    _minutes = np.floor((seconds - _hours * 3600) / 60)
+    _seconds = np.floor((seconds - _hours * 3600 - _minutes * 60))
+    _milli_seconds = seconds - np.floor(seconds)
+
+    if cut_milliseconds:
+        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
+    else:
+        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
+        l_max = time_string.find(".") + 10
+        time_string = time_string[0:l_max]
+
+    return time_string
+
+
+def _load_conditions_csv(filepath):
+    """Loads condition objects (experiment conditions, start markers) from a csv file"""
+    exp_conditions = pd.read_csv(filepath, index_col=0)
+    exp_conditions = {
+        exp_id: pd.DataFrame(
+            exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
+        ).T
+        for exp_id in exp_conditions.iloc[:, 0]
+    }
+    for key in exp_conditions.keys():
+        assert isinstance(exp_conditions[key], pd.DataFrame) and exp_conditions[key].shape[0]==1, "Conditions could not be loaded!"
+    return exp_conditions
+
+
+def load_exp_conditions(filepath: str):
+    
+    exp_conditions = _load_conditions_csv(filepath)
+    # some validity checks
+    for key in exp_conditions.keys():
+        for condition in exp_conditions[key].columns:
+            condition_instance=exp_conditions[key][condition].iloc[0]
+            assert isinstance(condition_instance, str), "Condition values need to be strings!"  
+    return exp_conditions
+
+
+def load_start_markers(filepath, frame_rate): # pragma: no cover
+    """Load start markers analogous to experimental conditions and do some checks"""
+    start_markers = _load_conditions_csv(filepath)
+    # some validity checks
+    for key in start_markers.keys():
+        for marker in start_markers[key].columns:
+            raw = copy.copy(start_markers[key][marker].iloc[0])
+            # clean quotes
+            if isinstance(raw, str):
+                start_point = raw.strip().strip('"').strip("'")
+            else:
+                start_point = raw
+            # validate allowed types    
+            is_frame = isinstance(start_point, (int, np.integer))
+            is_time = isinstance(start_point, str) and re.fullmatch(
+                r"\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?",
+                start_point
+            ) is not None
+            # Convert to uniform time format
+            if is_frame:
+                start_point = seconds_to_time(start_point/frame_rate, cut_milliseconds=False)
+            
+            assert (is_frame or is_time),'Start markers need to be integers for frames or deepOF time points (format "xx:xx:xx.xxx")!'
+            
+            start_markers[key][marker].iloc[0] = start_point
+    return start_markers
+
+
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
     """Return the DataFrame in polar coordinates.
 

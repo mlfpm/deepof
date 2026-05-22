@@ -57,50 +57,6 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
-def time_to_seconds(time_string: str) -> float:
-    """Compute seconds as float based on a time string.
-
-    Args:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
-
-    Returns:
-        seconds (float): time in seconds
-    """
-    seconds = None
-    if re.match(r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-        seconds=np.round(seconds * 10**9) / 10**9
-
-    return seconds
-
-
-def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
-    """Compute a time string based on seconds as float.
-
-    Args:
-        seconds (float): time in seconds
-        cut_milliseconds (bool): decides if milliseconds should be part of the output, defaults to True
-
-    Returns:
-        time_string (str): time string (format HH:MM:SS or HH:MM:SS.SSS...)
-    """
-    time_string = None
-    _hours = np.floor(seconds / 3600)
-    _minutes = np.floor((seconds - _hours * 3600) / 60)
-    _seconds = np.floor((seconds - _hours * 3600 - _minutes * 60))
-    _milli_seconds = seconds - np.floor(seconds)
-
-    if cut_milliseconds:
-        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
-    else:
-        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
-        l_max = time_string.find(".") + 10
-        time_string = time_string[0:l_max]
-
-    return time_string
-
-
 def hex_to_BGR(hex_color):
     color = hex_color.lstrip('#')
     return tuple(int(color[i:i+2], 16) for i in (4, 2, 0))
@@ -836,7 +792,7 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
         # Convert time string elements to integers
         custom_time_bins = [
             [
-                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                int(np.round(deepof.utils.time_to_seconds(sublist[k]) * coordinates._frame_rate))
                 if type(sublist[k]) == str
                 else sublist[k]
                 for k in range(len(sublist))
@@ -1081,7 +1037,7 @@ def _get_bins_from_strings(
     frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as time strings."""
-    bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
+    bin_size_frames = int(round(deepof.utils.time_to_seconds(bin_size_str) * frame_rate))
     if bin_size_frames <= 0:
         raise ValueError("bin_size string must represent a duration > 0.")  # pragma: no cover
 
@@ -1090,7 +1046,7 @@ def _get_bins_from_strings(
     end_too_late = {key: False for key in table_lengths}
     pre_start_warnings = {}
 
-    bin_index_sec = time_to_seconds(bin_index_str)
+    bin_index_sec = deepof.utils.time_to_seconds(bin_index_str)
 
     for key, length in table_lengths.items():
         bin_start_raw = int(round((bin_index_sec) * frame_rate))
@@ -1304,7 +1260,7 @@ def _preprocess_time_bins(
                 warned.add("precomputed_ignores_args")
 
     start_times = coordinates.get_start_times(start_marker=start_marker)
-    start_frames = {key: np.round(time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
+    start_frames = {key: np.round(deepof.utils.time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
     table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
     start_frames = {key: val for key, val in start_frames.items() if key in list(table_lengths.keys())}
 
