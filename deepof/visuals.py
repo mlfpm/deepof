@@ -546,6 +546,7 @@ def _plot_experiment_gantt(
         n_available_instances=n_base_features,
         instances_to_plot=behaviors_to_plot,
         colors=colors,
+        behavior_mode=False,
         bin_info=bin_info,
         bin_indices=bin_indices,
         additional_checkpoints=additional_checkpoints,
@@ -749,6 +750,7 @@ def _plot_behavior_gantt(
         n_available_instances=n_available_experiments,
         instances_to_plot=experiments_to_plot,
         colors=colors,
+        behavior_mode=True,
         bin_info=bin_info,
         bin_indices=bin_indices,
         additional_checkpoints=additional_checkpoints,
@@ -766,6 +768,7 @@ def gantt_plotter(
     n_available_instances: int, 
     instances_to_plot: list,
     colors: list,
+    behavior_mode: bool,
     # Time selection parameters
     bin_info: dict,
     bin_indices: (np.ndarray),
@@ -834,11 +837,20 @@ def gantt_plotter(
             )
             # mirror on x axis as it get's mirrored again during plotting
             standard_signal=-(standard_signal-1)
-            plt.plot(
-                signal_overlay.index[0 : len(bin_info[exp_id]['time'])],
-                standard_signal[bin_info[exp_id]['time']] + rows,
-                color="black",
-            )
+            # if behaviors are plotted, that means the experiment ids are in the rows, so signals have to be cut individually per row based on the bin
+            if behavior_mode:
+                plt.plot(
+                    signal_overlay.index[0 : len(bin_info[instances_to_plot[exp_id]]['time'])],
+                    standard_signal[bin_info[instances_to_plot[exp_id]]['time']] + rows,
+                    color="black",
+                )
+            # if experiments are plotted, behaviors are the rows, so teh entire plot is from teh same experiment.
+            else:
+                plt.plot(
+                    signal_overlay.index[0 : len(bin_info[instance_id]['time'])],
+                    standard_signal[bin_info[instance_id]['time']] + rows,
+                    color="black",
+                )
 
 
 
