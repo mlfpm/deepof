@@ -485,6 +485,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             "test2": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
         },
         fast_implementations_threshold=fast_implementations_threshold,
+        frame_rate=25,
     )
 
     #also use large table handling 

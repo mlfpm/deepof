@@ -1306,6 +1306,7 @@ def _preprocess_time_bins(
     start_times = coordinates.get_start_times(start_marker=start_marker)
     start_frames = {key: np.round(time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
     table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
+    start_frames = {key: val for key, val in start_frames.items() if key in list(table_lengths.keys())}
 
     if experiment_id:
         if experiment_id not in table_lengths:
@@ -1322,7 +1323,7 @@ def _preprocess_time_bins(
     
     elif isinstance(bin_size, int) and isinstance(bin_index, int) and given_in_frames:
         result = _get_bins_from_frames(
-            bin_size, bin_index, table_lengths, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif isinstance(bin_size, int) and isinstance(bin_index, int):

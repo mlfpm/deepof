@@ -850,6 +850,7 @@ def test_mouse_roi_interaction():
         video_format=".mp4",
         table_format=".h5",
         exp_conditions=None,
+        frame_rate=25,
     ).create(force=True, test=True)
 
     roi = np.array([[158.61861862, 154.05405405],
@@ -933,6 +934,7 @@ def test_transitions():
         video_format=".mp4",
         table_format=".h5",
         exp_conditions=None,
+        frame_rate=25,
     ).create(force=True, test=True)
 
     # Create exp_conditions with pandas DataFrames containing "CSDS" column

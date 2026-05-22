@@ -2380,15 +2380,17 @@ class Coordinates:
         if start_marker is None:
             for key in self._tables:
                 start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+                if isinstance(start_times[key], int):
+                    start_times[key]=seconds_to_time(float(start_times[key])/self._frame_rate,cut_milliseconds=False)
         # take start times from markers
         else:
             for key in self._tables:
                 start_time = self._start_markers[key][start_marker].iloc[0]
                 end_time=get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
-                assert (
-                    np.round(time_to_seconds(start_time)*self._frame_rate) < np.round(time_to_seconds(end_time)*self._frame_rate), 
-                    f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
-                )
+                if isinstance(end_time, str):
+                    end_time=np.round(time_to_seconds(end_time)*self._frame_rate)
+                assert np.round(time_to_seconds(start_time)*self._frame_rate) < end_time, f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
+                
                 start_times[key] = start_time
         
         return start_times
@@ -2399,6 +2401,8 @@ class Coordinates:
         end_times = {}
         for key in self._tables:
             end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+            if isinstance(end_times[key], int):
+                end_times[key]=seconds_to_time(float(end_times[key])/self._frame_rate,cut_milliseconds=False)
         return end_times
 
     def get_table_lengths(self, tab_dict_for_binning=None, start_marker=None):
@@ -2408,7 +2412,7 @@ class Coordinates:
 
         # Get dict of full table lenghts
         if tab_dict_for_binning is None:
-            full_table_lengths[key] = {key: get_dt(self._tables,key, only_metainfo=True)['num_rows']
+            full_table_lengths = {key: get_dt(self._tables,key, only_metainfo=True)['num_rows']
                 for key in self._tables
             }   
         # Get full table lengths from provided tab dict instead
@@ -2470,10 +2474,8 @@ class Coordinates:
                 if is_frame:
                     start_point = seconds_to_time(start_point/self._frame_rate, cut_milliseconds=False)
                 
-                assert ((is_frame or is_time),
-                    'Start markers need to be integers for frames or deepOF time points '
-                    '(format "xx:xx:xx.xxx")!'
-                )
+                assert (is_frame or is_time),'Start markers need to be integers for frames or deepOF time points (format "xx:xx:xx.xxx")!'
+                
                 start_markers[key][marker].iloc[0] = start_point
         self.start_markers=start_markers
 
