@@ -3436,7 +3436,7 @@ class TableDict(dict):
         connectivity: nx.Graph = None,
         polar: bool = None,
         exp_conditions: dict = None,
-        start_markers: dict = None,
+        #start_markers: dict = None,
         shapes: Dict = {},
     ):
         """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
@@ -3467,7 +3467,7 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._animal_ids = animal_ids
         self._exp_conditions = exp_conditions
-        self._start_markers = start_markers
+        #self._start_markers = start_markers
         self._table_path = table_path
         self._shapes = shapes
 
