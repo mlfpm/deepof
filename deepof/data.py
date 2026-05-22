@@ -174,6 +174,7 @@ def load_project(
     if not (hasattr(coordinates, "_custom_behaviors")):
             coordinates._custom_behaviors = None
             coordinates._custom_continuous_behavior_names=[]
+    if not (hasattr(coordinates, "_start_markers")):        
             coordinates._start_markers = None,
     # Error for not compatible versions
     if not (hasattr(coordinates, "_run_numba")): 
