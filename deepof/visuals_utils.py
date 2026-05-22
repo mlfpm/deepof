@@ -1162,7 +1162,7 @@ def _validate_and_warn(
 
     for key, is_late in result.start_too_late.items():
         if is_late:
-            max_time = seconds_to_time(table_lengths[key] / frame_rate, False)
+            max_time = deepof.utils.seconds_to_time(table_lengths[key] / frame_rate, False)
             max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 1
             raise ValueError(
                 f"[Error in {key}]: bin_index is out of range. "
@@ -1174,7 +1174,7 @@ def _validate_and_warn(
     for key, is_truncated in result.end_too_late.items():
         if is_truncated and not warned_once:
             if warned is None or "truncated_bin" not in warned:
-                truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
+                truncated_len = deepof.utils.seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
                 message = (
                     "\033[38;5;208m\n"
                     f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
@@ -1183,7 +1183,7 @@ def _validate_and_warn(
                 )
                 # Add helpful suggestion only if applicable
                 if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
-                    max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
+                    max_start_time = deepof.utils.seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
                     max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
                     message += (
                         "\033[38;5;208m\n"
