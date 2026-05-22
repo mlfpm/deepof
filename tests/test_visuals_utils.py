@@ -27,7 +27,6 @@ import warnings
 import deepof.data
 import deepof.visuals_utils
 from deepof.data import TableDict
-from deepof.utils import connect_mouse, time_to_seconds, seconds_to_time
 from deepof.visuals_utils import (
     calculate_average_arena,
     _filter_embeddings,
@@ -40,9 +39,12 @@ from deepof.visuals_utils import (
     _preprocess_embedding_evaluation,
 )
 from deepof.utils import (
+    connect_mouse,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
+    seconds_to_time,
+    time_to_seconds,
 )
 from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables, get_embeddings_tab_dict_instance, get_supervised_tab_dict_instance
 
