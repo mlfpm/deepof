@@ -1716,7 +1716,7 @@ def retrieve_corners_from_image(
                 corners = corners[:-1]
 
             # Exit is user presses 'q' and go to next
-            if len(corners) > 2:
+            if (len(corners) > 2 and "polygonal" in arena_type) or (len(corners) >= 5 and "circular" in arena_type):
                 if key == ord("q"):
                     exit_flag=Arena_GUI_exit_flag.NEXT
                     break
@@ -1752,7 +1752,7 @@ def retrieve_corners_from_image(
         norm_dist=np.mean([cur_arena_params[1][0]*w_ratio, cur_arena_params[1][1]*h_ratio])* 2
 
     # Fit ellipse and extract corner points from fitted ellipse (for smoothing)
-    if "circular" in arena_type and corners is not None and len(corners) > 5:
+    if "circular" in arena_type and corners is not None and len(corners) >= 5:
         arena_ellipse = fit_ellipse_to_polygon(corners)
         corners = extract_corners_from_arena(arena_ellipse)
     
