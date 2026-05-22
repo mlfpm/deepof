@@ -174,6 +174,7 @@ def load_project(
     if not (hasattr(coordinates, "_custom_behaviors")):
             coordinates._custom_behaviors = None
             coordinates._custom_continuous_behavior_names=[]
+            coordinates._start_markers = None,
     # Error for not compatible versions
     if not (hasattr(coordinates, "_run_numba")): 
 
@@ -1759,7 +1760,7 @@ class Coordinates:
             connectivity=self._connectivity,
             polar=polar,
             exp_conditions=self._exp_conditions,
-            start_markers=self._start_markers,
+            #start_markers=self._start_markers,
         )
 
 
@@ -2075,7 +2076,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
-                start_markers=self._start_markers,
+                #start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -2193,7 +2194,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
-                start_markers=self._start_markers,
+                #start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -2303,7 +2304,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
-                start_markers=self._start_markers,
+                #start_markers=self._start_markers,
             )
 
             return areas
@@ -3567,7 +3568,7 @@ class TableDict(dict):
             connectivity = self._connectivity,
             polar = self._polar,
             exp_conditions=self._exp_conditions,
-            start_markers=self._start_markers,
+            #start_markers=self._start_markers,
         )
 
     def _prepare_projection(self) -> np.ndarray:
