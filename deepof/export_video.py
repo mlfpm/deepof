@@ -386,7 +386,7 @@ def _draw_behavior_info(
             # Update and format text with counter if enabled
             if config.display_counter:
                 behavior_counters[i] += 1
-                time_str = deepof.visuals_utils.seconds_to_time(
+                time_str = deepof.utils.seconds_to_time(
                     behavior_counters[i] / frame_rate, cut_milliseconds=False
                 )[3:11]
                 behavior_text += f' {time_str}'
@@ -558,7 +558,7 @@ def output_annotated_video(
                             params.font, 0.75, params.text_color, 2)
             
             if video_export_config.display_time:
-                time_text = f"time: {deepof.visuals_utils.seconds_to_time(frame_idx / frame_rate)}"
+                time_text = f"time: {deepof.utils.seconds_to_time(frame_idx / frame_rate)}"
                 pos = (params.padding, 10 + text_h)
                 cv2.putText(frame, time_text, pos, params.font, params.font_scale * 1.5, params.outline_color, params.thickness + 2)
                 cv2.putText(frame, time_text, pos, params.font, params.font_scale * 1.5, params.text_color, params.thickness)
