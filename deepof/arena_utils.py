@@ -102,7 +102,7 @@ def get_arenas(
     enable_automatic_detection = True
     if arena_params is not None and scales is not None:
         # Scale back to pixel for correct display
-        arena_params = _scale_arenas_to_pixel(arena_params, scales, arena)
+        arena_params = _scale_arenas_to_pixel(arena_params, scales)
         if roi_dicts is not None:
             roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)  
         else:
@@ -433,48 +433,54 @@ def get_arenas(
 
 def _scale_arenas_to_mm(arena_params, scales):
     """Scales arenas from pixel to mm"""
+    scaled_arena_params={}
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
         if isinstance(arena_params[key], np.ndarray) or isinstance(arena_params[key], list): # polygonal
-            arena_params[key]=np.array(arena_params[key])*scaling_ratio
+            scaled_arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
-            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+            scaled_arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
         else:
             raise ValueError("Could not scale arena to mm!")
-    return arena_params
+    return scaled_arena_params
 
 
 def _scale_arenas_to_pixel(arena_params, scales):
     """Scales arenas from pixel to mm"""
+    scaled_arena_params={}
     for key in arena_params.keys():
         scaling_ratio = scales[key][2]/scales[key][3]
         if isinstance(arena_params[key], np.ndarray): # polygonal
-            arena_params[key]=(np.array(arena_params[key])*scaling_ratio).astype(int)
+            scaled_arena_params[key]=(np.array(arena_params[key])*scaling_ratio).astype(int)
         # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
         elif isinstance(arena_params[key], Tuple): # circular
             arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
-            arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+            scaled_arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
         else:
             raise ValueError("Could not scale arena to pixel!")
-    return arena_params
+    return scaled_arena_params
 
 
 def _scale_rois_to_mm(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
+    scaled_roi_dicts={}
     for key in roi_dicts.keys():
+        scaled_roi_dicts[key]={}
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][3]/scales[key][2]
-            roi_dicts[key][k] = np.array(roi)*scaling_ratio
-    return roi_dicts
+            scaled_roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    return scaled_roi_dicts
 
 
 def _scale_rois_to_pixel(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
+    scaled_roi_dicts={}
     for key in roi_dicts.keys():
+        scaled_roi_dicts[key]={}
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][2]/scales[key][3]
-            roi_dicts[key][k] = (np.array(roi)*scaling_ratio).astype(int)
-    return roi_dicts
+            scaled_roi_dicts[key][k] = (np.array(roi)*scaling_ratio).astype(int)
+    return scaled_roi_dicts
 
 
 def simplify_polygon(
@@ -819,6 +825,16 @@ def display_message(message: List[str]): # pragma: no cover
         cv2.destroyWindow(window_name)
 
 
+def get_random_frame(video_path: str):
+    # read random frame from video capture object
+    current_video_cap = cv2.VideoCapture(video_path)
+    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    random_frame_number = np.random.choice(total_frames)
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
+    _, numpy_im = current_video_cap.read()
+    current_video_cap.release()
+    return numpy_im
+
 def extract_polygonal_arena_coordinates(
     video_path: str, 
     arena_type: str, 
@@ -859,12 +875,7 @@ def extract_polygonal_arena_coordinates(
     """
 
     # read random frame from video capture object
-    current_video_cap = cv2.VideoCapture(video_path)
-    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    random_frame_number = np.random.choice(total_frames)
-    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
-    _, numpy_im = current_video_cap.read()
-    current_video_cap.release()
+    numpy_im = get_random_frame(video_path)
 
     roi_corners = None
     norm_dist_new = None

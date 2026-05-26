@@ -83,7 +83,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context, DistanceUnit
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warnings_context, DistanceUnit
 #import deepof.clustering.models_new
 import deepof.clustering.training
 import deepof.utils
@@ -597,8 +597,12 @@ class Project:
         arena_path.parent.mkdir(parents=True, exist_ok=True)
 
         # All three must share identical first-level keys
-        k1, k2, k3, k4 = set(roi_dicts.keys()), set(arena_params.keys()), set(scales.keys()), set(video_resolution.keys())
-        if not (k1 == k2 == k3):
+        k1, k3, k4 = set(arena_params.keys()), set(scales.keys()), set(video_resolution.keys())
+        if roi_dicts is None:
+            k2=k1
+        else:
+            k2 = set(roi_dicts.keys())
+        if not (k1 == k2 == k3 == k4):
             raise ValueError(
                 "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
             )
@@ -651,7 +655,7 @@ class Project:
 
         # If arena-only: skip ROI checks and do not return ROI dicts
         if not load_also_rois:
-            return {key:{} for key in arena_params.keys()}, arena_params, scales, video_resolution
+            return None, arena_params, scales, video_resolution
 
         # 3) ROI count check (based on first video key)
         available_rois = list(roi_dicts[list(roi_dicts.keys())[0]].keys())
@@ -703,13 +707,44 @@ class Project:
         skip_detection = False
         if arena_path is not None:
            
-            load_also_rois=deepof.arena_utils.confirm_action(
-                f"Do you want to additionally load the saved ROIs?\n" 
-                f"If you cancel, only the arenas get loaded." 
-                    )
+            load_also_rois=False
+            if not self.number_of_rois==0:
+                load_also_rois=deepof.arena_utils.confirm_action(
+                    f"Do you want to additionally load the saved ROIs?\n" 
+                    f"If you cancel, only the arenas get loaded." 
+                        )
             roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
-            if roi_dicts is not None or self.number_of_rois==0:
-                skip_detection=True
+
+            image_export_path=os.path.join(
+                self.project_path, 
+                self.project_name,
+                "Arena_detection",
+            )
+            scaled_arena_params=deepof.arena_utils._scale_arenas_to_pixel(arena_params,scales)
+            for index, key in enumerate(self.videos.keys()):
+                video_path = os.path.join(self.video_path, self.videos[key])
+                # read random frame from video capture object
+                numpy_im = deepof.arena_utils.get_random_frame(video_path)
+                deepof.arena_utils.save_arena_image(numpy_im, scaled_arena_params[key], image_export_path, key+"_arena")
+
+            if roi_dicts is not None:
+                
+                scaled_roi_dicts=deepof.arena_utils._scale_rois_to_pixel(roi_dicts,scales)
+                for index, key in enumerate(self.videos.keys()):
+                    video_path = os.path.join(self.video_path, self.videos[key])
+                    # read random frame from video capture object
+                    numpy_im = deepof.arena_utils.get_random_frame(video_path)
+                    for k in range(1, len(roi_dicts[key])+1):
+                        deepof.arena_utils.save_arena_image(numpy_im, scaled_roi_dicts[key][k], image_export_path, key+"_roi"+str(k), color=ROI_COLORS[k-1])
+
+                # if less rois than requested were loaded, fill the remaining fields with empty lists
+                n_loaded_rois=len(roi_dicts[list(roi_dicts.keys())[0]])
+                if n_loaded_rois<self.number_of_rois:
+                    for key in roi_dicts.keys():
+                        for k in range(n_loaded_rois+1,self.number_of_rois+1):
+                            roi_dicts[key][k]=[]
+                else:
+                    skip_detection=True
         
         if not skip_detection:
             scales, arena_params, roi_dicts, video_resolution = deepof.arena_utils.get_arenas(
