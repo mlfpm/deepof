@@ -654,7 +654,8 @@ def automatically_recognize_arena(
     current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, selected[0])
 
     # Collect frames into a stack for median computation
-    frame_stack = []
+    frame_stack = None
+    valid=0
     pos=selected[0]
     for frame_index in selected:
 
@@ -668,23 +669,30 @@ def automatically_recognize_arena(
         if pos != frame_index:
             # could not reach frame
             continue
+        pos += 1
 
         reading_successful, numpy_im = current_video_cap.read()
         if not reading_successful:
             continue
-        else:
-            frame_stack.append(numpy_im.astype(np.float32))
-        pos += 1
+        
+        if frame_stack is None:
+            h, w = numpy_im.shape[:2]
+            c = 1 if numpy_im.ndim == 2 else numpy_im.shape[2]
+            frame_stack = np.empty((len(selected), h, w, c), dtype=np.uint8)
+        
+        frame_stack[valid] = numpy_im if numpy_im.ndim == 3 else numpy_im[..., None]
+        valid += 1
 
     current_video_cap.release()
 
-    if not frame_stack:
+    if valid==0:
         raise RuntimeError(f"Could not read any frames from: {path}")
 
-    if len(frame_stack) < num_sample_frames * 0.8:
+    if valid < num_sample_frames * 0.8:
         warnings.warn(f"Only {len(frame_stack)}/{num_sample_frames} frames read successfully.")
 
     # Calculate pixel median for all pixels
+    frame_stack = frame_stack[:valid]
     median_image = np.median(frame_stack, axis=0).astype(np.uint8)
     
     # Get mask using the segmentation model
@@ -711,12 +719,6 @@ def automatically_recognize_arena(
         ]
     else:
         arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
-
-    #if debug:
-    #    arena_ref=None
-    #    if arena_reference is not None:
-    #        arena_ref=arena_reference[:2]
-    #    save_arena_image(numpy_im, arena, image_export_path, videos[vid_key][:-4]+"_arena", arena_ref)
 
     return arena, h, w
 
