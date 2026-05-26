@@ -11,6 +11,7 @@ from math import atan2, dist
 from enum import Enum
 from typing import Any, List, NewType, Tuple, Union
 from dataclasses import dataclass
+import warnings
 
 
 import cv2
@@ -649,28 +650,45 @@ def automatically_recognize_arena(
     )
 
     selected_indices = np.random.choice(n, num_sample_frames, replace=False)
+    selected = np.sort(np.asarray(selected_indices, dtype=int))
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, selected[0])
 
-    # Add up num_sample_frames random frames from the video
-    accumulator= None
-    for frame_index in selected_indices:
-        current_frame = frame_index
-        current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+    # Collect frames into a stack for median computation
+    frame_stack = []
+    pos=selected[0]
+    for frame_index in selected:
+
+        # Advance to next frame_index
+        while pos < frame_index:
+            # essentially "step one frame"
+            if not current_video_cap.grab(): 
+                break
+            pos += 1
+
+        if pos != frame_index:
+            # could not reach frame
+            continue
+
         reading_successful, numpy_im = current_video_cap.read()
-        if reading_successful:
-            numpy_im = numpy_im.astype(np.float32)
-            if accumulator is None:
-                accumulator = numpy_im
-            else:
-                accumulator += numpy_im
+        if not reading_successful:
+            continue
+        else:
+            frame_stack.append(numpy_im.astype(np.float32))
+        pos += 1
 
-    # Calculate average frame (as the arena stays constant everything else that changes is averaged out as "noise")
-    if accumulator is not None:
-        average_image = (accumulator / num_sample_frames).astype(np.uint8)
-    
     current_video_cap.release()
 
+    if not frame_stack:
+        raise RuntimeError(f"Could not read any frames from: {path}")
+
+    if len(frame_stack) < num_sample_frames * 0.8:
+        warnings.warn(f"Only {len(frame_stack)}/{num_sample_frames} frames read successfully.")
+
+    # Calculate pixel median for all pixels
+    median_image = np.median(frame_stack, axis=0).astype(np.uint8)
+    
     # Get mask using the segmentation model
-    segmentation_model.set_image(average_image)
+    segmentation_model.set_image(median_image)
 
     frame_masks, score, _ = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
