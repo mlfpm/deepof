@@ -732,8 +732,12 @@ def test_arena_scale_conversions(points, pixel_len, mm_len):
     arena_params={'key1':points,'key2':2*points}
     roi_dicts={'key1':{1:points},'key2':{1:2*points}}
     scales={'key1':(None,None,pixel_len,mm_len),'key2':(None,None,pixel_len,mm_len)}
-    assert arena_params == deepof.arena_utils._scale_arenas_to_pixel(deepof.arena_utils._scale_arenas_to_mm(arena_params, scales), scales)
-    assert roi_dicts == deepof.arena_utils._scale_rois_to_pixel(deepof.arena_utils._scale_rois_to_mm(roi_dicts, scales), scales)
+    arena_params_vgl=deepof.arena_utils._scale_arenas_to_pixel(deepof.arena_utils._scale_arenas_to_mm(arena_params, scales), scales)
+    roi_dicts_vgl=deepof.arena_utils._scale_rois_to_pixel(deepof.arena_utils._scale_rois_to_mm(roi_dicts, scales), scales)
+    for key in arena_params.keys():
+        assert (arena_params[key]==arena_params_vgl[key]).all()
+    for key in roi_dicts_vgl.keys():
+        assert (roi_dicts[key][1]==roi_dicts_vgl[key][1]).all()
 
 
 @settings(deadline=None, max_examples=3)

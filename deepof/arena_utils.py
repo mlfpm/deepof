@@ -451,7 +451,7 @@ def _scale_arenas_to_pixel(arena_params, scales):
     for key in arena_params.keys():
         scaling_ratio = scales[key][2]/scales[key][3]
         if isinstance(arena_params[key], np.ndarray): # polygonal
-            scaled_arena_params[key]=(np.array(arena_params[key])*scaling_ratio).astype(int)
+            scaled_arena_params[key]=np.round(np.array(arena_params[key])*scaling_ratio).astype(int)
         # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
         elif isinstance(arena_params[key], Tuple): # circular
             arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
@@ -479,7 +479,7 @@ def _scale_rois_to_pixel(roi_dicts, scales):
         scaled_roi_dicts[key]={}
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][2]/scales[key][3]
-            scaled_roi_dicts[key][k] = (np.array(roi)*scaling_ratio).astype(int)
+            scaled_roi_dicts[key][k] = np.round(np.array(roi)*scaling_ratio).astype(int)
     return scaled_roi_dicts
 
 
