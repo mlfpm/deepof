@@ -813,8 +813,10 @@ def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins
                 "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
             )  # pragma: no cover
         elif np.max(custom_time_bins) >= L_shortest:
+            prefix = f"Based on your start marker {start_marker}, " if start_marker is not None else ""
             raise ValueError(
-                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
+                f"{prefix}'custom_time_bins' contains at least one element that exceeds the length of your shortest data set!"
+
             )  # pragma: no cover
         # Warn in case of overlapping elements
         elif not (
