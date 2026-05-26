@@ -1478,13 +1478,6 @@ def retrieve_corners_from_image(
         )
 
 
-    def click_on_corners(event, x, y, flags, param):
-        # Callback function to store the coordinates of the clicked points
-        nonlocal corners, frame
-
-        if event == cv2.EVENT_LBUTTONDOWN:
-            corners.append((x, y))
-
     def mouse_callback(event, x, y, flags, param):
         # Callback function to store the coordinates of the clicked points
         nonlocal corners, frame
@@ -1629,6 +1622,10 @@ def retrieve_corners_from_image(
                     2,
                     cv2.LINE_AA
                 )
+
+            # Reset norm_dist
+            if len(corners) <= 1:
+                norm_dist=None
 
             # Close the polygon
             if len(corners) > 2:
