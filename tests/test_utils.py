@@ -716,6 +716,26 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
             assert dist_min<25
 
 
+@given(
+    points=arrays(
+        dtype=int,
+        shape=st.tuples(
+            st.integers(min_value=1, max_value=1000),
+            st.just(2),
+        )
+    ),
+    pixel_len=st.integers(min_value=1, max_value=100000),
+    mm_len=st.floats(min_value=1, max_value=100000, allow_nan=False,allow_infinity=False),
+)
+def test_arena_scale_conversions(points, pixel_len, mm_len):
+
+    arena_params={'key1':points,'key2':2*points}
+    roi_dicts={'key1':{1:points},'key2':{1:2*points}}
+    scales={'key1':(None,None,pixel_len,mm_len),'key2':(None,None,pixel_len,mm_len)}
+    assert arena_params == deepof.arena_utils._scale_arenas_to_pixel(deepof.arena_utils._scale_arenas_to_mm(arena_params, scales), scales)
+    assert roi_dicts == deepof.arena_utils._scale_rois_to_pixel(deepof.arena_utils._scale_rois_to_mm(roi_dicts, scales), scales)
+
+
 @settings(deadline=None, max_examples=3)
 @given(
     detection_mode=st.one_of(

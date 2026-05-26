@@ -259,7 +259,7 @@ def get_arenas(
                 rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
-                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                arena_params = _scale_arenas_to_mm(arena_params, scales)
                 roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
@@ -276,7 +276,7 @@ def get_arenas(
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
-                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                arena_params = _scale_arenas_to_mm(arena_params, scales)
                 roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
@@ -425,13 +425,13 @@ def get_arenas(
         )
     
     #scale rois and arenas to mm
-    arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+    arena_params = _scale_arenas_to_mm(arena_params, scales)
     roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
     return scales, arena_params, roi_dicts, video_resolution
 
 
-def _scale_arenas_to_mm(arena_params, scales, arena):
+def _scale_arenas_to_mm(arena_params, scales):
     """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
@@ -444,7 +444,7 @@ def _scale_arenas_to_mm(arena_params, scales, arena):
     return arena_params
 
 
-def _scale_arenas_to_pixel(arena_params, scales, arena):
+def _scale_arenas_to_pixel(arena_params, scales):
     """Scales arenas from pixel to mm"""
     for key in arena_params.keys():
         scaling_ratio = scales[key][2]/scales[key][3]
