@@ -101,7 +101,7 @@ def get_arenas(
     # if valid rois, arena parameters AND scales are given, these can be used for editing, otherwise start anew
     enable_automatic_detection = True
     if arena_params is not None and scales is not None:
-        # Scale back to pixel for corect display
+        # Scale back to pixel for correct display
         arena_params = _scale_arenas_to_pixel(arena_params, scales, arena)
         if roi_dicts is not None:
             roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)  

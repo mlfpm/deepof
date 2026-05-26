@@ -651,7 +651,7 @@ class Project:
 
         # If arena-only: skip ROI checks and do not return ROI dicts
         if not load_also_rois:
-            return None, arena_params, scales, video_resolution
+            return {key:{} for key in arena_params.keys()}, arena_params, scales, video_resolution
 
         # 3) ROI count check (based on first video key)
         available_rois = list(roi_dicts[list(roi_dicts.keys())[0]].keys())
