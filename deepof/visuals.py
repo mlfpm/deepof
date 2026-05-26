@@ -89,6 +89,7 @@ def plot_heatmaps(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int = 20000,
     # ROI functionality
     roi_number: int = None,
@@ -146,6 +147,7 @@ def plot_heatmaps(
         center=center,
         animals_in_roi=animals_in_roi,
         experiment_ids=experiment_id,
+        start_markers=start_marker,
         exp_condition=exp_condition,
         condition_values=[condition_value],
         roi_number=roi_number,
@@ -170,7 +172,7 @@ def plot_heatmaps(
     if not experiment_id=="average":
         e_id=experiment_id
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, samples_max=samples_max
+        coordinates, bin_size, bin_index, experiment_id=e_id, precomputed_bins=precomputed_bins, start_marker=start_marker, samples_max=samples_max
     )
 
     if not center:  # pragma: no cover
@@ -4487,6 +4489,7 @@ def return_mouse_roi_interaction(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -4540,6 +4543,7 @@ def return_mouse_roi_interaction(
         animal_id=animal_id,
         N_time_bins = N_time_bins,
         custom_time_bins = custom_time_bins,
+        start_marker=start_marker,
         samples_max = samples_max,
         # ROI functionality
         roi_number = roi_number,
@@ -4580,6 +4584,7 @@ def plot_mouse_roi_interaction(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -4634,6 +4639,7 @@ def plot_mouse_roi_interaction(
         bodyparts=bodyparts,
         animal_id=animal_id,
         N_time_bins = N_time_bins,
+        start_marker=start_marker,
         custom_time_bins = custom_time_bins,
         samples_max = samples_max,
         # ROI functionality
@@ -4837,6 +4843,7 @@ def get_roi_data(
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int =100000,
     # Visualization parameters
     experiment_id: str = None,
@@ -4861,6 +4868,7 @@ def get_roi_data(
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
@@ -4885,7 +4893,7 @@ def get_roi_data(
 
     # Preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, 
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, 
         tab_dict_for_binning=table_dict, samples_max=samples_max,
     )
 
@@ -4925,6 +4933,7 @@ def return_supervised_summary(
     in_roi_criterion: str = "Center", 
     # Time selection parameters
     N_time_bins: int = 10,
+    start_marker: str = None,
     custom_time_bins: List[List[Union[int, str]]] = None,
     hide_time_bins: List[bool] = None,
     samples_max=20000,
@@ -4945,17 +4954,23 @@ def return_supervised_summary(
 
     _check_enum_inputs(
         coordinates,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         roi_mode=roi_mode,
         in_roi_bodyparts=in_roi_criterion,
     )
+    latest_start=0
+    if start_marker is not None:
+        start_positions_dict=coordinates.get_start_marker_values(start_marker)
+        latest_start=int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+    
     L_shortest = min(
-        get_dt(supervised_annotations,key,only_metainfo=True)['num_rows'] for key in supervised_annotations.keys()
+        get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']-latest_start for key in supervised_annotations.keys()
     )
 
     # Prepare bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1, start_marker=start_marker)
 
     multi_bin_info={}
     # Create bin_info objects for each custom time bin
@@ -4964,7 +4979,7 @@ def return_supervised_summary(
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, start_marker=start_marker, samples_max=int(samples_max/len(custom_time_bins)),
         tab_dict_for_binning=supervised_annotations, given_in_frames=True, warned=warned,
         )
 

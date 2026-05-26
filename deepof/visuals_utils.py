@@ -1072,7 +1072,7 @@ def _get_full_range_bins(start_frames: dict[str, int], table_lengths: dict[str, 
     """Strategy to use the full time range for each experiment."""
     bin_info = {}
     for key in start_frames.keys():
-        bin_info[key] = np.arange(start_frames[key], table_lengths[key]-start_frames[key])
+        bin_info[key] = np.arange(start_frames[key], table_lengths[key])
     
     return _BinningResult(bin_info, {}, {}, {})
 
@@ -2087,6 +2087,7 @@ def _preprocess_mouse_roi_interaction(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -2146,6 +2147,7 @@ def _preprocess_mouse_roi_interaction(
         bodyparts=bodyparts,
         experiment_ids=experiment_ids,
         exp_condition=exp_condition,
+        start_markers=start_marker,
         condition_values=condition_values,
         animal_id=animal_id,
     )
@@ -2188,12 +2190,17 @@ def _preprocess_mouse_roi_interaction(
             )
             warnings.warn(warning_message)
 
+    latest_start=0
+    if start_marker is not None:
+        start_positions_dict=coordinates.get_start_marker_values(start_marker)
+        latest_start=int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+    
     L_shortest = min(
-        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows'] for key in coordinates._tables.keys()
+        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows']-latest_start for key in coordinates._tables.keys()
     )
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
+    custom_time_bins, hide_time_bins = build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1, start_marker=start_marker)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
     multi_bin_info={}
@@ -2203,7 +2210,7 @@ def _preprocess_mouse_roi_interaction(
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, start_marker=start_marker, samples_max=int(samples_max/len(custom_time_bins)),
         given_in_frames=True, warned=warned,
         )
                 
