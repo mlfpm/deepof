@@ -1480,6 +1480,7 @@ def return_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
     roi_number: int = None,
@@ -1503,6 +1504,7 @@ def return_transitions(
         bin_size=bin_size,
         bin_index=bin_index,
         precomputed_bins=precomputed_bins,
+        start_marker=start_marker,
         samples_max=samples_max,
         roi_number=roi_number,
         animals_in_roi=animals_in_roi,      
@@ -1531,6 +1533,7 @@ def plot_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
     roi_number: int = None,
@@ -1581,6 +1584,7 @@ def plot_transitions(
         bin_size=bin_size,
         bin_index=bin_index,
         precomputed_bins=precomputed_bins,
+        start_marker=start_marker,
         samples_max=samples_max,
         roi_number=roi_number,
         animals_in_roi=animals_in_roi,      
@@ -1712,6 +1716,7 @@ def count_all_events(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
     roi_number: int = None,
@@ -1744,6 +1749,7 @@ def count_all_events(
         coordinates,
         supervised_annotations=supervised_annotations,
         soft_counts=soft_counts,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         in_roi_bodyparts=in_roi_criterion,
@@ -1766,7 +1772,7 @@ def count_all_events(
 
     # preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
     )
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
@@ -2112,6 +2118,7 @@ def plot_stationary_entropy(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -2148,6 +2155,7 @@ def plot_stationary_entropy(
     _check_enum_inputs(
         coordinates,
         exp_condition=exp_condition,
+        start_markers=start_marker,
         animals_in_roi=animals_in_roi,
         roi_number=roi_number,
         in_roi_bodyparts=in_roi_criterion,
@@ -2176,7 +2184,7 @@ def plot_stationary_entropy(
 
     # preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
 
@@ -2405,6 +2413,7 @@ def plot_embeddings(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -2462,6 +2471,7 @@ def plot_embeddings(
         supervised_annotations=supervised_annotations,
         normative_model=normative_model,
         exp_condition=exp_condition,
+        start_markers=start_marker,
         aggregate_experiments=aggregate_experiments,
         colour_by=colour_by,
         animals_in_roi=animals_in_roi,
@@ -2514,12 +2524,12 @@ def plot_embeddings(
     # default to embeddings as embeddings are always the length of supervised_annotations or shorter
     if embeddings is not None:
         bin_info_time = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, 
+            coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker,
             tab_dict_for_binning=embeddings, samples_max=samples_max,
         )
     else:
         bin_info_time = _preprocess_time_bins(
-            coordinates, bin_size, bin_index, precomputed_bins, 
+            coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker,
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
 
@@ -3090,6 +3100,7 @@ def animate_skeleton(
     bin_size: Union[int, str, None] = None,
     bin_index: Union[int, str, None] = None,
     precomputed_bins: Optional[np.ndarray] = None,
+    start_marker: str = None,
     samples_max: int = 20000,
     # ROI functionality
     roi_number: Optional[int] = None,
@@ -3143,6 +3154,7 @@ def animate_skeleton(
     _check_enum_inputs(
         coordinates,
         experiment_ids=experiment_id,
+        start_markers=start_marker,
         animal_id=animal_id,
         center=center,
         roi_number=roi_number,
@@ -3176,6 +3188,7 @@ def animate_skeleton(
         bin_size,
         bin_index,
         precomputed_bins,
+        start_marker=start_marker,
         samples_max=samples_max,
         tab_dict_for_binning=tab_dict_for_binning,
     )
@@ -3688,6 +3701,7 @@ def export_annotated_video(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     frame_limit_per_video: int = None,
     # ROI functionality
     roi_number: int =None,
@@ -3741,6 +3755,7 @@ def export_annotated_video(
     _check_enum_inputs(
         coordinates,
         supervised_annotations=supervised_annotations,
+        start_markers=start_marker,
         soft_counts=soft_counts,
         experiment_ids=experiment_id,
         animals_in_roi=animals_in_roi,
@@ -3801,7 +3816,7 @@ def export_annotated_video(
 
     #preprocess time bins            
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=tab_dict, samples_max=np.inf
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=np.inf
         )
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)

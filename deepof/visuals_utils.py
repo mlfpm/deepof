@@ -1966,6 +1966,7 @@ def _preprocess_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
     roi_number: int = None,
@@ -2008,6 +2009,7 @@ def _preprocess_transitions(
         coordinates,
         origin="plot_transitions",
         exp_condition=exp_condition,
+        start_markers=start_marker,
         visualization=visualization,
         supervised_annotations=supervised_annotations,
         animals_in_roi=animals_in_roi,
@@ -2051,7 +2053,7 @@ def _preprocess_transitions(
 
     # preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
     )
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
 
