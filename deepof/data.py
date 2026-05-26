@@ -1288,7 +1288,6 @@ class Project:
             print("Overwriting old project...")
         
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
-            path=os.path.normpath(arena_path)
             if arena_path is not None and self.project_name in arena_path and os.path.abspath(arena_path.split(self.project_name)[0]) == os.path.abspath(os.path.join(self.project_path)):
                 raise FileNotFoundError("When overwriting a project in force mode, the arena data cannot be loaded from the overwritten project!")
             rmtree(os.path.join(self.project_path, self.project_name))
