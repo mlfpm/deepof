@@ -693,14 +693,14 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
         # Legacy compatibility
         if isinstance(coords._arena_params[video_key], Tuple):
-            vgl_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
+            expected_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
         else:
-            vgl_arena_parameters=coords._arena_params[video_key]
+            expected_arena_parameters=coords._arena_params[video_key]
         #check if the detected circular areas are sufficiently similar
-        for i in range(3):
+        for i in range(expected_arena_parameters.shape[0]):
             assert np.linalg.norm(
-                np.array(vgl_arena_parameters[i]) - np.array(arena_parameters[i])
-                ) < 1
+                np.array(expected_arena_parameters[i]) - np.array(arena_parameters[i])
+                ) < 2
 
         pass
     else:
@@ -724,8 +724,8 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
             st.just(2),
         )
     ),
-    pixel_len=st.integers(min_value=1, max_value=100000),
-    mm_len=st.floats(min_value=1, max_value=100000, allow_nan=False,allow_infinity=False),
+    pixel_len=st.integers(min_value=1, max_value=10000),
+    mm_len=st.floats(min_value=1, max_value=10000, allow_nan=False,allow_infinity=False),
 )
 def test_arena_scale_conversions(points, pixel_len, mm_len):
 

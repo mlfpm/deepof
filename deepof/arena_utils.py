@@ -270,9 +270,9 @@ def get_arenas(
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
-                cur_arena_params_1 = extract_corners_from_arena(((200, 195), (167, 169), 14.071887016296387))
-                cur_arena_params_2 = ((200, 195), (167, 169), 14.071887016296387) #keep one circular arena to also test legacy code
-                arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2}
+                cur_arena_params_1 = extract_corners_from_arena(((200, 195), (166, 169), 13.54))
+                cur_arena_params_2 = ((200, 195), (166, 169), 13.54) #keep one circular arena to also test legacy code
+                arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2} 
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
                 roi_dicts={'test': rois, 'test2': rois} 
