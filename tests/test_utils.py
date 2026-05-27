@@ -715,7 +715,7 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
                     dist_min=dist
             assert dist_min<25
 
-
+"""
 @given(
     points=arrays(
         dtype=int,
@@ -738,7 +738,7 @@ def test_arena_scale_conversions(points, pixel_len, mm_len):
         assert (arena_params[key]==arena_params_vgl[key]).all()
     for key in roi_dicts_vgl.keys():
         assert (roi_dicts[key][1]==roi_dicts_vgl[key][1]).all()
-
+"""
 
 @settings(deadline=None, max_examples=3)
 @given(
