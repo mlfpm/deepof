@@ -259,9 +259,9 @@ def test_count_events(tab_numpy):
 
     num_events=deepof.utils.count_events(tab_numpy)
 
-    # Number of 1s in teh table is always larger than or equal to the number of counted events
+    # Number of 1s in the table is always larger than or equal to the number of counted events
     assert(np.sum(tab_numpy) >= num_events)
-    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to teh numebr of events
+    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to the numebr of events
     assert len(np.where(np.diff(tab_numpy.astype(int))==1)[0]) <= num_events
     assert len(np.where(np.diff(tab_numpy.astype(int))==-1)[0]) <= num_events
     
@@ -842,7 +842,7 @@ def test_get_behavior_mask_and_confidence(soft_counts, supervised_tables, n_beha
 
         mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
 
-    # Check that elements from teh first column are included in the mask, if they happen to be true maximums of their rows
+    # Check that elements from the first column are included in the mask, if they happen to be true maximums of their rows
     if input_tab.shape[1]>1:
         first_col_is_max=input_tab.iloc[:,0]>input_tab.iloc[:,1:].max(axis=1)
         assert all(mask['col_0'][first_col_is_max]==True)

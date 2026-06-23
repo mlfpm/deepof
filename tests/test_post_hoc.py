@@ -91,7 +91,7 @@ def test_get_contrastive_soft_counts(states):
     assert all([np.sum(soft_counts_out[key])==100.0 for key in soft_counts_out.keys()])
 
     # Check if Ideal states determined based on different modes stay consistent 
-    # (i.e. this is what teh tests currently return, if these results based on teh same inputs change, we have an issue)
+    # (i.e. this is what the tests currently return, if these results based on the same inputs change, we have an issue)
     if states != "bic" and states != 2:
         assert all([np.shape(soft_counts_out[key])[1]==3 for key in soft_counts_out.keys()])
     else:
@@ -502,7 +502,7 @@ def test_get_aggregated_embedding(reduce_dim, agg, bins, roi_number, animals_in_
     # PCA reduced to 2 dimensions
     if reduce_dim:
         assert aggregated_embeddings.shape[1] == 2
-    # We purposefully set one experiment to all false in teh roi bins, so this experiment should have been removed
+    # We purposefully set one experiment to all false in the roi bins, so this experiment should have been removed
     else:
         assert aggregated_embeddings.dropna().shape[0] == 9
 

@@ -279,7 +279,7 @@ def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment
         )
     )
 
-    # empty case: as none of teh default behaviors are in our supervised behaviors, we get an empty dataframe back
+    # empty case: as none of the default behaviors are in our supervised behaviors, we get an empty dataframe back
     if include_behaviors is None:
         assert isinstance( eval, pd.DataFrame)
         assert len(eval)==0     
@@ -747,7 +747,7 @@ def test_calculate_FSTTC(max_val,preceding_behavior,proximate_behavior,frame_rat
     proximate_behavior=proximate_behavior[0:max_val]
     fsttc=deepof.visuals_utils.calculate_FSTTC(preceding_behavior,proximate_behavior,frame_rate,delta_T)
 
-    # The FSTTC can only reach values in teh range between -1 and 1
+    # The FSTTC can only reach values in the range between -1 and 1
     assert(1 >= fsttc and fsttc >=-1)
 
 
