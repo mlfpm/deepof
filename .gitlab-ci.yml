@@ -15,6 +15,7 @@ install-pypi:
     - python -m pip install --upgrade pip
     - python -m pip install light-the-torch 
     - python -m pip install --no-cache-dir deepof
+    - python -m pip uninstall -y torch torchvision torchaudio
     - ltt install torch==2.8 torchvision==0.23.0
     - cd /tmp
     - python -m pip show deepof
@@ -59,6 +60,7 @@ install-poetry:
     - export PATH="/root/.local/bin:$PATH"
     - poetry lock
     - poetry install
+    - python -m pip uninstall -y torch torchvision torchaudio
     - python -m pip install light-the-torch 
     - ltt install torch==2.8 torchvision==0.23.0  
     - poetry run python -c 'import deepof.data'
