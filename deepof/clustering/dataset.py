@@ -1,3 +1,7 @@
+# @author NoCreativeIdeForGoodUsername
+# encoding: utf-8
+# module deepof.clustering
+
 import os
 import hashlib
 import h5py

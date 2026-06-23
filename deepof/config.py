@@ -1,3 +1,7 @@
+# @author NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
+
 from contextvars import ContextVar
 import numpy as np
 from enum import Enum

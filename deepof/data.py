@@ -9,7 +9,9 @@ and processed time-series as values in a dictionary-like object.
 
 For a detailed tutorial on how to use this module, see the advanced tutorials in the main section.
 """
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
 # encoding: utf-8
 # module deepof
 

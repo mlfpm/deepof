@@ -1,4 +1,6 @@
-# @author lucasmiranda42
+# @author lucasmiranda42 (of original Tensorflow implementations) and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof.clustering
 # encoding: utf-8
 # module deepof
 

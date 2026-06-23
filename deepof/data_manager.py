@@ -1,3 +1,7 @@
+# @author Dipanwita_Roy and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
+
 import os
 import io
 import ast

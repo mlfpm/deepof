@@ -1,3 +1,7 @@
+# @author Dipanvita_Roy and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
+
 import math
 from IPython.display import display, HTML
 import ipywidgets as widgets
