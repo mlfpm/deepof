@@ -13,7 +13,9 @@ install-pypi:
   script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
     - python -m pip install --upgrade pip
+    - python -m pip install light-the-torch 
     - python -m pip install --no-cache-dir deepof
+    - ltt install torch 
     - cd /tmp
     - python -m pip show deepof
     - python -c "import deepof.data"
