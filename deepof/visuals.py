@@ -846,7 +846,7 @@ def gantt_plotter(
                     standard_signal[bin_info[instances_to_plot[exp_id]]['time']] + rows,
                     color="black",
                 )
-            # if experiments are plotted, behaviors are the rows, so teh entire plot is from teh same experiment.
+            # if experiments are plotted, behaviors are the rows, so the entire plot is from the same experiment.
             else:
                 plt.plot(
                     signal_overlay.index[0 : len(bin_info[instance_id]['time'])],
@@ -4543,7 +4543,7 @@ def return_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
-        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        fov_angle_deg (int): Angle of the field of view of the mouse, defaults to 90 deg.
         get_raw_data (bool): If True, returns the raw per-frame interaction DataFrame instead of binned statistics. Defaults to False.
 
     Returns:
@@ -4640,7 +4640,7 @@ def plot_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
-        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        fov_angle_deg (int): Angle of the field of view of the mouse, defaults to 90 deg.
         ax (Any): Matplotlib axis for plotting. If None, creates a new figure.
         polar_depiction (bool): If True, display as polar plot. Defaults to False.
         show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to False.

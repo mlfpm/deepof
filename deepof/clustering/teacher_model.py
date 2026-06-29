@@ -42,7 +42,7 @@ def soft_cross_entropy_logits(logits, soft_targets, eps=1e-8, reduction="mean"):
 
 class TurtleHeads(nn.Module):
     """Trains each linear head for each view to resemble the target tau (the lienar fit based on all views)
-    i.e. tries to get as close as possible to prediciting the separation within the full dataset (at teh current batch) based on each view of the dataset.
+    i.e. tries to get as close as possible to prediciting the separation within the full dataset (at the current batch) based on each view of the dataset.
     
     Args:
         feature_dims (List[int]): List containing the feature dimensionality of each active view.

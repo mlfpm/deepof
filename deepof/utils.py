@@ -2859,8 +2859,8 @@ def extract_windows(
         aggregate (str): Aggregate  Instead of extracting full windows. Extracts full windows if none (default), otherwise options are:
             "mean" : average windows to one value
             "mid" : take middle of windows as window value
-            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as teh window value
-            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as teh window value
+            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as the window value
+            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as the window value
         windows_desc (str): Progress bar label
 
     Returns:

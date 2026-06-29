@@ -2128,7 +2128,7 @@ def _preprocess_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
-        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        fov_angle_deg (int): Angle of the field of view of the mouse, defaults to 90 deg.
         get_raw_data (bool): If True, skips binning and returns raw per-frame interaction values. Defaults to False.
 
     Returns:
