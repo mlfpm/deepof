@@ -1221,7 +1221,7 @@ def fit_contrastive(
     device: str = "cpu",
     trial: optuna.Trial = None,
 ):
-    is_main = (not is_ddp) or (rank == 0)
+    
     tuning_mode=False
     if trial is not None:
         tuning_mode=True
@@ -1269,6 +1269,7 @@ def fit_contrastive(
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    is_main = (not is_ddp) or (rank == 0)
 
     if is_ddp:
         if rank == 0:

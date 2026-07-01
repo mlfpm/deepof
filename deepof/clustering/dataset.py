@@ -449,6 +449,8 @@ class _H5BatchIterableDataset(IterableDataset):
         self.permute_within_block = permute_within_block
         self.return_angles = return_angles
         self.seed = None if seed is None else int(seed)
+        self.ddp_rank = ddp_rank
+        self.ddp_world_size = ddp_world_size
 
 
     def __getattr__(self, name):
