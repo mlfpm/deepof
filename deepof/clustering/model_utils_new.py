@@ -18,6 +18,7 @@ from IPython.display import clear_output
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 from deepof.data_loading import get_dt
@@ -168,10 +169,6 @@ class VaDECfg:
     kl_cooldown_pretrain: int = 10
 
 
-
-
-
-
 @dataclass
 class ContrastiveCfg:
     temperature: float = 0.1
@@ -191,6 +188,44 @@ class ContrastiveCfg:
     aug_noise_sigma: float = 0.03
     aug_p_noise: float = 0.0
 
+
+#################
+# MULTIPROCESSING
+#################
+
+def ddp_init_if_needed(backend: str = "nccl"):
+    """
+    Returns (is_ddp, rank, world_size, local_rank).
+    Optional distributed processing if multiple GPUs are used
+    """
+    if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
+        return False, 0, 1, 0
+
+    if not dist.is_available():
+        raise RuntimeError("torch.distributed not available but RANK/WORLD_SIZE are set")
+
+    if dist.is_initialized():
+        # Already initialized somewhere else
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        return True, rank, world_size, local_rank
+
+    dist.init_process_group(backend=backend, init_method="env://")
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+
+    return True, rank, world_size, local_rank
+
+
+#################
+# MISCELLANEOUS
+#################
+
 def _append_cfg(lines, title: str, cfg) -> None:
     if cfg is None:
         return
@@ -202,9 +237,9 @@ def _append_cfg(lines, title: str, cfg) -> None:
     lines.append("")  # spacer
 
 
-def unwrap_dp(model: nn.Module) -> nn.Module:
-    return model.module if isinstance(model, nn.DataParallel) else model
-
+def unwrap_dp(model: torch.nn.Module) -> torch.nn.Module:
+    # Works for nn.DataParallel and nn.parallel.DistributedDataParallel
+    return model.module if hasattr(model, "module") else model
 
 def move_to(x, device):
     if isinstance(x, (list, tuple)):
@@ -214,6 +249,11 @@ def move_to(x, device):
     if torch.is_tensor(x):
         return x.to(device, non_blocking=True)
     return x
+
+
+
+
+
 
 
 def save_model_info(

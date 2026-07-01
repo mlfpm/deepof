@@ -27,6 +27,8 @@ from copy import deepcopy
 from torch.utils.data import DataLoader
 from torch.amp import autocast
 from torch.amp import GradScaler
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -44,6 +46,7 @@ from deepof.clustering.model_utils_new import (
     save_model_info,
     load_best_checkpoints,
     slice_time_per_sample,
+    ddp_init_if_needed,
 )
 from deepof.clustering.logging import (
     init_log_summary, 
@@ -864,18 +867,34 @@ def train_deepof_model_base(
 
 
     # ----------------------------------------------------
+    # Check for possible multiprocessing
+    # ----------------------------------------------------
+    is_ddp, rank, world_size, local_rank = ddp_init_if_needed()
+    # is main process
+    is_main = (not is_ddp) or (rank == 0)
+
+    # ----------------------------------------------------
     # Prepare device and data
     # ----------------------------------------------------
     model_name = common_cfg.model_name # Name defaults to "vade"
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif isinstance(device, str) and (device=="cpu" or device=="gpu"):
-        device = torch.device(device)
-    else: # pragma: no cover
+        if torch.cuda.is_available():
+            if is_ddp:
+                device = torch.device(f"cuda:{local_rank}")
+            else:
+                device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+    elif isinstance(device, str) and (device == "cpu" or device == "gpu"):
+        device = torch.device("cpu" if device == "cpu" else ("cuda" if not is_ddp else f"cuda:{local_rank}"))
+    else:
         raise ValueError("If a device is given, it needs to be either cpu or gpu!")
-    
     print(f"Using device: {device}")
-    if device.type == "cuda":
+    if is_ddp:
+        print(f"DDP enabled: rank={rank}/{world_size}, local_rank={local_rank}")
+
+    
+    if "cuda" in device.type:
         torch.backends.cudnn.benchmark = True
         try:
             torch.set_float32_matmul_precision("high")
@@ -901,16 +920,16 @@ def train_deepof_model_base(
     train_loader = train_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=shuffle, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,  ddp_shard=True,
     )
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,  ddp_shard=False,
     )
 
     writer = None
-    if common_cfg.log_history:
+    if common_cfg.log_history and is_main:
         log_dir = os.path.join(common_cfg.output_path, "logs", f"{model_name}_run_{common_cfg.run}")
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir)
@@ -1202,7 +1221,7 @@ def fit_contrastive(
     device: str = "cpu",
     trial: optuna.Trial = None,
 ):
-    
+    is_main = (not is_ddp) or (rank == 0)
     tuning_mode=False
     if trial is not None:
         tuning_mode=True
@@ -1245,10 +1264,23 @@ def fit_contrastive(
         temperature=contrastive_cfg.temperature,
         beta=contrastive_cfg.beta,
         tau=contrastive_cfg.tau,
-    ).to(device, non_blocking=True)
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-        model = nn.DataParallel(model)
+    ).to(device)
+    # DDP wrap (preferred)
+    is_ddp = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if is_ddp else 0
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+
+    if is_ddp:
+        if rank == 0:
+            print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            # find_unused_parameters=True,  # only enable if you get “unused parameter” errors
+        )
+
 
     n_nodes = train_loader.dataset.x_shape[1]
     edge_index_global, edge_index_local, _ = _build_edge_from_metainfo(
@@ -1373,7 +1405,7 @@ def fit_contrastive(
         # Save best model based on total validation loss
         if v_total < best_val:
             best_val = v_total
-            if common_cfg.save_weights:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -1403,7 +1435,7 @@ def fit_contrastive(
         if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = v_total
-            if common_cfg.save_weights:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_score,
                     stage="best_score",

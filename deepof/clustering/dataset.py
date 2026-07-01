@@ -9,6 +9,7 @@ import math
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_info
+import torch.distributed as dist
 from typing import Dict, Tuple, Optional
 from deepof.data_loading import get_dt
 
@@ -346,7 +347,16 @@ class BatchDictDataset:
         prefetch_factor: int = 4,
         persistent_workers: Optional[bool] = None,
         seed: Optional[int] = None,  
+        ddp_shard: bool = True, 
     ) -> DataLoader:
+        
+        # get DDP identity (if needed)
+        ddp_rank = 0
+        ddp_world_size = 1
+        if ddp_shard and dist.is_available() and dist.is_initialized():
+            ddp_rank = dist.get_rank()
+            ddp_world_size = dist.get_world_size()
+
         if persistent_workers is None:
             persistent_workers = num_workers > 0
         
@@ -373,6 +383,8 @@ class BatchDictDataset:
                 permute_within_block=permute_within_block,
                 return_angles=self.return_angles,
                 seed=seed, 
+                ddp_rank=ddp_rank,                 
+                ddp_world_size=ddp_world_size, 
             )
             return DataLoader(
                 iterable,
@@ -417,6 +429,8 @@ class _H5BatchIterableDataset(IterableDataset):
         permute_within_block: bool = False,
         return_angles: int = False,
         seed: Optional[int] = None,
+        ddp_rank: int = 0,                 
+        ddp_world_size: int = 1,          
     ):
         super().__init__()
         self.base_dataset = base_dataset
@@ -448,8 +462,15 @@ class _H5BatchIterableDataset(IterableDataset):
                 n = int(f['X'].shape[0])
         else:
             n = self.n_samples
+
         bs = self.batch_size
-        return (n // bs) if self.drop_last else ((n + bs - 1) // bs)
+        total_batches = (n // bs) if self.drop_last else ((n + bs - 1) // bs)
+
+        # If sharded across ranks, each rank sees about 1/world_size of batches
+        if self.ddp_world_size > 1:
+            return (total_batches + self.ddp_world_size - 1) // self.ddp_world_size
+
+        return total_batches
 
     def __iter__(self):
         X_h5 = h5py.File(self.x_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
@@ -476,18 +497,26 @@ class _H5BatchIterableDataset(IterableDataset):
 
         w = get_worker_info()
         worker_id = w.id if w is not None else 0
-        shared_base_seed = (torch.initial_seed() - worker_id) % (2**32)
+        num_workers = w.num_workers if w is not None else 1
 
         # epoch counter (increments once per __iter__ call in each worker)
         self._epoch = getattr(self, "_epoch", 0) + 1
-        epoch_seed = (shared_base_seed + self._epoch) % (2**32)
 
+        # using self.seed from make_loader so all DDP ranks shuffle identically, then shard by DDP rank
+        base_seed = self.seed if self.seed is not None else 0
+        epoch_seed = (base_seed + self._epoch) % (2**32)
         rng = np.random.default_rng(epoch_seed)
+
         if self.shuffle and self.block_shuffle:
             rng.shuffle(starts)
 
+        # DDP shard first
+        if self.ddp_world_size > 1:
+            starts = starts[self.ddp_rank :: self.ddp_world_size]
+
+        # Then worker shard
         if w is not None:
-            starts = starts[w.id::w.num_workers]
+            starts = starts[worker_id :: num_workers]
 
         Ang_h5 = None
         Ang = None
