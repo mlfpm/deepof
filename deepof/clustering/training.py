@@ -929,6 +929,7 @@ def train_deepof_model_base(
             common_cfg,
             teacher_cfg,
             writer,
+            device,
         )
 
     # ----------------------------------------------------
@@ -945,6 +946,7 @@ def train_deepof_model_base(
             teacher_cfg,
             contrastive_cfg,
             writer,
+            device,
         )
 
     # ----------------------------------------------------
@@ -960,6 +962,7 @@ def train_deepof_model_base(
             teacher_cfg,
             vade_cfg,
             writer,
+            device,
         )
     else: # pragma: no cover
         raise ValueError(f"Unsupported model: {model_name}")
@@ -973,6 +976,7 @@ def fit_VQVAE(
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     writer: SummaryWriter,
+    device: str = "cpu",
     trial: optuna.Trial = None,
 ):
     
@@ -981,7 +985,6 @@ def fit_VQVAE(
         tuning_mode=True
 
     # Some setup
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
 
@@ -1196,6 +1199,7 @@ def fit_contrastive(
     teacher_cfg: TurtleTeacherCfg,
     contrastive_cfg: ContrastiveCfg,
     writer: SummaryWriter,
+    device: str = "cpu",
     trial: optuna.Trial = None,
 ):
     
@@ -1204,7 +1208,6 @@ def fit_contrastive(
         tuning_mode=True
 
     # Some setup
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
 
@@ -1441,8 +1444,10 @@ def fit_VADE(
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
-    writer: SummaryWriter,
+    writer: SummaryWriter,    
+    device: str = "cpu",
     trial: optuna.Trial = None,
+
 ):
     
     tuning_mode=False
@@ -1453,7 +1458,6 @@ def fit_VADE(
     # Set up
     ###############
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_path = os.path.join(common_cfg.output_path, "Datasets")
     n_batches_per_epoch = len(train_loader)
 
