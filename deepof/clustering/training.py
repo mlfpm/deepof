@@ -995,7 +995,7 @@ def fit_VQVAE(
     common_cfg : CommonFitCfg,
     teacher_cfg: TurtleTeacherCfg,
     writer: SummaryWriter,
-    device: str = "cpu",
+    device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
 ):
     
@@ -1218,7 +1218,7 @@ def fit_contrastive(
     teacher_cfg: TurtleTeacherCfg,
     contrastive_cfg: ContrastiveCfg,
     writer: SummaryWriter,
-    device: str = "cpu",
+    device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
 ):
     
@@ -1478,7 +1478,7 @@ def fit_VADE(
     teacher_cfg: TurtleTeacherCfg,
     vade_cfg: VaDECfg,
     writer: SummaryWriter,    
-    device: str = "cpu",
+    device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
 
 ):
