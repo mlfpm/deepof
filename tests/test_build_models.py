@@ -178,7 +178,7 @@ def test_embedding_model_fittingPT(model_name):
     orig_batch_dataset = deepof.clustering.dataset.BatchDictDataset
 
     def fake_fit_vade(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                        common_cfg, teacher_cfg, vade_cfg, writer):
+                        common_cfg, teacher_cfg, vade_cfg, writer, device):
         fit_calls["vade"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -187,11 +187,12 @@ def test_embedding_model_fittingPT(model_name):
             "teacher_cfg": teacher_cfg,
             "vade_cfg": vade_cfg,
             "writer": writer,
+            "device": device,
         })
         return dummy_return
 
     def fake_fit_vqvae(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                        common_cfg, teacher_cfg, writer):
+                        common_cfg, teacher_cfg, writer, device):
         fit_calls["vqvae"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -199,11 +200,12 @@ def test_embedding_model_fittingPT(model_name):
             "common_cfg": common_cfg,
             "teacher_cfg": teacher_cfg,
             "writer": writer,
+            "device": device,
         })
         return dummy_return
 
     def fake_fit_contrastive(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer):
+                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer, device):
         fit_calls["contrastive"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -213,6 +215,7 @@ def test_embedding_model_fittingPT(model_name):
             "teacher_cfg": teacher_cfg,
             "contrastive_cfg": contrastive_cfg,
             "writer": writer,
+            "device": device,
         })
         return dummy_return
 
