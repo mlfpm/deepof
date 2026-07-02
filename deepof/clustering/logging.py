@@ -356,8 +356,16 @@ def print_losses(model_name: str,
                   train_logs: dict,
                   val_logs: dict,
                   klw: float = 0.0,
-                  lambda_d: float = 0.0):
+                  lambda_d: float = 0.0,
+                  is_main: bool = True):
     """Print losses neatly aligned and append them to the log summary."""
+
+    # Update log summary
+    log_summary = _update_log_summary(log_summary, train_logs, val_logs)
+    
+    # Early return for not main shard, skipping prints
+    if not is_main:
+        return log_summary
 
     # Define consistent field width for alignment
     col_width = 10
@@ -413,8 +421,6 @@ def print_losses(model_name: str,
     print(footer)
         
 
-    # Update summary
-    log_summary = _update_log_summary(log_summary, train_logs, val_logs)
     return log_summary
 
 

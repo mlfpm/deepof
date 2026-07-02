@@ -1046,9 +1046,22 @@ def fit_VQVAE(
         interaction_regularization=common_cfg.interaction_regularization,
         kmeans_loss=common_cfg.kmeans_loss,
     ).to(device, non_blocking=True)
-    #if torch.cuda.device_count() > 1:
-    #    print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-    #    model = nn.DataParallel(model)
+    # DDP wrap (preferred)
+    is_ddp = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if is_ddp else 0
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    is_main = (not is_ddp) or (rank == 0)
+
+    if is_ddp:
+        if rank == 0:
+            print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            # find_unused_parameters=True,  # only enable if you get “unused parameter” errors
+        )
 
     # Create teacher
     teacher_cfg.include_latent_view=False
@@ -1078,7 +1091,10 @@ def fit_VQVAE(
             end_weight=teacher_cfg.lambda_end_weight,
         )
 
+
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+    if is_ddp:
+        distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
@@ -1141,13 +1157,13 @@ def fit_VQVAE(
             val_logs["bal_norm"] = float("nan")
 
         # Print training progress            
-        log_summary = print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+        log_summary = print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs, is_main=is_main)
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
         # Save best model based on total validation loss
         if v_total < best_val:
             best_val = v_total
-            if common_cfg.save_weights:
+            if common_cfg.save_weights  and is_main:
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -1182,7 +1198,7 @@ def fit_VQVAE(
         if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = v_total
-            if common_cfg.save_weights:
+            if common_cfg.save_weights  and is_main:
                 save_model_info(
                     best_path_score,
                     stage="best_score",
@@ -1327,6 +1343,8 @@ def fit_contrastive(
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
+    if is_ddp:
+        distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
@@ -1405,7 +1423,7 @@ def fit_contrastive(
             val_logs["bal_norm"] = float("nan")
 
         # Print training progress
-        log_summary = print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs)
+        log_summary = print_losses(model_name="Contrastive", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs, is_main=is_main)
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
    
@@ -1514,9 +1532,22 @@ def fit_VADE(
     ).to(device, non_blocking=True)
     step_fn = step_vade
 
-    #if torch.cuda.device_count() > 1:
-    #    print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-    #    model = nn.DataParallel(model)
+    # DDP wrap (preferred)
+    is_ddp = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if is_ddp else 0
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    is_main = (not is_ddp) or (rank == 0)
+
+    if is_ddp:
+        if rank == 0:
+            print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            # find_unused_parameters=True,  # only enable if you get “unused parameter” errors
+        )
 
     # More setup
     optimizer = build_optimizer_vade(model=model, base_lr=vade_cfg.learning_rate_pretrain, gmm_lr=0.0) #gmm learnign rate is not used in pretraining
@@ -1785,7 +1816,7 @@ def fit_VADE(
         val_total = float(val_logs.get("total_loss", float("inf")))
         score_value = float(val_logs["alignment_score"])
 
-        log_summary = print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs)
+        log_summary = print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs, is_main=is_main)
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value)
 
         # Deterimine if validation loss and / or balance + certainty score has improved
@@ -1812,7 +1843,7 @@ def fit_VADE(
             val_top_reached=True
             best_val = val_total
             val_tol=0.0
-            if common_cfg.save_weights:
+            if common_cfg.save_weights  and is_main:
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -1834,7 +1865,7 @@ def fit_VADE(
         if improved_score and epoch > score_start_epoch:
             best_score = score_value
             best_score_val = val_total
-            if common_cfg.save_weights:
+            if common_cfg.save_weights  and is_main:
                 save_model_info(
                     best_path_score,
                     stage="best_score",
