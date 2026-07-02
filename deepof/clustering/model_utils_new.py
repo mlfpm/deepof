@@ -194,18 +194,22 @@ class ContrastiveCfg:
 #################
 
 def ddp_init_if_needed(backend: str = "nccl"):
-    """
-    Returns (is_ddp, rank, world_size, local_rank).
-    Optional distributed processing if multiple GPUs are used
-    """
+    import os
+    import torch
+    import torch.distributed as dist
+
+    # If launched with srun (multiple tasks), map Slurm vars -> torchrun vars
+    if "RANK" not in os.environ and "SLURM_PROCID" in os.environ:
+        os.environ["RANK"] = os.environ["SLURM_PROCID"]
+        os.environ["WORLD_SIZE"] = os.environ["SLURM_NTASKS"]
+        os.environ["LOCAL_RANK"] = os.environ.get("SLURM_LOCALID", "0")
+        os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+        os.environ.setdefault("MASTER_PORT", "29500")
+
     if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
         return False, 0, 1, 0
 
-    if not dist.is_available():
-        raise RuntimeError("torch.distributed not available but RANK/WORLD_SIZE are set")
-
     if dist.is_initialized():
-        # Already initialized somewhere else
         rank = dist.get_rank()
         world_size = dist.get_world_size()
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))

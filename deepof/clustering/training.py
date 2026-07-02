@@ -870,6 +870,12 @@ def train_deepof_model_base(
     # Check for possible multiprocessing
     # ----------------------------------------------------
     is_ddp, rank, world_size, local_rank = ddp_init_if_needed()
+    print("Is DDP even active?")
+    print(is_ddp)
+    print(rank)
+    print(world_size)
+    print(local_rank)
+
     # is main process
     is_main = (not is_ddp) or (rank == 0)
 
@@ -1040,9 +1046,9 @@ def fit_VQVAE(
         interaction_regularization=common_cfg.interaction_regularization,
         kmeans_loss=common_cfg.kmeans_loss,
     ).to(device, non_blocking=True)
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-        model = nn.DataParallel(model)
+    #if torch.cuda.device_count() > 1:
+    #    print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+    #    model = nn.DataParallel(model)
 
     # Create teacher
     teacher_cfg.include_latent_view=False
@@ -1508,9 +1514,9 @@ def fit_VADE(
     ).to(device, non_blocking=True)
     step_fn = step_vade
 
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
-        model = nn.DataParallel(model)
+    #if torch.cuda.device_count() > 1:
+    #    print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+    #    model = nn.DataParallel(model)
 
     # More setup
     optimizer = build_optimizer_vade(model=model, base_lr=vade_cfg.learning_rate_pretrain, gmm_lr=0.0) #gmm learnign rate is not used in pretraining
