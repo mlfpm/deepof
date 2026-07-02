@@ -468,11 +468,13 @@ class _H5BatchIterableDataset(IterableDataset):
         bs = self.batch_size
         total_batches = (n // bs) if self.drop_last else ((n + bs - 1) // bs)
 
-        # If sharded across ranks, each rank sees about 1/world_size of batches
+        # If sharded across ranks, each rank sees exactly 1/world_size of batches (excess is dropped)
         if self.ddp_world_size > 1:
-            return (total_batches + self.ddp_world_size - 1) // self.ddp_world_size
+            total_batches = (total_batches // self.ddp_world_size) * self.ddp_world_size
+            return total_batches // self.ddp_world_size
 
         return total_batches
+
 
     def __iter__(self):
         X_h5 = h5py.File(self.x_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
@@ -511,6 +513,11 @@ class _H5BatchIterableDataset(IterableDataset):
 
         if self.shuffle and self.block_shuffle:
             rng.shuffle(starts)
+
+        # Ensure divisible by world_size so every rank gets the same number of batches
+        if self.ddp_world_size > 1:
+            n_full = (len(starts) // self.ddp_world_size) * self.ddp_world_size
+            starts = starts[:n_full]
 
         # DDP shard first
         if self.ddp_world_size > 1:
