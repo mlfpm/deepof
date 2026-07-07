@@ -438,6 +438,9 @@ def embedding_per_video(
     quality_threshold: float = 0.75,
     frac_bps_below: float = 0.5,
     samples_max: int = 227272,
+    M_gates: int = 3,
+    n_micro: int = 200,
+    lagtime: int = 3,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -639,7 +642,7 @@ def embedding_per_video(
             keys=list(embeddings.keys()),
             window_size=window_size,
             supervised_annotations=supervised_annotations,
-            M_gates=3,
+            M_gates=M_gates,
             embedding_gates=embedding_gates,
         )
 
@@ -655,7 +658,7 @@ def embedding_per_video(
             embedding_gates=embedding_gates,
             temporal_smooth_win=3,
             N_clusters_per_gate=states,
-            M_gates=3,
+            M_gates=M_gates,
             gate_edges=gate_edges,
         )
         soft_counts = soft_counts_dict[extract_pair]
@@ -672,10 +675,10 @@ def embedding_per_video(
             embedding_gates=embedding_gates,
             temporal_smooth_win=3,
             N_clusters_per_gate=states,
-            M_gates=3,
+            M_gates=M_gates,
             gate_edges=gate_edges,
-            n_micro=200,  # 400
-            lagtime=3,    # 3
+            n_micro=n_micro,  # 400
+            lagtime=lagtime,    # 3
         )
         if softcounts_extraction_method == "combined":
 
@@ -690,7 +693,7 @@ def embedding_per_video(
                 temporal_smooth_win=3,
                 N_clusters_per_gate=states,
                 embedding_gates=['anychaos'],
-                M_gates=3,
+                M_gates=M_gates,
                 gate_edges=None,
             )
             soft_counts_dict = deepof.post_hoc.add_chaos_gates(
