@@ -3268,6 +3268,7 @@ class Coordinates:
         interaction_regularization: float = 0.0,
         bootstrap_training: bool = False,
         bootstrap_block_len: int = 250,
+        random_seed: int = 0,
         **kwargs,
     ) -> Tuple:  # pragma: no cover
         """Annotates coordinates using a deep unsupervised autoencoder.
@@ -3306,6 +3307,7 @@ class Coordinates:
             interaction_regularization (float): weight of the interaction regularization term for all encoders.
             bootstrap_training (bool): If true, will train by sampling from data with replacement for stability estimation. False per default.
             bootstrap_block_len (int): Minimum number of samples that stay in the same block during boots_trapping to reduce effect of window overlap. Will be rounded up to a multiple of the batch size. 
+            random_seed (int): Random seed to be used for mainly data loader shuffling
             **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
@@ -3377,6 +3379,7 @@ class Coordinates:
                 interaction_regularization=interaction_regularization,
                 bootstrap_training=bootstrap_training,
                 bootstrap_block_len=bootstrap_block_len,
+                random_seed=random_seed,
                 **kwargs,
             )
         except IndexError:

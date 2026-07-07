@@ -712,6 +712,8 @@ def train_deepof_model(
     h5_dataset_folder: Optional[str] = None,
     bootstrap_training: Optional[bool]=False,
     bootstrap_block_len: int = 250,
+    # Random seed
+    random_seed: int = 0,
 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
@@ -739,7 +741,7 @@ def train_deepof_model(
         interaction_regularization=interaction_regularization,
         kmeans_loss=kmeans_loss,
         diag_max_batches=diag_max_batches,
-        seed=0, 
+        seed=random_seed, 
     )
 
     teacher_cfg = TurtleTeacherCfg(
