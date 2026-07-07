@@ -710,6 +710,8 @@ def train_deepof_model(
     aug_p_noise: float = 0.4, 
     # Dataset management 
     h5_dataset_folder: Optional[str] = None,
+    bootstrap_training: Optional[bool]=False,
+
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
@@ -848,6 +850,7 @@ def train_deepof_model(
         vade_cfg=vade_cfg,
         contrastive_cfg=contrastive_cfg,
         h5_dataset_folder=h5_dataset_folder,
+        bootstrap_training=bootstrap_training,
     )
 
    
@@ -863,6 +866,7 @@ def train_deepof_model_base(
     h5_dataset_folder: str = None,
     shuffle: bool = True,
     device: str = None,
+    bootstrap_training: bool = False,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
@@ -926,12 +930,14 @@ def train_deepof_model_base(
     train_loader = train_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=shuffle, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,  ddp_shard=True,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,  
+        ddp_shard=True, bootstrap_training=bootstrap_training,
     )
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,  ddp_shard=False,
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,  ddp_shard=False, 
+        bootstrap_training=False,
     )
 
     writer = None

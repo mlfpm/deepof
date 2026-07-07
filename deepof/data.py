@@ -3266,6 +3266,8 @@ class Coordinates:
         reg_cat_clusters: float = 0.0,
         recluster: bool = False,
         interaction_regularization: float = 0.0,
+        bootstrap_training: bool = False,
+        bootstrap_block_len: int = 250,
         **kwargs,
     ) -> Tuple:  # pragma: no cover
         """Annotates coordinates using a deep unsupervised autoencoder.
@@ -3302,6 +3304,8 @@ class Coordinates:
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
             interaction_regularization (float): weight of the interaction regularization term for all encoders.
+            bootstrap_training (bool): If true, will train by sampling from data with replacement for stability estimation. False per default.
+            bootstrap_block_len (int): Minimum number of samples that stay in the same block during boots_trapping to reduce effect of window overlap. Will be rounded up to a multiple of the batch size. 
             **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
@@ -3371,6 +3375,8 @@ class Coordinates:
                 reg_cat_clusters=reg_cat_clusters,
                 recluster=recluster,
                 interaction_regularization=interaction_regularization,
+                bootstrap_training=bootstrap_training,
+                bootstrap_block_len=bootstrap_block_len,
                 **kwargs,
             )
         except IndexError:

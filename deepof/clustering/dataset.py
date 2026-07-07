@@ -348,6 +348,8 @@ class BatchDictDataset:
         persistent_workers: Optional[bool] = None,
         seed: Optional[int] = None,  
         ddp_shard: bool = True, 
+        bootstrap_training: bool = False,
+        bootstrap_block_len: int = 250,
     ) -> DataLoader:
         
         # get DDP identity (if needed)
@@ -385,6 +387,8 @@ class BatchDictDataset:
                 seed=seed, 
                 ddp_rank=ddp_rank,                 
                 ddp_world_size=ddp_world_size, 
+                bootstrap_training=bootstrap_training,
+                bootstrap_block_len=bootstrap_block_len,
             )
             return DataLoader(
                 iterable,
@@ -430,7 +434,9 @@ class _H5BatchIterableDataset(IterableDataset):
         return_angles: int = False,
         seed: Optional[int] = None,
         ddp_rank: int = 0,                 
-        ddp_world_size: int = 1,          
+        ddp_world_size: int = 1,  
+        bootstrap_training: bool = False,   
+        bootstrap_block_len: int = 250,     
     ):
         super().__init__()
         self.base_dataset = base_dataset
@@ -451,6 +457,8 @@ class _H5BatchIterableDataset(IterableDataset):
         self.seed = None if seed is None else int(seed)
         self.ddp_rank = ddp_rank
         self.ddp_world_size = ddp_world_size
+        self.bootstrap_training = bootstrap_training
+        self.bootstrap_block_len = int(bootstrap_block_len)
 
 
     def __getattr__(self, name):
@@ -475,6 +483,80 @@ class _H5BatchIterableDataset(IterableDataset):
 
         return total_batches
 
+    def _compute_video_ranges(self, video_idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Returns:
+        starts: (n_videos,) start index in [0,n)
+        ends:   (n_videos,) end index (exclusive)
+        Assumes each video is contiguous in the concatenated dataset (true for your build).
+        """
+        vid = np.asarray(video_idx)
+        n = vid.shape[0]
+        if n == 0:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
+
+        change = np.flatnonzero(vid[1:] != vid[:-1]) + 1
+        bounds = np.concatenate(([0], change, [n])).astype(np.int64)
+        starts = bounds[:-1]
+        ends = bounds[1:]
+        return starts, ends
+
+
+    def _block_bootstrap_batch_starts(
+        self,
+        rng: np.random.Generator,
+        video_idx: np.ndarray,
+        n: int,
+        bs: int,
+        target_batches: int,
+    ) -> np.ndarray:
+        """
+        Build an array of length target_batches, containing *batch start indices*.
+        Each consecutive group of starts comes from a contiguous block within one video.
+        """
+        v_starts, v_ends = self._compute_video_ranges(video_idx)
+        v_lens = (v_ends - v_starts).astype(np.int64)
+
+        # only videos that can supply at least one full batch
+        ok = v_lens >= bs
+        v_starts, v_ends, v_lens = v_starts[ok], v_ends[ok], v_lens[ok]
+        if len(v_lens) == 0:
+            raise RuntimeError("No video segment long enough to provide a full batch.")
+
+
+        L = int(self.bootstrap_block_len)
+
+        # For efficient batching without boundary issues, add starts at step=bs.
+        # (L is not required to be a multiple of bs)
+        batches_per_block =  int(max(1, np.ceil(L / bs)))
+
+        out = np.empty((target_batches,), dtype=np.int64)
+        filled = 0
+
+        while filled < target_batches:
+            v = int(rng.choice(len(v_lens), p=None))
+            vs, ve, m = int(v_starts[v]), int(v_ends[v]), int(v_lens[v])
+
+            # How many full batches fit in the selected video
+            max_batches_in_video = m // bs
+            bpb = min(batches_per_block, max_batches_in_video)
+
+            # Choose a block start such that bpb full batches fit (so s+bs*bpb <= ve)
+            max_start = ve - (bpb * bs)
+            if max_start < vs:
+                # extremely short video edge case; skip
+                continue
+
+            s0 = int(rng.integers(vs, max_start + 1))
+
+            # write batch starts for this block
+            for j in range(bpb):
+                if filled >= target_batches:
+                    break
+                out[filled] = s0 + j * bs
+                filled += 1
+
+        return out
 
     def __iter__(self):
         X_h5 = h5py.File(self.x_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
@@ -518,6 +600,18 @@ class _H5BatchIterableDataset(IterableDataset):
         if self.ddp_world_size > 1:
             n_full = (len(starts) // self.ddp_world_size) * self.ddp_world_size
             starts = starts[:n_full]
+        
+        # Bootstrap mode: Sample with replacement from ranges with a length of bootstrap_block_len
+        if self.bootstrap_training:
+
+            target_batches = len(starts)
+            starts = self._block_bootstrap_batch_starts(
+                rng=rng,
+                video_idx=video_idx,
+                n=n,
+                bs=bs,
+                target_batches=target_batches,
+            )
 
         # DDP shard first
         if self.ddp_world_size > 1:
