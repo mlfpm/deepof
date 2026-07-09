@@ -206,7 +206,7 @@ def ddp_init_if_needed(backend: str = "nccl"):
         os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
         os.environ.setdefault("MASTER_PORT", "29500")
 
-    if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
+    if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ or not torch.cuda.is_available():
         return False, 0, 1, 0
 
     if dist.is_initialized():
