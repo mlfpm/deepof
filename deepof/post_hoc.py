@@ -1311,7 +1311,7 @@ def get_contrastive_soft_counts_msm_pcca(
                 kmeans = model["kmeans"]
                 m2m = model["micro2macro"]
 
-                for s, e in _mask_to_runs(mask, min_len=2):
+                for s, e in _mask_to_runs(mask, min_len=1):
                     seg = Z0[s:e, :]
                     Xs = scaler.transform(seg)
                     d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
