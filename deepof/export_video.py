@@ -82,7 +82,7 @@ def _filter_videos_by_condition(
     list(conditions.values())
     filtered_conditions = [
         exp_id for exp_id in experiment_ids if
-        all([all_exp_conditions.get(exp_id, {})[cond][0] == state
+        all([all_exp_conditions.get(exp_id, {})[cond].iloc[0] == state
         for cond, state in conditions.items()])
     ]
     assert len(filtered_conditions)>0, f"No conditions are left after filtering. Make sure that your dictionary keys are among: {list(all_exp_conditions[list(all_exp_conditions.keys())[0]].columns)} and condition values are spelled correctly!" 
