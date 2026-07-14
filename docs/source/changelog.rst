@@ -1,6 +1,56 @@
 Changelog
 =========
 
+
+[0.9.0] - 2026-07-14
+=====================
+
+Added
+-------
+- Big unsupervised model rework: all unsupervised models were reimplemented in PyTorch with improved performance, stability and optional GPU support.
+- New Turtle teacher feature and related training utilities for contrastive/translation models to improve training stability and reduce cluster collapse.
+- New modular supervised behavior API (`DeepOF_behavior`, `BehaviorContext`, `Behavior_scope`, `Behavior_output`) enabling user-supplied `custom_behaviors` in `supervised_tagging` (multi-output and continuous behaviors supported).
+- Helper utilities for custom behaviors: `validate_custom_behaviors` and `assign_custom_behavior_colors`.
+- Extensive PyTorch tooling and ports under `deepof.clustering.*` including weight-transfer helpers, loss ports and unit-tests for translation/contrastive parity.
+- Data/time binning and experiment start support: added `start_markers` support in `Project` / `Coordinates`, new methods `get_start_times`, `get_table_lengths`, `get_start_markers` and `get_start_marker_values` to allow relative/marker-based bin start positions.
+- Plotting and visualization updates: `bin_index` may denote an exact start position (string) or index; plot helpers and functions (including `animate_skeleton`, `plot_behavior_trends`, `plot_heatmaps`) now better support relative starting positions and precomputed bins.
+- CI and packaging: new `install-pypi-local` job, `regression_test` job, poetry build/wheel artifacts in pipeline, and use of `light-the-torch` in CI to provision pinned `torch` builds.
+- New notebooks and regression tests for clustering/contrastive translation and model parity verification added under `deepof/clustering/`.
+
+Changed
+-------
+- `supervised_tagging` extended with `custom_behaviors` and `custom_behavior_context` and refactored into a behavior-class architecture; result is still a tag DataFrame but internals are modular and extensible.
+- `deepof.__init__` no longer auto-imports `models` to reduce import-side effects; import `deepof.models` explicitly where needed.
+- `arena_utils.get_arenas` and the arena-scaling helpers were reworked: stricter pixel↔mm scaling, clearer automatic-detection path, and consistent return structures for `scales`, `arena_params`, `roi_dicts` and `video_resolution`.
+- Plotting helpers and `data` API: `bin_index` handling clarified (can be int or string referencing exact time), `precomputed_bins` option respected across plotting functions, and several plot defaults (`bin_index=None`) standardized.
+- `annotation_utils` refactor: many supervised-behavior functions wrapped into `DeepOF_behavior` instances, continuous measures computation standardized (`distance`, `cum-distance`, `speed` keys), and multiple internal signatures adapted for clearer typing.
+- CI/tests: test job now installs the built wheel and runs coverage against updated module paths (new clustering modules included).
+- Arena/ROI detection improvements: median-based frame stack for segmentation, more robust `automatically_recognize_arena`/`extract_polygonal_arena_coordinates` logic, and automatic export of arena/ROI images.
+- Arena/ROI scaling helpers rewritten to consistently return typed dicts and to avoid legacy circular-ellipse inconsistencies.
+
+
+Bug Fixes
+---------
+- Improved ROI/arena scaling and pixel↔mm conversion fixes (avoids inconsistent vertex counts and ellipse-to-polygon issues).
+- `extract_polygonal_arena_coordinates` and GUI corner retrieval fixes: more reliable random-frame selection and circular-arena handling.
+- Fixed numerous small edge cases in supervised tagging, behavior postprocessing and validation (clearer exceptions and input checks).
+
+Known Issues
+------------
+- Some of the new clustering / PyTorch translation code may require additional review for GPU usage on Windows; tests and transfer utilities are included to help.
+
+Compatibility
+-------------
+- Minor breaking change: `deepof.__init__` no longer auto-imports `models`. If your code relied on `import deepof; deepof.models`, please update to `import deepof.models`.
+
+Additional Information
+----------------------
+- Release Date: 2026-07-14
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.9.0/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
 [0.8.5] - 2026-03-24
 ====================
 
