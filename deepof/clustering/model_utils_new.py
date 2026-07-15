@@ -375,17 +375,22 @@ def ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
 
 
 def check_model_inputs(
-    model_name: Optional[str] = None,
+    preprocessed_object: Optional[dict] = None,
+    adjacency_matrix: Optional[np.ndarray] = None,
+    meta_info: Optional[np.ndarray] = None,
     encoder_type: Optional[str] = None,
+    batch_size: Optional[int] = None,
+    latent_dim: Optional[int] = None,
+    epochs: Optional[int] = None,
+    output_path: Optional[str] = None,
+    model_name: Optional[str] = None,
     kl_annealing_mode: Optional[str] = None,
     contrastive_similarity_function: Optional[str] = None,
     contrastive_loss_function: Optional[str] = None, 
-):  # pragma: no cover
+    pretrained: Optional[str] = None,
+):
     """
-    Checks and validates enum-like input parameters for various plot functions.
-
-    This function acts as a centralized guard to ensure that all categorical
-    and list-based inputs are valid before being used in downstream logic.
+    Checks and validates main input parameters for model training.
 
     Args:
         model_name (str): Name of the model
@@ -396,7 +401,29 @@ def check_model_inputs(
     """    
 
     # =========================================================================
-    # 1. GENERATE LISTS OF VALID OPTIONS
+    # 1. Model loading shortcut, allows to skip everything else
+    # =========================================================================
+    if pretrained is not None and os.path.exists(pretrained):
+        return
+
+    # =========================================================================
+    # 2. For specific inputs:
+    # =========================================================================
+
+    #preprocessed_object
+
+    #adjacency_matrix
+
+    #meta_info
+    #output_path
+
+    assert isinstance(batch_size,int) and batch_size >8, "batch_size \"batch_size\" need to be an integer grater than 8"
+    assert isinstance(latent_dim,int) and latent_dim >0, "The number of latent / hidden dimensions of the model \"latent_dim\" need to be an integer grater than 0"
+    assert isinstance(epochs,int) and epochs >0, "The number of training epochs \"epochs\" need to be an integer grater than 0"
+
+    # For enum-likes:
+    # =========================================================================
+    # 3. Generate lists of valid options
     # =========================================================================
     
     # --- Statically defined options ---
@@ -407,7 +434,7 @@ def check_model_inputs(
     contrastive_loss_function_ops=["nce","fc", "dlc", "hard_dcl"]
 
     # =========================================================================
-    # 3. CONFIGURE AND RUN VALIDATION CHECKS
+    # 4. Configure and run valid checks
     # Format: (param_name, param_value, valid_options, is_list, custom_error)
     # =========================================================================
     validation_checks = [

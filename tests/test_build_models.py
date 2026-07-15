@@ -669,8 +669,14 @@ def test_save_and_load_model(model_name):
     assert os.path.isfile(info_path), f"Info file not created: {info_path}"
 
     # Load the model using load_model_from_ckpt
-    loaded_model, loaded_log_summary, loaded_spec, load_report = \
+    loaded_model1, loaded_log_summary, loaded_spec, load_report = \
         deepof.clustering.model_utils_new.load_model_from_ckpt(ckpt_path, device=device, strict=True)
+    
+    # alternative loading path using train_deepof_model
+    loaded_model2, _ , _, loaded_log_summary2 = \
+        deepof.clustering.training.train_deepof_model(
+            pretrained=ckpt_path, device=device,
+        )
 
     # Verify load report has no missing/unexpected keys
     assert len(load_report["missing"]) == 0, f"Missing keys: {load_report['missing']}"
@@ -679,48 +685,53 @@ def test_save_and_load_model(model_name):
     # Verify log_summary was preserved
     assert loaded_log_summary["final_epoch"] == 10
     assert loaded_log_summary["best_val_loss"] == 0.123
+    assert loaded_log_summary==loaded_log_summary2   
 
     # Verify rebuild_spec was preserved
     assert loaded_spec["model_name"] == model_name
     assert loaded_spec["latent_dim"] == latent_dim
 
-    # Verify model type matches
-    if model_name == "vade":
-        assert isinstance(loaded_model, deepof.clustering.models_new.VaDEPT)
-    elif model_name == "vqvae":
-        assert isinstance(loaded_model, deepof.clustering.models_new.VQVAEPT)
-    elif model_name == "contrastive":
-        assert isinstance(loaded_model, deepof.clustering.models_new.ContrastivePT)
 
-    # Verify all parameters match
-    loaded_params = dict(loaded_model.named_parameters())
 
-    assert set(original_params.keys()) == set(loaded_params.keys()), \
-        f"Parameter name mismatch.\nOriginal: {set(original_params.keys())}\nLoaded: {set(loaded_params.keys())}"
+    # Verify that all parameters match for both loading methods
+    for loaded_model in [loaded_model1, loaded_model2]:
+        
+        # Verify model type matches
+        if model_name == "vade":
+            assert isinstance(loaded_model, deepof.clustering.models_new.VaDEPT)
+        elif model_name == "vqvae":
+            assert isinstance(loaded_model, deepof.clustering.models_new.VQVAEPT)
+        elif model_name == "contrastive":
+            assert isinstance(loaded_model, deepof.clustering.models_new.ContrastivePT)
 
-    for name in original_params:
-        orig_p = original_params[name]
-        load_p = loaded_params[name]
-        assert orig_p.shape == load_p.shape, \
-            f"Shape mismatch for {name}: {orig_p.shape} vs {load_p.shape}"
-        assert torch.allclose(orig_p, load_p, atol=1e-6), \
-            f"Value mismatch for {name}: max diff = {(orig_p - load_p).abs().max().item()}"
+        loaded_params = dict(loaded_model.named_parameters())
 
-    # Verify forward pass produces identical output
-    loaded_model.eval()
-    with torch.no_grad():
-        out_original = model(x_dummy, a_dummy)
-        out_loaded = loaded_model(x_dummy, a_dummy)
+        assert set(original_params.keys()) == set(loaded_params.keys()), \
+            f"Parameter name mismatch.\nOriginal: {set(original_params.keys())}\nLoaded: {set(loaded_params.keys())}"
 
-    # Handle different return types
-    if isinstance(out_original, tuple):
-        for i, (o1, o2) in enumerate(zip(out_original, out_loaded)):
-            if torch.is_tensor(o1) and torch.is_tensor(o2):
-                assert torch.allclose(o1, o2, atol=1e-5), \
-                    f"Output {i} mismatch: max diff = {(o1 - o2).abs().max().item()}"
-    elif torch.is_tensor(out_original):
-        assert torch.allclose(out_original, out_loaded, atol=1e-5), \
-            f"Output mismatch: max diff = {(out_original - out_loaded).abs().max().item()}"
+        for name in original_params:
+            orig_p = original_params[name]
+            load_p = loaded_params[name]
+            assert orig_p.shape == load_p.shape, \
+                f"Shape mismatch for {name}: {orig_p.shape} vs {load_p.shape}"
+            assert torch.allclose(orig_p, load_p, atol=1e-6), \
+                f"Value mismatch for {name}: max diff = {(orig_p - load_p).abs().max().item()}"
+
+        # Verify forward pass produces identical output
+        loaded_model.eval()
+        with torch.no_grad():
+            out_original = model(x_dummy, a_dummy)
+            out_loaded = loaded_model(x_dummy, a_dummy)
+
+        # Handle different return types
+        if isinstance(out_original, tuple):
+            for i, (o1, o2) in enumerate(zip(out_original, out_loaded)):
+                if torch.is_tensor(o1) and torch.is_tensor(o2):
+                    assert torch.allclose(o1, o2, atol=1e-5), \
+                        f"Output {i} mismatch: max diff = {(o1 - o2).abs().max().item()}"
+        elif torch.is_tensor(out_original):
+            assert torch.allclose(out_original, out_loaded, atol=1e-5), \
+                f"Output mismatch: max diff = {(out_original - out_loaded).abs().max().item()}"
 
     # Verify info file contents
     with open(info_path, "r", encoding="utf-8") as f:

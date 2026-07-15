@@ -409,9 +409,9 @@ def label_separation_score(
     min_neg: int = 2,
     normalize_embeddings: bool = True,
     eps: float = 1e-8,
-) -> torch.Tensor:
+) -> torch.Tensor: # pragma: no cover
     """
-    Returns ONE scalar score per batch (higher = better separation).
+    Returns ONE scalar score per batch (higher = better separation). [currently unused]
 
     For each behavior/label l:
       positives: y[:,l] >= pos_thr
@@ -590,14 +590,14 @@ def step_contrastive_distill(
 
 
 def train_deepof_model(
-    preprocessed_object: Tuple[dict, dict],
-    adjacency_matrix: np.ndarray,
-    meta_info: dict,
-    encoder_type: str,
-    batch_size: int,
-    latent_dim: int,
-    epochs: int,
-    output_path: str,
+    preprocessed_object: Tuple[dict, dict] = None,
+    adjacency_matrix: np.ndarray = None,
+    meta_info: dict = None,
+    encoder_type: str = None,
+    batch_size: int = None,
+    latent_dim: int = None,
+    epochs: int = None,
+    output_path: str = None,
     # Logging/IO
     n_clusters: int = 10,
     learning_rate: float = 1e-3,
@@ -709,6 +709,7 @@ def train_deepof_model(
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 0.4, 
     # Dataset management 
+    device: str = None,
     h5_dataset_folder: Optional[str] = None,
     bootstrap_training: Optional[bool]=False,
     bootstrap_block_len: int = 250,
@@ -718,7 +719,21 @@ def train_deepof_model(
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
     # Verify if various model inputs have valid values (TO DO)
-    deepof.clustering.model_utils_new.check_model_inputs()
+    deepof.clustering.model_utils_new.check_model_inputs(
+        preprocessed_object=preprocessed_object,
+        adjacency_matrix=adjacency_matrix,
+        meta_info=meta_info,
+        encoder_type=encoder_type,
+        batch_size=batch_size,
+        latent_dim=latent_dim,
+        epochs = epochs,
+        output_path = output_path,
+        model_name = model_name,
+        kl_annealing_mode = kl_annealing_mode,
+        contrastive_similarity_function = contrastive_similarity_function,
+        contrastive_loss_function = contrastive_loss_function, 
+        pretrained = pretrained,
+    )
 
     # Create configs for different models to avoid gigantic function signaturs
     common_cfg = CommonFitCfg(
@@ -853,6 +868,7 @@ def train_deepof_model(
         vade_cfg=vade_cfg,
         contrastive_cfg=contrastive_cfg,
         h5_dataset_folder=h5_dataset_folder,
+        device=device,
         bootstrap_training=bootstrap_training,
         bootstrap_block_len=bootstrap_block_len,
     )
@@ -875,6 +891,12 @@ def train_deepof_model_base(
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
+    # Load pretrained model if available + early return
+    if common_cfg.pretrained:
+        print(f"Loading pretrained weights from {common_cfg.pretrained}")
+        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained, device=device)
+        return unwrap_dp(model), None, None, log_summary
+    
     # ----------------------------------------------------
     # Check for possible multiprocessing
     # ----------------------------------------------------
@@ -893,7 +915,7 @@ def train_deepof_model_base(
     # ----------------------------------------------------
     model_name = common_cfg.model_name # Name defaults to "vade"
     if device is None:
-        if torch.cuda.is_available():
+        if torch.cuda.is_available(): # pragma: no cover
             if is_ddp:
                 device = torch.device(f"cuda:{local_rank}")
             else:
@@ -902,14 +924,14 @@ def train_deepof_model_base(
             device = torch.device("cpu")
     elif isinstance(device, str) and (device == "cpu" or device == "gpu"):
         device = torch.device("cpu" if device == "cpu" else ("cuda" if not is_ddp else f"cuda:{local_rank}"))
-    else:
+    else: # pragma: no cover
         raise ValueError("If a device is given, it needs to be either cpu or gpu!")
     print(f"Using device: {device}")
-    if is_ddp:
+    if is_ddp: # pragma: no cover
         print(f"DDP enabled: rank={rank}/{world_size}, local_rank={local_rank}")
 
     
-    if "cuda" in device.type:
+    if "cuda" in device.type: # pragma: no cover
         torch.backends.cudnn.benchmark = True
         try:
             torch.set_float32_matmul_precision("high")
@@ -1037,14 +1059,6 @@ def fit_VQVAE(
         "interaction_regularization": common_cfg.interaction_regularization,
     }
     
-    # Load pretrained model if available + early return
-    if common_cfg.pretrained:
-        print(f"Loading pretrained weights from {common_cfg.pretrained}")
-        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
-        if writer:
-            writer.flush(); writer.close()
-        return unwrap_dp(model), None, None, log_summary
-
     # Create model
     model = VQVAEPT(
         input_shape=train_loader.dataset.x_shape,
@@ -1275,14 +1289,6 @@ def fit_contrastive(
         "use_gnn": True,
         "interaction_regularization": common_cfg.interaction_regularization,
     }
-
-    # Load pretrained model if available + early return
-    if common_cfg.pretrained:
-        print(f"Loading pretrained weights from {common_cfg.pretrained}")
-        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
-        if writer:
-            writer.flush(); writer.close()
-        return unwrap_dp(model), None, None, log_summary
 
     # Create model
     model = ContrastivePT(
@@ -1579,14 +1585,6 @@ def fit_VADE(
         "interaction_regularization": common_cfg.interaction_regularization,
         "lens_enabled": False,
     }
-
-    # Load pretrained model if available + early return
-    if common_cfg.pretrained:
-        print(f"Loading pretrained weights from {common_cfg.pretrained}")
-        model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained)
-        if writer:
-            writer.flush(); writer.close()
-        return unwrap_dp(model), None, None, log_summary
 
 
     ###############
