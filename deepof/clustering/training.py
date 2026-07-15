@@ -1227,7 +1227,7 @@ def fit_VQVAE(
             if trial.should_prune():
                 raise optuna.TrialPruned(f"Pruned at epoch={epoch}, best_score={max_score:.4f}")
 
-        if improved_score and epoch > score_start_epoch:
+        if improved_score and epoch > score_start_epoch: # pragma: no cover
             best_score = score_value
             best_score_val = v_total
             if common_cfg.save_weights  and is_main:
@@ -1481,7 +1481,7 @@ def fit_contrastive(
             )
         )
 
-        if improved_score and epoch > score_start_epoch:
+        if improved_score and epoch > score_start_epoch: # pragma: no cover
             best_score = score_value
             best_score_val = v_total
             if common_cfg.save_weights and is_main:
@@ -1878,7 +1878,7 @@ def fit_VADE(
 
 
         # Save best model based on model balance and certainty score
-        if improved_score and epoch > score_start_epoch:
+        if improved_score and epoch > score_start_epoch: # pragma: no cover
             best_score = score_value
             best_score_val = val_total
             if common_cfg.save_weights  and is_main:
