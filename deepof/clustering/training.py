@@ -720,7 +720,7 @@ def train_deepof_model(
     
     # force lower case
     model_name=str(model_name).lower()
-    encoder_type=str(model_name).lower()
+    encoder_type=str(encoder_type).lower()
     kl_annealing_mode=str(kl_annealing_mode).lower()
     contrastive_similarity_function=str(contrastive_similarity_function).lower()
     contrastive_loss_function=str(contrastive_loss_function).lower()
