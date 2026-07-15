@@ -417,7 +417,7 @@ def check_model_inputs(
     #meta_info
     #output_path
 
-    assert isinstance(batch_size,int) and batch_size >8, "batch_size \"batch_size\" need to be an integer grater than 8"
+    assert isinstance(batch_size,int) and batch_size >1, "batch_size \"batch_size\" need to be an integer grater than 1"
     assert isinstance(latent_dim,int) and latent_dim >0, "The number of latent / hidden dimensions of the model \"latent_dim\" need to be an integer grater than 0"
     assert isinstance(epochs,int) and epochs >0, "The number of training epochs \"epochs\" need to be an integer grater than 0"
 
