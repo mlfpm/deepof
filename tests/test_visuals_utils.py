@@ -85,14 +85,17 @@ def test_color_conversion(r, g, b):
     experiment_type=st.one_of(
         st.just("test_multi_topview"),
         st.just("test_single_topview"),
-    )
+    ),
+    named_single_mouse=st.booleans()
 )
-def test_get_behavior_colors(experiment_type):
+def test_get_behavior_colors(experiment_type,named_single_mouse):
 
     if experiment_type == "test_multi_topview":
-        animal_ids=["B","W"] 
-    else:
+        animal_ids=["B","W"]
+    elif experiment_type == "test_single_topview":
         animal_ids = None
+    if named_single_mouse and experiment_type == "test_single_topview":
+        aid_addon = "mouse1"
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", experiment_type),
@@ -117,13 +120,20 @@ def test_get_behavior_colors(experiment_type):
     continuous_behaviors, _=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
     behaviors=list(set(behaviors)-set(continuous_behaviors))
 
+    df=supervised['test']
+    if named_single_mouse and experiment_type == "test_single_topview":
+        behaviors = [aid_addon+"_"+beh for beh in behaviors]
+        animal_ids=aid_addon
+        df.columns = [aid_addon+"_"+beh for beh in df.columns]
+
     colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
-    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
+    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,df)
 
     #check if all supervised behaviors have a color
     assert not None in colors_a
     #check if generated Colors stay the same independent of animal id retrieval
     assert colors_a == colors_b
+
 
 
 @settings(deadline=None)
