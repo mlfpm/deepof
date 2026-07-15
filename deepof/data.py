@@ -643,7 +643,7 @@ class Project:
             arena_params = data["arena_params"]
             scales = data["scales"]
             video_resolution = data["video_resolution"]
-        elif isinstance(data, (tuple, list)) and len(data) == 3:
+        elif isinstance(data, (tuple, list)) and len(data) == 4:
             roi_dicts, arena_params, scales, video_resolution = data
         else:
             raise ValueError(
