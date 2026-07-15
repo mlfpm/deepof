@@ -185,7 +185,57 @@ def test_arena_loading():
         if os.path.exists(tmp_dir):
             rmtree(tmp_dir)
 
-            
+
+def test_start_markers():
+
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+    video_path = os.path.join(base_path, "Videos")
+    table_path = os.path.join(base_path, "Tables")
+    project_name = "test_start_markers"
+    keys = ['test2', 'test']
+
+    # 2) Define start markers 
+    # dict[key] -> DataFrame with one row, columns = marker names, values = time strings
+    marker_name = "trial_start"
+    start_time_str = "00:00:01.000"  # 1 second
+    start_markers = {k: pd.DataFrame({marker_name: [start_time_str]}) for k in keys}
+
+    try:
+        # 3) Create project WITH start_markers
+        coords = deepof.data.Project(
+            project_path=base_path,
+            project_name=project_name,
+            video_path=video_path,
+            table_path=table_path,
+            arena="polygonal-autodetect",
+            video_scale="380 mm",
+            video_format=".mp4",
+            table_format=".h5",
+            start_markers=start_markers,
+        ).create(force=True, test=True)
+
+        # 4) Validate start marker frame values
+        start_frames = coords.get_start_marker_values(marker_name, return_frames=True)
+        expected_start_frame = int(np.round(coords._frame_rate))  # 1 second * fps
+
+        for k in keys:
+            assert start_frames[k] == expected_start_frame
+
+        # 5) Validate table lengths are shortened accordingly
+        full_lengths = coords.get_table_lengths()
+        shortened_lengths = coords.get_table_lengths(start_marker=marker_name)
+
+        for k in keys:
+            assert shortened_lengths[k] == full_lengths[k] - expected_start_frame
+
+    finally:
+        out_dir = os.path.join(base_path, project_name)
+        if os.path.exists(out_dir):
+            rmtree(out_dir)
+
+test_start_markers()
+
+
 def test_project_extend():
 
     #create a new folder with only one video and table  

@@ -1314,7 +1314,7 @@ class Project:
             print("Setting up project directories...")
 
         # Overwrite warning
-        if os.path.exists(os.path.join(self.project_path, self.project_name)) and not test and DISPLAY_AVAILABLE:
+        if os.path.exists(os.path.join(self.project_path, self.project_name)) and not test and DISPLAY_AVAILABLE: # pragma: no cover
             overwrite_project=deepof.arena_utils.confirm_action(
                 f"A project already exists at the given path and name!\n"
                 f"Do you want to overwrite this old project with a new one?" 
