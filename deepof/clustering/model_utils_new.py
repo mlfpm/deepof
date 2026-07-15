@@ -427,8 +427,8 @@ def check_model_inputs(
     # =========================================================================
     
     # --- Statically defined options ---
-    model_opts = ["VaDE", "VQVAE", "Contrastive"]
-    encoder_opts = ["recurrent", "TCN", "transformer"]
+    model_opts = ["vade", "vqvae", "contrastive"]
+    encoder_opts = ["recurrent", "tcn", "transformer"]
     kl_annealing_mode_opts = ["linear","sigmoid","tf_sigmoid"]
     contrastive_similarity_function_opts = ["cosine","dot","euclidean","edit"]
     contrastive_loss_function_ops=["nce","fc", "dlc", "hard_dcl"]

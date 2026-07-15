@@ -718,6 +718,13 @@ def train_deepof_model(
 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
+    # force lower case
+    model_name=str(model_name).lower()
+    encoder_type=str(model_name).lower()
+    kl_annealing_mode=str(kl_annealing_mode).lower()
+    contrastive_similarity_function=str(contrastive_similarity_function).lower()
+    contrastive_loss_function=str(contrastive_loss_function).lower()
+
     # Verify if various model inputs have valid values (TO DO)
     deepof.clustering.model_utils_new.check_model_inputs(
         preprocessed_object=preprocessed_object,
