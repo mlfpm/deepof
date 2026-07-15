@@ -540,9 +540,10 @@ def test_preprocess_time_bins(
     mode=st.one_of(st.just("single"), st.just("multi")),
     bin_size=st.one_of(st.just(100), st.just(50)),
     in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose"), st.just("all"), st.just(["Spine_1","Center","Spine_2"])),
+    invert_roi=st.booleans(),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
-def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
+def test_apply_rois(mode, bin_size, in_roi_criterion, invert_roi,use_numba):
 
     fast_implementations_threshold = 100000
     if use_numba:
@@ -580,16 +581,22 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
  
     bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
 
-    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
-    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
+    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
 
     # bin info is a two level dictionary
     assert isinstance(bin_info_roi1, dict) 
     assert isinstance(bin_info_roi1[list(bin_info_roi1.keys())[0]], dict)
     # There are always more or an equal amount of frames in which the animal is in the larger roi (roi 1) as compared to it being in the smaller roi (roi2) 
-    for key in bin_info_roi1.keys():
-        for roi in bin_info_roi1[key].keys():
-            assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
+    if not invert_roi:
+        for key in bin_info_roi1.keys():
+            for roi in bin_info_roi1[key].keys():
+                assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
+    # The opposite is true if ROIs are inverted
+    else:
+        for key in bin_info_roi1.keys():
+            for roi in bin_info_roi1[key].keys():
+                assert np.sum(bin_info_roi1[key][roi]) <= np.sum(bin_info_roi2[key][roi]) 
     
 
 @settings(deadline=None)

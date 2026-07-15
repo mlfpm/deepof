@@ -1336,6 +1336,7 @@ def _apply_rois_to_bin_info(
     roi_number: int,
     bin_info_time: dict = None,
     in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
 ):
     """Retrieve annotated behaviors that occured within a given roi.
 
@@ -1370,7 +1371,7 @@ def _apply_rois_to_bin_info(
 
                 tab = get_dt(coordinates._tables,key)
                 roi_polygon=coordinates._roi_dicts[key][roi_number]
-                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, coordinates._run_numba)
+                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, coordinates._run_numba)
 
                 # only keep boolean indices that were within the time bins for this mouse
                 bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
@@ -1971,6 +1972,8 @@ def _preprocess_transitions(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
     delta_T: float = 0.5,
@@ -2055,7 +2058,7 @@ def _preprocess_transitions(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
 
     grouped_transitions, columns, combined_columns = deepof.utils.count_transitions(
         tab_dict=tab_dict,

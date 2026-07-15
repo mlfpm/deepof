@@ -356,6 +356,7 @@ def _plot_experiment_gantt(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -458,7 +459,7 @@ def _plot_experiment_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
 
     # get indices to be plotted
     bin_indices=bin_info[experiment_id]["time"]
@@ -572,6 +573,7 @@ def _plot_behavior_gantt(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Visualization parameters
     soft_counts: table_dict = None,
     supervised_annotations: table_dict = None,
@@ -670,7 +672,7 @@ def _plot_behavior_gantt(
             "This function currently only accepts either supervised or unsupervised annotations as inputs, not both at the same time!"
         )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
 
     # only keep valid experiments
     if experiments_to_plot is not None:
@@ -988,7 +990,8 @@ def plot_enrichment(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise", 
-    in_roi_criterion: str = "Center", 
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False, 
     # Visualization parameters
     polar_depiction: bool = False,
     plot_speed: bool = False,
@@ -1093,7 +1096,7 @@ def plot_enrichment(
             tab_dict_for_binning=tab_dict_for_binning, start_marker=start_marker, samples_max=samples_max,
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
 
     # Get cluster enrichment across conditions for the desired settings (still in default unit)
     enrichment = deepof.post_hoc.enrichment_across_conditions(
@@ -1485,6 +1488,8 @@ def return_transitions(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
     delta_T: float = 0.0,
@@ -1507,7 +1512,9 @@ def return_transitions(
         start_marker=start_marker,
         samples_max=samples_max,
         roi_number=roi_number,
-        animals_in_roi=animals_in_roi,      
+        animals_in_roi=animals_in_roi,    
+        in_roi_criterion=in_roi_criterion,
+        invert_roi=invert_roi,   
         exp_condition=exp_condition,
         delta_T=delta_T,        
         silence_diagonal=silence_diagonal,
@@ -1538,6 +1545,8 @@ def plot_transitions(
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
     delta_T: float = 0.0,
@@ -1587,7 +1596,9 @@ def plot_transitions(
         start_marker=start_marker,
         samples_max=samples_max,
         roi_number=roi_number,
-        animals_in_roi=animals_in_roi,      
+        animals_in_roi=animals_in_roi,  
+        in_roi_criterion=in_roi_criterion,
+        invert_roi=invert_roi,    
         exp_condition=exp_condition,
         delta_T=delta_T,        
         silence_diagonal=silence_diagonal,
@@ -1722,6 +1733,7 @@ def count_all_events(
     roi_number: int = None,
     animals_in_roi: list = None,
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Others
     counting_mode = "Events",
 ):
@@ -1774,7 +1786,7 @@ def count_all_events(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
 
     # create tabdict dictionary to iterate over options
     load_range = None
@@ -2124,6 +2136,7 @@ def plot_stationary_entropy(
     roi_number: int = None,
     animals_in_roi: list = None,
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Visualization parameters
     add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
@@ -2186,7 +2199,7 @@ def plot_stationary_entropy(
     bin_info_time = _preprocess_time_bins(
         coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=embeddings, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
 
     if (any([np.sum(bin_info[key]["time"]) < 2 for key in bin_info.keys()])):
         raise ValueError("precomputed_bins or bin_size need to be > 1")
@@ -2419,7 +2432,8 @@ def plot_embeddings(
     roi_number: int = None,
     animals_in_roi: Union[str,list] = None,
     roi_mode: str = "mousewise",
-    in_roi_criterion: str = "Center", 
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False, 
     # Quality selection parameters
     min_confidence: float = 0.0,
     # Normative modelling
@@ -2533,7 +2547,7 @@ def plot_embeddings(
             tab_dict_for_binning=supervised_annotations, samples_max=samples_max,
         )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
     hue_order=None
     
 
@@ -3106,6 +3120,7 @@ def animate_skeleton(
     roi_number: Optional[int] = None,
     animals_in_roi: Optional[Union[str, Sequence[str]]] = None,
     in_roi_criterion: Union[str, Sequence[str]] = "Center",
+    invert_roi: bool = False,
     # other parameters
     animal_id: Optional[Union[str, Sequence[str]]] = None,
     center: Union[str, bool] = "arena",
@@ -3193,7 +3208,7 @@ def animate_skeleton(
         tab_dict_for_binning=tab_dict_for_binning,
     )
     bin_info = _apply_rois_to_bin_info(
-        coordinates, roi_number, bin_info_time, in_roi_criterion
+        coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi
     )
 
     # Get available frames to display based on binning
@@ -3708,6 +3723,7 @@ def export_annotated_video(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     #others
     behaviors: list = None,
     experiment_id: str = None,
@@ -3819,7 +3835,7 @@ def export_annotated_video(
         coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=np.inf
         )
     
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
     
     # special case: an experiment id was given
     if experiment_id is not None:
@@ -4087,6 +4103,7 @@ def plot_behavior_trends(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Visualization
     hide_time_bins: List[bool] = None,
     polar_depiction: bool = True,
@@ -4227,7 +4244,7 @@ def plot_behavior_trends(
         )
 
         # Create ROI bins
-        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
  
         
         multi_bin_info[j]=roi_bin_info
@@ -4854,6 +4871,7 @@ def get_roi_data(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Time selection parameters
     bin_index: Union[int, str] = None,
     bin_size: Union[int, str] = None,
@@ -4912,7 +4930,7 @@ def get_roi_data(
         tab_dict_for_binning=table_dict, samples_max=samples_max,
     )
 
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)    
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)    
 
     object_out={}
     for key in exp_ids:
@@ -4946,6 +4964,7 @@ def return_supervised_summary(
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
+    invert_roi: bool = False,
     # Time selection parameters
     N_time_bins: int = 10,
     start_marker: str = None,
@@ -4999,7 +5018,7 @@ def return_supervised_summary(
         )
 
         # Create ROI bins
-        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion)
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
  
         
         multi_bin_info[j]=roi_bin_info

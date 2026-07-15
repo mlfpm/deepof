@@ -1690,6 +1690,7 @@ class Coordinates:
         roi_number: int = None,
         animals_in_roi: str = None,
         in_roi_criterion: str = "Center",
+        invert_roi: bool = False,
         file_name: str = 'coords',
         return_path: bool = False,
     ) -> table_dict:
@@ -1738,6 +1739,7 @@ class Coordinates:
                 roi_number = roi_number,
                 animals_in_roi = animals_in_roi,
                 in_roi_criterion = in_roi_criterion,
+                invert_roi=invert_roi,
             )
             
             # save paths for modified tables
@@ -1788,7 +1790,7 @@ class Coordinates:
                 raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")  # pragma: no cover
             
     
-    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str) -> pd.DataFrame:
+    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str, invert_roi: bool) -> pd.DataFrame:
         """Filters the DataFrame to include only data within the specified ROI."""
         if roi_number is None:
             return tab
@@ -1805,7 +1807,7 @@ class Coordinates:
         tab_mouse_positions=get_dt(self._tables, key)
 
         for aid in animals_to_check:
-            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, self._run_numba)
+            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, invert_roi, self._run_numba)
             
             # Get columns for the current animal
             mask = [any([col_sec.startswith(aid) for col_sec in col]) if isinstance(col,tuple) else col.startswith(aid) for col in tab.columns]
@@ -1956,6 +1958,7 @@ class Coordinates:
     roi_number: int = None,
     animals_in_roi: str = None,
     in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -1983,7 +1986,7 @@ class Coordinates:
         self._validate_inputs(tab, key, align, center, roi_number)
 
         # 2. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, in_roi_criterion)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, in_roi_criterion, invert_roi)
 
         # 3. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -2024,6 +2027,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
         return_path: bool = False,
@@ -2057,6 +2061,7 @@ class Coordinates:
                     selected_id=selected_id,
                     roi_number=roi_number,
                     animals_in_roi=animals_in_roi,
+                    invert_roi=invert_roi,
                     filter_on_graph=filter_on_graph,
                     )
                 
@@ -2090,6 +2095,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
         """Return a pd.DataFrame with the distances between body parts of one animal as values.
@@ -2113,7 +2119,7 @@ class Coordinates:
         self._validate_inputs(tab, key, None, None, roi_number)
 
         # 2. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 3. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -2144,6 +2150,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -2176,6 +2183,7 @@ class Coordinates:
                     selected_id=selected_id,
                     roi_number = roi_number,
                     animals_in_roi=animals_in_roi,
+                    invert_roi=invert_roi,
                 )
 
                 # save paths for modified tables
@@ -2209,6 +2217,7 @@ class Coordinates:
     selected_id: str = None,
     roi_number: int = None,
     animals_in_roi: str = None,
+    invert_roi: bool = False,
 
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
@@ -2236,7 +2245,7 @@ class Coordinates:
             tab = np.degrees(tab) 
 
         # 3. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 4. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -2257,6 +2266,7 @@ class Coordinates:
             selected_id: str = "all",
             roi_number: int = None,
             animals_in_roi: str = None,
+            invert_roi: bool = False,
             file_name: str = 'got_areas',
             return_path: bool = False,
             ) -> table_dict:
@@ -2286,6 +2296,7 @@ class Coordinates:
                     selected_id = selected_id,
                     roi_number = roi_number,
                     animals_in_roi = animals_in_roi,
+                    invert_roi = invert_roi,
                 )
 
                 # save paths for modified tables
@@ -2320,6 +2331,7 @@ class Coordinates:
         selected_id: str = "all",
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
@@ -2346,7 +2358,7 @@ class Coordinates:
             selected_ids = [selected_id]
 
         # 3. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 4. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_ids)

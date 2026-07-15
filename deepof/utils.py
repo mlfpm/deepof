@@ -1826,7 +1826,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
     return out
 
 
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, run_numba=False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1863,6 +1863,10 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
             mask &= deepof.utils.point_in_polygon_numba(pts, roi_polygon)
         else:
             mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
+
+    # to instead count if the specific bodyparts of the animal are NOT in the ROI
+    if invert_roi:
+        mask=np.invert(mask)
 
     return mask
 
