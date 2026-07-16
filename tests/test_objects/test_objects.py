@@ -230,8 +230,6 @@ mouse_compression_behavior=DeepOF_behavior(
     postprocess=postprocess_identity, # here we use the identity-postprocessing function from deepof i.e. no postprocessing is applied at all.
 )
 
-np.random.seed=0
-
 CUSTOM_BEHAVIORS=[mouse_nose_mid_distance_behavior, mouse_compression_behavior]
 
 # packaging our parameters

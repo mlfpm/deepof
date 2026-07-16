@@ -133,8 +133,8 @@ def test_get_behavior_colors(experiment_type,named_single_mouse):
         animal_ids=aid_addon
         df.columns = [aid_addon+"_"+beh for beh in df.columns]
 
-    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
-    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,df)
+    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids, custom_behaviors=CUSTOM_BEHAVIORS)
+    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,df, custom_behaviors=CUSTOM_BEHAVIORS)
 
     #check if all supervised behaviors have a color
     assert not None in colors_a
