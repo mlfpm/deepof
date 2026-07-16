@@ -90,6 +90,8 @@ def get_dt(
             sliced = raw_data
         elif isinstance(load_range, (list,np.ndarray)) and len(load_range) == 2:
             sliced = raw_data.iloc[load_range[0]:load_range[1]+1]
+        elif len(load_range) == 0:
+            sliced = pd.DataFrame(columns=raw_data.columns)
         else:
             sliced = raw_data.iloc[load_range]
 
@@ -106,11 +108,15 @@ def get_dt(
             if isinstance(raw_data, tuple):
                 if len(load_range) == 2:
                     raw_data = tuple(arr[load_range[0]:load_range[1]+1] for arr in raw_data)
+                elif len(load_range) == 0:
+                    raw_data = tuple(np.empty(shape=[0,0]) for arr in raw_data)
                 else:
                     raw_data = tuple(arr[load_range] for arr in raw_data)
             else:
                 if len(load_range) == 2:
                     raw_data = raw_data[load_range[0]:load_range[1]+1]
+                elif len(load_range) == 0:
+                    raw_data = np.empty(shape=[0,0])
                 else:
                     raw_data = raw_data[load_range]
 
@@ -122,16 +128,21 @@ def get_dt(
         table_name = sanitize_table_name(raw_data["table"])
 
         # early return in case of empty load range 
-        if load_range is not None and len(load_range) == 0:
-            with DataManager(db_path) as manager:
-                result = manager.load(
-                    table_name,
-                    return_path=return_path,
-                    only_metainfo=True,
-                    load_index=False,
-                    load_range=[0]
-                )   
-            return (pd.DataFrame(columns=result['columns']), path) if return_path else pd.DataFrame(columns=result['columns'])
+        if not only_metainfo and load_range is not None and len(load_range) == 0:
+            if table_name.endswith("npy"):
+                return (np.empty(shape=[0,0]), path) if return_path else np.empty(shape=[0,0])
+            elif table_name.endswith("npz"):
+                return ((np.empty(shape=[0,0]),np.empty(shape=[0,0])), path) if return_path else (np.empty(shape=[0,0]),np.empty(shape=[0,0]))
+            else:
+                with DataManager(db_path) as manager:
+                    result = manager.load(
+                        table_name,
+                        return_path=return_path,
+                        only_metainfo=True,
+                        load_index=False,
+                        load_range=[0]
+                    )   
+                return (pd.DataFrame(columns=result['columns']), path) if return_path else pd.DataFrame(columns=result['columns'])
 
 
         with DataManager(db_path) as manager:
