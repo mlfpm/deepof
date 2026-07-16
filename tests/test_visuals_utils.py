@@ -559,7 +559,7 @@ def test_preprocess_time_bins(
 @settings(deadline=None)
 @given(
     mode=st.one_of(st.just("single"), st.just("multi")),
-    bin_size=st.one_of(st.just(100), st.just(50)),
+    bin_size=st.one_of(st.just(None), st.just(100), st.just(50)),
     in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose"), st.just("all"), st.just(["Spine_1","Center","Spine_2"])),
     invert_roi=st.booleans(),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
@@ -600,7 +600,9 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, invert_roi,use_numba):
     
     prun = prun.create(force=True, test=True)
  
-    bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
+    bin_info_time=None
+    if bin_size is not None:
+        bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
 
     bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
     bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
