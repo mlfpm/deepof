@@ -621,6 +621,92 @@ def test_remove_outliers(mode):
     assert (high_std_sum < low_std_sum)
 
 
+def test_exp_cond_and_start_marker_loading():
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+    video_path = os.path.join(base_path, "Videos")
+    table_path = os.path.join(base_path, "Tables")
+
+    project_name = "test_conditions_and_markers"
+    project_dir = os.path.join(base_path, project_name)
+    tmp_dir = os.path.join(base_path, "_tmp_conditions_and_markers")
+
+    try:
+        if os.path.exists(project_dir):
+            rmtree(project_dir)
+        if os.path.exists(tmp_dir):
+            rmtree(tmp_dir)
+        os.makedirs(tmp_dir, exist_ok=True)
+
+        # Create a project 
+        pr = deepof.data.Project(
+            project_path=base_path,
+            project_name=project_name,
+            video_path=video_path,
+            table_path=table_path,
+            arena="polygonal-autodetect",
+            video_scale="380 mm",
+            video_format=".mp4",
+            table_format=".h5",
+        )
+        keys = list(pr.tables.keys())
+        assert len(keys) > 0
+
+        # Build minimal CSVs in a format that is robust to read_csv(index_col=0) or not
+        exp_path = os.path.join(tmp_dir, "exp_conditions.csv")
+        mk_path = os.path.join(tmp_dir, "start_markers.csv")
+
+        exp_df = pd.DataFrame({"experiment_id": keys, "group": ["A"] * len(keys)})
+        exp_df.to_csv(exp_path)
+
+        start_time_1s = deepof.utils.seconds_to_time(1.0, cut_milliseconds=False)
+        mk_df = pd.DataFrame({"experiment_id": keys, "start": [start_time_1s] * len(keys)}, index=keys)
+        mk_df.to_csv(mk_path)
+
+        # Explicitly call Project loaders (covers Project.load_exp_conditions/load_start_markers)
+        pr.load_exp_conditions(exp_path)
+        pr.load_start_markers(mk_path)
+
+        # Create in test mode
+        coords = pr.create(force=True, test=True)
+
+        # Check exp_conditions loaded and keys match
+        assert set(coords.get_table_keys()) == set(coords.get_exp_conditions.keys())
+        assert coords.get_condition_values("group") == ["A"]
+
+        # Check start markers loaded and converted to frames correctly
+        fps = coords._frame_rate
+        expected_frame = int(np.round(1.0 * fps))
+        starts = coords.get_start_marker_values("start", return_frames=True)
+        for k in keys:
+            assert starts[k] == expected_frame
+
+        # Cover Coordinates.load_exp_conditions/load_start_markers too (reload with new values)
+        exp_path2 = os.path.join(tmp_dir, "exp_conditions_2.csv")
+        mk_path2 = os.path.join(tmp_dir, "start_markers_2.csv")
+
+        exp_df2 = pd.DataFrame({"experiment_id": keys, "group": ["B"] * len(keys)})
+        exp_df2.to_csv(exp_path2)
+
+        start_time_2s = deepof.utils.seconds_to_time(2.0, cut_milliseconds=False)
+        mk_df2 = pd.DataFrame({"experiment_id": keys, "start": [start_time_2s] * len(keys)}, index=keys)
+        mk_df2.to_csv(mk_path2)
+
+        coords.load_exp_conditions(exp_path2)
+        coords.load_start_markers(mk_path2)
+
+        assert coords.get_condition_values("group") == ["B"]
+        expected_frame2 = int(np.round(2.0 * fps))
+        starts2 = coords.get_start_marker_values("start", return_frames=True)
+        for k in keys:
+            assert starts2[k] == expected_frame2
+
+    finally:
+        if os.path.exists(tmp_dir):
+            rmtree(tmp_dir)
+        if os.path.exists(project_dir):
+            rmtree(project_dir)
+
+
 @settings(deadline=None, max_examples=10)
 @given(
     detection_mode=st.one_of(
