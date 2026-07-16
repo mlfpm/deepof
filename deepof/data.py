@@ -49,7 +49,7 @@ exit(0)
         return False
 
 DISPLAY_AVAILABLE = is_display_available()
-if DISPLAY_AVAILABLE:
+if DISPLAY_AVAILABLE: # pragma: no cover
     cv2.imshow("test",1)
     cv2.waitKey(1)
     cv2.destroyAllWindows()
@@ -354,7 +354,7 @@ class Project:
             # Remove the DLC suffix from the table name
             try:
                 tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
-            except IndexError:
+            except IndexError: # pragma: no cover
                 tab_name = tab.split(".")[0]
             self.tables[tab_name]=table_list[i]
             self.videos[tab_name]=video_list[i]
@@ -375,7 +375,7 @@ class Project:
         # If sampling rates deviate, confirm continued setup.
         continue_init=True
         if max_diff>=0.01:
-            if DISPLAY_AVAILABLE:
+            if DISPLAY_AVAILABLE: # pragma: no cover
                 continue_init=deepof.arena_utils.confirm_action(
                     f"The sampling rates of your videos deviate significantly!\n" 
                     f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
@@ -414,7 +414,7 @@ class Project:
                     f"If your arena is really this small or large, you can ignore this warning."
                     f"\033[0m"
                 )
-        else:
+        else: # pragma: no cover
             raise ValueError('Error! Please enter video_scale as \"[value] [unit of measurment]\", e.g. \"200 mm\"')
         print(
             f"\033[33mInfo! Set arena dimension to {self.arena_dims} mm!\033[0m"
@@ -445,8 +445,8 @@ class Project:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
             elif len(rename_bodyparts) == 14:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
-            else:
-                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") # pragma: no cover
+            else: # pragma: no cover
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") 
             
             # Creates a dictionary assigning table bp names to corresponding deepOF bp names
             rename_bodyparts_dict = {}

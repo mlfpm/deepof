@@ -87,6 +87,56 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
     assert isinstance(prun, deepof.data.Coordinates)
 
 
+@settings(max_examples=20, deadline=None)
+@given(
+    table_type=st.one_of(
+        st.just("analysis.h5"),
+        st.just("h5"),
+        st.just("csv"),
+        st.just("slp"),
+        st.just("autodetect"),
+    ),
+    rename_len=st.sampled_from([8, 11, 14]),
+)
+def test_rename_bodyparts(table_type, rename_len):
+
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+
+    # Match existing test structure for table paths
+    tables_path = "Tables"
+    if table_type in ["slp", "analysis.h5"]:
+        tables_path = os.path.join(tables_path, "SLEAP")
+
+    # Fake bodypart names. In normal usage, this has to correspond the the actually correct DeepOF naming schemas
+    #(The purpose of rename_bodyparts is to FIX naming errors in the table after all, not cause them)
+    rename_bodyparts = [f"custom_bp_{i}" for i in range(rename_len)]
+
+    prun = deepof.data.Project(
+        project_path=base_path,
+        project_name=f"test_rename_bodyparts_{table_type}_{rename_len}",
+        video_path=os.path.join(base_path, "Videos"),
+        table_path=os.path.join(base_path, tables_path),
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=table_type,
+        rename_bodyparts=rename_bodyparts,
+        bodypart_graph=f"deepof_{rename_len}",
+    )
+
+    # Ensure dict was created
+    assert isinstance(prun.rename_bodyparts_dict, dict)
+    assert set(prun.rename_bodyparts_dict.keys()) == set(rename_bodyparts)
+    assert len(prun.rename_bodyparts_dict) == rename_len
+
+    # Ensure mapping order matches connect_mouse(node order) for that preset
+    expected_nodes = list(
+        deepof.utils.connect_mouse(animal_ids="", graph_preset=f"deepof_{rename_len}").nodes
+    )
+    for custom_name, deepof_name in zip(rename_bodyparts, expected_nodes):
+        assert prun.rename_bodyparts_dict[custom_name] == deepof_name
+        
+
 def test_arena_loading():
 
     base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
