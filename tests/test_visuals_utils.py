@@ -46,7 +46,14 @@ from deepof.utils import (
     seconds_to_time,
     time_to_seconds,
 )
-from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables, get_embeddings_tab_dict_instance, get_supervised_tab_dict_instance
+from tests.test_objects.test_objects import (
+    get_soft_counts, 
+    get_supervised_tables, 
+    get_embeddings_tab_dict_instance, 
+    get_supervised_tab_dict_instance, 
+    CUSTOM_BEHAVIORS, 
+    CUSTOM_BEHAVIOR_CONTEXT,
+)
 
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -113,7 +120,7 @@ def test_get_behavior_colors(experiment_type,named_single_mouse):
         table_format=".h5",
     ).create(force=True, test=True)
 
-    supervised = prun.supervised_annotation()
+    supervised = prun.supervised_annotation(custom_behaviors=CUSTOM_BEHAVIORS, custom_behavior_context=CUSTOM_BEHAVIOR_CONTEXT)
     behaviors=list(supervised['test'].keys())
 
     # remove continuous behaviors (they currently do not get a color attributed)
@@ -961,7 +968,7 @@ def test_transitions():
     }
 
     # Generate supervised annotations (replace with actual method if different)
-    supervised_annotation = prun.supervised_annotation()
+    supervised_annotation = prun.supervised_annotation(custom_behaviors=CUSTOM_BEHAVIORS, custom_behavior_context=CUSTOM_BEHAVIOR_CONTEXT)
 
     ref_path = os.path.join(".", "tests", "test_examples", "test_data", "transitions")
 

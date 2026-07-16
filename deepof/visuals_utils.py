@@ -155,7 +155,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
 
         # append custom behaviors
         if custom_behaviors is not None:
-            supervised = [animal_ids[0] + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+            supervised = [animal_ids[0] + "_" + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
             supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
 
     else:

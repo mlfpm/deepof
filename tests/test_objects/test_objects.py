@@ -12,6 +12,11 @@ import os
 from itertools import combinations
 from shutil import rmtree
 
+from deepof.annotation_utils import DeepOF_behavior
+from deepof.annotation_utils import Behavior_scope, Behavior_output
+from deepof.annotation_utils import animal_ids, BehaviorContext
+from deepof.annotation_utils import postprocess_identity
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -161,3 +166,77 @@ def get_supervised_tab_dict_instance(keys, col_names=None, n_min=1, n_max=50, m_
         table_path=None,
         exp_conditions=None,
     )
+
+# Custom behaviors to import for tests
+
+def mouse_nose_mid_distance(ctx: BehaviorContext, mice_pair: animal_ids):
+     
+    # As this is going to be a function for paired mouse behavior, we expect mice_pair to contain two animal ids.
+    a, b = mice_pair 
+
+    # Now we also need the tracked bodypart positions. We can get them from the "raw_coords" field (a pandas dataTable) in our BehaviorContext ctx
+    pos_dframe=ctx.raw_coords
+    
+    # We are specifically interested in the Noses. So we get the "nsoe" bodypart for both of our animals.
+    # The bp function here simply applies the corret formatting. We could also simply write str(a)+"_Nose" 
+    nose_m1=ctx.bp(a, "Nose")
+    nose_m2=ctx.bp(b, "Nose")
+
+    # And here we calculate all frames within the table in which the noses of both mice are farther away that our "close_contact_tol" 
+    # from the supervised parameters but also closer than 3 times that tolerance. Here we create a binary output array
+    middle_contact = (
+        (np.linalg.norm(pos_dframe[nose_m1] - pos_dframe[nose_m2], axis=1) > float(ctx.params["close_contact_tol"])) & 
+        (np.linalg.norm(pos_dframe[nose_m1] - pos_dframe[nose_m2], axis=1) <= 5*float(ctx.params["close_contact_tol"]))
+    )
+    return middle_contact
+
+def mouse_compression(ctx: BehaviorContext, mouse: animal_ids):    
+
+    # As this is going to be a function for single mouse behavior, we expect mouse to contain only one animal id.
+    a=mouse
+
+    # We again use the coordinates data_frame
+    pos_dframe=ctx.raw_coords
+
+    # We additionally use the lieklyhoods dataframe which contains the the tracking accuracy for each bodypart as a percentage
+    likely_dframe=ctx.likelihoods
+
+    # We extract the bodypart names
+    m1_nose=ctx.bp(a,"Nose")
+    m1_tailbase=ctx.bp(a,"Tail_base")
+
+    # We calculate the distance 
+    mouse_compression = np.linalg.norm(pos_dframe[m1_nose]-pos_dframe[m1_tailbase],axis=1)
+
+    # We set all our "compression" values to 0 at frames where the nose or tail base of the mouse is not accurately detected 
+    # i.e. the likelyhood value is below the threshold we defined
+    mouse_compression = mouse_compression*(likely_dframe[m1_nose]>ctx.extra['likelyhood_threshold'])
+    mouse_compression = mouse_compression*(likely_dframe[m1_tailbase]>ctx.extra['likelyhood_threshold'])
+
+    return mouse_compression
+
+mouse_nose_mid_distance_behavior=DeepOF_behavior(
+    name="nose2nose-mid", # The name for our behavior.
+    scope=Behavior_scope.PAIR_NONDIRECTIONAL, # just like deepofs nose2nose, our behavior is pairwise and nondirectional
+    output_type=Behavior_output.BINARY, # We choose the binary output type
+    compute=mouse_nose_mid_distance, # This is the computation function we just defined
+)
+
+mouse_compression_behavior=DeepOF_behavior(
+    name="is-compressed",
+    scope=Behavior_scope.INDIVIDUAL,
+    output_type=Behavior_output.CONTINUOUS,
+    compute=mouse_compression,
+    postprocess=postprocess_identity, # here we use the identity-postprocessing function from deepof i.e. no postprocessing is applied at all.
+)
+
+np.random.seed=0
+
+CUSTOM_BEHAVIORS=[mouse_nose_mid_distance_behavior, mouse_compression_behavior]
+
+# packaging our parameters
+CUSTOM_BEHAVIOR_CONTEXT={
+
+    'likelyhood_threshold' : 0.5,
+}
+
