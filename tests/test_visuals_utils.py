@@ -493,6 +493,10 @@ class Pseudo_Coordinates:
     is_int=st.booleans(),
     has_precomputed_bins=st.booleans(),
     samples_max=st.integers(min_value=10, max_value=2000),
+    experiment_id=st.one_of(
+        st.just(None),
+        st.just("key1"),
+    ),
     makes_sense=st.one_of(
         st.just("yes"),
         st.just("no"),
@@ -500,7 +504,7 @@ class Pseudo_Coordinates:
     )
 )
 def test_preprocess_time_bins(
-    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins, samples_max, makes_sense
+    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins, samples_max, experiment_id, makes_sense
     ):
     
     # Only allow up to 8 decimales for float inputs 
@@ -541,7 +545,7 @@ def test_preprocess_time_bins(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         bin_info = _preprocess_time_bins(
-        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins, samples_max=samples_max,
+        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins, samples_max=samples_max, experiment_id=experiment_id,
         )
 
     for key in bin_info.keys():
