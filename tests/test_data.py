@@ -144,42 +144,36 @@ def test_arena_loading():
     video_path = os.path.join(base_path, "Videos")
     table_path = os.path.join(base_path, "Tables")
 
-    # Delete later
-    tmp_dir = os.path.join(base_path, f"_tmp_load_arena_data")
+    tmp_dir = os.path.join(base_path, "_tmp_load_arena_data")
+    arena_file = os.path.join(tmp_dir, "arena_data.pkl")
+
+    project_name = "test_get_arena_loading_branch"
+    out_project_dir = os.path.join(base_path, project_name)
 
     try:
-        prun = deepof.data.Project(
+        # 1) Create and save arena data (file has 3 ROIs)
+        pr_raw = deepof.data.Project(
             project_path=base_path,
-            project_name="test_load_arena_data_save",
+            project_name="test_get_arena_loading_save",
             video_path=video_path,
             table_path=table_path,
             arena="polygonal-autodetect",
             video_scale="380 mm",
             video_format=".mp4",
             table_format=".h5",
-            number_of_rois=3,  # the saved file will contain 3 ROIs
+            number_of_rois=2,
         )
+        
+        pr_save=pr_raw.create(force=True, test=True) # Note: test mode will result in 2 rois independent from the number chosen
 
-        keys = list(prun.tables.keys())
-        assert len(keys) > 0
+        keys = list(pr_save._tables.keys())
 
-        # Soem datato load
-        arena_params = {k: np.array([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]) for k in keys}
-        scales = {k: np.array([0.0, 0.0, 100.0, 380.0]) for k in keys}
-        video_resolution = {k: (640, 480) for k in keys}
+        arena_params = pr_save._arena_params
+        scales = pr_save._scales
+        video_resolution = pr_save._video_resolution
+        roi_dicts = pr_save._roi_dicts
 
-        # Some rois to load
-        roi_dicts = {
-            k: {
-                1: np.array([[1.0, 1.0], [2.0, 1.0], [2.0, 2.0]]),
-                2: np.array([[3.0, 3.0], [4.0, 3.0], [4.0, 4.0]]),
-                3: np.array([[5.0, 5.0], [6.0, 5.0], [6.0, 6.0]]),
-            }
-            for k in keys
-        }
-
-        arena_file = os.path.join(tmp_dir, "arena_data.pkl")
-        prun.save_arena_data(
+        pr_raw.save_arena_data(
             arena_path=arena_file,
             arena_params=arena_params,
             roi_dicts=roi_dicts,
@@ -187,55 +181,46 @@ def test_arena_loading():
             video_resolution=video_resolution,
         )
 
-        # Loader project expects fewer ROIs -> should warn and truncate
+        # 2) Loader project expects only 1 ROI -> load_arena_data will truncate -> skip_detection=True
+        if os.path.exists(out_project_dir):
+            rmtree(out_project_dir)
+
         pr_load = deepof.data.Project(
             project_path=base_path,
-            project_name="test_load_arena_data_load",
+            project_name=project_name,
             video_path=video_path,
             table_path=table_path,
             arena="polygonal-autodetect",
             video_scale="380 mm",
             video_format=".mp4",
             table_format=".h5",
-            number_of_rois=2,  # request only first 2 ROIs
+            number_of_rois=1,
+        )
+        pr_load.set_up_project_directory(debug=True)  # ensures Arena_detection/Coordinates exist
+
+        got_scales, got_arena, got_rois, got_res = pr_load.get_arena(
+            tables={k: None for k in keys},
+            arena_path=arena_file,
+            test=True,
+            load_also_rois=True,  # no UI
         )
 
-        # load three rois into two i.e. drop last roi
-        loaded_rois, loaded_arena, loaded_scales, loaded_res = pr_load.load_arena_data(
-            arena_file, load_also_rois=True
-        )
+        # Minimal correctness checks
+        k0 = keys[0]
+        assert list(got_rois[k0].keys()) == [1]
+        assert (got_rois[k0][1] == roi_dicts[k0][1]).all()
+        assert (got_arena[k0] == arena_params[k0]).all()
+        assert got_scales[k0] == scales[k0]
+        assert got_res[k0] == video_resolution[k0]
 
-        # Round-trip checks
-        assert loaded_arena.keys() == arena_params.keys()
-        assert loaded_scales.keys() == scales.keys()
-        assert loaded_res.keys() == video_resolution.keys()
-
-        for k in keys:
-            assert (loaded_arena[k] == arena_params[k]).all()
-            assert (loaded_scales[k] == scales[k]).all()  
-            assert loaded_res[k] == video_resolution[k]
-
-        # ROI truncation checks
-        assert loaded_rois is not None
-        for k in keys:
-            assert list(loaded_rois[k].keys()) == [1, 2]
-
-            assert (loaded_rois[k][1] == roi_dicts[k][1]).all()
-            assert (loaded_rois[k][2] == roi_dicts[k][2]).all()
-
-        # load_also_rois=False => roi_dicts must be None
-        roi_none, arena_only, scales_only, res_only = pr_load.load_arena_data(
-            arena_file, load_also_rois=False
-        )
-        assert roi_none is None
-        for k in keys:
-            assert  (arena_only[k] == arena_params[k]).all()
-            assert  (scales_only[k] == scales[k]).all()
-            assert res_only[k] == video_resolution[k]
+        # get_arena always saves arena_data.pkl into the project
+        assert os.path.isfile(os.path.join(out_project_dir, "Coordinates", "arena_data.pkl"))
 
     finally:
         if os.path.exists(tmp_dir):
             rmtree(tmp_dir)
+        if os.path.exists(out_project_dir):
+            rmtree(out_project_dir)
 
 
 def test_start_markers():

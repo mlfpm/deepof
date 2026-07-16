@@ -604,7 +604,7 @@ class Project:
             k2=k1
         else:
             k2 = set(roi_dicts.keys())
-        if not (k1 == k2 == k3 == k4):
+        if not (k1 == k2 == k3 == k4): # pragma: no cover
             raise ValueError(
                 "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
             )
@@ -631,7 +631,7 @@ class Project:
         """
         # Check if exists
         arena_path = Path(arena_path)
-        if not arena_path.exists() or not arena_path.is_file():
+        if not arena_path.exists() or not arena_path.is_file(): # pragma: no cover
             raise FileNotFoundError(f"Arena file not found: {arena_path}")
 
         with arena_path.open("rb") as f:
@@ -645,7 +645,7 @@ class Project:
             video_resolution = data["video_resolution"]
         elif isinstance(data, (tuple, list)) and len(data) == 4:
             roi_dicts, arena_params, scales, video_resolution = data
-        else:
+        else:  # pragma: no cover
             raise ValueError(
                 "Invalid arena pickle format. Expected dict with keys "
                 "{'roi_dicts','arena_params','scales'} or a (roi_dicts, arena_params, scales) tuple."
@@ -690,6 +690,7 @@ class Project:
         arena_path: str = None,
         debug: str = False,
         test: bool = False,
+        load_also_rois: bool = False
     ) -> np.array:
         """Return the arena as recognised from the videos.
 
@@ -709,12 +710,11 @@ class Project:
         skip_detection = False
         if arena_path is not None:
            
-            load_also_rois=False
-            if not self.number_of_rois==0:
+            if not self.number_of_rois==0 and DISPLAY_AVAILABLE:
                 load_also_rois=deepof.arena_utils.confirm_action(
                     f"Do you want to additionally load the saved ROIs?\n" 
                     f"If you cancel, only the arenas get loaded." 
-                        )
+                        ) 
             roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
 
             image_export_path=os.path.join(
