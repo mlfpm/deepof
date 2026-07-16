@@ -782,7 +782,7 @@ def load_exp_conditions(filepath: str):
     return exp_conditions
 
 
-def load_start_markers(filepath, frame_rate): # pragma: no cover
+def load_start_markers(filepath, frame_rate): 
     """Load start markers analogous to experimental conditions and do some checks"""
     start_markers = _load_conditions_csv(filepath)
     # some validity checks
