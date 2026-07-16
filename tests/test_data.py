@@ -812,11 +812,12 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
+    test_videos=st.one_of(st.just(1),st.just(["test"])),
     full_nan_table=st.booleans(),
     dist_standardize_groups=st.booleans(),
     speed_standardize_groups=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standardize_groups,speed_standardize_groups):
+def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -866,7 +867,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standa
                 st.just(False),
             )
         ),
-        test_videos=1,
+        test_videos=test_videos,
         dist_standardize=dist_standardize,
         speed_standardize=speed_standardize,
     )

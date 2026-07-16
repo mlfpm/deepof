@@ -3733,10 +3733,10 @@ class TableDict(dict):
             )
             test_keys = keys[test_indices]
         elif isinstance(test_videos,list) and all([key in list(current_table_dict.keys()) for key in test_videos]):
-            
+                    
             test_keys = test_videos
-        else:
-            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  # pragma: no cover
+        else: # pragma: no cover
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  
         
         train_keys = list(set(keys)-set(test_keys))
 
