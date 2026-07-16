@@ -117,6 +117,7 @@ def test_rename_bodyparts(table_type, rename_len):
         video_path=os.path.join(base_path, "Videos"),
         table_path=os.path.join(base_path, tables_path),
         arena="circular-autodetect",
+        animal_ids="",
         video_scale="380 mm",
         video_format=".mp4",
         table_format=table_type,
@@ -135,7 +136,7 @@ def test_rename_bodyparts(table_type, rename_len):
     )
     for custom_name, deepof_name in zip(rename_bodyparts, expected_nodes):
         assert prun.rename_bodyparts_dict[custom_name] == deepof_name
-        
+
 
 def test_arena_loading():
 
