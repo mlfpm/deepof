@@ -630,7 +630,6 @@ def test_exp_cond_and_start_marker_loading():
     project_dir = os.path.join(base_path, project_name)
     tmp_dir = os.path.join(base_path, "_tmp_conditions_and_markers")
 
-
     if os.path.exists(project_dir):
         rmtree(project_dir)
     if os.path.exists(tmp_dir):
@@ -699,6 +698,10 @@ def test_exp_cond_and_start_marker_loading():
     starts2 = coords.get_start_marker_values("start", return_frames=True)
     for k in keys:
         assert starts2[k] == expected_frame2
+
+    start_times=coords.get_start_times(start_marker="start")
+    for k in keys:
+        assert int(np.round(deepof.utils.time_to_seconds(start_times[k])*fps)) == expected_frame2
 
     if os.path.exists(tmp_dir):
         rmtree(tmp_dir)
