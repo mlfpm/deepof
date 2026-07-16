@@ -127,5 +127,3 @@ push = true
 "docs/source/index.rst" = [
     'release-v{version}-informational',
 ]
-
-
