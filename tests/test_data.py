@@ -32,6 +32,7 @@ import deepof.utils
         st.just("csv"),
         st.just("npy"),
         st.just("slp"),
+        st.just("autodetect"),
     ),
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
