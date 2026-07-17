@@ -781,13 +781,100 @@ def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.n
     return buf[:filled]
 
 
+def _gating_series_from_distances(
+    *,
+    coordinates,
+    keys,
+    window_len: int,
+    animal_pairs,
+    bodypart: str,
+) -> Dict[str, Dict]:
+    """Compute per-window gating series based on pairwise bodypart distances."""
+    out: Dict[str, Dict] = {}
+    kern = np.ones(window_len, dtype=np.float32)
+
+    for key in keys:
+        tab = get_dt(coordinates._tables, key)
+        out[key] = {}
+
+        for a_id, b_id in animal_pairs:
+            # Validate bodypart existence (at least for "x"; "y" checked implicitly later)
+            cx = (f"{a_id}_{bodypart}", "x")
+            if cx not in tab.columns:  # pragma: no cover
+                raise KeyError(
+                    f"Bodypart column {cx} not found in table '{key}'. "
+                    f"Available: {[c for c in tab.columns if isinstance(c, tuple) and len(c) == 2 and c[1] == 'x'][:10]}..."
+                )
+
+            ax = tab[(f"{a_id}_{bodypart}", "x")].to_numpy(np.float64)
+            ay = tab[(f"{a_id}_{bodypart}", "y")].to_numpy(np.float64)
+            bx = tab[(f"{b_id}_{bodypart}", "x")].to_numpy(np.float64)
+            by = tab[(f"{b_id}_{bodypart}", "y")].to_numpy(np.float64)
+
+            dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
+
+            # Guard against all-NaN
+            mask = np.isfinite(dist_raw)
+            if mask.any():
+                idx = np.arange(dist_raw.size)
+                dist_raw = np.interp(idx, idx[mask], dist_raw[mask]).astype(np.float32)
+            else:
+                dist_raw = np.zeros_like(dist_raw)
+
+            out[key][(a_id, b_id)] = np.convolve(
+                dist_raw, kern / window_len, mode="valid"
+            )
+
+    return out
+
+
+def _gating_series_from_behaviors(
+    *,
+    coordinates,
+    keys,
+    window_len: int,
+    supervised_annotations,
+    behaviors: Sequence[str],
+    behavior_combinations: bool,
+) -> Dict[str, Dict]:
+    """Compute per-window gating series based on supervised behavior(s)."""
+    out: Dict[str, Dict] = {}
+    kern = np.ones(window_len, dtype=np.float32)
+
+    for key in keys:
+        tab = get_dt(coordinates._tables, key)
+        out[key] = {}
+
+        sup = get_dt(supervised_annotations, key)
+
+        cols = []
+        for beh in behaviors:  # deterministic order supplied by dispatcher
+            raw = sup[beh].to_numpy()
+            win = (np.convolve(raw, kern, mode="valid") > 0).astype(np.int32)
+
+            if not behavior_combinations:
+                out[key][beh] = win
+            else:
+                cols.append(win)
+
+        if behavior_combinations and cols:
+            arr = np.array(cols, dtype=np.int32)  # (n_beh, T)
+            powers = 2 ** np.arange(len(cols), dtype=np.int32)
+            out[key]["behavior_combinations"] = (powers @ arr).astype(np.int32)
+
+        # Keep behavior gating independent of pose-table length sanity checks;
+        # if tables mismatch in length, it will fail naturally at convolution time.
+
+    return out
+
+
 def get_pairwise_distances(
     coordinates,
     window_len: int,
     supervised_annotations=None,
     embedding_gates: Any = "Nose",
     behavior_combinations: bool = True,
-) -> Dict[str, Dict]: 
+) -> Dict[str, Dict]:
     """
     Per-window gating series: pairwise distances OR behavior-combination codes.
 
@@ -798,89 +885,78 @@ def get_pairwise_distances(
       - validates bodypart existence in distance mode
     """
     animal_ids = coordinates._animal_ids
-    gating = None
+    keys = list(coordinates._tables.keys())
 
-    # ---- decide mode ----
-    if (animal_ids and 2 <= len(animal_ids) <= 4
-            and supervised_annotations is None
-            and isinstance(embedding_gates, str)):
-        gating = "distances"
+    # ---- decide mode + precompute gate definitions ----
+    gating_mode = None
+    animal_pairs = None
+    behaviors = None
+
+    # distance gating: only in multi-animal, unsupervised mode, and single bodypart string
+    if (
+        animal_ids
+        and 2 <= len(animal_ids) <= 4
+        and supervised_annotations is None
+        and isinstance(embedding_gates, str)
+    ):
+        gating_mode = "distances"
         animal_pairs = list(combinations(list(animal_ids), 2))
 
-    # use supervised_annotations for gating
+    # behavior gating: supervised annotations available
     elif animal_ids and supervised_annotations is not None:
         if isinstance(embedding_gates, str):
             embedding_gates = [embedding_gates]
+
         requested = sorted(set(embedding_gates))
 
         first_key = list(supervised_annotations.keys())[0]
-        available = set(get_dt(supervised_annotations, first_key, only_metainfo=True)["columns"])
+        available = set(
+            get_dt(supervised_annotations, first_key, only_metainfo=True)["columns"]
+        )
+
         valid = [b for b in requested if b in available]
         dropped = [b for b in requested if b not in available]
 
-        if dropped: # pragma: no cover
+        if dropped:  # pragma: no cover
             print(f"[gating] Dropped unavailable behaviors: {dropped}")
-        if not valid: # pragma: no cover
+        if valid:
+            gating_mode = "behaviors"
+            behaviors = valid
+        else:  # pragma: no cover
             print("[gating] No valid behaviors remain; falling back to no gating.")
-        else:
-            gating = "behaviors"
-            embedding_gates = valid  # ordered list
 
-    out = {}
+    # ---- compute series ----
+    if gating_mode == "distances":
+        return _gating_series_from_distances(
+            coordinates=coordinates,
+            keys=keys,
+            window_len=window_len,
+            animal_pairs=animal_pairs,
+            bodypart=str(embedding_gates),
+        )
+
+    if gating_mode == "behaviors":
+        return _gating_series_from_behaviors(
+            coordinates=coordinates,
+            keys=keys,
+            window_len=window_len,
+            supervised_annotations=supervised_annotations,
+            behaviors=behaviors,
+            behavior_combinations=behavior_combinations,
+        )
+
+    # ---- no gating fallback ----
+    out: Dict[str, Dict] = {}
     kern = np.ones(window_len, dtype=np.float32)
-
-    for key in coordinates._tables.keys():
+    for key in keys:
         tab = get_dt(coordinates._tables, key)
-        out[key] = {}
-
-        if gating == "distances":
-            for a_id, b_id in animal_pairs:
-                # FIX: validate columns exist
-                cx = (f"{a_id}_{embedding_gates}", "x")
-                if cx not in tab.columns: # pragma: no cover
-                    raise KeyError(
-                        f"Bodypart column {cx} not found in table '{key}'. "
-                        f"Available: {[c for c in tab.columns if c[1]=='x'][:10]}..."
-                    )
-
-                ax = tab[(f"{a_id}_{embedding_gates}", "x")].to_numpy(np.float64)
-                ay = tab[(f"{a_id}_{embedding_gates}", "y")].to_numpy(np.float64)
-                bx = tab[(f"{b_id}_{embedding_gates}", "x")].to_numpy(np.float64)
-                by = tab[(f"{b_id}_{embedding_gates}", "y")].to_numpy(np.float64)
-
-                dist_raw = np.sqrt((ax - bx) ** 2 + (ay - by) ** 2).astype(np.float32)
-
-                # Guard against all-NaN
-                mask = np.isfinite(dist_raw)
-                if mask.any():
-                    idx = np.arange(dist_raw.size)
-                    dist_raw = np.interp(idx, idx[mask], dist_raw[mask]).astype(np.float32)
-                else:
-                    dist_raw = np.zeros_like(dist_raw)
-
-                out[key][(a_id, b_id)] = np.convolve(dist_raw, kern / window_len, mode="valid")
-
-        elif gating == "behaviors":
-            sup = get_dt(supervised_annotations, key)
-            cols = []
-            for beh in embedding_gates:  # deterministic order
-                raw = sup[beh].to_numpy()
-                win = (np.convolve(raw, kern, mode="valid") > 0).astype(np.int32)
-                if not behavior_combinations:
-                    out[key][beh] = win
-                else:
-                    cols.append(win)
-
-            if behavior_combinations and cols:
-                arr = np.array(cols, dtype=np.int32)       # (n_beh, T)
-                powers = 2 ** np.arange(len(cols), dtype=np.int32)
-                out[key]["behavior_combinations"] = (powers @ arr).astype(np.int32)
-
-        else:
-            # no gating
-            out[key][""] = np.convolve(
-                np.ones(tab.shape[0], dtype=np.float32), kern / window_len, mode="valid"
+        out[key] = {
+            "": np.convolve(
+                np.ones(tab.shape[0], dtype=np.float32),
+                kern / window_len,
+                mode="valid",
             )
+        }
 
     return out
 
