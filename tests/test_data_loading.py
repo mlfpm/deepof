@@ -34,6 +34,7 @@ from deepof.data_loading import (
     load_index=st.booleans(),
     load_range=st.one_of(
         st.just(None),
+        st.just([]),
         st.lists(st.integers(min_value=0, max_value=99),min_size=1,max_size=100, unique=True).map(sorted)
     )
 
@@ -85,10 +86,25 @@ def test_get_dt_and_subfunctions(table_type, return_path, only_metainfo, load_in
         assert data['num_rows'] == 100
         assert 'num_cols' in data
         assert data['num_cols'] == 5
-    elif table_type=="numpy":
-        assert (save_dict['1'][adj_load_range]==data).all()
-    elif table_type=="panda":
-        assert (np.array(save_dict['1'].iloc[adj_load_range])==np.array(data)).all()
+    # normal case
+    if len(adj_load_range)>0:
+        if only_metainfo:
+            pass
+        elif table_type=="numpy":
+            assert (save_dict['1'][adj_load_range]==data).all()
+        elif table_type=="panda":
+            assert (np.array(save_dict['1'].iloc[adj_load_range])==np.array(data)).all()
+        else:
+            assert (save_dict['1'][0][adj_load_range]==data[0]).all()
+            assert (save_dict['1'][1][adj_load_range]==data[1]).all()
+    # an empty range was provided resulting in loading an empty object
     else:
-        assert (save_dict['1'][0][adj_load_range]==data[0]).all()
-        assert (save_dict['1'][1][adj_load_range]==data[1]).all()
+        if only_metainfo:
+            pass
+        elif table_type=="numpy": 
+            assert isinstance(data, np.ndarray) and data.shape==(0,0)
+        elif table_type=="panda": 
+            assert (save_dict['1'].columns.astype(str)==data.columns.astype(str)).all()
+        else:   
+            assert isinstance(data[0], np.ndarray) and data[0].shape==(0,0)
+            assert isinstance(data[1], np.ndarray) and data[1].shape==(0,0)

@@ -1,4 +1,4 @@
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
 # encoding: utf-8
 # module deepof
 
@@ -8,8 +8,10 @@ import os
 import copy
 import pickle
 import warnings
-from itertools import combinations
-from typing import Any, List, NewType, Union, Tuple
+from itertools import combinations, cycle
+from typing import Any, List, NewType, Union, Tuple, Callable, Optional, Mapping
+from enum import Enum, auto
+from dataclasses import dataclass, field, replace
 
 import numba as nb
 import numpy as np
@@ -20,19 +22,405 @@ from natsort import os_sorted
 from shapely.geometry import Polygon
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-import requests
+import re
 
 import deepof.post_hoc
 import deepof.utils
 from deepof.utils import _suppress_warning
 from deepof.data_loading import get_dt, _suppress_warning
 import xgboost #as xgb
+from deepof.config import SINGLE_BEHAVIORS, SYMMETRIC_BEHAVIORS,ASYMMETRIC_BEHAVIORS,CONTINUOUS_BEHAVIORS,CUSTOM_BEHAVIOR_COLOR_MAP
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
+
+
+#######################
+# BEHAVIOR BASE CLASSES
+#######################
+
+class Behavior_scope(Enum):
+    INDIVIDUAL = auto()
+    PAIR_DIRECTIONAL = auto()
+    PAIR_NONDIRECTIONAL = auto()
+    #GLOBAL = auto() #may be added later on
+
+
+class Behavior_output(Enum):
+    BINARY = auto()
+    CONTINUOUS = auto()
+
+BehaviorResult = Union[np.ndarray, pd.Series, Mapping[str, Union[np.ndarray, pd.Series]]]
+animal_ids = Union[str, Tuple[str, str], None]
+BehaviorFn = Callable[["BehaviorContext", animal_ids], BehaviorResult]
+PostprocessFn = Callable[[np.ndarray, "BehaviorContext", animal_ids], np.ndarray]
+
+
+@dataclass
+class BehaviorContext:
+    # identifiers / metadata
+    key: str
+    animal_ids: list[str]
+    frame_rate: float
+    arena_type: Any
+    arena_params: Any
+    roi_dict: dict
+
+    # core tables
+    raw_coords: pd.DataFrame
+    coords: pd.DataFrame
+    dists: pd.DataFrame
+    angles: pd.DataFrame
+    speeds: pd.DataFrame
+    likelihoods: pd.DataFrame
+
+    # features (optionally per-animal; keep flexible)
+    full_features: Any
+
+    # parameters + execution options
+    params: dict[str, Any]
+    run_numba: bool = False
+
+    # optional extras (user extensions)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def prefix(self, animal_id: str) -> str:
+        """For multi-animal, columns are e.g. 'A_Nose', 'B_Nose' etc. for single-animal, just 'Nose'."""
+        return f"{animal_id}_" if animal_id else ""
+
+    def bp(self, animal_id: str, bodypart: str) -> str:
+        """Convenience: ctx.bp("A","Nose")->"A_Nose"; ctx.bp("","Nose")->"Nose"."""
+        return f"{animal_id}_{bodypart}" if animal_id else bodypart
+
+
+def postprocess_median_filtering(y: np.ndarray, ctx: BehaviorContext, behavior_output: Behavior_output) -> np.ndarray:
+    """Default postprocessing for most binary behaviors.
+    """
+    y = np.asarray(y)
+
+    # Apply binary moving median
+    y_bool = np.nan_to_num(y, nan=0.0).astype(bool)
+    y_bool = deepof.utils.binary_moving_median_numba(
+        y_bool, lag=int(ctx.params["median_filter_width"])
+    )
+    return y_bool.astype(float)
+
+
+def postprocess_following(y: np.ndarray, ctx: BehaviorContext, animal_ids: animal_ids) -> np.ndarray:
+    """Standard postprocessing, then removal of short segments"""
+    # First default binary smoothing
+    y = postprocess_median_filtering(y, ctx, Behavior_output.BINARY).astype(bool)
+
+    # Then filter our short segments
+    y = deepof.utils.filter_short_true_segments_numba(
+        array=y,
+        min_length=int(ctx.params["min_follow_frames"]),
+    )
+    return y.astype(float)
+
+
+def postprocess_identity(y: np.ndarray, ctx: BehaviorContext, animal_ids: animal_ids) -> np.ndarray:
+    """Does not apply any postprocessing, used for e.g. continuous behaviors"""
+    return np.asarray(y).astype(float, copy=False)
+
+
+@dataclass(frozen=True)
+class DeepOF_behavior:
+    """Class for different types of behaviors that The supervised annotations of DeepOF can process.
+
+    """
+    name: str
+    scope: Behavior_scope
+    output_type: Behavior_output
+    compute: BehaviorFn
+    unit: Optional[str] = "a.u."
+    
+
+    # Optional: assign a user defined hex color. If None, a color from deepof.config.CUSTOM_BEHAVIOR_COLOR_MAP will be assigned
+    color: Optional[str] = None
+
+    # Optional: override postprocess; if None, use default_postprocess(...)
+    postprocess: Optional[PostprocessFn] = None
+
+    # Optional: simple dependency documentation/validation
+    requires: Tuple[str, ...] = ()
+
+    # Optional: ordering control (e.g., keep speed measures last)
+    order: int = 0
+
+    def set_color(self, color: Optional[str]) -> "DeepOF_behavior":
+        return replace(self, color=color)
+
+    def column_name(self, ctx: BehaviorContext, animal_ids: animal_ids) -> str:
+        if self.scope is Behavior_scope.INDIVIDUAL:
+            animal_id = animal_ids  # type: ignore[assignment]
+            return f"{ctx.prefix(animal_id)}{self.name}"
+        if self.scope is Behavior_scope.PAIR_DIRECTIONAL:
+            a, b = animal_ids  # type: ignore[misc]
+            return f"{a}_{b}_{self.name}"
+        if self.scope is Behavior_scope.GLOBAL:
+            return self.name
+        raise ValueError(f"Unsupported scope: {self.scope}")  # pragma: no cover
+
+    def annotate_behavior(self, ctx: BehaviorContext, animal_ids: animal_ids) -> np.ndarray:
+        # optional dependency checks
+        for attr in self.requires:
+            if not hasattr(ctx, attr): # pragma: no cover 
+                raise AttributeError(f"Behavior '{self.name}' requires ctx.{attr} to exist") 
+
+        res = self.compute(ctx, animal_ids)
+
+        if isinstance(res, Mapping):
+            out: dict[str, np.ndarray] = {}
+            for subkey, arr in res.items():
+                y = np.asarray(arr)
+                y = self.postprocess(y, ctx, animal_ids)
+                out[subkey] = y
+            return out
+        else:
+            
+            y = np.asarray(res)
+
+            if self.postprocess is not None:
+                y = np.asarray(self.postprocess(y, ctx, animal_ids))
+            else:
+                y = postprocess_median_filtering(y, ctx, self.output_type)
+
+            return y
+
+
+###########################
+# PAIRED BEHAVIOR INSTANCES
+###########################
+
+
+def compute_nose2nose(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """nondirectional, noses of both mice are close"""
+    a, b = mice_pair  
+    tol = float(ctx.params["close_contact_tol"])
+    return close_single_contact(
+        ctx.raw_coords,
+        ctx.bp(a, "Nose"),
+        ctx.bp(b, "Nose"),
+        tol,
+    )
+
+def compute_sidebyside(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """nondirectional, mice are next to each other nose by nose"""
+    a, b = mice_pair 
+    return close_double_contact(
+        ctx.raw_coords,
+        ctx.bp(a, "Nose"),
+        ctx.bp(a, "Tail_base"),
+        ctx.bp(b, "Nose"),
+        ctx.bp(b, "Tail_base"),
+        rel_tol=float(ctx.params["side_contact_tol"]),
+        rev=False,
+    )
+
+def compute_sidereside(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """nondirectional, mice are next to each other nose by tail"""
+    a, b = mice_pair  
+    return close_double_contact(
+        ctx.raw_coords,
+        ctx.bp(a, "Nose"),
+        ctx.bp(a, "Tail_base"),
+        ctx.bp(b, "Nose"),
+        ctx.bp(b, "Tail_base"),
+        rel_tol=float(ctx.params["side_contact_tol"]),
+        rev=True,
+    )
+
+def compute_nose2tail(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """Directional: (a,b) means a_nose close to b_tailbase"""
+    a, b = mice_pair  
+    tol = float(ctx.params["close_contact_tol"])
+    return close_single_contact(
+        ctx.raw_coords,
+        ctx.bp(a, "Nose"),
+        ctx.bp(b, "Tail_base"),
+        tol,
+    )
+
+def compute_nose2body(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """Directional: (a,b) means a_nose close to any of b main_body parts."""
+    a, b = mice_pair 
+    tol = float(ctx.params["close_contact_tol"])
+    main_body = ctx.extra["main_body"]  # list like ["Left_ear", "Right_ear", ...]
+    body_cols = [ctx.bp(b, bp) for bp in main_body]
+    return close_single_contact(
+        ctx.raw_coords,
+        ctx.bp(a, "Nose"),
+        body_cols,
+        tol,
+    )
+
+def compute_following(ctx: BehaviorContext, mice_pair: animal_ids) -> np.ndarray:
+    """Directional: (a,b) means a follows b."""
+    a, b = mice_pair  
+    return following_path(
+        distance_dframe=ctx.dists,
+        position_dframe=ctx.raw_coords,
+        speed_dframe=ctx.speeds,
+        follower=a,
+        followed=b,
+        frames=int(ctx.params["follow_frames"]),
+        tol=float(ctx.params["follow_tol"]),
+        tol_speed=float(ctx.params["stationary_threshold"]),
+    )
+
+
+###########################
+# SINGLE BEHAVIOR INSTANCES
+###########################
+
+
+def compute_climb_arena(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+    prefix = ctx.prefix(aid)
+    mouse_len = ctx.extra.get("mouse_lens", {}).get(prefix, 50)
+
+    return climb_arena(
+        arena_type=ctx.arena_type,
+        arena=ctx.arena_params,
+        pos_dict=ctx.raw_coords,
+        rel_tol=float(ctx.params["climb_tol"]),
+        id=prefix,
+        mouse_len=mouse_len,
+        centered_data=False,
+        run_numba=ctx.run_numba,
+    )
+
+
+def compute_sniff_arena(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+    center = ctx.extra.get("center", "Center")
+
+    return sniff_object(
+        speed_dframe=ctx.speeds,
+        arena=ctx.arena_params,
+        pos_dict=ctx.raw_coords,
+        tol=float(ctx.params["sniff_arena_tol"]),
+        tol_speed=float(ctx.params["stationary_threshold"]),
+        nose=ctx.bp(aid, "Nose"),
+        center_name=center,
+        centered_data=False,
+        s_object="arena",
+        animal_id=aid,  # IMPORTANT: without underscore, matches old call
+        run_numba=ctx.run_numba,
+    ).to_numpy()
+
+
+def compute_immobility(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+    est = ctx.extra["immobility_estimator"]
+
+    # match old feature selection logic
+    if aid:
+        X = get_dt(ctx.full_features[aid], ctx.key)
+    else:
+        X = get_dt(ctx.full_features, ctx.key)
+
+    y_imm, _ = immobility(
+        X_huddle=X,
+        huddle_estimator=est,
+        animal_id=ctx.prefix(aid),  # NOTE: with underscore as in old code
+        median_filter_width=int(ctx.params["median_filter_width"]),
+        min_immobility=int(ctx.params["min_immobility"]),
+        max_immobility=0,  # keep as in your current call
+    )
+    return y_imm
+
+
+def compute_stat_lookaround(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+
+    # close_range matches your current behavior (int array)
+    if len(ctx.animal_ids) > 1:
+        close_range = calculate_close_range(
+            ctx.dists,
+            mouse_id=ctx.prefix(aid),       # e.g. "A_"
+            bodypart="Nose",
+            threshold=float(ctx.params["side_contact_tol"]),
+        )
+    else:
+        close_range = np.zeros(len(ctx.dists), dtype=int)
+
+    return stationary_lookaround(
+        speed_dframe=ctx.speeds,
+        dist_dframe=ctx.dists,
+        likelihood_dframe=ctx.likelihoods,
+        mouse_identity=ctx.prefix(aid),  # e.g. "A_"
+        close_range=close_range,
+        tol_speed=float(ctx.params["stationary_threshold"]),
+        tol_likelihood=float(ctx.params["nose_likelihood"]),
+        min_length=int(ctx.params["min_follow_frames"]),
+        animal_id=aid,  # without underscore, as in old call
+    )
+
+
+def compute_detect_activity(ctx: BehaviorContext, animal_id: animal_ids) -> dict[str, np.ndarray]:
+    aid = animal_id  # type: ignore[assignment]
+    center = ctx.extra.get("center", "Center")
+
+    stat_a, stat_p, mov = detect_activity(
+        speed_dframe=ctx.speeds,
+        likelihood_dframe=ctx.likelihoods,
+        tol_speed=float(ctx.params["stationary_threshold"]),
+        tol_likelihood=float(ctx.params["nose_likelihood"]),
+        min_length=int(ctx.params["min_follow_frames"]),
+        center_name=center,
+        animal_id=aid,
+    )
+    return {
+        "stat-active": stat_a,
+        "stat-passive": stat_p,
+        "moving": mov,
+    }
+
+
+def compute_sniffing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+    center = ctx.extra.get("center", "Center")
+    return np.asarray(sniff_around(ctx.speeds, ctx.likelihoods,
+                                  float(ctx.params["stationary_threshold"]),
+                                  float(ctx.params["nose_likelihood"]),
+                                  center_name=center, animal_id=aid))
+
+
+###############################
+# CONTINUOUS BEHAVIOR INSTANCES
+###############################
+
+
+@_suppress_warning(warn_messages=["All-NaN slice encountered"])
+def compute_continuous_measures(ctx: BehaviorContext, animal_id: animal_ids) -> dict[str, np.ndarray]:
+    aid = animal_id  # type: ignore[assignment]
+
+    bparts = ["Center","Spine_1","Spine_2","Nose","Left_ear","Right_ear",
+              "Left_fhip","Right_fhip","Left_bhip","Right_bhip","Tail_base"]
+    cols = [ctx.bp(aid, bp) for bp in bparts if ctx.bp(aid, bp) in ctx.speeds.columns]
+
+    if len(cols) == 0:
+        n = len(ctx.speeds)
+        nan = np.full(n, np.nan)
+        return {"distance": nan, "cum-distance": nan, "speed": nan}
+
+    array = ctx.speeds[cols]
+    avg_speed = np.nanmedian(array.iloc[1:].to_numpy(), axis=1)
+    avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
+
+    avg_distance = avg_speed * (1.0 / float(ctx.frame_rate))
+    cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
+
+    return {
+        "distance": avg_distance,
+        "cum-distance": cum_distance,
+        "speed": avg_speed,
+    }
 
 
 def close_single_contact(
@@ -224,7 +612,7 @@ def climb_arena(
                 deepof.utils.point_in_polygon(nose.values, Polygon(arena).buffer(tol))
             )
 
-    else:
+    else:  # pragma: no cover
         raise NotImplementedError(
             "Supported values for arena_type are ['polygonal-manual', 'polygonal-autodetect', 'circular-manual', 'circular-autodetect']"
         )
@@ -331,7 +719,7 @@ def sniff_object(
         # (not in smaller polygon and [not not] in larger polygon)
         nosing = nosing_min & (~nosing_max)
 
-    else:
+    else:  # pragma: no cover
         raise NotImplementedError
         
     speed = speed_dframe[animal_id + center_name] < tol_speed
@@ -506,6 +894,21 @@ def digging(
         stationary_passive (np.array): True if the animal is standing still and is passive, False otherwise
 
     """
+
+    # Experimental and too unspecific, called via
+    #tag_dict[_id + undercond + "digging"] = digging(
+    #speeds,
+    #dists,
+    #likelihoods,
+    #_id + undercond,
+    #close_range,
+    #params["stationary_threshold"],
+    #params["nose_likelihood"],
+    #params["min_follow_frames"],
+    #center_name=center,
+    #animal_id=_id,
+    #)
+
     if animal_id != "":
         animal_id += "_"
 
@@ -934,6 +1337,8 @@ def supervised_tagging(
     center: str = "Center",
     params: dict = {},
     run_numba: bool = False,
+    custom_behaviors: list[DeepOF_behavior] = None,
+    custom_behavior_context: dict = {}
 ) -> pd.DataFrame:
     """Output a dataframe with the registered motives per frame.
 
@@ -952,23 +1357,17 @@ def supervised_tagging(
         center (str): Body part to center coordinates on. "Center" by default.
         params (dict): dictionary to overwrite the default values of the parameters of the functions that the rule-based pose estimation utilizes. See documentation for details.
         run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
-
+        custom_behaviors (list[DeepOF_behavior]): a list of custom DeepOF_behavior objects. Added at the beginning of supervised behaviors if provided
+        custom_behavior_context (dict): a dictionary containing additional information you need for your custom behaviors
+        
     Returns:
         tag_df (pandas.DataFrame): table with traits as columns and frames as rows. Each value is a boolean indicating trait detection at a given time
 
     """
-    # Load pre-trained models for ML annotated traits
-
-    immobility_estimator = immobility_estimator
-
-    # Extract arena information from coordinates object
-    arena_params_scaled = coord_object._arena_params[key] #scaling is now already included
-    arena_type = coord_object._arena
-    frame_rate = coord_object._frame_rate
 
     animal_ids = coord_object._animal_ids
     undercond = "_" if len(animal_ids) > 1 else ""
-               
+
     #extract various data tables from their Table dicts
     raw_coords = get_dt(raw_coords,key).reset_index(drop=True)
     coords = get_dt(coords,key).reset_index(drop=True)
@@ -976,6 +1375,134 @@ def supervised_tagging(
     angles = get_dt(angles,key).reset_index(drop=True)
     speeds = get_dt(speeds,key).reset_index(drop=True)
     likelihoods = get_dt(coord_object.get_quality(),key).reset_index(drop=True)
+
+    # Initialize context + behavior class instances               
+    behavior_ctx = BehaviorContext(
+        key=key,
+        animal_ids=coord_object._animal_ids,
+        frame_rate=coord_object._frame_rate,
+        arena_type=coord_object._arena,
+        arena_params=coord_object._arena_params[key],
+        roi_dict=coord_object._roi_dicts[key],
+
+        raw_coords = raw_coords,
+        coords = coords,
+        dists = dists,
+        angles = angles,
+        speeds = speeds,
+        likelihoods = likelihoods,
+
+        # features (optionally per-animal; keep flexible)
+        full_features = full_features,
+        params = params,
+        run_numba = run_numba,       
+    )
+
+    behavior_nose2nose = DeepOF_behavior(
+        name="nose2nose",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_nose2nose,
+        requires=("raw_coords",),
+    )
+
+    behavior_sidebyside = DeepOF_behavior(
+        name="sidebyside",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_sidebyside,
+        requires=("raw_coords",),
+    )
+
+    behavior_sidereside = DeepOF_behavior(
+        name="sidereside",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_sidereside,
+        requires=("raw_coords",),
+    )
+
+    behavior_nose2tail = DeepOF_behavior(
+        name="nose2tail",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_nose2tail,
+        requires=("raw_coords",),
+    )
+
+    behavior_nose2body = DeepOF_behavior(
+        name="nose2body",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_nose2body,
+        requires=("raw_coords",),
+    )
+
+    behavior_following = DeepOF_behavior(
+        name="following",
+        scope=Behavior_scope.PAIR_DIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_following,
+        postprocess=postprocess_following,
+        requires=("dists", "raw_coords", "speeds"),
+    )
+
+    behavior_climb_arena = DeepOF_behavior(
+        name="climb-arena",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_climb_arena,
+        requires=("raw_coords",),
+    )
+
+    behavior_sniff_arena = DeepOF_behavior(
+        name="sniff-arena",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_sniff_arena,
+        requires=("raw_coords", "speeds"),
+    )
+
+    behavior_immobility = DeepOF_behavior(
+        name="immobility",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_immobility,
+        postprocess=postprocess_identity,  
+    )
+
+    behavior_stat_lookaround = DeepOF_behavior(
+        name="stat-lookaround",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_stat_lookaround,
+        postprocess=postprocess_identity,  
+    )
+
+    behavior_detect_activity = DeepOF_behavior(
+        name="detect_activity",  # mutlti-behavior, name is not used in column naming for dict outputs
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_detect_activity,
+        postprocess=postprocess_identity, 
+    )
+
+    behavior_sniffing = DeepOF_behavior(
+        name="sniffing",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_sniffing,
+        postprocess=postprocess_identity,  
+    )
+
+    behavior_continuous = DeepOF_behavior(
+        name="continuous",  # mutlti-behavior, name is not used in column naming for dict outputs
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.CONTINUOUS,
+        compute=compute_continuous_measures,
+        postprocess=postprocess_identity, 
+    )
+
 
     # Dictionary with motives per frame
     tag_dict = {}
@@ -1001,12 +1528,12 @@ def supervised_tagging(
     #extract mouse normalization information from coordinates object
     mouse_lens={}
     mouse_areas={}
-    for _id in animal_ids:
-        if _id:
-         _id=_id+"_"
+    for aid in animal_ids:
+        if aid:
+         aid=aid+"_"
         
         #calculate mouse lengths
-        backbone=[_id+"Nose",_id+"Spine_1",_id+"Center", _id+"Spine_2", _id+"Tail_base"]
+        backbone=[aid+"Nose",aid+"Spine_1",aid+"Center", aid+"Spine_2", aid+"Tail_base"]
 
         #remove missing bodyparts from backbone
         for bp in backbone:
@@ -1025,274 +1552,99 @@ def supervised_tagging(
                             -raw_coords[backbone[bp_pos]].iloc[indices]
                             )
                         )
-            mouse_lens[_id]=np.nanpercentile(mouse_lens_raw,80)
+            mouse_lens[aid]=np.nanpercentile(mouse_lens_raw,80)
                     
         #assume default mouse length if body parts for length estimation are insufficient
         else:
-            mouse_lens[_id]=50
+            mouse_lens[aid]=50
         
-        if _id+"full_area" in coord_object._areas[key]:
-            mouse_areas[_id]=np.nanpercentile(
-                coord_object._areas[key][_id+"full_area"]
+        if aid+"full_area" in coord_object._areas[key]:
+            mouse_areas[aid]=np.nanpercentile(
+                coord_object._areas[key][aid+"full_area"]
                 ,80)
-
-    def onebyone_contact(interactors: List, bparts: List):
-        """Return a smooth boolean array with 1to1 contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params
-
-        try:
-            left = interactors[0] + bparts[0]
-        except TypeError:
-            left = [interactors[0] + "_" + suffix for suffix in bparts[0]]
-
-        try:
-            right = interactors[1] + bparts[-1]
-        except TypeError:
-            right = [interactors[1] + "_" + suffix for suffix in bparts[-1]]
-
-        return deepof.utils.binary_moving_median_numba(
-            close_single_contact(
-                raw_coords,
-                (left if not isinstance(left, list) else right),
-                (right if not isinstance(left, list) else left),
-                params["close_contact_tol"],
-            ),
-            lag=params["median_filter_width"],
-        )
-
-    def twobytwo_contact(interactors: List, rev: bool):
-        """Return a smooth boolean array with side by side contacts between two mice."""
-        nonlocal raw_coords, animal_ids, params, mouse_lens
+            
+    behavior_ctx.extra["main_body"] = main_body
+    behavior_ctx.extra["immobility_estimator"]=immobility_estimator
+    behavior_ctx.extra["mouse_lens"] = mouse_lens
+    behavior_ctx.extra.update(custom_behavior_context)
         
-        return deepof.utils.binary_moving_median_numba(
-            close_double_contact(
-            raw_coords,
-            #mouse_lens[interactors[0]+"_"],
-            interactors[0] + "_Nose",
-            interactors[0] + "_Tail_base",
-            #mouse_lens[interactors[1]+"_"],
-            interactors[1] + "_Nose",
-            interactors[1] + "_Tail_base",
-            params["side_contact_tol"],
-            rev=rev,
-            ),
-            lag=params["median_filter_width"],
-        )
-        
-
-    @_suppress_warning(warn_messages=["All-NaN slice encountered"])
-    def get_continuous_measures(ovr_speeds, _id, ucond, frame_rate):
-        """Return the overall speed and cumulative distance of each mouse."""
-        bparts = [
-            "Center",
-            "Spine_1",
-            "Spine_2",
-            "Nose",
-            "Left_ear",
-            "Right_ear",
-            "Left_fhip",
-            "Right_fhip",
-            "Left_bhip",
-            "Right_bhip",
-            "Tail_base",
-        ]
-        bparts = [
-            bpart
-            for bpart in bparts
-            if bpart
-            if any(bpart in col for col in ovr_speeds.columns)
-        ]
-        array = ovr_speeds[[_id + ucond + bpart for bpart in bparts]]
-        avg_speed = np.nanmedian(array[1:], axis=1)
-        # mm per s 
-        avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
-
-        # convert from mm per second to mm
-        avg_distance = avg_speed * 1/frame_rate 
-
-        # in mm
-        cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
-
-        return avg_distance, cum_distance, avg_speed
-
     # Get all animal ID combinations
     animal_pairs = list(combinations(animal_ids, 2))
 
+
+    # Paired behaviors
     if len(animal_ids) >= 2:
 
         for animal_pair in animal_pairs:
-            # Define behaviours that can be computed on the fly from the distance matrix
-            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2nose"] = onebyone_contact(
-                interactors=animal_pair, bparts=["_Nose"]
-            )
 
-            tag_dict[
-                f"{animal_pair[0]}_{animal_pair[1]}_sidebyside"
-            ] = twobytwo_contact(interactors=animal_pair, rev=False)
+            if custom_behaviors is not None:
+                for custom_behavior in custom_behaviors:
 
-            tag_dict[
-                f"{animal_pair[0]}_{animal_pair[1]}_sidereside"
-            ] = twobytwo_contact(interactors=animal_pair, rev=True)
+                    if custom_behavior.scope is Behavior_scope.PAIR_NONDIRECTIONAL:
 
-            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2tail"] = onebyone_contact(
-                interactors=animal_pair, bparts=["_Nose", "_Tail_base"]
-            )
-            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2tail"] = onebyone_contact(
-                interactors=animal_pair, bparts=["_Tail_base", "_Nose"]
-            )
-            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2body"] = onebyone_contact(
-                interactors=animal_pair, bparts=["_Nose", main_body]
-            )
-            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2body"] = onebyone_contact(
-                interactors=animal_pair, bparts=[main_body, "_Nose"]
-            )
+                        # Pairs of directional behaviors (inverted order for other behavior direction)
+                        tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_" + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, animal_pair)
+                    
+                    elif custom_behavior.scope is Behavior_scope.PAIR_DIRECTIONAL:
 
-            try:
-                tag_dict[
-                    f"{animal_pair[0]}_{animal_pair[1]}_following"
-                ] = deepof.utils.binary_moving_median_numba(
-                    following_path(
-                        dists,
-                        raw_coords,
-                        speeds,
-                        follower=animal_pair[0],
-                        followed=animal_pair[1],
-                        frames=params["follow_frames"],
-                        tol=params["follow_tol"],
-                        tol_speed=params["stationary_threshold"]
-                    ),
-                    lag=params["median_filter_width"],
-                )
-
-                tag_dict[
-                    f"{animal_pair[1]}_{animal_pair[0]}_following"
-                ] = deepof.utils.binary_moving_median_numba(
-                    following_path(
-                        dists,
-                        raw_coords,
-                        speeds,
-                        follower=animal_pair[1],
-                        followed=animal_pair[0],
-                        frames=params["follow_frames"],
-                        tol=params["follow_tol"],
-                        tol_speed=params["stationary_threshold"],
-                    ),
-                    lag=params["median_filter_width"],
-                )
-
-                # Filter out extremely short segments (Always use numba version, since function is called very often 
-                # and its regular version otherwise wastes more time than just compiling it once with numba)
-                tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"]=deepof.utils.filter_short_true_segments_numba(
-                    array=tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"], min_length=params["min_follow_frames"],
-                )
-                tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"]=deepof.utils.filter_short_true_segments_numba(
-                    array=tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"], min_length=params["min_follow_frames"],
-                )        
+                        # Pairs of directional behaviors (inverted order for other behavior direction)
+                        tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_" + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, animal_pair)
+                        tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_" + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, (animal_pair[1],animal_pair[0]))
 
 
-            except KeyError:
-                pass
+            # Nondirectional behaviors
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2nose"] = behavior_nose2nose.annotate_behavior(behavior_ctx, animal_pair)           
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_sidebyside"] = behavior_sidebyside.annotate_behavior(behavior_ctx, animal_pair)
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_sidereside"] = behavior_sidereside.annotate_behavior(behavior_ctx, animal_pair)
 
-    for _id in animal_ids:
-        
-        if _id:
-            current_features=get_dt(full_features[_id],key)
-            close_range = calculate_close_range(dists, _id + undercond, 'Nose', params["side_contact_tol"]) 
-        else:
-            current_features=get_dt(full_features,key)
-            close_range = np.zeros(len(dists), dtype=int)
-        
+            # Pairs of directional behaviors (inverted order for other behavior direction)
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2tail"] = behavior_nose2tail.annotate_behavior(behavior_ctx, animal_pair)
+            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2tail"] = behavior_nose2tail.annotate_behavior(behavior_ctx, (animal_pair[1],animal_pair[0])) 
 
-        tag_dict[_id + undercond + "climb-arena"] = deepof.utils.binary_moving_median_numba(
-            climb_arena(
-                arena_type,
-                arena_params_scaled,
-                raw_coords,
-                params["climb_tol"],
-                _id + undercond,
-                mouse_lens[_id + undercond],
-                run_numba=run_numba,
-            ),
-            lag=params["median_filter_width"]
-        )
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_nose2body"] = behavior_nose2body.annotate_behavior(behavior_ctx, animal_pair)
+            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_nose2body"] = behavior_nose2body.annotate_behavior(behavior_ctx, (animal_pair[1],animal_pair[0]))
 
+            tag_dict[f"{animal_pair[0]}_{animal_pair[1]}_following"] = behavior_following.annotate_behavior(behavior_ctx, animal_pair)
+            tag_dict[f"{animal_pair[1]}_{animal_pair[0]}_following"] = behavior_following.annotate_behavior(behavior_ctx, (animal_pair[1],animal_pair[0]))
+   
 
-        tag_dict[_id + undercond + "sniff-arena"] = deepof.utils.binary_moving_median_numba(
-            sniff_object(
-                speed_dframe=speeds,
-                arena=arena_params_scaled,
-                pos_dict=raw_coords,
-                tol=params["sniff_arena_tol"],
-                tol_speed=params["stationary_threshold"],
-                nose=_id + undercond + "Nose",
-                center_name=center,
-                s_object="arena",
-                animal_id=_id,
-                run_numba=run_numba,
-            ).to_numpy(),
-            lag=params["median_filter_width"]
-        )
+    # Single behaviors
+    for aid in animal_ids:    
 
-        tag_dict[_id + undercond + "immobility"], _ = immobility(
-            current_features,
-            huddle_estimator=immobility_estimator,
-            animal_id=_id + undercond,
-            median_filter_width = params["median_filter_width"],
-            min_immobility = params["min_immobility"],
-            max_immobility = 0,#params["max_immobility"],
-        )
-        #detect immobility and active / passive behavior
-        tag_dict[_id + undercond + "stat-lookaround"] = stationary_lookaround(
-        speeds,
-        dists,
-        likelihoods,
-        _id + undercond,
-        close_range,
-        params["stationary_threshold"],
-        params["nose_likelihood"],
-        params["min_follow_frames"],
-        animal_id=_id,
-        )
+        if custom_behaviors is not None:
+            for custom_behavior in custom_behaviors:
 
-        # Experimental and too unspecific
-        #tag_dict[_id + undercond + "digging"] = digging(
-        #speeds,
-        #dists,
-        #likelihoods,
-        #_id + undercond,
-        #close_range,
-        #params["stationary_threshold"],
-        #params["nose_likelihood"],
-        #params["min_follow_frames"],
-        #center_name=center,
-        #animal_id=_id,
-        #)
-        
-        tag_dict[_id + undercond + "stat-active"], tag_dict[_id + undercond + "stat-passive"], tag_dict[_id + undercond + "moving"] = detect_activity(
-        speeds,
-        likelihoods,
-        params["stationary_threshold"],
-        params["nose_likelihood"],
-        params["min_follow_frames"],
-        center_name=center,
-        animal_id=_id,
-        )
+                if custom_behavior.scope is Behavior_scope.INDIVIDUAL:
 
-        tag_dict[_id + undercond + "sniffing"] = sniff_around(
-            speeds,
-            likelihoods,
-            params["stationary_threshold"],
-            params["nose_likelihood"],
-            center_name=center,
-            animal_id=_id,
-        )
+                    # Pairs of directional behaviors (inverted order for other behavior direction)
+                    tag_dict[aid + undercond + custom_behavior.name] = custom_behavior.annotate_behavior(behavior_ctx, aid) 
+      
+        tag_dict[aid + undercond + "climb-arena"] = behavior_climb_arena.annotate_behavior(behavior_ctx, aid) 
+
+        tag_dict[aid + undercond + "sniff-arena"] = behavior_sniff_arena.annotate_behavior(behavior_ctx, aid)
+
+        tag_dict[aid + undercond + "immobility"] = behavior_immobility.annotate_behavior(behavior_ctx, aid)
+    
+        tag_dict[aid + undercond + "stat-lookaround"] = behavior_stat_lookaround.annotate_behavior(behavior_ctx, aid)
+    
+        # Multi-behavior activity
+        activity_dict = behavior_detect_activity.annotate_behavior(behavior_ctx, aid)
+    
+        tag_dict[aid + undercond + "stat-active"] = activity_dict["stat-active"]
+        tag_dict[aid + undercond + "stat-passive"] = activity_dict["stat-passive"]
+        tag_dict[aid + undercond + "moving"] = activity_dict["moving"]
+    
+        tag_dict[aid + undercond + "sniffing"] = behavior_sniffing.annotate_behavior(behavior_ctx, aid)
+    
+        # Multi-behavior for continuous behaviors
+        continuous_meaures = behavior_continuous.annotate_behavior(behavior_ctx, aid)
+    
         # NOTE: It's important that speeds remain the last columns.
-        # Preprocessing for weakly supervised autoencoders relies on this
-        tag_dict[_id + undercond + "distance"], tag_dict[_id + undercond + "cum-distance"], tag_dict[_id + undercond + "speed"] = get_continuous_measures(speeds, _id, undercond, frame_rate)
-
-
-
-
+        # Preprocessing for weakly supervised autoencoders relies on this (or at least did rely on it at some point)
+        tag_dict[aid + undercond + "distance"] = continuous_meaures["distance"] 
+        tag_dict[aid + undercond + "cum-distance"] = continuous_meaures["cum-distance"]  
+        tag_dict[aid + undercond + "speed"] = continuous_meaures["speed"]   
+        
     tag_df = pd.DataFrame(tag_dict).fillna(0).astype(float)
 
     return tag_df
@@ -1328,6 +1680,50 @@ def calculate_close_range(df: pd.DataFrame, mouse_id: str, bodypart: str, thresh
     # Check rows where any relevant column is below the threshold
     proximity_mask = (df[relevant_cols] < threshold).any(axis=1)
     return proximity_mask.astype(int).to_numpy()
+
+
+def validate_custom_behaviors(custom_behaviors: list[DeepOF_behavior] = None, custom_behavior_inputs: dict = {}): 
+
+    if custom_behaviors is None or custom_behaviors == []:
+        return None
+    if custom_behaviors is not None and (not isinstance(custom_behaviors,list) or not isinstance(custom_behaviors[0], DeepOF_behavior)): # pragma: no cover
+        raise ValueError("\"custom_behaviors\" need to be a list of DeepOF_behavior objects or None!")
+    if not isinstance(custom_behavior_inputs,dict): # pragma: no cover
+        raise ValueError("\"custom_behavior_inputs\" needs to be a dictionary!")
+    CUSTOM_BEHAVIORS=[]
+    for custom_behavior in custom_behaviors:
+        if "_" in custom_behavior.name: # pragma: no cover
+            raise ValueError("No \"_\" allowed in behavior names. Use \"-\" instead")
+        if not custom_behavior.scope==Behavior_scope.INDIVIDUAL and custom_behavior.output_type==Behavior_output.CONTINUOUS: # pragma: no cover
+            raise NotImplementedError("Currently continuous behaviors are only supported for individuals!")
+        if (custom_behavior.name in SINGLE_BEHAVIORS or custom_behavior.name in SYMMETRIC_BEHAVIORS or 
+        custom_behavior.name in ASYMMETRIC_BEHAVIORS or custom_behavior.name in CONTINUOUS_BEHAVIORS): # pragma: no cover
+            raise ValueError(f"The behavior name {custom_behavior.name} is already in use!")
+        if custom_behavior.name in CUSTOM_BEHAVIORS: # pragma: no cover
+            raise ValueError(f"All your custom behaviors need unique names. The name {custom_behavior.name} occurs at least twice!")
+        CUSTOM_BEHAVIORS.append(custom_behavior.name)
+
+
+def assign_custom_behavior_colors(custom_behaviors: list[DeepOF_behavior] = None):
+    """Returns a list of hex colors (same order as custom_behaviors), uses user defined colors if available"""
+
+    if custom_behaviors is None:
+        return None
+
+    pal = cycle(list(CUSTOM_BEHAVIOR_COLOR_MAP.values()))
+    for idx, custom_behavior in enumerate(custom_behaviors): 
+
+        if custom_behavior.color is not None and isinstance(custom_behavior.color, str) and re.search(r'^#(?:[0-9a-fA-F]{3}){1,2}$', custom_behavior.color):
+            continue
+        else:
+            custom_behaviors[idx] = custom_behavior.set_color(next(pal))
+    
+    return custom_behaviors
+
+    
+        
+
+    
     
 
 if __name__ == "__main__":

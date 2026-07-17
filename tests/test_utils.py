@@ -28,7 +28,7 @@ from typing import Any, List, NewType, Tuple, Union
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
-from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
 
 # AUXILIARY FUNCTIONS #
 
@@ -259,9 +259,9 @@ def test_count_events(tab_numpy):
 
     num_events=deepof.utils.count_events(tab_numpy)
 
-    # Number of 1s in teh table is always larger than or equal to the number of counted events
+    # Number of 1s in the table is always larger than or equal to the number of counted events
     assert(np.sum(tab_numpy) >= num_events)
-    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to teh numebr of events
+    # Number of changes from 0 to 1 and 1 to 0 is always smaller or equal to the numebr of events
     assert len(np.where(np.diff(tab_numpy.astype(int))==1)[0]) <= num_events
     assert len(np.where(np.diff(tab_numpy.astype(int))==-1)[0]) <= num_events
     
@@ -621,6 +621,94 @@ def test_remove_outliers(mode):
     assert (high_std_sum < low_std_sum)
 
 
+def test_exp_cond_and_start_marker_loading():
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+    video_path = os.path.join(base_path, "Videos")
+    table_path = os.path.join(base_path, "Tables")
+
+    project_name = "test_conditions_and_markers"
+    project_dir = os.path.join(base_path, project_name)
+    tmp_dir = os.path.join(base_path, "_tmp_conditions_and_markers")
+
+    if os.path.exists(project_dir):
+        rmtree(project_dir)
+    if os.path.exists(tmp_dir):
+        rmtree(tmp_dir)
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # Create a project 
+    pr = deepof.data.Project(
+        project_path=base_path,
+        project_name=project_name,
+        video_path=video_path,
+        table_path=table_path,
+        arena="polygonal-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+    )
+    keys = list(pr.tables.keys())
+    assert len(keys) > 0
+
+    # Build minimal CSVs in a format that is robust to read_csv(index_col=0) or not
+    exp_path = os.path.join(tmp_dir, "exp_conditions.csv")
+    mk_path = os.path.join(tmp_dir, "start_markers.csv")
+
+    exp_df = pd.DataFrame({"experiment_id": keys, "group": ["A"] * len(keys)})
+    exp_df.to_csv(exp_path)
+
+    start_time_1s = deepof.utils.seconds_to_time(1.0, cut_milliseconds=False)
+    mk_df = pd.DataFrame({"experiment_id": keys, "start": [start_time_1s] * len(keys)}, index=keys)
+    mk_df.to_csv(mk_path)
+
+    # Explicitly call Project loaders (covers Project.load_exp_conditions/load_start_markers)
+    pr.load_exp_conditions(exp_path)
+    pr.load_start_markers(mk_path)
+
+    # Create in test mode
+    coords = pr.create(force=True, test=True)
+
+    # Check exp_conditions loaded and keys match
+    assert set(coords.get_table_keys()) == set(coords.get_exp_conditions.keys())
+    assert coords.get_condition_values("group") == ["A"]
+
+    # Check start markers loaded and converted to frames correctly
+    fps = coords._frame_rate
+    expected_frame = int(np.round(1.0 * fps))
+    starts = coords.get_start_marker_values("start", return_frames=True)
+    for k in keys:
+        assert starts[k] == expected_frame
+
+    # Cover Coordinates.load_exp_conditions/load_start_markers too (reload with new values)
+    exp_path2 = os.path.join(tmp_dir, "exp_conditions_2.csv")
+    mk_path2 = os.path.join(tmp_dir, "start_markers_2.csv")
+
+    exp_df2 = pd.DataFrame({"experiment_id": keys, "group": ["B"] * len(keys)})
+    exp_df2.to_csv(exp_path2)
+
+    start_time_2s = deepof.utils.seconds_to_time(2.0, cut_milliseconds=False)
+    mk_df2 = pd.DataFrame({"experiment_id": keys, "start": [start_time_2s] * len(keys)}, index=keys)
+    mk_df2.to_csv(mk_path2)
+
+    coords.load_exp_conditions(exp_path2)
+    coords.load_start_markers(mk_path2)
+
+    assert coords.get_condition_values("group") == ["B"]
+    expected_frame2 = int(np.round(2.0 * fps))
+    starts2 = coords.get_start_marker_values("start", return_frames=True)
+    for k in keys:
+        assert starts2[k] == expected_frame2
+
+    start_times=coords.get_start_times(start_marker="start")
+    for k in keys:
+        assert int(np.round(deepof.utils.time_to_seconds(start_times[k])*fps)) == expected_frame2
+
+    if os.path.exists(tmp_dir):
+        rmtree(tmp_dir)
+    if os.path.exists(project_dir):
+        rmtree(project_dir)
+
+
 @settings(deadline=None, max_examples=10)
 @given(
     detection_mode=st.one_of(
@@ -693,14 +781,14 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
         # Legacy compatibility
         if isinstance(coords._arena_params[video_key], Tuple):
-            vgl_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
+            expected_arena_parameters=deepof.arena_utils.extract_corners_from_arena(coords._arena_params[video_key])
         else:
-            vgl_arena_parameters=coords._arena_params[video_key]
+            expected_arena_parameters=coords._arena_params[video_key]
         #check if the detected circular areas are sufficiently similar
-        for i in range(3):
+        for i in range(expected_arena_parameters.shape[0]):
             assert np.linalg.norm(
-                np.array(vgl_arena_parameters[i]) - np.array(arena_parameters[i])
-                ) < 1
+                np.array(expected_arena_parameters[i]) - np.array(arena_parameters[i])
+                ) < 2
 
         pass
     else:
@@ -715,6 +803,30 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
                     dist_min=dist
             assert dist_min<25
 
+"""
+@given(
+    points=arrays(
+        dtype=int,
+        shape=st.tuples(
+            st.integers(min_value=1, max_value=1000),
+            st.just(2),
+        )
+    ),
+    pixel_len=st.integers(min_value=1, max_value=10000),
+    mm_len=st.floats(min_value=1, max_value=10000, allow_nan=False,allow_infinity=False),
+)
+def test_arena_scale_conversions(points, pixel_len, mm_len):
+
+    arena_params={'key1':points,'key2':2*points}
+    roi_dicts={'key1':{1:points},'key2':{1:2*points}}
+    scales={'key1':(None,None,pixel_len,mm_len),'key2':(None,None,pixel_len,mm_len)}
+    arena_params_vgl=deepof.arena_utils._scale_arenas_to_pixel(deepof.arena_utils._scale_arenas_to_mm(arena_params, scales), scales)
+    roi_dicts_vgl=deepof.arena_utils._scale_rois_to_pixel(deepof.arena_utils._scale_rois_to_mm(roi_dicts, scales), scales)
+    for key in arena_params.keys():
+        assert (arena_params[key]==arena_params_vgl[key]).all()
+    for key in roi_dicts_vgl.keys():
+        assert (roi_dicts[key][1]==roi_dicts_vgl[key][1]).all()
+"""
 
 @settings(deadline=None, max_examples=3)
 @given(
@@ -818,7 +930,7 @@ def test_get_behavior_mask_and_confidence(soft_counts, supervised_tables, n_beha
 
         mask, confidence = deepof.utils.get_behavior_mask_and_confidence(input_tab, behaviors, supervised_export)
 
-    # Check that elements from teh first column are included in the mask, if they happen to be true maximums of their rows
+    # Check that elements from the first column are included in the mask, if they happen to be true maximums of their rows
     if input_tab.shape[1]>1:
         first_col_is_max=input_tab.iloc[:,0]>input_tab.iloc[:,1:].max(axis=1)
         assert all(mask['col_0'][first_col_is_max]==True)

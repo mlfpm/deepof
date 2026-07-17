@@ -13,10 +13,13 @@ install-pypi:
   script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
     - python -m pip install --upgrade pip
+    - python -m pip install light-the-torch 
     - python -m pip install --no-cache-dir deepof
+    - python -m pip uninstall -y torch torchvision torchaudio
+    - ltt install torch==2.8 torchvision==0.23.0
     - cd /tmp
     - python -m pip show deepof
-    #- python -c "import deepof.data"
+    - python -c "import deepof.data"
 
 
 install-pypi-local:
@@ -37,7 +40,12 @@ install-pypi-local:
     - python -m pip install --no-cache-dir dist/*.whl
     - cd /tmp
     - python -c "import deepof.data"
-    
+
+  artifacts:
+    paths:
+      - dist/*.whl
+    expire_in: 1 week  
+
 
 install-poetry:
   stage: install
@@ -52,26 +60,66 @@ install-poetry:
     - export PATH="/root/.local/bin:$PATH"
     - poetry lock
     - poetry install
+    - python -m pip uninstall -y torch torchvision torchaudio
+    - python -m pip install light-the-torch 
+    - ltt install torch==2.8 torchvision==0.23.0  
     - poetry run python -c 'import deepof.data'
+
+regression_test:
+  stage: test
+  variables:
+    PYTHONHASHSEED: "0"
+  retry: 1
+
+  image:
+    name: python:3.9.14
+
+  needs:
+    - job: install-pypi-local
+      artifacts: true
+
+  before_script:
+    - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
+
+  cache:
+    key: "regression-refs"
+    paths:
+      - tests/test_examples/test_data/regression_tests/
+    policy: pull-push
+
+  script:
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install dist/*.whl
+    - python -m pip install pytest hypothesis pytest-timeout
+    # First run: creates baselines if cache was empty, verifies otherwise
+    - pytest -s tests/regression/  
+    # Second run: guarantees verification even on cold cache
+    - pytest -s tests/regression/ 
+
 
 test:
   stage: test
   retry: 1
 
   image:
-    name: lucasmiranda42/deepof
-    entrypoint: [""]
+    name: python:3.9.14
+
+  needs:
+    - job: install-pypi-local
+      artifacts: true
 
   before_script:
     - export PATH="~/.local/pipx/venvs/poetry/bin:$PATH"
 
   script:
-    - pip install pyarrow
-    - pip install xgboost==2.1.4
-    - pip install duckdb==1.2.2
-    - coverage run --source deepof -m pytest
-    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/model_utils.py,deepof/annotation_utils.py,deepof/models.py,deepof/hypermodels.py,deepof/visuals_utils.py,deepof/data_loading.py
-    - coverage xml -o deepof_cov.xml
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install dist/*.whl
+    - python -m pip install coverage pytest hypothesis pytest-timeout
+    - coverage run --source deepof -m pytest --ignore=tests/regression
+    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/annotation_utils.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,deepof/clustering/losses.py,deepof/clustering/logging.py,deepof/clustering/training.py,deepof/clustering/teacher_model.py,
+    - coverage xml -o deepof_cov.xml  
 
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
@@ -99,17 +147,14 @@ tutorials:
 
   before_script:
     - apt update
-    - apt install -y curl unzip
+    - apt install -y curl unzip 
     - pip install papermill
     - pip install -q -e . --timeout=100 --progress-bar off
     - python -m ipykernel install --user --name deepof --display-name "Python (deepof)"
-    - curl -L --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/Hu1XjZkY9zml0mm/download
+    - curl -L --output tutorial_files.zip https://datashare.mpcdf.mpg.de/s/TbSrod2fm5jbHfL/download
     - unzip tutorial_files.zip
 
   script:
-    - pip install pyarrow
-    - pip install duckdb==1.2.2
-    - pip install xgboost==2.1.4
     - papermill docs/source/tutorial_notebooks/deepof_big_data_tutorial.ipynb big_data_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_behavior_tutorial.ipynb behavior_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_preprocessing_tutorial.ipynb preprocessing_output.ipynb
@@ -117,3 +162,5 @@ tutorials:
     - papermill docs/source/tutorial_notebooks/deepof_unsupervised_tutorial.ipynb unsupervised_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_labels_tutorial.ipynb custom_labels_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_roi_tutorial.ipynb roi_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_custom_behaviors_tutorial.ipynb custom_behaviors_output.ipynb
+    - papermill docs/source/tutorial_notebooks/deepof_model_types_tutorial.ipynb model_types_output.ipynb

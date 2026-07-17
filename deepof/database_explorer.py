@@ -1,3 +1,8 @@
+# @author Dipanvita_Roy and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
+# encoding: utf-8
+
 import duckdb
 import os
 import pandas as pd

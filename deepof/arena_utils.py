@@ -1,4 +1,4 @@
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
 # encoding: utf-8
 # module deepof
 
@@ -11,6 +11,7 @@ from math import atan2, dist
 from enum import Enum
 from typing import Any, List, NewType, Tuple, Union
 from dataclasses import dataclass
+import warnings
 
 
 import cv2
@@ -97,12 +98,17 @@ def get_arenas(
 
         
 
-    """
-    # if valid rois, arena parameters AND scales are given, these can be used for editing, otehrwise start anew
-    if arena_params is not None and roi_dicts is not None and scales is not None:
-        # Scale back to pixel for corect display
-        arena_params = _scale_arenas_to_pixel(arena_params, scales, arena)
-        roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)        
+    """    
+    # if valid rois, arena parameters AND scales are given, these can be used for editing, otherwise start anew
+    enable_automatic_detection = True
+    if arena_params is not None and scales is not None:
+        # Scale back to pixel for correct display
+        arena_params = _scale_arenas_to_pixel(arena_params, scales)
+        if roi_dicts is not None:
+            roi_dicts = _scale_rois_to_pixel(roi_dicts, scales)  
+        else:
+            roi_dicts = {}  
+        enable_automatic_detection=False    
     else:
         scales = {}
         arena_params = {}
@@ -254,7 +260,7 @@ def get_arenas(
                 rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
-                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                arena_params = _scale_arenas_to_mm(arena_params, scales)
                 roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
@@ -264,14 +270,14 @@ def get_arenas(
         
             elif "circular" in arena:
                 scales={'test2': [300.0, 38.0, 252.0, 380], 'test': [300.0, 38.0, 252.0, 380]}
-                cur_arena_params_1 = extract_corners_from_arena(((200, 195), (167, 169), 14.071887016296387))
-                cur_arena_params_2 = ((200, 195), (167, 169), 14.071887016296387) #keep one circular arena to also test legacy code
-                arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2}
+                cur_arena_params_1 = extract_corners_from_arena(((200, 195), (166, 169), 13.54))
+                cur_arena_params_2 = ((200, 195), (166, 169), 13.54) #keep one circular arena to also test legacy code
+                arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2} 
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
-                arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+                arena_params = _scale_arenas_to_mm(arena_params, scales)
                 roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
                 if test == "detect_arena":
@@ -291,8 +297,8 @@ def get_arenas(
                 
             vid_idx = 0
             key = list(videos.keys())[0]
-            if not test:
-                arena_corners, _, arena_dist, _ , _, exit_flag_arena, _ = extract_polygonal_arena_coordinates(
+            if not test and enable_automatic_detection:
+                arena_corners, _, _, _ , _, exit_flag_arena, _ = extract_polygonal_arena_coordinates(
                     os.path.join(video_path, videos[key]),
                     arena,
                     vid_idx,
@@ -315,43 +321,52 @@ def get_arenas(
             arena_dists={}
             for key in videos.keys():    
                 
-                arena_parameters_raw, h, w = automatically_recognize_arena(
-                    videos=videos,
-                    vid_key=key,
-                    path=video_path,
-                    arena_type=arena,
-                    arena_reference=arena_reference,
-                    segmentation_model=segmentation_model,
-                )
+                if enable_automatic_detection:
+                    arena_parameters_raw, h, w = automatically_recognize_arena(
+                        videos=videos,
+                        vid_key=key,
+                        path=video_path,
+                        arena_type=arena,
+                        arena_reference=arena_reference,
+                        segmentation_model=segmentation_model,
+                    )
 
-                if "polygonal" in arena:
+                    if "polygonal" in arena:
 
-                    arena_parameters=arena_parameters_raw.astype(int)
-                    arena_parameters = simplify_polygon(arena_parameters, n_points=len(arena_reference))
+                        arena_parameters=arena_parameters_raw.astype(int)
+                        arena_parameters = simplify_polygon(arena_parameters, n_points=len(arena_reference))
 
-                    closest_side_points = closest_side(arena_parameters, arena_reference[:2])
+                        closest_side_points = closest_side(arena_parameters, arena_reference[:2])
 
-                    arena_dist=dist(*closest_side_points)
+                        arena_dist=dist(*closest_side_points)
 
 
-                elif "circular" in arena:
-                    # arena_parameters_raw here contain the coordinates of the center of the arena,
-                    # the absolute diameter measured from the video in pixels, and
-                    # the provided diameter in mm (1 -default- equals not provided)
+                    elif "circular" in arena:
+                        # arena_parameters_raw here contain the coordinates of the center of the arena,
+                        # the absolute diameter measured from the video in pixels, and
+                        # the provided diameter in mm (1 -default- equals not provided)
 
-                    arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
+                        arena_dist=np.mean([arena_parameters_raw[1][0], arena_parameters_raw[1][1]])* 2
 
-                    arena_parameters = extract_corners_from_arena(arena_parameters_raw).astype(int)
+                        arena_parameters = extract_corners_from_arena(arena_parameters_raw).astype(int)
 
-                scales[key]=[
-                        *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
-                        arena_dist,
-                        arena_dims,
-                    ]
+                    scales[key]=[
+                            *(np.mean(arena_parameters, axis=0)*(arena_dims/arena_dist)),
+                            arena_dist,
+                            arena_dims,
+                        ]
+                    arena_dists[key] = arena_dist                           
+                    arena_params[key]=arena_parameters
+                    video_resolution[key]=(h, w)
+                else:
+                    current_video_cap = cv2.VideoCapture(os.path.join(video_path, videos[key]))
+                    h = int(current_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    w = int(current_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-                arena_dists[key] = arena_dist                           
-                arena_params[key]=arena_parameters
-                video_resolution[key]=(h, w)
+                    #scales[key] # already set
+                    arena_dists[key] = scales[key][1]
+                    #arena_params[key] already set
+                    video_resolution[key]=(h, w)
                 pbar.update()
 
             vid_idx=0        
@@ -411,56 +426,62 @@ def get_arenas(
         )
     
     #scale rois and arenas to mm
-    arena_params = _scale_arenas_to_mm(arena_params, scales, arena)
+    arena_params = _scale_arenas_to_mm(arena_params, scales)
     roi_dicts = _scale_rois_to_mm(roi_dicts, scales)
 
     return scales, arena_params, roi_dicts, video_resolution
 
 
-def _scale_arenas_to_mm(arena_params, scales, arena):
+def _scale_arenas_to_mm(arena_params, scales):
     """Scales arenas from pixel to mm"""
+    scaled_arena_params={}
     for key in arena_params.keys():
         scaling_ratio = scales[key][3]/scales[key][2]
         if isinstance(arena_params[key], np.ndarray) or isinstance(arena_params[key], list): # polygonal
-            arena_params[key]=np.array(arena_params[key])*scaling_ratio
+            scaled_arena_params[key]=np.array(arena_params[key])*scaling_ratio
         elif isinstance(arena_params[key], Tuple): # circular
-            arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+            scaled_arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
         else:
             raise ValueError("Could not scale arena to mm!")
-    return arena_params
+    return scaled_arena_params
 
 
-def _scale_arenas_to_pixel(arena_params, scales, arena):
+def _scale_arenas_to_pixel(arena_params, scales):
     """Scales arenas from pixel to mm"""
+    scaled_arena_params={}
     for key in arena_params.keys():
         scaling_ratio = scales[key][2]/scales[key][3]
         if isinstance(arena_params[key], np.ndarray): # polygonal
-            arena_params[key]=(np.array(arena_params[key])*scaling_ratio).astype(int)
+            scaled_arena_params[key]=np.round(np.array(arena_params[key])*scaling_ratio).astype(int)
         # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
         elif isinstance(arena_params[key], Tuple): # circular
             arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
-            arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+            scaled_arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
         else:
             raise ValueError("Could not scale arena to pixel!")
-    return arena_params
+    return scaled_arena_params
 
 
 def _scale_rois_to_mm(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
+    scaled_roi_dicts={}
     for key in roi_dicts.keys():
+        scaled_roi_dicts[key]={}
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][3]/scales[key][2]
-            roi_dicts[key][k] = np.array(roi)*scaling_ratio
-    return roi_dicts
+            scaled_roi_dicts[key][k] = np.array(roi)*scaling_ratio
+    return scaled_roi_dicts
 
 
 def _scale_rois_to_pixel(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
+    scaled_roi_dicts={}
     for key in roi_dicts.keys():
+        scaled_roi_dicts[key]={}
         for k, roi in roi_dicts[key].items():
             scaling_ratio = scales[key][2]/scales[key][3]
-            roi_dicts[key][k] = (np.array(roi)*scaling_ratio).astype(int)
-    return roi_dicts
+            scaled_roi_dicts[key][k] = np.round(np.array(roi)*scaling_ratio).astype(int)
+    return scaled_roi_dicts
 
 
 def simplify_polygon(
@@ -629,28 +650,53 @@ def automatically_recognize_arena(
     )
 
     selected_indices = np.random.choice(n, num_sample_frames, replace=False)
+    selected = np.sort(np.asarray(selected_indices, dtype=int))
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, selected[0])
 
-    # Add up num_sample_frames random frames from the video
-    accumulator= None
-    for frame_index in selected_indices:
-        current_frame = frame_index
-        current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+    # Collect frames into a stack for median computation
+    frame_stack = None
+    valid=0
+    pos=selected[0]
+    for frame_index in selected:
+
+        # Advance to next frame_index
+        while pos < frame_index:
+            # essentially "step one frame"
+            if not current_video_cap.grab(): 
+                break
+            pos += 1
+
+        if pos != frame_index:
+            # could not reach frame
+            continue
+        pos += 1
+
         reading_successful, numpy_im = current_video_cap.read()
-        if reading_successful:
-            numpy_im = numpy_im.astype(np.float32)
-            if accumulator is None:
-                accumulator = numpy_im
-            else:
-                accumulator += numpy_im
+        if not reading_successful:
+            continue
+        
+        if frame_stack is None:
+            h, w = numpy_im.shape[:2]
+            c = 1 if numpy_im.ndim == 2 else numpy_im.shape[2]
+            frame_stack = np.empty((len(selected), h, w, c), dtype=np.uint8)
+        
+        frame_stack[valid] = numpy_im if numpy_im.ndim == 3 else numpy_im[..., None]
+        valid += 1
 
-    # Calculate average frame (as the arena stays constant everything else that changes is averaged out as "noise")
-    if accumulator is not None:
-        average_image = (accumulator / num_sample_frames).astype(np.uint8)
-    
     current_video_cap.release()
 
+    if valid==0:
+        raise RuntimeError(f"Could not read any frames from: {path}")
+
+    if valid < num_sample_frames * 0.8:
+        warnings.warn(f"Only {len(frame_stack)}/{num_sample_frames} frames read successfully.")
+
+    # Calculate pixel median for all pixels
+    frame_stack = frame_stack[:valid]
+    median_image = np.median(frame_stack, axis=0).astype(np.uint8)
+    
     # Get mask using the segmentation model
-    segmentation_model.set_image(average_image)
+    segmentation_model.set_image(median_image)
 
     frame_masks, score, _ = segmentation_model.predict(
         point_coords=np.array([[w // 2, h // 2]]),
@@ -673,12 +719,6 @@ def automatically_recognize_arena(
         ]
     else:
         arena = arena_parameter_extraction(frame_masks[np.argmax(score)], arena_type)
-
-    #if debug:
-    #    arena_ref=None
-    #    if arena_reference is not None:
-    #        arena_ref=arena_reference[:2]
-    #    save_arena_image(numpy_im, arena, image_export_path, videos[vid_key][:-4]+"_arena", arena_ref)
 
     return arena, h, w
 
@@ -805,6 +845,16 @@ def display_message(message: List[str]): # pragma: no cover
         cv2.destroyWindow(window_name)
 
 
+def get_random_frame(video_path: str):
+    # read random frame from video capture object
+    current_video_cap = cv2.VideoCapture(video_path)
+    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    random_frame_number = np.random.choice(total_frames)
+    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
+    _, numpy_im = current_video_cap.read()
+    current_video_cap.release()
+    return numpy_im
+
 def extract_polygonal_arena_coordinates(
     video_path: str, 
     arena_type: str, 
@@ -845,12 +895,7 @@ def extract_polygonal_arena_coordinates(
     """
 
     # read random frame from video capture object
-    current_video_cap = cv2.VideoCapture(video_path)
-    total_frames = int(current_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    random_frame_number = np.random.choice(total_frames)
-    current_video_cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame_number)
-    _, numpy_im = current_video_cap.read()
-    current_video_cap.release()
+    numpy_im = get_random_frame(video_path)
 
     roi_corners = None
     norm_dist_new = None
@@ -1464,13 +1509,6 @@ def retrieve_corners_from_image(
         )
 
 
-    def click_on_corners(event, x, y, flags, param):
-        # Callback function to store the coordinates of the clicked points
-        nonlocal corners, frame
-
-        if event == cv2.EVENT_LBUTTONDOWN:
-            corners.append((x, y))
-
     def mouse_callback(event, x, y, flags, param):
         # Callback function to store the coordinates of the clicked points
         nonlocal corners, frame
@@ -1616,6 +1654,10 @@ def retrieve_corners_from_image(
                     cv2.LINE_AA
                 )
 
+            # Reset norm_dist
+            if len(corners) <= 1:
+                norm_dist=None
+
             # Close the polygon
             if len(corners) > 2:
                 if "polygonal" in arena_type or len(corners) < 5:
@@ -1702,7 +1744,7 @@ def retrieve_corners_from_image(
                 corners = corners[:-1]
 
             # Exit is user presses 'q' and go to next
-            if len(corners) > 2:
+            if (len(corners) > 2 and "polygonal" in arena_type) or (len(corners) >= 5 and "circular" in arena_type):
                 if key == ord("q"):
                     exit_flag=Arena_GUI_exit_flag.NEXT
                     break
@@ -1738,7 +1780,7 @@ def retrieve_corners_from_image(
         norm_dist=np.mean([cur_arena_params[1][0]*w_ratio, cur_arena_params[1][1]*h_ratio])* 2
 
     # Fit ellipse and extract corner points from fitted ellipse (for smoothing)
-    if "circular" in arena_type and corners is not None and len(corners) > 5:
+    if "circular" in arena_type and corners is not None and len(corners) >= 5:
         arena_ellipse = fit_ellipse_to_polygon(corners)
         corners = extract_corners_from_arena(arena_ellipse)
     

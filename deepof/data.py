@@ -9,7 +9,9 @@ and processed time-series as values in a dictionary-like object.
 
 For a detailed tutorial on how to use this module, see the advanced tutorials in the main section.
 """
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
+# encoding: utf-8
+# module deepof
 # encoding: utf-8
 # module deepof
 
@@ -47,7 +49,7 @@ exit(0)
         return False
 
 DISPLAY_AVAILABLE = is_display_available()
-if DISPLAY_AVAILABLE:
+if DISPLAY_AVAILABLE: # pragma: no cover
     cv2.imshow("test",1)
     cv2.waitKey(1)
     cv2.destroyAllWindows()
@@ -63,6 +65,7 @@ import warnings
 from shutil import rmtree
 from time import time
 from typing import Any, Dict, List, NewType, Tuple, Union, Optional
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
@@ -71,7 +74,6 @@ import psutil
 
 import umap
 from natsort import os_sorted
-from pkg_resources import resource_filename
 from sklearn import random_projection
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import (
@@ -83,21 +85,20 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, suppress_warnings_context, DistanceUnit
-import deepof.model_utils
-import deepof.models
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warnings_context, DistanceUnit
 #import deepof.clustering.models_new
-#import deepof.clustering.model_utils_new
+import deepof.clustering.training
 import deepof.utils
 import deepof.arena_utils
 import deepof.visuals
+from deepof.utils import time_to_seconds, seconds_to_time
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
 from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.8.6"
+current_deepof_version="0.9.0"
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -115,6 +116,7 @@ def load_project(
         iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: dict = None,
+        start_markers: dict = None,
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
@@ -142,6 +144,7 @@ def load_project(
         iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
         exclude_bodyparts (list): list of bodyparts to exclude from analysis.
         exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+        start_markers (dict): dictionary with experiment IDs as keys and start markers as values.
         remove_outliers (bool): whether outliers should be removed during project creation.
         interpolation_limit (int): maximum number of missing frames to interpolate.
         interpolation_std (int): maximum number of standard deviations to interpolate.
@@ -170,6 +173,12 @@ def load_project(
         coordinates = pickle.load(handle)
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
+    # Small fix for compatibility of pre 0.9 versions
+    if not (hasattr(coordinates, "_custom_behaviors")):
+            coordinates._custom_behaviors = None
+            coordinates._custom_continuous_behavior_names=[]
+    if not (hasattr(coordinates, "_start_markers")):        
+            coordinates._start_markers = None
     # Error for not compatible versions
     if not (hasattr(coordinates, "_run_numba")): 
 
@@ -205,6 +214,7 @@ def load_project(
             iterative_imputation=iterative_imputation,
             exclude_bodyparts = coordinates._excluded,
             exp_conditions=coordinates._exp_conditions,
+            start_markers=None,
             remove_outliers = remove_outliers,
             interpolation_limit = interpolation_limit,
             interpolation_std = interpolation_std,
@@ -244,6 +254,7 @@ class Project:
         iterative_imputation: str = "partial",
         exclude_bodyparts: List = tuple([""]),
         exp_conditions: Union[str, dict] = None,
+        start_markers: Union[str, dict] = None,
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
@@ -260,6 +271,7 @@ class Project:
         video_format: str = ".mp4",
         video_scale: str = None,
         number_of_rois: int = 0,
+        frame_rate: float = None,
         fast_implementations_threshold: int = 50000,
     ):
         """Initialize a Project object.
@@ -270,7 +282,8 @@ class Project:
             bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
             iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
-            exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+            exp_conditions Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and experimental conditions as values.
+            start_markers Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and start markers as values
             remove_outliers (bool): whether outliers should be removed during project creation.
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
@@ -299,7 +312,7 @@ class Project:
         #for later separation into path to source tables and path tables generated with deepof
         self.table_path = table_path
         self.source_table_path = table_path
-        self.trained_path = resource_filename(__name__, "trained_models")
+        self.trained_path = os.path.join(project_path, project_name, "trained_models")
 
         # Detect files to load from disk
         self.table_format = table_format
@@ -341,7 +354,7 @@ class Project:
             # Remove the DLC suffix from the table name
             try:
                 tab_name = deepof.utils.re.findall("(.*?)DLC", tab)[0]
-            except IndexError:
+            except IndexError: # pragma: no cover
                 tab_name = tab.split(".")[0]
             self.tables[tab_name]=table_list[i]
             self.videos[tab_name]=video_list[i]
@@ -362,7 +375,7 @@ class Project:
         # If sampling rates deviate, confirm continued setup.
         continue_init=True
         if max_diff>=0.01:
-            if DISPLAY_AVAILABLE:
+            if DISPLAY_AVAILABLE: # pragma: no cover
                 continue_init=deepof.arena_utils.confirm_action(
                     f"The sampling rates of your videos deviate significantly!\n" 
                     f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
@@ -379,6 +392,14 @@ class Project:
                 f"The sampling rate of some of your videos differ. The maximum difference is {min_key}: {min_val} fps and {max_key}: {max_val} fps! Proceed with cauthion"
                 f"\033[0m"
             )
+        # Get frame rate
+        first_key=list(self.videos.keys())[0]
+        current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
+        if frame_rate is None:
+            self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS)) 
+        else:
+            self.frame_rate = frame_rate
+        current_video_cap.release()
 
         # Loads arena details and (if needed) detection models
         self.arena = arena
@@ -393,7 +414,7 @@ class Project:
                     f"If your arena is really this small or large, you can ignore this warning."
                     f"\033[0m"
                 )
-        else:
+        else: # pragma: no cover
             raise ValueError('Error! Please enter video_scale as \"[value] [unit of measurment]\", e.g. \"200 mm\"')
         print(
             f"\033[33mInfo! Set arena dimension to {self.arena_dims} mm!\033[0m"
@@ -424,8 +445,8 @@ class Project:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
             elif len(rename_bodyparts) == 14:
                 pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
-            else:
-                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") # pragma: no cover
+            else: # pragma: no cover
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") 
             
             # Creates a dictionary assigning table bp names to corresponding deepOF bp names
             rename_bodyparts_dict = {}
@@ -444,7 +465,7 @@ class Project:
 
         # Init the rest of the parameters
         self.angles = True
-        self.animal_ids = animal_ids if animal_ids is not None else [""]
+        self.animal_ids = animal_ids if animal_ids is not None and animal_ids != "" else [""]
         if isinstance(self.animal_ids,str):
             self.animal_ids = [self.animal_ids] 
         self.areas = True
@@ -456,13 +477,16 @@ class Project:
             self.load_exp_conditions(exp_conditions)
         else:
             self.exp_conditions = exp_conditions
+        if isinstance(start_markers, str):
+            self.load_start_markers(start_markers)
+        else:
+            self.start_markers = start_markers
         self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
         self.model = model
         self.smooth_alpha = smooth_alpha
-        self.frame_rate = None
         self.video_format = video_format
         self.iterative_imputation = iterative_imputation
         self.exclude_bodyparts = exclude_bodyparts
@@ -528,6 +552,12 @@ class Project:
             raise OSError(
                 "Project already exists. Delete it or specify a different name."
             )  # pragma: no cover
+
+
+    def load_start_markers(self, filepath): # pragma: no cover
+        """Load start markers analogous to experimental conditions and do some checks"""
+        self.start_markers = deepof.utils.load_start_markers(filepath, self.frame_rate)
+
     
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
@@ -536,14 +566,8 @@ class Project:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
-        exp_conditions = pd.read_csv(filepath, index_col=0)
-        exp_conditions = {
-            exp_id: pd.DataFrame(
-                exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
-            ).T
-            for exp_id in exp_conditions.iloc[:, 0]
-        }
-        self.exp_conditions = exp_conditions
+        self.exp_conditions = deepof.utils.load_exp_conditions(filepath)
+
 
     @property
     def distances(self):
@@ -560,16 +584,119 @@ class Project:
         """Returns angles table_dict"""
         return self._angles
 
+
+    def save_arena_data(self, arena_path: str, arena_params: dict = None, roi_dicts: dict = None, scales: dict = None, video_resolution: dict = None) -> None:
+        """Save ROI dictionaries, arena parameters, and scales as a single pickle file.
+
+        Args:
+            arena_path (str): Output path to the .pkl file.
+            arena_params (dict): arena info.
+            roi_dicts (dict) roi info.
+            scales (dict) scaling info.
+
+        """
+        arena_path = Path(arena_path)
+        arena_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # All three must share identical first-level keys
+        k1, k3, k4 = set(arena_params.keys()), set(scales.keys()), set(video_resolution.keys())
+        if roi_dicts is None:
+            k2=k1
+        else:
+            k2 = set(roi_dicts.keys())
+        if not (k1 == k2 == k3 == k4): # pragma: no cover
+            raise ValueError(
+                "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
+            )
+
+        payload = {"roi_dicts": roi_dicts, "arena_params": arena_params, "scales": scales, "video_resolution": video_resolution}
+
+        with arena_path.open("wb") as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    def load_arena_data(
+        self, arena_path: str, load_also_rois: bool = False
+    ) -> Tuple[Dict, Dict, Dict, Dict]:
+        """Load ROI dictionaries, arena parameters, and scales from a pickle file, with checks.
+
+        Args:
+            arena_path (str): Path to the .pkl file to load.
+            load_also_rois (bool): If False, skip ROI loading/validation and return roi_dicts as None.
+
+        Returns:
+            (roi_dicts, arena_params, scales):
+                roi_dicts is None if load_arena_only is True, otherwise the (possibly truncated) ROI dict.
+                arena_params and scales are always returned.
+        """
+        # Check if exists
+        arena_path = Path(arena_path)
+        if not arena_path.exists() or not arena_path.is_file(): # pragma: no cover
+            raise FileNotFoundError(f"Arena file not found: {arena_path}")
+
+        with arena_path.open("rb") as f:
+            data = pickle.load(f)
+
+        # Extract data
+        if isinstance(data, dict) and {"roi_dicts", "arena_params", "scales"} <= set(data.keys()):
+            roi_dicts = data["roi_dicts"]
+            arena_params = data["arena_params"]
+            scales = data["scales"]
+            video_resolution = data["video_resolution"]
+        elif isinstance(data, (tuple, list)) and len(data) == 4:
+            roi_dicts, arena_params, scales, video_resolution = data
+        else:  # pragma: no cover
+            raise ValueError(
+                "Invalid arena pickle format. Expected dict with keys "
+                "{'roi_dicts','arena_params','scales'} or a (roi_dicts, arena_params, scales) tuple."
+            )
+        
+        expected_keys=set(arena_params.keys())
+        assert (set(roi_dicts.keys()) == expected_keys == set(scales.keys()) == set(video_resolution.keys())), "Arena objects have deviatin keys, could not load arena info." 
+        assert expected_keys == set(self.tables.keys()), "Keys of Arena objects do not match project keys, could not load arena info"
+
+        # If arena-only: skip ROI checks and do not return ROI dicts
+        if not load_also_rois:
+            return None, arena_params, scales, video_resolution
+
+        # 3) ROI count check (based on first video key)
+        available_rois = list(roi_dicts[list(roi_dicts.keys())[0]].keys())
+        n_available = len(available_rois)
+        n_expected = int(getattr(self, "number_of_rois"))
+
+        if n_available != n_expected:
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! ROI count mismatch in loaded arena file.\n"
+                f"File contains {n_available} ROI(s), but self.number_of_rois is {n_expected}.\n"
+                f"{'Only the first ' + str(n_expected) + ' ROI(s) will be loaded.' if n_expected < n_available else 'All available ROI(s) will be loaded.'}"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+
+        # If too many: truncate consistently across all videos, preserving insertion order
+        if n_expected < n_available:
+            keep = set(available_rois[:n_expected])
+            roi_dicts = {
+                vkey: {rkey: arr for rkey, arr in roi_dicts[vkey].items() if rkey in keep}
+                for vkey in roi_dicts
+            }
+
+        return roi_dicts, arena_params, scales, video_resolution
+
     def get_arena(
         self,
         tables: dict,
+        arena_path: str = None,
         debug: str = False,
         test: bool = False,
+        load_also_rois: bool = False
     ) -> np.array:
         """Return the arena as recognised from the videos.
 
         Args:
             tables (dict): dictionary containing coordinate tables
+            arena_path: str, path to saved arena data, will try to load arena and ROI data if not None.
             debug (str): if True, saves intermediate results to disk
             test (bool): if True, runs the function in test mode
 
@@ -577,19 +704,69 @@ class Project:
             arena (np.ndarray): arena parameters, as recognised from the videos. The shape depends on the arena type
 
         """
-        #if verbose:
-        #    print("Detecting arena...")
+        
+        # arena loading functionality
+        arena_params, roi_dicts, scales = None, None, None
+        skip_detection = False
+        if arena_path is not None:
+           
+            if not self.number_of_rois==0 and DISPLAY_AVAILABLE:
+                load_also_rois=deepof.arena_utils.confirm_action(
+                    f"Do you want to additionally load the saved ROIs?\n" 
+                    f"If you cancel, only the arenas get loaded." 
+                        ) 
+            roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
 
-        return deepof.arena_utils.get_arenas(
-            self,
-            self.arena,
-            self.arena_dims,
-            self.number_of_rois,
-            self.segmentation_path,
-            self.video_path,
-            self.videos,
-            test,
-        )
+            image_export_path=os.path.join(
+                self.project_path, 
+                self.project_name,
+                "Arena_detection",
+            )
+            scaled_arena_params=deepof.arena_utils._scale_arenas_to_pixel(arena_params,scales)
+            for index, key in enumerate(self.videos.keys()):
+                video_path = os.path.join(self.video_path, self.videos[key])
+                # read random frame from video capture object
+                numpy_im = deepof.arena_utils.get_random_frame(video_path)
+                deepof.arena_utils.save_arena_image(numpy_im, scaled_arena_params[key], image_export_path, key+"_arena")
+
+            if roi_dicts is not None:
+                
+                scaled_roi_dicts=deepof.arena_utils._scale_rois_to_pixel(roi_dicts,scales)
+                for index, key in enumerate(self.videos.keys()):
+                    video_path = os.path.join(self.video_path, self.videos[key])
+                    # read random frame from video capture object
+                    numpy_im = deepof.arena_utils.get_random_frame(video_path)
+                    for k in range(1, len(roi_dicts[key])+1):
+                        deepof.arena_utils.save_arena_image(numpy_im, scaled_roi_dicts[key][k], image_export_path, key+"_roi"+str(k), color=ROI_COLORS[k-1])
+
+                # if less rois than requested were loaded, fill the remaining fields with empty lists
+                n_loaded_rois=len(roi_dicts[list(roi_dicts.keys())[0]])
+                if n_loaded_rois<self.number_of_rois:
+                    for key in roi_dicts.keys():
+                        for k in range(n_loaded_rois+1,self.number_of_rois+1):
+                            roi_dicts[key][k]=[]
+                else:
+                    skip_detection=True
+        
+        if not skip_detection:
+            scales, arena_params, roi_dicts, video_resolution = deepof.arena_utils.get_arenas(
+                self,
+                self.arena,
+                self.arena_dims,
+                self.number_of_rois,
+                self.segmentation_path,
+                self.video_path,
+                self.videos,
+                test,
+                arena_params=arena_params,
+                roi_dicts=roi_dicts,
+                scales=scales,
+            )   
+
+        # Save arena data seperately    
+        self.save_arena_data(os.path.join(self.project_path, self.project_name, "Coordinates", "arena_data.pkl"), arena_params, roi_dicts, scales, video_resolution)
+
+        return scales, arena_params, roi_dicts, video_resolution
 
 
     def _update_progress(self, pbar: tqdm, step: str, key: str):
@@ -620,7 +797,9 @@ class Project:
 
         if is_multi_animal:
             # Update animal IDs and adapt table for the pipeline
-            self.animal_ids = list(table.loc["individuals"].unique())
+            if len(self.animal_ids)==1:
+                self.animal_ids = list(table.loc["individuals"].unique())
+            assert all([id in self.animal_ids for id in  list(table.loc["individuals"].unique())]), f"Error! some of your animal ids are not present in table {key}!"
             table.loc["bodyparts"] = table.loc["individuals"] + "_" + table.loc["bodyparts"]
             table.drop("individuals", axis=0, inplace=True)
         
@@ -760,29 +939,13 @@ class Project:
 
                 # 4. Add Time Index
                 if self.frame_rate:
-                    #self._update_progress(pbar, "Updating time index", key)
-                    #ätime_index = pd.to_timedelta(np.arange(len(table)) / self.frame_rate, unit="s")
-                    #table.index = time_index.map(lambda t: str(t.round('ms'))[7:])
 
+                    freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
                     table.index = pd.timedelta_range(
-                        "00:00:00",
-                        pd.to_timedelta(
-                            int(np.round(table.shape[0] // self.frame_rate)), unit="sec"
-                        ),
-                        periods=table.shape[0] + 1,
-                        closed="left",
-                    ).map(lambda t: str(t)[7:])
-
-                    #freq_in_nanoseconds = np.round(1e9 / self.frame_rate)
-                    #time_index = pd.timedelta_range(
-                    #    start="0s",
-                    #    periods=len(table),
-                    #    freq=f"{freq_in_nanoseconds}ns"
-                    #)
-                    # Perform rounding on the ENTIRE index at once. This is a fast, vectorized operation.
-                    #rounded_index = time_index.round('ms')
-                    # Now, apply the string conversion. The slow .map() is now doing the minimum work.
-                    #table.index = rounded_index.map(lambda t: str(t)[7:])
+                        start="0s",
+                        periods=table.shape[0],
+                        freq=f"{freq_in_nanoseconds}ns"
+                    ).round('ms').map(lambda t: str(t)[7:])
 
                 # 5. Split coordinates from likelihood and filter bodyparts
                 self._update_progress(pbar, "Filter bodyparts", key)
@@ -1128,6 +1291,7 @@ class Project:
         self,
         verbose: bool = True,
         force: bool = False,
+        arena_path: str = None,
         debug: bool = True,
         test: bool = False,
         _to_extend: coordinates = None,
@@ -1137,6 +1301,7 @@ class Project:
         Args:
             verbose (bool): If True, prints progress. Defaults to True.
             force (bool): If True, overwrites existing project. Defaults to False.
+            arena_path: str, path to saved arena data, will try to load arena and ROI data if not None.
             debug (bool): If True, saves arena detection images to disk. Defaults to False.
             test (bool): If True, creates the project in test mode (which, for example, bypasses any manual input). Defaults to False.
             _to_extend (coordinates): Coordinates object to extend with the current dataset. For internal usage only.
@@ -1148,17 +1313,24 @@ class Project:
         if verbose:
             print("Setting up project directories...")
 
+        # Overwrite warning
+        if os.path.exists(os.path.join(self.project_path, self.project_name)) and not test and DISPLAY_AVAILABLE: # pragma: no cover
+            overwrite_project=deepof.arena_utils.confirm_action(
+                f"A project already exists at the given path and name!\n"
+                f"Do you want to overwrite this old project with a new one?" 
+            )
+            if not overwrite_project:
+                print("Loading old project instead...")
+                return load_project(os.path.join(self.project_path, self.project_name))
+            print("Overwriting old project...")
+        
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
+            if arena_path is not None and self.project_name in arena_path and os.path.abspath(arena_path.split(self.project_name)[0]) == os.path.abspath(os.path.join(self.project_path)):
+                raise FileNotFoundError("When overwriting a project in force mode, the arena data cannot be loaded from the overwritten project!")
             rmtree(os.path.join(self.project_path, self.project_name))
 
         if not os.path.exists(os.path.join(self.project_path, self.project_name)):
             self.set_up_project_directory(debug=debug)
-
-        # load video info
-        first_key=list(self.videos.keys())[0]
-        current_video_cap = cv2.VideoCapture(os.path.join(self.video_path, self.videos[first_key]))
-        self.frame_rate = float(current_video_cap.get(cv2.CAP_PROP_FPS))
-        current_video_cap.release()
 
         # load table info
         tables, quality = self.preprocess_tables()
@@ -1167,6 +1339,10 @@ class Project:
             assert (
                 tables.keys() == self.exp_conditions.keys()
             ), "experimental IDs in exp_conditions do not match"
+        if self.start_markers is not None:
+            assert (
+                tables.keys() == self.start_markers.keys()
+            ), "start marker IDs in start_markers do not match"
 
         distances = None
         angles = None
@@ -1174,7 +1350,7 @@ class Project:
 
         # noinspection PyAttributeOutsideInit
         self.scales, self.arena_params, self.roi_dicts, self.video_resolution = self.get_arena(
-            tables, debug, test
+            tables, arena_path, debug, test
         )
 
         tables=self.scale_tables(tables)
@@ -1217,6 +1393,10 @@ class Project:
                     **_to_extend._exp_conditions,
                     **self.exp_conditions,
                 }
+                self.start_markers = {
+                    **_to_extend._start_markers,
+                    **self.start_markers,
+                }
             except TypeError:
                 pass
 
@@ -1234,6 +1414,7 @@ class Project:
             excluded_bodyparts=self.exclude_bodyparts,
             frame_rate=self.frame_rate,
             exp_conditions=self.exp_conditions,
+            start_markers = self.start_markers,
             path=self.project_path,
             quality=quality,
             scales=self.scales,
@@ -1306,6 +1487,8 @@ class Project:
             print("Loading previous project...")
 
         previous_project = load_project(project_to_extend)
+
+        assert previous_project._number_of_rois == self.number_of_rois, f"Cannot extend, number of ROIs must match. Your previous project has {previous_project._number_of_rois} ROIs, your new project has {self.number_of_rois} rois!"
 
         assert (
             os.path.abspath(os.path.join(previous_project._project_path,previous_project._project_name)) == os.path.abspath(os.path.join(self.project_path,self.project_name))
@@ -1409,6 +1592,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        start_markers: dict = None,
         number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
@@ -1439,6 +1623,7 @@ class Coordinates:
             distances (dict): Dictionary containing the distances of the experiment. See deepof.data.Project for more information.
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
+            start_markers (dict): Dictionary containing the start markers of the experiment. See deepof.data.Project for more information.
             number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
@@ -1455,6 +1640,7 @@ class Coordinates:
         self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
+        self._start_markers = start_markers
         self._frame_rate = frame_rate
         self._path = path
         self._quality = quality
@@ -1474,6 +1660,8 @@ class Coordinates:
         self._run_numba = run_numba
         self._very_large_project = very_large_project
         self._version = version
+        self._custom_behaviors = None
+        self._custom_continuous_behavior_names=[]
 
     def __str__(self):  # pragma: no cover
         """Print the object to stdout."""
@@ -1502,6 +1690,7 @@ class Coordinates:
         roi_number: int = None,
         animals_in_roi: str = None,
         in_roi_criterion: str = "Center",
+        invert_roi: bool = False,
         file_name: str = 'coords',
         return_path: bool = False,
     ) -> table_dict:
@@ -1550,6 +1739,7 @@ class Coordinates:
                 roi_number = roi_number,
                 animals_in_roi = animals_in_roi,
                 in_roi_criterion = in_roi_criterion,
+                invert_roi=invert_roi,
             )
             
             # save paths for modified tables
@@ -1570,6 +1760,7 @@ class Coordinates:
             connectivity=self._connectivity,
             polar=polar,
             exp_conditions=self._exp_conditions,
+            #start_markers=self._start_markers,
         )
 
 
@@ -1599,7 +1790,7 @@ class Coordinates:
                 raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")  # pragma: no cover
             
     
-    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str) -> pd.DataFrame:
+    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str, invert_roi: bool) -> pd.DataFrame:
         """Filters the DataFrame to include only data within the specified ROI."""
         if roi_number is None:
             return tab
@@ -1616,7 +1807,7 @@ class Coordinates:
         tab_mouse_positions=get_dt(self._tables, key)
 
         for aid in animals_to_check:
-            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, self._run_numba)
+            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, invert_roi, self._run_numba)
             
             # Get columns for the current animal
             mask = [any([col_sec.startswith(aid) for col_sec in col]) if isinstance(col,tuple) else col.startswith(aid) for col in tab.columns]
@@ -1767,6 +1958,7 @@ class Coordinates:
     roi_number: int = None,
     animals_in_roi: str = None,
     in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -1794,7 +1986,7 @@ class Coordinates:
         self._validate_inputs(tab, key, align, center, roi_number)
 
         # 2. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, in_roi_criterion)
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, in_roi_criterion, invert_roi)
 
         # 3. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -1835,6 +2027,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         filter_on_graph: bool = True,
         file_name: str = 'got_distances',
         return_path: bool = False,
@@ -1868,6 +2061,7 @@ class Coordinates:
                     selected_id=selected_id,
                     roi_number=roi_number,
                     animals_in_roi=animals_in_roi,
+                    invert_roi=invert_roi,
                     filter_on_graph=filter_on_graph,
                     )
                 
@@ -1885,6 +2079,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                #start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -1900,6 +2095,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         filter_on_graph: bool = True,
     ) -> pd.DataFrame:
         """Return a pd.DataFrame with the distances between body parts of one animal as values.
@@ -1923,7 +2119,7 @@ class Coordinates:
         self._validate_inputs(tab, key, None, None, roi_number)
 
         # 2. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 3. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -1954,6 +2150,7 @@ class Coordinates:
         selected_id: str = None,
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         file_name: str = 'got_angles',
         return_path: bool = False,
     ) -> table_dict:
@@ -1986,6 +2183,7 @@ class Coordinates:
                     selected_id=selected_id,
                     roi_number = roi_number,
                     animals_in_roi=animals_in_roi,
+                    invert_roi=invert_roi,
                 )
 
                 # save paths for modified tables
@@ -2002,6 +2200,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                #start_markers=self._start_markers,
             )
 
         raise ValueError(
@@ -2018,6 +2217,7 @@ class Coordinates:
     selected_id: str = None,
     roi_number: int = None,
     animals_in_roi: str = None,
+    invert_roi: bool = False,
 
     ) -> pd.DataFrame:
         """Return a Dataframe with the angles between body parts for one animal as values.
@@ -2045,7 +2245,7 @@ class Coordinates:
             tab = np.degrees(tab) 
 
         # 3. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 4. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_id)
@@ -2066,6 +2266,7 @@ class Coordinates:
             selected_id: str = "all",
             roi_number: int = None,
             animals_in_roi: str = None,
+            invert_roi: bool = False,
             file_name: str = 'got_areas',
             return_path: bool = False,
             ) -> table_dict:
@@ -2095,6 +2296,7 @@ class Coordinates:
                     selected_id = selected_id,
                     roi_number = roi_number,
                     animals_in_roi = animals_in_roi,
+                    invert_roi = invert_roi,
                 )
 
                 # save paths for modified tables
@@ -2111,6 +2313,7 @@ class Coordinates:
                 animal_ids=self._animal_ids,
                 connectivity=self._connectivity,
                 exp_conditions=self._exp_conditions,
+                #start_markers=self._start_markers,
             )
 
             return areas
@@ -2128,6 +2331,7 @@ class Coordinates:
         selected_id: str = "all",
         roi_number: int = None,
         animals_in_roi: str = None,
+        invert_roi: bool = False,
         ) -> table_dict:
         """Return a pd.DataFrame with all relevant areas (head, torso, back, full). Unless specified otherwise, the areas are computed for all animals.
 
@@ -2154,7 +2358,7 @@ class Coordinates:
             selected_ids = [selected_id]
 
         # 3. Apply ROI filtering (before coordinate transformations)
-        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center")
+        tab = self._filter_by_roi(tab, key, roi_number, animals_in_roi, "Center", invert_roi)
 
         # 4. Select a single animal if specified
         tab = self._select_animal_data(tab, selected_ids)
@@ -2180,31 +2384,76 @@ class Coordinates:
 
         return out
 
-    def get_start_times(self):
+    def get_start_times(self, start_marker=None):
         """Returns the start time for each table in a dictionary"""
         start_times = {}
-        for key in self._tables:
-            start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+        # Trivial case with starts being at table starts
+        if start_marker is None:
+            for key in self._tables:
+                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+                if isinstance(start_times[key], int):
+                    start_times[key]=seconds_to_time(float(start_times[key])/self._frame_rate,cut_milliseconds=False)
+        # take start times from markers
+        else:
+            for key in self._tables:
+                start_time = self._start_markers[key][start_marker].iloc[0]
+                end_time=get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+                if isinstance(end_time, str):
+                    end_time=np.round(time_to_seconds(end_time)*self._frame_rate)
+                assert np.round(time_to_seconds(start_time)*self._frame_rate) < end_time, f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
+                
+                start_times[key] = start_time
+        
         return start_times
+
 
     def get_end_times(self):
         """Returns the end time for each table in a dictionary"""
         end_times = {}
         for key in self._tables:
             end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+            if isinstance(end_times[key], int):
+                end_times[key]=seconds_to_time(float(end_times[key])/self._frame_rate,cut_milliseconds=False)
         return end_times
 
-    def get_table_lengths(self):
+    def get_table_lengths(self, tab_dict_for_binning=None, start_marker=None):
         """Returns the length for each table in a dictionary"""
-        table_lengths = {}
-        for key in self._tables:
-            table_lengths[key] = get_dt(self._tables,key, only_metainfo=True)['num_rows']
+        full_table_lengths = {}
+        table_lengths={}
+
+        # Get dict of full table lenghts
+        if tab_dict_for_binning is None:
+            full_table_lengths = {key: get_dt(self._tables,key, only_metainfo=True)['num_rows']
+                for key in self._tables
+            }   
+        # Get full table lengths from provided tab dict instead
+        else:
+            full_table_lengths = {
+                k: int(get_dt(tab_dict_for_binning, k, only_metainfo=True)['shape'][0])
+                for k in tab_dict_for_binning
+            }
+
+        # shorten full table lengths according to start positions (if given)
+        if start_marker is None:
+            table_lengths = full_table_lengths
+        else:
+            for key in self._tables:
+                start_time = self._start_markers[key][start_marker].iloc[0]
+                start_frame=np.round(time_to_seconds(start_time)*self._frame_rate)
+                shortened_table_len=np.round(full_table_lengths[key]-start_frame).astype(int)
+                assert shortened_table_len > 0, f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
+                table_lengths[key]=shortened_table_len
         return table_lengths
 
     @property
     def get_exp_conditions(self):
         """Return the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
+    
+    @property
+    def get_start_markers(self):
+        """Return the stored dictionary with start markers per subject."""
+        return self._start_markers
 
     def get_condition_values(self, exp_cond):
         conditions=[]
@@ -2213,7 +2462,25 @@ class Coordinates:
                 conditions.append(self._exp_conditions[key][exp_cond].iloc[0]) 
         assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
         return list(np.unique(conditions))
+    
+    def get_start_marker_values(self, start_marker, return_frames=True):
+        starts={}
+        marker_dict=self.get_start_markers
+        for key in marker_dict.keys():
+            assert start_marker in marker_dict[key], f"given start_marker is missing at key {key}"
+            cur_start=marker_dict[key][start_marker].iloc[0]
+            if return_frames:
+                cur_start=np.round(time_to_seconds(cur_start)*self._frame_rate).astype(int)
+            starts[key]=cur_start
+        return starts
 
+    def load_start_markers(self, filepath): # pragma: no cover
+        """Load start markers analogous to experimental conditions and do some checks"""
+        self._start_markers = deepof.utils.load_start_markers(filepath, self._frame_rate)
+
+        # Save loaded conditions within project
+        self.save(timestamp=False)
+    
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
 
@@ -2221,18 +2488,11 @@ class Coordinates:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
-        exp_conditions = pd.read_csv(filepath, index_col=0)
-        exp_conditions = {
-            exp_id: pd.DataFrame(
-                exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
-            ).T
-            for exp_id in exp_conditions.iloc[:, 0]
-        }
-        self._exp_conditions = exp_conditions
+        self._exp_conditions = deepof.utils.load_exp_conditions(filepath)
 
         # Save loaded conditions within project
         self.save(timestamp=False)
-
+        
 
     def get_quality(self):
         """Retrieve a dictionary with the tagging quality per video, as reported by DLC or SLEAP."""
@@ -2368,8 +2628,12 @@ class Coordinates:
             (f"_{int(time())}" if timestamp else ""),
         )
 
-        with open(pkl_out, "wb") as handle:
-            pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        if file is None:
+            with open(pkl_out, "wb") as handle:
+                pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            with open(pkl_out, "wb") as handle:
+                pickle.dump(file, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
     @deepof.data_loading._suppress_warning(
@@ -2380,6 +2644,7 @@ class Coordinates:
     def get_graph_dataset(
         self,
         animal_id: str = None,
+        window_size: int = None,
         #binning info
         bin_size=None,
         bin_index=None,
@@ -2391,8 +2656,10 @@ class Coordinates:
         polar: bool = False,
         align: str = None,
         preprocess: bool = True,
+        scale: str = "standard",
         dist_standardize: str = "per_column",
         speed_standardize: str = "per_column",
+        coord_standardize: str = "per_column",
         return_as_paths: bool = None,
         **kwargs,
     ) -> table_dict:
@@ -2420,13 +2687,18 @@ class Coordinates:
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
+        # Defaults to 1 second windows if no window size is given
+        if window_size is None:
+            window_size= int(np.round(self._frame_rate))
         
         N_steps=5
         if precomputed_tab_dict is not None:           
-            N_steps=1
+            N_steps=2
         with tqdm(total=N_steps, desc=f"{'Loading tables':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
                             
             if precomputed_tab_dict is not None:  # pragma: no cover
+                pbar.set_postfix(step="Loading data")
+
                 tab_dict = precomputed_tab_dict 
                 
                 
@@ -2515,15 +2787,20 @@ class Coordinates:
             else:
                 feature_names = pd.Index([i for i in list(tab_dict.values())[0].columns])
 
+            # Sorting everything
+            nodes = sorted(graph.nodes())
+            edges = sorted(tuple(sorted(e)) for e in graph.edges())
+            adj_matrix = nx.adjacency_matrix(graph, nodelist=nodes).todense() #adj_matrix in new node order
+
             node_feature_names = (
-                [(i, "x") for i in list(graph.nodes())]
-                + [(i, "y") for i in list(graph.nodes())]
-                + list(graph.nodes())
+                [(i, "x") for i in nodes]
+                + [(i, "y") for i in nodes]
+                + nodes
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
             speed_feature_names = (
-                list(graph.nodes())
+                nodes
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
@@ -2544,7 +2821,7 @@ class Coordinates:
             
 
             inner_link_bool_mask = []
-            for e in [tuple(sorted(e)) for e in list(graph.edges)]:
+            for e in [tuple(sorted(e)) for e in edges]:
                 for j, f in enumerate(edge_feature_names):
                     if e == f:
                         edge_sorting_indices.append(j)
@@ -2560,18 +2837,13 @@ class Coordinates:
         # Create metainfo
         metainfo={}
 
-        metainfo['node_columns']=feature_names[node_sorting_indices]
-        metainfo['edge_columns']=feature_names[edge_sorting_indices]
-        metainfo['angle_columns']=feature_names[angle_sorting_indices]
-
-
         # Create graph datasets
         if preprocess:
 
             collect_quality = True
             if collect_quality==True:
                 quality_to_load = self.get_quality()
-            to_preprocess, shapes, global_scaler = tab_dict.preprocess(
+            to_preprocess, metainfo, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
                 bin_size=bin_size,
@@ -2582,8 +2854,14 @@ class Coordinates:
                 quality_to_load=None, #quality_to_load,
                 dist_standardize=dist_standardize,
                 speed_standardize=speed_standardize,
+                coord_standardize=coord_standardize,
+                window_size=window_size,
+                scale=scale,
                 **kwargs,
                 )
+            metainfo['node_columns']=feature_names[node_sorting_indices]
+            metainfo['edge_columns']=feature_names[edge_sorting_indices]
+            metainfo['angle_columns']=feature_names[angle_sorting_indices]
    
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for k in range(0,len(to_preprocess)):
@@ -2617,11 +2895,10 @@ class Coordinates:
                         metainfo['shape_train']=[(0,),(0,),(0,)]
                     pbar.update()
 
-
             return (
                 to_preprocess,
                 metainfo,
-                nx.adjacency_matrix(graph).todense(),
+                adj_matrix,
                 tab_dict,
                 global_scaler,
             )
@@ -2649,9 +2926,9 @@ class Coordinates:
                     dataset = (
                         tab[:, ~feature_names.isin(edge_feature_names)][
                             :, node_sorting_indices
-                        ].reshape([tab.shape[0], len(graph.nodes()), -1], order="F"),
+                        ].reshape([tab.shape[0], len(nodes), -1], order="F"),
                         deepof.utils.edges_to_weighted_adj(
-                            nx.adj_matrix(graph).todense(),
+                            adj_matrix,
                             tab[:, feature_names.isin(edge_feature_names)][
                                 :, edge_sorting_indices
                             ],
@@ -2667,7 +2944,14 @@ class Coordinates:
 
                 metainfo[f'shape_{key}']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2])]
 
-            return to_preprocess, metainfo, nx.adjacency_matrix(graph).todense(), tab_dict, None
+            # add standardizations
+            metainfo['node_columns']=feature_names[node_sorting_indices]
+            metainfo['edge_columns']=feature_names[edge_sorting_indices]
+            metainfo['angle_columns']=feature_names[angle_sorting_indices]
+            metainfo['dist_standardize'] = dist_standardize
+            metainfo['speed_standardize'] = speed_standardize
+            metainfo['coord_standardize'] = coord_standardize
+            return to_preprocess, metainfo, adj_matrix, tab_dict, None
                 
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:
@@ -2757,12 +3041,16 @@ class Coordinates:
         self,
         center: str = "Center",
         align: str = "Spine_1",
+        custom_behaviors: list[deepof.annotation_utils.DeepOF_behavior] = None,
+        custom_behavior_context: dict = {}
     ) -> table_dict:
         """Annotates coordinates with behavioral traits using a supervised pipeline.
 
         Args:
             center (str): Body part to center coordinates on. "Center" by default.
             align (str): Body part to rotationally align the body parts with. "Spine_1" by default.
+            custom_behaviors (list[DeepOF_behavior]): a list of custom DeepOF_behavior objects. Added at the beginning of supervised behaviors if provided
+            custom_behavior_context (dict): a dictionary containing additional information you need for your custom behaviors
 
         Returns:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
@@ -2775,8 +3063,18 @@ class Coordinates:
             This is not supported by the current version of deepof"""
             )  # pragma: no cover
         
+        deepof.annotation_utils.validate_custom_behaviors(custom_behaviors,custom_behavior_context)
+        self._custom_behaviors=deepof.annotation_utils.assign_custom_behavior_colors(custom_behaviors)
+        self._custom_continuous_behavior_names=[]
+        if self._custom_behaviors is not None:
+            self._custom_continuous_behavior_names=[ #collect custom continous behaviors
+                custom_behavior.name for 
+                custom_behavior in self._custom_behaviors 
+                if custom_behavior.output_type==deepof.annotation_utils.Behavior_output.CONTINUOUS
+            ]
+
         # get immobility classifer
-        self._trained_model_path = resource_filename(__name__, "trained_models")    
+        self._trained_model_path = os.path.join(self._project_path, self._project_name, "trained_models",)  
         immobility_estimator = deepof.utils.load_precompiled_model(
             None,
             download_path="https://datashare.mpcdf.mpg.de/s/kiLpLy1dYNQrPKb/download",
@@ -2896,6 +3194,8 @@ class Coordinates:
                     center=center,
                     params=params,
                     run_numba=self._run_numba,
+                    custom_behaviors = custom_behaviors,
+                    custom_behavior_context = custom_behavior_context
                 )
 
                 supervised_tags.index = tag_index
@@ -2960,7 +3260,7 @@ class Coordinates:
         epochs: int = 150,
         log_history: bool = True,
         log_hparams: bool = False,
-        n_components: int = 10,
+        n_clusters: int = 10,
         kmeans_loss: float = 0.0,
         temperature: float = 0.1,
         contrastive_similarity_function: str = "cosine",
@@ -2978,6 +3278,9 @@ class Coordinates:
         reg_cat_clusters: float = 0.0,
         recluster: bool = False,
         interaction_regularization: float = 0.0,
+        bootstrap_training: bool = False,
+        bootstrap_block_len: int = 250,
+        random_seed: int = 0,
         **kwargs,
     ) -> Tuple:  # pragma: no cover
         """Annotates coordinates using a deep unsupervised autoencoder.
@@ -3014,6 +3317,9 @@ class Coordinates:
             reg_cat_clusters (bool): whether to penalize uneven cluster membership in the latent space, by minimizing the KL divergence between cluster membership and a uniform categorical distribution.
             recluster (bool): whether to recluster after training using a Gaussian Mixture Model. Only valid for VaDE.
             interaction_regularization (float): weight of the interaction regularization term for all encoders.
+            bootstrap_training (bool): If true, will train by sampling from data with replacement for stability estimation. False per default.
+            bootstrap_block_len (int): Minimum number of samples that stay in the same block during boots_trapping to reduce effect of window overlap. Will be rounded up to a multiple of the batch size. 
+            random_seed (int): Random seed to be used for mainly data loader shuffling
             **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
@@ -3027,18 +3333,18 @@ class Coordinates:
         pt_shape=get_dt(preprocessed_train,list(preprocessed_train.keys())[0], only_metainfo=True)['shape']
 
         #get available memory -10% as buffer
-        available_mem=psutil.virtual_memory().available*0.9
+        #available_mem=psutil.virtual_memory().available*0.9
         #calculate maximum number of rows that fit in memory based on table info 
-        N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
-        if samples_max is None:
-            samples_max=N_rows_max
-        elif samples_max>N_rows_max:
-            warning_message = (
-            "\033[38;5;208m\n"
-            "Warning! The selected number of samples may exceed your available memory."
-            "\033[0m"
-        )
-            warnings.warn(warning_message)
+        #N_rows_max=int(available_mem/((pt_shape[1]+11)*pt_shape[2]*8))
+        #if samples_max is None:
+        #    samples_max=N_rows_max
+        #elif samples_max>N_rows_max:
+        #    warning_message = (
+        #    "\033[38;5;208m\n"
+        #    "Warning! The selected number of samples may exceed your available memory."
+        #    "\033[0m"
+        #)
+        #    warnings.warn(warning_message)
 
         bin_info=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[0], samples_max=samples_max)
         bin_info_test=_preprocess_time_bins(coordinates=self, bin_size=bin_size,bin_index=bin_index,precomputed_bins=precomputed_bins, tab_dict_for_binning=preprocessed_object[1], samples_max=samples_max)
@@ -3047,43 +3353,21 @@ class Coordinates:
         ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
         ###
-        # Improve after refactor
-        # Select path to apropriate pretrained model
+        # get full pretrained model path
         if pretrained:
-            pretrained_path = os.path.join(
-                self._project_path,
-                self._project_name,
-                "Trained_models",
-                "trained_weights",
-            )
-            pretrained = os.path.join(
-                pretrained_path,
-                (
-                    pretrained
-                    if isinstance(pretrained, str)
-                    else [
-                        w
-                        for w in os.listdir(pretrained_path)
-                        if embedding_model in w
-                        and encoder_type in w
-                        and "encoding={}".format(latent_dim) in w
-                        and "k={}".format(n_components)
-                    ][0]
-                ),
-            )
+            pretrained = os.path.join(self._project_path, self._project_name, "Trained_models","models",pretrained)  
 
         try:
-            trained_models = deepof.model_utils.embedding_model_fitting(
+            model_val, model_score, model_part, log_summary = deepof.clustering.training.train_deepof_model(
                 preprocessed_object=preprocessed_object,
                 adjacency_matrix=adjacency_matrix,
-                embedding_model=embedding_model,
+                model_name=embedding_model,
                 encoder_type=encoder_type,
                 batch_size=batch_size,
                 latent_dim=latent_dim,
                 epochs=epochs,
                 log_history=log_history,
-                log_hparams=log_hparams,
-                n_components=n_components,
+                n_clusters=n_clusters,
                 kmeans_loss=kmeans_loss,
                 temperature=temperature,
                 contrastive_similarity_function=contrastive_similarity_function,
@@ -3098,16 +3382,16 @@ class Coordinates:
                 ),
                 data_path=os.path.join(self._project_path, self._project_name, 'Tables'),
                 pretrained=pretrained,
-                save_checkpoints=save_checkpoints,
-                save_weights=save_weights,
-                input_type=input_type,
-                bin_info=bin_info,
+                save_weights=save_checkpoints,
                 run=run,
                 kl_annealing_mode=kl_annealing_mode,
                 kl_warmup=kl_warmup,
                 reg_cat_clusters=reg_cat_clusters,
                 recluster=recluster,
                 interaction_regularization=interaction_regularization,
+                bootstrap_training=bootstrap_training,
+                bootstrap_block_len=bootstrap_block_len,
+                random_seed=random_seed,
                 **kwargs,
             )
         except IndexError:
@@ -3115,8 +3399,8 @@ class Coordinates:
                 "No pretrained model found for the given parameters. Please train a model first."
             )  # pragma: no cover
 
-        # returns a list of trained tensorflow models
-        return trained_models
+        # returns a list of trained pytorch models
+        return model_val, model_score, model_part, log_summary
 
 
 
@@ -3138,6 +3422,7 @@ class TableDict(dict):
         connectivity: nx.Graph = None,
         polar: bool = None,
         exp_conditions: dict = None,
+        #start_markers: dict = None,
         shapes: Dict = {},
     ):
         """Store single datasets as dictionaries with individuals as keys and pandas.DataFrames as values.
@@ -3155,6 +3440,7 @@ class TableDict(dict):
             connectivity (nx.Graph): Bodypart graph of a mouse.
             polar (bool): Whether the dataset is in polar coordinates. Handled internally.
             exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
+            start_markers (dict): dictionary with experiment IDs as keys and start markers as values.
             shapes (Dict): Dictionary containing the shapes of all stored tables
 
         """
@@ -3167,6 +3453,7 @@ class TableDict(dict):
         self._arena_dims = arena_dims
         self._animal_ids = animal_ids
         self._exp_conditions = exp_conditions
+        #self._start_markers = start_markers
         self._table_path = table_path
         self._shapes = shapes
 
@@ -3268,6 +3555,7 @@ class TableDict(dict):
             connectivity = self._connectivity,
             polar = self._polar,
             exp_conditions=self._exp_conditions,
+            #start_markers=self._start_markers,
         )
 
     def _prepare_projection(self) -> np.ndarray:
@@ -3439,16 +3727,16 @@ class TableDict(dict):
         keys=np.array(list(current_table_dict.keys()))
 
         if isinstance(test_videos,int):
-            #rng = np.random.seed(42)
+            rng = np.random.seed(42)
             test_indices = np.random.choice(
                 range(len(current_table_dict)), test_videos, replace=False, 
             )
             test_keys = keys[test_indices]
         elif isinstance(test_videos,list) and all([key in list(current_table_dict.keys()) for key in test_videos]):
-            
+                    
             test_keys = test_videos
-        else:
-            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  # pragma: no cover
+        else: # pragma: no cover
+            raise ValueError("\"test_videos\" bust be either an integer that denotes the numebr of test videos or a list of valid keys that denote test videos.")  
         
         train_keys = list(set(keys)-set(test_keys))
 
@@ -3481,7 +3769,7 @@ class TableDict(dict):
     def preprocess(
         self,
         coordinates,
-        window_size: int = 25,
+        window_size: int = None,
         window_step: int = 1,
         bin_size=None,
         bin_index=None,
@@ -3498,6 +3786,7 @@ class TableDict(dict):
         quality_to_load=None, 
         dist_standardize: str = "groupwise", 
         speed_standardize: str = "groupwise", 
+        coord_standardize: str = "groupwise",
         log_distances: bool = True, 
     ) -> tuple:
         """
@@ -3516,6 +3805,9 @@ class TableDict(dict):
         """
 
         SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+        # If no window size is given, defaults to 1 second windows
+        if window_size is None:
+            window_size= int(np.round(coordinates._frame_rate))
 
         def _make_scaler(kind: str):
             if kind not in SCALERS:
@@ -3552,6 +3844,7 @@ class TableDict(dict):
             save_as_paths = coordinates._very_large_project
 
         keys_list = list(self.keys())
+        keys_list = sorted(self.keys())
         animal_ids = coordinates._animal_ids
         
         bin_info = _preprocess_time_bins(
@@ -3572,8 +3865,8 @@ class TableDict(dict):
                 del table_temp[k]
         
         rng = np.random.RandomState(2)
-        samples_speed, samples_dist, samples_inner, samples_intra = [], [], [], []
-        ref_speed_cols, ref_dist_cols = None, None
+        samples_speed, samples_dist, samples_coord, samples_inner, samples_intra = [], [], [], [], []
+        ref_speed_cols, ref_dist_cols, ref_coord_cols = None, None, None
         global_scaler = None
         valid_keys = []
 
@@ -3605,6 +3898,7 @@ class TableDict(dict):
                         standardize=True,   # size-normalize only
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
+                        coord_standardize=None,
                         log_distances=log_distances,
                     )
 
@@ -3614,7 +3908,7 @@ class TableDict(dict):
                     n_take = min(samples_max, len(tab_local))
                     if n_take > 0:
                         idx = rng.choice(len(tab_local), size=n_take, replace=False)
-                        if speed_standardize != "none" and col_types["speeds"]:
+                        if speed_standardize is not None and col_types["speeds"]:
                             if speed_standardize == "per_column":
                                 if ref_speed_cols is None:
                                     ref_speed_cols = col_types["speeds"]
@@ -3626,7 +3920,7 @@ class TableDict(dict):
                                     tab_local.iloc[idx][col_types["speeds"]].to_numpy(float).reshape(-1)
                                 )
 
-                        if dist_standardize != "none" and col_types["dists"]:
+                        if dist_standardize is not None and col_types["dists"]:
                             if dist_standardize == "per_column":
                                 if ref_dist_cols is None:
                                     ref_dist_cols = col_types["dists"]
@@ -3642,6 +3936,25 @@ class TableDict(dict):
                                     samples_intra.append(
                                         tab_local.iloc[idx][col_types["intra_dists"]].to_numpy(float).reshape(-1)
                                     )
+
+                        # Coordinates
+                        coord_cols_local = [c for c in tab_local.columns
+                                            if isinstance(c, tuple) and len(c) == 2
+                                            and c[1] in ("x", "y")]
+                        if coord_standardize is not None and coord_cols_local:
+                            if coord_standardize == "per_column":
+                                if ref_coord_cols is None:
+                                    ref_coord_cols = coord_cols_local
+                                samples_coord.append(
+                                    tab_local.iloc[idx].reindex(
+                                        columns=ref_coord_cols
+                                    )[ref_coord_cols].to_numpy(float)
+                                )
+                            else:  # groupwise
+                                samples_coord.append(
+                                    tab_local.iloc[idx][coord_cols_local]
+                                    .to_numpy(float).reshape(-1)
+                                )
 
                 pbar.update()
 
@@ -3671,8 +3984,10 @@ class TableDict(dict):
                 "dist": None,
                 "dist_inner": None,
                 "dist_intra": None,
+                "coord": None,
                 "speed_mode": speed_standardize,
                 "dist_mode": dist_standardize,
+                "coord_mode": coord_standardize,
                 "log_distances": log_distances,
             }
 
@@ -3687,7 +4002,13 @@ class TableDict(dict):
                 global_scaler["dist_inner"] = _fit_global_groupwise(samples_inner)
                 global_scaler["dist_intra"] = _fit_global_groupwise(samples_intra)
 
-            if all(global_scaler[k] is None for k in ("speed", "dist", "dist_inner", "dist_intra")):
+            if coord_standardize == "per_column":
+                global_scaler["coord"] = _fit_global_per_column(samples_coord)
+            elif coord_standardize == "groupwise":
+                global_scaler["coord"] = _fit_global_groupwise(samples_coord)
+
+            if all(global_scaler[k] is None
+                   for k in ("speed", "dist", "dist_inner", "dist_intra", "coord")):
                 global_scaler = None
 
 
@@ -3719,6 +4040,14 @@ class TableDict(dict):
                 _apply_1d(col_types["inner_dists"], gs.get("dist_inner"))
                 _apply_1d(col_types["intra_dists"], gs.get("dist_intra"))
 
+            coord_cols_apply = [c for c in tab_scaled.columns
+                                if isinstance(c, tuple) and len(c) == 2
+                                and c[1] in ("x", "y")]
+            if coord_standardize == "per_column":
+                _apply_2d(coord_cols_apply, gs.get("coord"))
+            elif coord_standardize == "groupwise":
+                _apply_1d(coord_cols_apply, gs.get("coord"))
+
             return tab_scaled
         
         with tqdm(total=len(valid_keys), desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
@@ -3747,6 +4076,7 @@ class TableDict(dict):
                         standardize=True,  
                         dist_standardize=dist_standardize,
                         speed_standardize=speed_standardize,
+                        coord_standardize=None,
                         log_distances=log_distances,
                     )
 
@@ -3758,11 +4088,16 @@ class TableDict(dict):
                     # Clip outliers and interpolate (scalars only)
                     if scale == "standard" and interpolate_normalized:
                         scalars = [c for c in col_types["scalars"] if c in tab.columns]
-                        if scalars:
-                            arr = tab[scalars].to_numpy(float)
+                        # Include coordinates in outlier clipping
+                        coord_cols_clip = [c for c in tab.columns
+                                           if isinstance(c, tuple) and len(c) == 2
+                                           and c[1] in ("x", "y")]
+                        clip_cols = list(dict.fromkeys(scalars + coord_cols_clip))
+                        if clip_cols:
+                            arr = tab[clip_cols].to_numpy(float)
                             arr[np.abs(arr) > interpolate_normalized] = np.nan
-                            tab[scalars] = pd.DataFrame(
-                                arr, index=tab.index, columns=scalars
+                            tab[clip_cols] = pd.DataFrame(
+                                arr, index=tab.index, columns=clip_cols
                             ).interpolate(limit_direction="both")
 
                 # Reattach interpolated angles
@@ -3809,10 +4144,16 @@ class TableDict(dict):
         else:
             test_shape = (0,)
 
+        to_preprocess=(X_train, X_test)
+        
         metainfo={}
         metainfo['shape_train']=train_shape
         metainfo['shape_test']=test_shape
-        return (X_train, X_test), metainfo, global_scaler
+        # add standardizations
+        metainfo['dist_standardize'] = dist_standardize
+        metainfo['speed_standardize'] = speed_standardize
+        metainfo['coord_standardize'] = coord_standardize
+        return to_preprocess, metainfo, global_scaler
 
 
     def _get_data_tables(self, key: str) -> Tuple[Union[np.ndarray, pd.DataFrame], Optional[Union[np.ndarray, pd.DataFrame]]]:
@@ -3827,7 +4168,7 @@ class TableDict(dict):
             return raw_data[0], raw_data[1] if len(raw_data) > 1 else None
         return raw_data, None
 
-    def _get_sample_indices(self, table: Union[np.ndarray, pd.DataFrame], n_windows: int, no_nans: bool) -> np.ndarray:
+    def _get_sample_indices(self, table: Union[np.ndarray, pd.DataFrame], n_windows: int, no_nans: bool, rng = None) -> np.ndarray:
         """
         Generates a contiguous block of sample indices for a single table.
         
@@ -3853,7 +4194,9 @@ class TableDict(dict):
         max_start = len(source_table) - n_windows_to_sample
         
         # Select a random start position
-        start = np.random.randint(low=0, high=max(1, max_start + 1))
+        if rng is None:
+            rng = np.random.default_rng(0)  # or raise
+        start = rng.integers(low=0, high=max(1, max_start + 1))
         end = start + n_windows_to_sample
 
         # Map the relative slice back to the original table's indices
@@ -3943,5 +4286,5 @@ class TableDict(dict):
     
 
 if __name__ == "__main__":
-    # Remove excessive logging from tensorflow
+    # Remove excessive logging
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

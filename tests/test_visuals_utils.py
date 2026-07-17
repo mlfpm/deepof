@@ -27,10 +27,7 @@ import warnings
 import deepof.data
 import deepof.visuals_utils
 from deepof.data import TableDict
-from deepof.utils import connect_mouse
 from deepof.visuals_utils import (
-    time_to_seconds,
-    seconds_to_time,
     calculate_average_arena,
     _filter_embeddings,
     _get_polygon_coords,
@@ -39,11 +36,24 @@ from deepof.visuals_utils import (
     cohend,
     _preprocess_time_bins,
     _apply_rois_to_bin_info,
+    _preprocess_embedding_evaluation,
+)
+from deepof.utils import (
+    connect_mouse,
     get_supervised_behaviors_in_roi,
     get_unsupervised_behaviors_in_roi,
     get_behavior_frames_in_roi,
+    seconds_to_time,
+    time_to_seconds,
 )
-from deepof.test_objects.test_objects import get_soft_counts, get_supervised_tables
+from tests.test_objects.test_objects import (
+    get_soft_counts, 
+    get_supervised_tables, 
+    get_embeddings_tab_dict_instance, 
+    get_supervised_tab_dict_instance, 
+    CUSTOM_BEHAVIORS, 
+    CUSTOM_BEHAVIOR_CONTEXT,
+)
 
 
 # TESTING SOME AUXILIARY FUNCTIONS #
@@ -82,14 +92,17 @@ def test_color_conversion(r, g, b):
     experiment_type=st.one_of(
         st.just("test_multi_topview"),
         st.just("test_single_topview"),
-    )
+    ),
+    named_single_mouse=st.booleans()
 )
-def test_get_behavior_colors(experiment_type):
+def test_get_behavior_colors(experiment_type,named_single_mouse):
 
     if experiment_type == "test_multi_topview":
-        animal_ids=["B","W"] 
-    else:
+        animal_ids=["B","W"]
+    elif experiment_type == "test_single_topview":
         animal_ids = None
+    if named_single_mouse and experiment_type == "test_single_topview":
+        aid_addon = "mouse1"
 
     prun = deepof.data.Project(
         project_path=os.path.join(".", "tests", "test_examples", experiment_type),
@@ -107,20 +120,27 @@ def test_get_behavior_colors(experiment_type):
         table_format=".h5",
     ).create(force=True, test=True)
 
-    supervised = prun.supervised_annotation()
+    supervised = prun.supervised_annotation(custom_behaviors=CUSTOM_BEHAVIORS, custom_behavior_context=CUSTOM_BEHAVIOR_CONTEXT)
     behaviors=list(supervised['test'].keys())
 
     # remove continuous behaviors (they currently do not get a color attributed)
-    continuous_behaviors=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
+    continuous_behaviors, _=deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,True)
     behaviors=list(set(behaviors)-set(continuous_behaviors))
 
-    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids)
-    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,supervised['test'])
+    df=supervised['test']
+    if named_single_mouse and experiment_type == "test_single_topview":
+        behaviors = [aid_addon+"_"+beh for beh in behaviors]
+        animal_ids=aid_addon
+        df.columns = [aid_addon+"_"+beh for beh in df.columns]
+
+    colors_a = deepof.visuals_utils.get_behavior_colors(behaviors,animal_ids, custom_behaviors=CUSTOM_BEHAVIORS)
+    colors_b = deepof.visuals_utils.get_behavior_colors(behaviors,df, custom_behaviors=CUSTOM_BEHAVIORS)
 
     #check if all supervised behaviors have a color
     assert not None in colors_a
     #check if generated Colors stay the same independent of animal id retrieval
     assert colors_a == colors_b
+
 
 
 @settings(deadline=None)
@@ -205,6 +225,92 @@ def test_filter_embeddings(keys,exp_condition):
         assert concat_hue == comp_list
     assert embeddings.keys()==soft_counts.keys()
     assert embeddings.keys()==supervised_annotations.keys()
+
+
+@settings(deadline=None, max_examples=25)
+@given(
+    include_behaviors=st.one_of(st.just(None),st.just(["B_moving"]),st.just(["B_moving","B_stat-active","B_stat-passive"])),
+    window_size=st.integers(5,10),
+    alignment_mode=st.one_of(st.just("any"),st.just("center")),
+    minimum_number_of_positives=st.integers(5,100),
+    normalize=st.booleans(),
+    exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
+    )
+def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment_mode,minimum_number_of_positives,normalize,exp_type):
+
+
+    animal_ids = [""]
+    animal_pair=''
+    if not exp_type=="test_single_topview":
+        animal_ids=["B","W"]
+        animal_pair=('B','W')
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", exp_type),
+        video_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Videos",
+        ),
+        table_path=os.path.join(
+            ".",
+            "tests",
+            "test_examples",
+            exp_type,
+            "Tables",
+        ),
+        animal_ids=animal_ids,
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        exp_conditions={"test": "test_cond", "test2": "test_cond"},
+    ).create(force=True, test=True)
+
+    # Define a test embedding dictionary
+    keys=prun._tables.keys()
+    n=100-window_size+1
+    m=10
+
+    n_behaviors=len(include_behaviors) if include_behaviors is not None else 12
+
+    embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
+    supervised_annotations=get_supervised_tab_dict_instance(keys, col_names=include_behaviors, n_min=100, n_max=100, m_min=n_behaviors, m_max=n_behaviors)
+
+    eval=_preprocess_embedding_evaluation(
+        coordinates=prun,
+        embeddings=embeddings,
+        supervised_annotations=supervised_annotations,
+        include_behaviors=include_behaviors,
+        window_size=window_size,
+        alignment_mode=alignment_mode,
+        minimum_number_of_positives = minimum_number_of_positives,
+        normalize=normalize,
+    ) 
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", exp_type, "deepof_project"
+        )
+    )
+
+    # empty case: as none of the default behaviors are in our supervised behaviors, we get an empty dataframe back
+    if include_behaviors is None:
+        assert isinstance( eval, pd.DataFrame)
+        assert len(eval)==0     
+    else:
+        # All behaviors occur in evaluation data
+        assert all([beh in list(eval.behavior) for beh in include_behaviors])
+
+        # Number of total findows corresponds to widnows fitting into frames in project 
+        assert eval.n_windows[0]==(100-window_size+1)*2
+
+        # Parameters are in expected range
+        assert all([ np.isnan(trace_cov_pos_norm_global) or (trace_cov_pos_norm_global>=0 and trace_cov_pos_norm_global<=1.1) for trace_cov_pos_norm_global in list(eval.trace_cov_pos_norm_global)]) 
+        assert all([ np.isnan(ap_mean) or (ap_mean>=0 and ap_mean<=1) for ap_mean in list(eval.ap_mean)]) 
+        assert all([ np.isnan(pos_knn_agree_mean) or (pos_knn_agree_mean>=0 and pos_knn_agree_mean<=1) for pos_knn_agree_mean in list(eval.pos_knn_agree_mean)])
 
 
 @given(
@@ -351,6 +457,7 @@ class Pseudo_Coordinates:
         self._frame_rate = frame_rate
         self._start_times = {}
         self._table_lengths = {}  
+        start_marker = None,
         
         # set start time as time strings
         for i, start_time in enumerate(start_times_raw):
@@ -360,7 +467,7 @@ class Pseudo_Coordinates:
         # set lengths as a minimum of start time + 10 seconds
         for i, start_time in enumerate(start_times_raw):
             min_length = 120 * frame_rate
-            self._table_lengths[f"key{i + 1}"] = int(min_length)
+            self._table_lengths[f"key{i + 1}"] = int(time_to_seconds(self._start_times[f"key{i + 1}"])* frame_rate) + int(min_length)
 
 
     def add_table_lengths(self, lengths):
@@ -368,10 +475,10 @@ class Pseudo_Coordinates:
         for i, length in enumerate(lengths):
             self._table_lengths[f"key{i + 1}"] = int(length)
 
-    def get_start_times(self):
+    def get_start_times(self, start_marker=None):
         return self._start_times
 
-    def get_table_lengths(self):
+    def get_table_lengths(self, tab_dict_for_binning=None, start_marker=None):
         return self._table_lengths
 
 
@@ -386,6 +493,10 @@ class Pseudo_Coordinates:
     is_int=st.booleans(),
     has_precomputed_bins=st.booleans(),
     samples_max=st.integers(min_value=10, max_value=2000),
+    experiment_id=st.one_of(
+        st.just(None),
+        st.just("key1"),
+    ),
     makes_sense=st.one_of(
         st.just("yes"),
         st.just("no"),
@@ -393,7 +504,7 @@ class Pseudo_Coordinates:
     )
 )
 def test_preprocess_time_bins(
-    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins, samples_max, makes_sense
+    start_times_raw, frame_rate, bin_size, bin_index, is_int, has_precomputed_bins, samples_max, experiment_id, makes_sense
     ):
     
     # Only allow up to 8 decimales for float inputs 
@@ -434,7 +545,7 @@ def test_preprocess_time_bins(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         bin_info = _preprocess_time_bins(
-        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins, samples_max=samples_max,
+        coordinates=coords, bin_size=bin_size_user, bin_index=bin_index_user, precomputed_bins=precomputed_bins, samples_max=samples_max, experiment_id=experiment_id,
         )
 
     for key in bin_info.keys():
@@ -448,11 +559,12 @@ def test_preprocess_time_bins(
 @settings(deadline=None)
 @given(
     mode=st.one_of(st.just("single"), st.just("multi")),
-    bin_size=st.one_of(st.just(100), st.just(50)),
+    bin_size=st.one_of(st.just(None), st.just(100), st.just(50)),
     in_roi_criterion=st.one_of(st.just("Center"), st.just("Nose"), st.just("all"), st.just(["Spine_1","Center","Spine_2"])),
+    invert_roi=st.booleans(),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
 )
-def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
+def test_apply_rois(mode, bin_size, in_roi_criterion, invert_roi,use_numba):
 
     fast_implementations_threshold = 100000
     if use_numba:
@@ -488,18 +600,26 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, use_numba):
     
     prun = prun.create(force=True, test=True)
  
-    bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
+    bin_info_time=None
+    if bin_size is not None:
+        bin_info_time={i: np.arange(0, bin_size) for i in prun._tables.keys()}
 
-    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
-    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion)
+    bin_info_roi1=_apply_rois_to_bin_info(coordinates=prun, roi_number=1, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
+    bin_info_roi2=_apply_rois_to_bin_info(coordinates=prun, roi_number=2, bin_info_time=bin_info_time,in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
 
     # bin info is a two level dictionary
     assert isinstance(bin_info_roi1, dict) 
     assert isinstance(bin_info_roi1[list(bin_info_roi1.keys())[0]], dict)
     # There are always more or an equal amount of frames in which the animal is in the larger roi (roi 1) as compared to it being in the smaller roi (roi2) 
-    for key in bin_info_roi1.keys():
-        for roi in bin_info_roi1[key].keys():
-            assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
+    if not invert_roi:
+        for key in bin_info_roi1.keys():
+            for roi in bin_info_roi1[key].keys():
+                assert np.sum(bin_info_roi1[key][roi]) >= np.sum(bin_info_roi2[key][roi]) 
+    # The opposite is true if ROIs are inverted
+    else:
+        for key in bin_info_roi1.keys():
+            for roi in bin_info_roi1[key].keys():
+                assert np.sum(bin_info_roi1[key][roi]) <= np.sum(bin_info_roi2[key][roi]) 
     
 
 @settings(deadline=None)
@@ -657,7 +777,7 @@ def test_calculate_FSTTC(max_val,preceding_behavior,proximate_behavior,frame_rat
     proximate_behavior=proximate_behavior[0:max_val]
     fsttc=deepof.visuals_utils.calculate_FSTTC(preceding_behavior,proximate_behavior,frame_rate,delta_T)
 
-    # The FSTTC can only reach values in teh range between -1 and 1
+    # The FSTTC can only reach values in the range between -1 and 1
     assert(1 >= fsttc and fsttc >=-1)
 
 
@@ -760,6 +880,7 @@ def test_mouse_roi_interaction():
         video_format=".mp4",
         table_format=".h5",
         exp_conditions=None,
+        frame_rate=25,
     ).create(force=True, test=True)
 
     roi = np.array([[158.61861862, 154.05405405],
@@ -843,6 +964,7 @@ def test_transitions():
         video_format=".mp4",
         table_format=".h5",
         exp_conditions=None,
+        frame_rate=25,
     ).create(force=True, test=True)
 
     # Create exp_conditions with pandas DataFrames containing "CSDS" column
@@ -852,7 +974,7 @@ def test_transitions():
     }
 
     # Generate supervised annotations (replace with actual method if different)
-    supervised_annotation = prun.supervised_annotation()
+    supervised_annotation = prun.supervised_annotation(custom_behaviors=CUSTOM_BEHAVIORS, custom_behavior_context=CUSTOM_BEHAVIOR_CONTEXT)
 
     ref_path = os.path.join(".", "tests", "test_examples", "test_data", "transitions")
 

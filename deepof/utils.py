@@ -1,4 +1,4 @@
-# @author lucasmiranda42
+# @author lucasmiranda42 and NoCreativeIdeaForGoodUsername
 # encoding: utf-8
 # module deepof
 
@@ -14,7 +14,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import combinations, product
 from math import atan2, dist
-from typing import Any, List, NewType, Tuple, Union, Optional
+from typing import Any, List, NewType, Tuple, Union, Optional, Dict
 
 # For optional verification plots, will probably be removed later
 from matplotlib import pyplot as plt
@@ -37,12 +37,17 @@ from sklearn import mixture
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import average_precision_score
+from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import StratifiedKFold
 from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
+import deepof.legacy_smote_handling
 import deepof.utils
 
 
@@ -485,18 +490,20 @@ def connect_mouse(
     final_graph = connectivities[0]
     for g in range(1, len(connectivities)):
         final_graph = nx.compose(final_graph, connectivities[g])
+
+    for a, b in combinations(animal_ids, 2):
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g - 1]), "{}_Nose".format(animal_ids[g])
+            "{}_Nose".format(a), "{}_Nose".format(b)
         )
         final_graph.add_edge(
-            "{}_Tail_base".format(animal_ids[g - 1]),
-            "{}_Tail_base".format(animal_ids[g]),
+            "{}_Tail_base".format(a),
+            "{}_Tail_base".format(b),
         )
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g]), "{}_Tail_base".format(animal_ids[g - 1])
+            "{}_Nose".format(a), "{}_Tail_base".format(b)
         )
         final_graph.add_edge(
-            "{}_Nose".format(animal_ids[g - 1]), "{}_Tail_base".format(animal_ids[g])
+            "{}_Nose".format(b), "{}_Tail_base".format(a)
         )
 
     return final_graph
@@ -704,6 +711,103 @@ def set_missing_animals(
             tab_dict[k].loc[missing_times.index, missing_times.columns] = np.nan
 
     return tab_dict
+
+
+def time_to_seconds(time_string: str) -> float:
+    """Compute seconds as float based on a time string.
+
+    Args:
+        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
+
+    Returns:
+        seconds (float): time in seconds
+    """
+    seconds = None
+    if re.match(r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?$", time_string) is not None:
+        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
+        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
+        seconds=np.round(seconds * 10**9) / 10**9
+
+    return seconds
+
+
+def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
+    """Compute a time string based on seconds as float.
+
+    Args:
+        seconds (float): time in seconds
+        cut_milliseconds (bool): decides if milliseconds should be part of the output, defaults to True
+
+    Returns:
+        time_string (str): time string (format HH:MM:SS or HH:MM:SS.SSS...)
+    """
+    time_string = None
+    _hours = np.floor(seconds / 3600)
+    _minutes = np.floor((seconds - _hours * 3600) / 60)
+    _seconds = np.floor((seconds - _hours * 3600 - _minutes * 60))
+    _milli_seconds = seconds - np.floor(seconds)
+
+    if cut_milliseconds:
+        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
+    else:
+        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
+        l_max = time_string.find(".") + 10
+        time_string = time_string[0:l_max]
+
+    return time_string
+
+
+def _load_conditions_csv(filepath):
+    """Loads condition objects (experiment conditions, start markers) from a csv file"""
+    exp_conditions = pd.read_csv(filepath, index_col=0)
+    exp_conditions = {
+        exp_id: pd.DataFrame(
+            exp_conditions.loc[exp_conditions.iloc[:, 0] == exp_id, :].iloc[0, 1:]
+        ).T
+        for exp_id in exp_conditions.iloc[:, 0]
+    }
+    for key in exp_conditions.keys():
+        assert isinstance(exp_conditions[key], pd.DataFrame) and exp_conditions[key].shape[0]==1, "Conditions could not be loaded!"
+    return exp_conditions
+
+
+def load_exp_conditions(filepath: str):
+    
+    exp_conditions = _load_conditions_csv(filepath)
+    # some validity checks
+    for key in exp_conditions.keys():
+        for condition in exp_conditions[key].columns:
+            condition_instance=exp_conditions[key][condition].iloc[0]
+            assert isinstance(condition_instance, str), "Condition values need to be strings!"  
+    return exp_conditions
+
+
+def load_start_markers(filepath, frame_rate): 
+    """Load start markers analogous to experimental conditions and do some checks"""
+    start_markers = _load_conditions_csv(filepath)
+    # some validity checks
+    for key in start_markers.keys():
+        for marker in start_markers[key].columns:
+            raw = copy.copy(start_markers[key][marker].iloc[0])
+            # clean quotes
+            if isinstance(raw, str):
+                start_point = raw.strip().strip('"').strip("'")
+            else:
+                start_point = raw
+            # validate allowed types    
+            is_frame = isinstance(start_point, (int, np.integer))
+            is_time = isinstance(start_point, str) and re.fullmatch(
+                r"\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?",
+                start_point
+            ) is not None
+            # Convert to uniform time format
+            if is_frame:
+                start_point = seconds_to_time(start_point/frame_rate, cut_milliseconds=False)
+            
+            assert (is_frame or is_time),'Start markers need to be integers for frames or deepOF time points (format "xx:xx:xx.xxx")!'
+            
+            start_markers[key][marker].iloc[0] = start_point
+    return start_markers
 
 
 def bp2polar(tab: pd.DataFrame) -> pd.DataFrame:
@@ -969,7 +1073,8 @@ def count_transitions(
     silence_diagonal: bool = False,
     aggregate: str = True,
     normalize: str = True,
-    diagonal_behavior_counting: str = "Transitions"
+    diagonal_behavior_counting: str = "Transitions",
+    custom_continuous_behavior_names: list = [],
 ):
     """
     Count transitions between successive behaviors for all experiments in tab_dict.
@@ -989,6 +1094,7 @@ def count_transitions(
             - "Time": Total time where behavior is active
             - "Events": number of instances of the behavior occuring 
             - "Transitions": number of frame-wise internal behavior transitions e.g. A behavior of 4 frames in length would have 3 transitions.
+        custom_continuous_behavior_names (list): list of potentially added names of custom continuous behaviors (should get sorted out)
 
     Returns:
         transitions_dict (dict): Dictionary of transition matrices. Keys:
@@ -1017,7 +1123,7 @@ def count_transitions(
         if bin_info is not None:
             load_range = bin_info[key]["time"]
             if len(bin_info[key]) > 1:
-                load_range=deepof.visuals_utils.get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
+                load_range=get_behavior_frames_in_roi(None,bin_info[key],animals_in_roi)
         # Create empty tab, in case load range does not contain any valid frames
         if load_range is not None and len(load_range)==0:
             meta_info = get_dt(tab_dict,key,only_metainfo=True)
@@ -1041,7 +1147,7 @@ def count_transitions(
         
         # Drop non-binary columns (e.g. speed column in supervised)
         for col in columns:
-            if col.endswith(tuple(CONTINUOUS_BEHAVIORS)):
+            if col.endswith(tuple(CONTINUOUS_BEHAVIORS+custom_continuous_behavior_names)):
                 tab=tab.drop(columns=[col])
 
         # Update columns
@@ -1720,7 +1826,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
     return out
 
 
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, run_numba=False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1758,7 +1864,190 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, run_numba=False):
         else:
             mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
 
+    # to instead count if the specific bodyparts of the animal are NOT in the ROI
+    if invert_roi:
+        mask=np.invert(mask)
+
     return mask
+
+
+def _get_mousevise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals are not inside of the ROI"""
+    
+    # get list of masks for all animals
+    masks = [local_bin_info[aid] for aid in animal_ids]
+    if not masks:
+        return cur_supervised # No animals to filter by, return as is
+    
+    # Fancy numpy operation
+    combined_mask = np.logical_and.reduce(masks)
+    
+    # Apply the combined mask to the entire DataFrame at once.
+    cur_supervised.loc[~combined_mask, :] = np.nan
+    return cur_supervised  
+
+
+
+def _get_behaviorwise_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+):
+    """Filter out all frames in which the requested animals that take part in each individual behavior are not inside of the ROI"""
+
+    def _get_col_base_name(col: Any) -> str:
+        """Safely gets the first level of a column name, handling MultiIndex."""
+        return col[0] if isinstance(col, tuple) else col
+
+    # 1. Determine which columns are relevant (involve at least one target_id).
+    # This list comprehension is more direct than the original nested loop.
+    valid_cols = {
+        col for col in cur_supervised.columns 
+        if any(_get_col_base_name(col).startswith(animal_id) for animal_id in animal_ids)
+    }
+
+    # 2. Invalidate all columns that do not involve any of the target animals.
+    invalid_cols = cur_supervised.columns.difference(list(valid_cols))
+    if not invalid_cols.empty:
+        cur_supervised[invalid_cols] = np.nan
+
+    if not valid_cols:
+        return cur_supervised # No relevant columns to process further.
+
+    # 3. Apply ROI masks animal by animal, but only to their relevant columns.
+    for animal_id, roi_mask in local_bin_info.items():
+        if animal_id == "time":
+            continue
+        # if there is more than one mosue, add underscores
+        animal_id_suffix = animal_id
+        if len(local_bin_info)>2:
+            animal_id_suffix = animal_id + "_"
+            
+        # Find which of the valid_cols are associated with the current animal_id
+        cols_for_this_animal = [
+            col for col in valid_cols 
+            if (animal_id_suffix) in _get_col_base_name(col)
+        ]
+        
+        if cols_for_this_animal:
+            # Apply the specific ROI mask for this animal to its columns.
+            cur_supervised.loc[~roi_mask, cols_for_this_animal] = np.nan
+            
+    return cur_supervised
+    
+
+def get_supervised_behaviors_in_roi(
+    cur_supervised: pd.DataFrame,
+    local_bin_info: dict,
+    animal_ids: Union[str, list], 
+    roi_mode: str = "mousewise",
+):
+    """Filter supervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
+ 
+    Returns:
+        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
+    """
+    
+    # Check and reformat input
+    if not animal_ids:
+        return cur_supervised  
+    animal_ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids)
+
+    cur_supervised=copy.copy(cur_supervised)
+
+    # Filter 
+    if roi_mode=="mousewise":
+        cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    elif roi_mode == "behaviorwise":
+        cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
+    else:
+        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
+            
+    return cur_supervised
+
+
+def get_unsupervised_behaviors_in_roi(
+        cur_unsupervised: np.array,
+        local_bin_info: dict,
+        animal_ids: str, 
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
+    """
+
+    cur_unsupervised=copy.copy(cur_unsupervised)
+    if type(animal_ids)==str:
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""] 
+
+    if len(cur_unsupervised.shape)==1:
+        for aid in animal_ids:
+            cur_unsupervised[~local_bin_info[aid]]=-1    
+    else:
+        for aid in animal_ids: 
+            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
+
+    return cur_unsupervised
+
+
+def get_behavior_frames_in_roi(
+    behavior: str,
+    local_bin_info: dict,
+    animal_ids: Union[str, list],        
+):
+    """Filter unsupervised behaviors based on rois given by animal_ids.
+
+    Args:
+        behavior (str): Behavior for which frames in ROi get determined.
+        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
+        animal_ids (Union[str, list]): single or multiple animal ids
+    
+    Returns:
+        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
+    """
+
+    if isinstance(animal_ids, str):
+        animal_ids=[animal_ids]
+    elif animal_ids is None:
+        animal_ids=[""]   
+
+    local_bin_info = copy.copy(local_bin_info)
+    frames = copy.copy(local_bin_info["time"])
+
+    is_supervised_behavior = False
+    if behavior is not None:
+        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
+       
+    if is_supervised_behavior:
+        for aid in local_bin_info.keys():
+            if aid == "time":
+                continue
+            if aid + "_" in behavior:
+                frames[~local_bin_info[aid]]=-1
+    else:
+        for aid in animal_ids:
+            frames[~local_bin_info[aid]]=-1
+    
+    frames=frames[frames >= 0]
+    return frames
 
 
 # noinspection PyArgumentList
@@ -1809,6 +2098,49 @@ def align_trajectories(
 
     return aligned_trajs
 
+
+def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size=None, alignment_mode="center"):
+    """returns mid-sections of current embedding and supervised_annotations at key"""
+
+    assert key in embeddings.keys() and key in supervised_annotations.keys(), "No mebeddings-supervised alignment possible! Key not found in at least one of both table dicts!"
+
+    cur_embeddings = get_dt(embeddings,key)
+    cur_supervised = get_dt(supervised_annotations, key)
+
+    assert cur_embeddings.shape[0]<=cur_supervised.shape[0], "Error! Labels exceed windows!"
+
+    if window_size is None:
+        window_size=cur_supervised.shape[0]-cur_embeddings.shape[0]+1
+
+    # cut out middle section to align with windows, strict cutting
+    center = window_size // 2  # for even W, this is the right-of-center convention
+    start = center
+    end = start + cur_embeddings.shape[0]
+    if alignment_mode=="center":
+        # Pick the label at the window center for each window.
+        center = window_size // 2  # for even W, this is the right-of-center convention
+        start = center
+        end = start + cur_embeddings.shape[0]
+        cur_supervised_aligned = cur_supervised.iloc[start:end].reset_index(drop=True)
+
+    elif alignment_mode=="any":
+
+        # Per-window OR for binary labels: trailing rolling max over each window.
+        cur_supervised_aligned = (
+            cur_supervised
+            .rolling(window=window_size, min_periods=window_size)  # trailing window (aligns with window start after reset)
+            .max()
+            .reset_index(drop=True)
+        ) 
+        cur_supervised_aligned = cur_supervised_aligned.iloc[start:end].reset_index(drop=True)  #.iloc[window_size-1:window_size-1+cur_embeddings.shape[0]].reset_index(drop=True)
+
+    else:
+        raise NotImplementedError("Error, only \"center\" and \"any\" modes are available")
+
+    assert cur_embeddings.shape[0]==cur_supervised_aligned.shape[0], "Error! Alignment unsuccessful!"
+
+    return cur_embeddings, cur_supervised_aligned
+    
 
 def load_table(
     tab: str,
@@ -2015,16 +2347,19 @@ def scale_table(
     standardize: bool = True,     # if False: only size-normalize
     dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
     speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    coord_standardize: str = "per_column",
     log_distances: bool = True,   
 ) -> pd.DataFrame:
     if not scale:
         return df.copy()
     if scale not in {"standard", "minmax", "robust"}:
         raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
-    if dist_standardize not in {"per_column", "groupwise", "none"}:
-        raise ValueError("dist_standardize must be one of {'per_column','groupwise','none'}")
-    if speed_standardize not in {"per_column", "groupwise", "none"}:
-        raise ValueError("speed_standardize must be one of {'per_column','groupwise','none'}")
+    if dist_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise','None'}")
+    if speed_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise','None'}")
+    if coord_standardize not in {"per_column", "groupwise", None}:
+        raise ValueError("coord_standardize must be one of {'per_column','groupwise','None'}")
 
     out = df.copy()
 
@@ -2145,6 +2480,12 @@ def scale_table(
         _fit_transform_groupwise(inner_dist_cols)
         _fit_transform_groupwise(intra_dist_cols)
     # else: "none" -> do nothing
+
+    # Coords
+    if coord_standardize == "per_column":
+        _fit_transform_per_column(coord_cols)
+    elif coord_standardize == "groupwise":
+        _fit_transform_groupwise(coord_cols)
 
     return out
 
@@ -2522,8 +2863,8 @@ def extract_windows(
         aggregate (str): Aggregate  Instead of extracting full windows. Extracts full windows if none (default), otherwise options are:
             "mean" : average windows to one value
             "mid" : take middle of windows as window value
-            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as teh window value
-            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as teh window value
+            "wta" : winner takes all: whatever behavior or behavior combination is the most frequent is set as the window value
+            "lta" : loser takes all: whatever behavior or behavior combination is the rarest is set as the window value
         windows_desc (str): Progress bar label
 
     Returns:
@@ -2556,11 +2897,11 @@ def extract_windows(
             # Extrakt raw windows
             if aggregate is None:
                 pass
-            # take average of window as label
+            # take mid point of window as label
             elif aggregate=="mid":
                 mid = tab.shape[1] // 2
                 tab=tab[:, mid:mid+1, :]  
-            # take mid point of window as label
+            # take average of window as label
             elif aggregate=="mean":
                 tab=tab.mean(axis=1)
                 tab = tab[:, None, :]
@@ -2856,6 +3197,12 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
     return columns_to_keep
 
 
+@deepof.data_loading._suppress_warning(
+    warn_messages=[
+        "Trying to unpickle estimator StandardScaler from version 1.2.0 when using version 1.7.2.",
+        "Trying to unpickle estimator NearestNeighbors from version 1.2.0 when using version 1.7.2."
+    ]
+)
 def load_precompiled_model(path, download_path, model_path, model_name):
     """Loads model for automatic arena segmentation"""
 
@@ -2897,14 +3244,7 @@ def load_precompiled_model(path, download_path, model_path, model_name):
         predictor = SamPredictor(sam)
     # Immobility estimator model
     elif path.endswith(".pkl"):
-        with open(
-            os.path.join(
-            path,
-            ),
-            "rb",
-        ) as est:
-            predictor = pickle.load(est)
-
+        predictor = deepof.legacy_smote_handling.load_pickle_compat(path)
     return predictor
 
 
@@ -3240,6 +3580,137 @@ def gmm_model_selection(
                 best_bic_gmm = res[0][0]
 
     return bic, m_bic, best_bic_gmm
+
+
+def compute_compactness(
+    Z_pos: np.ndarray,
+    Z_all: np.ndarray,
+    eps: float = 1e-12,
+) -> Dict[str, float]:
+    """Compute compactness of positive-class embeddings relative to all embeddings.
+
+    Uses the trace of the covariance matrix as a spread measure.  Lower values
+    indicate tighter clustering of positive samples.
+
+    Args:
+        Z_pos: Positive-class embeddings, shape (N_pos, D).
+        Z_all: All embeddings, shape (N_all, D).
+        eps: Guard against division by zero.
+
+    Returns:
+        dict: ``trace_cov_pos`` – absolute trace covariance of positives;
+              ``trace_cov_pos_norm_global`` – ratio of positive to global trace.
+    """
+    tr_p = float(np.trace(np.cov(Z_pos.astype(np.float64, copy=False), rowvar=False)))
+    tr_a = float(np.trace(np.cov(Z_all.astype(np.float64, copy=False), rowvar=False)))
+    return {"trace_cov_pos": tr_p, "trace_cov_pos_norm_global": tr_p / max(eps, tr_a)}
+
+
+def compute_separability_logreg(
+    X: np.ndarray,
+    y: np.ndarray,
+    n_splits: int = 5,
+    seed: int = 0,
+    C: float = 1.0,
+    max_train: int = 100_000,
+) -> Dict[str, float]:
+    """Compute class separability via logistic-regression average precision (AP).
+
+    Performs stratified *k*-fold cross-validation with a balanced logistic
+    regression classifier and returns mean ± std of the AP score.
+
+    Args:
+        X: Feature matrix, shape (N, D).
+        y: Binary labels in {0, 1}, shape (N,).
+        n_splits: Number of CV folds.
+        seed: Random seed for reproducibility.
+        C: Inverse regularisation strength.
+        max_train: Maximum samples used (balanced subsample).
+
+    Returns:
+        dict: ``ap_mean``, ``ap_std``, ``n_used``.  Values are NaN when only
+              one class is present.
+    """
+    yb = (y > 0.5).astype(np.int32)
+    if yb.min() == yb.max():
+        return {"ap_mean": float("nan"), "ap_std": float("nan"), "n_used": 0}
+
+    rng = np.random.default_rng(seed)
+    idx_pos, idx_neg = np.where(yb == 1)[0], np.where(yb == 0)[0]
+    n_pos, n_neg = len(idx_pos), len(idx_neg)
+    n_target = min(max_train, n_pos + n_neg)
+    n_pos_t = int(round(n_target * n_pos / (n_pos + n_neg)))
+    n_neg_t = n_target - n_pos_t
+
+    idx = np.concatenate([
+        rng.choice(idx_pos, size=min(n_pos_t, n_pos), replace=False),
+        rng.choice(idx_neg, size=min(n_neg_t, n_neg), replace=False),
+    ])
+    rng.shuffle(idx)
+
+    Xs, ys = X[idx].astype(np.float64), yb[idx]
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    aps = []
+    for tr, te in skf.split(Xs, ys):
+        sc = StandardScaler()
+        Xtr, Xte = sc.fit_transform(Xs[tr]), sc.transform(Xs[te])
+        clf = LogisticRegression(C=C, max_iter=2000, class_weight="balanced", solver="lbfgs")
+        clf.fit(Xtr, ys[tr])
+        aps.append(average_precision_score(ys[te], clf.predict_proba(Xte)[:, 1]))
+
+    return {"ap_mean": float(np.mean(aps)), "ap_std": float(np.std(aps)), "n_used": int(len(idx))}
+
+
+def compute_knn_agreement(
+    X: np.ndarray,
+    y: np.ndarray,
+    k: int = 25,
+    seed: int = 0,
+    max_points: int = 50_000,
+    max_pos_queries: int = 10_000,
+    metric: str = "cosine",
+) -> Dict[str, float]:
+    """Compute kNN label agreement for positive-class samples.
+
+    For each positive sample, reports the fraction of its *k* nearest neighbours
+    that are also positive.  Higher values indicate better clustering.
+
+    Args:
+        X: Feature matrix, shape (N, D).
+        y: Binary labels in {0, 1}, shape (N,).
+        k: Number of nearest neighbours.
+        seed: Random seed for subsampling.
+        max_points: Maximum reference-set size.
+        max_pos_queries: Maximum positive query points.
+        metric: Distance metric for kNN.
+
+    Returns:
+        dict: ``k``, ``pos_knn_agree_mean``, ``pos_knn_agree_std``,
+              ``n_ref``, ``n_pos_queries``.
+    """
+    yb = (y > 0.5).astype(np.int32)
+    idx_pos = np.where(yb == 1)[0]
+    if idx_pos.size == 0 or X.shape[0] < k + 2:
+        return {"k": int(k), "pos_knn_agree_mean": float("nan"),
+                "pos_knn_agree_std": float("nan"), "n_ref": 0, "n_pos_queries": 0}
+
+    rng = np.random.default_rng(seed)
+    idx_all = np.arange(X.shape[0])
+    idx_ref = rng.choice(idx_all, size=min(max_points, idx_all.size), replace=False) if idx_all.size > max_points else idx_all
+    idx_q = rng.choice(idx_pos, size=min(max_pos_queries, idx_pos.size), replace=False) if idx_pos.size > max_pos_queries else idx_pos
+
+    X_ref, y_ref = X[idx_ref].astype(np.float32), yb[idx_ref]
+    X_q = X[idx_q].astype(np.float32)
+
+    nn = NearestNeighbors(n_neighbors=min(k + 1, X_ref.shape[0]), metric=metric)
+    nn.fit(X_ref)
+    neigh = nn.kneighbors(X_q, return_distance=False)
+    neigh_k = neigh[:, 1:min(k + 1, neigh.shape[1])]  # drop self-match
+
+    frac_pos = y_ref[neigh_k].mean(axis=1)
+    return {"k": int(k), "pos_knn_agree_mean": float(frac_pos.mean()),
+            "pos_knn_agree_std": float(frac_pos.std()),
+            "n_ref": int(X_ref.shape[0]), "n_pos_queries": int(X_q.shape[0])}
 
 
 # RESULT ANALYSIS FUNCTIONS #

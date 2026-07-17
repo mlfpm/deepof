@@ -23,6 +23,10 @@ from shapely.geometry import Point, Polygon
 import deepof.annotation_utils
 import deepof.data
 import deepof.utils
+from deepof.annotation_utils import DeepOF_behavior
+from deepof.annotation_utils import Behavior_scope, Behavior_output
+from deepof.annotation_utils import animal_ids, BehaviorContext
+from deepof.annotation_utils import postprocess_identity
 
 
 @settings(deadline=None)
@@ -333,6 +337,129 @@ def test_frame_corners(w, h):
         deepof.annotation_utils.frame_corners(w, h, {"downright": "test"})["downright"]
         == "test"
     )
+
+
+@settings(max_examples=8, deadline=None)
+@given(
+    use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
+    detection_mode=st.one_of(
+        st.just("polygonal-autodetect"), st.just("circular-autodetect")
+    ),
+    bodypart_graph=st.one_of(
+        st.just("deepof_14"), st.just("deepof_8")
+    ),
+    include_behaviors=st.one_of(
+        st.just(["nose2nose-mid"]), st.just(["is-compressed"]), st.just(["nose2nose-mid","is-compressed"])
+    ),
+)
+def test_custom_behavior_annotation(use_numba,detection_mode,bodypart_graph,include_behaviors):
+
+    ###
+    # Define custom behaviors for later usage
+    ###
+    def mouse_nose_mid_distance(ctx: BehaviorContext, mice_pair: animal_ids):
+     
+        a, b = mice_pair 
+        pos_dframe=ctx.raw_coords
+        nose_m1=ctx.bp(a, "Nose")
+        nose_m2=ctx.bp(b, "Nose")
+        middle_contact = (
+            (np.linalg.norm(pos_dframe[nose_m1] - pos_dframe[nose_m2], axis=1) > float(ctx.params["close_contact_tol"])) & 
+            (np.linalg.norm(pos_dframe[nose_m1] - pos_dframe[nose_m2], axis=1) <= 5*float(ctx.params["close_contact_tol"]))
+        )
+        return middle_contact
+    
+    mouse_nose_mid_distance_behavior=DeepOF_behavior(
+        name="nose2nose-mid", 
+        scope=Behavior_scope.PAIR_NONDIRECTIONAL,
+        output_type=Behavior_output.BINARY,
+        compute=mouse_nose_mid_distance,
+    )
+
+    def mouse_compression(ctx: BehaviorContext, mouse: animal_ids):    
+
+        a=mouse
+        pos_dframe=ctx.raw_coords
+        likely_dframe=ctx.likelihoods
+        m1_nose=ctx.bp(a,"Nose")
+        m1_tailbase=ctx.bp(a,"Tail_base")
+
+        mouse_compression = np.linalg.norm(pos_dframe[m1_nose]-pos_dframe[m1_tailbase],axis=1)
+        mouse_compression = mouse_compression*(likely_dframe[m1_nose]>ctx.extra['likelyhood_threshold'])
+        mouse_compression = mouse_compression*(likely_dframe[m1_tailbase]>ctx.extra['likelyhood_threshold'])
+        mouse_compression = mouse_compression*ctx.extra['bias_correction_dict'][ctx.key]
+
+        return mouse_compression
+    
+    mouse_compression_behavior=DeepOF_behavior(
+        name="is-compressed",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.CONTINUOUS,
+        compute=mouse_compression,
+        postprocess=postprocess_identity, # here we use the identity-postprocessing function from deepof i.e. no postprocessing is applied at all.
+    )
+
+    # Normal project definition and creation
+    if detection_mode=="circular-autodetect":
+        arena_type="test_multi_topview"
+        a_ids=["B","W"]
+    else:
+        arena_type="test_square_arena_topview"
+        a_ids=None
+
+    fast_implementations_threshold = 100000
+    if use_numba:
+        fast_implementations_threshold = 10
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", arena_type),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", arena_type, "Tables"
+        ),
+        arena=detection_mode,
+        bodypart_graph=bodypart_graph,
+        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+        animal_ids=a_ids,
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=".h5",
+        frame_rate=25,
+        fast_implementations_threshold=fast_implementations_threshold,
+    ).create(force=True, test=True)
+
+
+    bias_correction_dict={key: np.random.uniform()+1 for key in prun._tables.keys()}
+    custom_behavior_context={
+        'bias_correction_dict' : bias_correction_dict,
+        'likelyhood_threshold' : 0.5,
+    }
+
+    custom_behaviors=[mouse_nose_mid_distance_behavior,mouse_compression_behavior]
+    #filter
+    custom_behaviors=[behavior for behavior in custom_behaviors if behavior.name in include_behaviors]
+
+    prun = prun.supervised_annotation(custom_behaviors=custom_behaviors,custom_behavior_context=custom_behavior_context)
+
+    if detection_mode!="circular-autodetect":
+        include_behaviors.remove('nose2nose-mid') if 'nose2nose-mid' in include_behaviors else include_behaviors
+
+    rmtree(
+        os.path.join(
+            ".", "tests", "test_examples", arena_type, "deepof_project"
+        )
+    )
+
+    assert isinstance(prun, deepof.data.TableDict)
+    assert prun._type == "supervised" 
+    # Make sure that the custom behaviors are now present in the supervised_annotations if they should have been computed
+    # (paired behaviors get skipepd for solo-mosue data)
+    behavior_suffixes_test=[col.split('_')[-1] for col in prun['test'].columns]
+    behavior_suffixes_test2=[col.split('_')[-1] for col in prun['test2'].columns]
+    assert all([behavior in behavior_suffixes_test for behavior in include_behaviors])
+    assert all([behavior in behavior_suffixes_test2 for behavior in include_behaviors])
 
 
 # does not work online

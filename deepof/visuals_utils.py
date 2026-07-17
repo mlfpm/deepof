@@ -24,14 +24,16 @@ from natsort import os_sorted
 from scipy.interpolate import interp1d
 
 
-import deepof.annotation_utils
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
 from deepof.config import (
     PROGRESS_BAR_FIXED_WIDTH,
     ONE_ANIMAL_COLOR_MAP,
-    TWO_ANIMALS_COLOR_MAP,
+    TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL,
+    TWO_ANIMALS_COLOR_MAP_DIRECTIONAL,
+    CUSTOM_BEHAVIOR_COLOR_MAP,
+    CONTINUOUS_COLOR_MAP,
     DEEPOF_8_BODYPARTS,
     DEEPOF_11_BODYPARTS,
     DEEPOF_14_BODYPARTS,
@@ -45,56 +47,14 @@ from deepof.config import (
     DistanceUnit,
     TimeUnit,
 )
+from deepof.annotation_utils import DeepOF_behavior, Behavior_scope, Behavior_output
+
 
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
 coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
-
-
-def time_to_seconds(time_string: str) -> float:
-    """Compute seconds as float based on a time string.
-
-    Args:
-        time_string (str): time string as input (format HH:MM:SS or HH:MM:SS.SSS...).
-
-    Returns:
-        seconds (float): time in seconds
-    """
-    seconds = None
-    if re.match(r"^\b\d{1,6}:\d{1,6}:\d{1,6}(?:\.\d{1,9})?$", time_string) is not None:
-        time_array = np.array(re.findall(r"[-+]?\d*\.?\d+", time_string)).astype(float)
-        seconds = 3600 * time_array[0] + 60 * time_array[1] + time_array[2]
-        seconds=np.round(seconds * 10**9) / 10**9
-
-    return seconds
-
-
-def seconds_to_time(seconds: float, cut_milliseconds: bool = True) -> str:
-    """Compute a time string based on seconds as float.
-
-    Args:
-        seconds (float): time in seconds
-        cut_milliseconds (bool): decides if milliseconds should be part of the output, defaults to True
-
-    Returns:
-        time_string (str): time string (format HH:MM:SS or HH:MM:SS.SSS...)
-    """
-    time_string = None
-    _hours = np.floor(seconds / 3600)
-    _minutes = np.floor((seconds - _hours * 3600) / 60)
-    _seconds = np.floor((seconds - _hours * 3600 - _minutes * 60))
-    _milli_seconds = seconds - np.floor(seconds)
-
-    if cut_milliseconds:
-        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}"
-    else:
-        time_string = f"{int(_hours):02d}:{int(_minutes):02d}:{int(_seconds):02d}.{int(np.round(_milli_seconds*10**9)):09d}"
-        l_max = time_string.find(".") + 10
-        time_string = time_string[0:l_max]
-
-    return time_string
 
 
 def hex_to_BGR(hex_color):
@@ -105,11 +65,19 @@ def BGR_to_hex(bgr_color):
     r, g, b = bgr_color[2], bgr_color[1], bgr_color[0]
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
-def RGB_to_hex(bgr_color):
-    r, g, b = bgr_color[0], bgr_color[1], bgr_color[2]
+def RGB_to_hex(rgb_color):
+    r, g, b = rgb_color[0], rgb_color[1], rgb_color[2]
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
-def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None):
+def RGB_to_BGR(rgb_color):
+    r, g, b = rgb_color[0], rgb_color[1], rgb_color[2]
+    return tuple([b,g,r])
+
+def BGR_to_RGB(bgr_color):
+    b, g, r = bgr_color[0], bgr_color[1], bgr_color[2]
+    return tuple([r,g,b])
+
+def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None, custom_behaviors: List[DeepOF_behavior] =None):
     """
     Gets corresponding colors for all supervised behaviors or clusters within behaviors list.
 
@@ -166,31 +134,32 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     # Set supervised colors
     #######
 
-    # Behavior name lists. Should ideally be imported from elsewhere in the future
-    single_behaviors=SINGLE_BEHAVIORS
-    symmetric_behaviors=SYMMETRIC_BEHAVIORS
-    asymmetric_behaviors=ASYMMETRIC_BEHAVIORS
+    # Behavior name lists. 
+    single_behaviors=list(ONE_ANIMAL_COLOR_MAP.keys())
+    symmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL.keys())
+    asymmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_DIRECTIONAL.keys())
 
-    # create names of supervised behaviors from animal ids and raw behavior names in correct order
+    # Create name-color dictionaries for all in the current setting possible behaviors
     if animal_ids is None or animal_ids[0]=='':
-        supervised = single_behaviors
-        color_map = ONE_ANIMAL_COLOR_MAP
-    elif len(animal_ids)==1:
-        supervised = single_behaviors
-        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]
-        color_map = ONE_ANIMAL_COLOR_MAP
-    else:
-        supervised = generate_behavior_combinations(animal_ids,symmetric_behaviors,asymmetric_behaviors,single_behaviors, False)
-        color_map = TWO_ANIMALS_COLOR_MAP
+        supervised = single_behaviors              
+        supervised_colors = {key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
 
-    supervised_max = 1
-    if len(supervised) > 0:
-        supervised_max = len(supervised)
-    # Generate color map of appropriate length
-    supervised_colors = np.tile(
-        color_map,
-        int(np.ceil(supervised_max / len(color_map))),
-    )
+        # append custom behaviors
+        if custom_behaviors is not None:
+            supervised = [custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+            supervised_colors.update({custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
+
+    elif len(animal_ids)==1:
+        supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]            
+        supervised_colors = {animal_ids[0] + "_" + key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
+
+        # append custom behaviors
+        if custom_behaviors is not None:
+            supervised = [animal_ids[0] + "_" + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
+            supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
+
+    else:
+        supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, False, custom_behaviors)
 
     # Select appropriate color for all given behaviors
     colors=[]
@@ -198,80 +167,115 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         if behavior in clusters:
             colors.append(cluster_colors[int(re.search(r'\d+', behavior)[0])])
         elif behavior in supervised:
-            colors.append(supervised_colors[supervised.index(behavior)])
+            colors.append(supervised_colors[behavior])
         else:
             colors.append(None)
 
     return colors
 
 
-def generate_behavior_combinations(animal_ids, symmetric_behaviors=True, asymmetric_behaviors=True, single_behaviors=True, continuous_behaviors=True):
-    """
-    Generates combinations of animal IDs with different types of behaviors exactly as in supervised annotations.
+def generate_behavior_combinations(
+    animal_ids,
+    symmetric_behaviors: Union[bool, List]=True,
+    asymmetric_behaviors: Union[bool, List]=True,
+    single_behaviors: Union[bool, List]=True,
+    continuous_behaviors: Union[bool, List]=True,
+    custom_behaviors: List[DeepOF_behavior] = None,
+):
+    """Return (result_list, color_dict) with full column names and their colors."""
+    custom_behaviors = custom_behaviors or []
 
-    Args:
-        animal_ids (list): List of strings representing animal IDs.
-        symmetric_behaviors (list): List of symmetric paired behaviors.
-        asymmetric_behaviors (list): List of asymmetric paired behaviors.
-        single_behaviors (list): List of single mouse behaviors.
+    # Resolve behavior lists (built-ins + customs by scope)
+    sym = list(SYMMETRIC_BEHAVIORS) if symmetric_behaviors is True else []
+    asym = list(ASYMMETRIC_BEHAVIORS) if asymmetric_behaviors is True else []
+    single = list(SINGLE_BEHAVIORS) if single_behaviors is True else []
+    cont = list(CONTINUOUS_BEHAVIORS) if continuous_behaviors is True else []
 
-    Returns:
-        list: A list of strings with the combined animal IDs and behaviors.
-    """
+    if isinstance(symmetric_behaviors, list):
+        sym = symmetric_behaviors
+    if isinstance(asymmetric_behaviors, list):
+        asym = asymmetric_behaviors
+    if isinstance(single_behaviors, list):
+        single = single_behaviors
+    if isinstance(continuous_behaviors, list):
+        cont = continuous_behaviors
+
+    # Add custom behaviors by scope
+    for b in custom_behaviors:
+        if b.scope == Behavior_scope.PAIR_NONDIRECTIONAL:
+            sym.append(b.name)
+        elif b.scope == Behavior_scope.PAIR_DIRECTIONAL:
+            asym.append(b.name)
+        elif b.scope == Behavior_scope.INDIVIDUAL:
+            (cont if b.output_type == Behavior_output.CONTINUOUS else single).append(b.name)
+
+    ids = [""] if (animal_ids is None or (isinstance(animal_ids,list) and len(animal_ids[0])==0) or (isinstance(animal_ids,str) and len(animal_ids)==0)) else [f"{aid}_" for aid in animal_ids]
+    n = len(ids)
+
+    # Custom color lookup (user-provided .color or from palette)
+    custom_colors = {}
+    palette = itertools.cycle(CUSTOM_BEHAVIOR_COLOR_MAP.values())
+    for b in custom_behaviors:
+        custom_colors[b.name] = b.color if b.color is not None else next(palette)
+
     result = []
-    # Defaults for boolean true false inputs if no list of names is given
-    if symmetric_behaviors==True:
-        symmetric_behaviors = SYMMETRIC_BEHAVIORS
-    elif symmetric_behaviors==False:
-        symmetric_behaviors=[]
-    if asymmetric_behaviors==True:
-        asymmetric_behaviors = ASYMMETRIC_BEHAVIORS
-    elif asymmetric_behaviors==False:
-        asymmetric_behaviors=[]
-    if single_behaviors==True:
-        single_behaviors = SINGLE_BEHAVIORS
-    elif single_behaviors==False:
-        single_behaviors=[]
-    if continuous_behaviors==True:   
-        continuous_behaviors=CONTINUOUS_BEHAVIORS
-    elif continuous_behaviors==False:
-        continuous_behaviors=[]
+    color_dict = {}
 
-    if animal_ids is None:
-        animal_ids=[""]
-    else:
-        animal_ids=[id + "_" for id in animal_ids]
+    # Symmetric (nondirectional) pairs
+    for beh in sym:
+        col = custom_colors.get(beh, TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL.get(beh))
+        for a, b in itertools.combinations(ids, 2):
+            key = f"{a}{b}{beh}"
+            result.append(key)
+            color_dict[key] = col if isinstance(col, str) else col[0]
 
-    
-    # Process symmetric paired behaviors
-    for behavior in symmetric_behaviors:
-        for pair in itertools.combinations(animal_ids, 2):
-            # Sort the pair to ensure consistent order and avoid duplicates
-            sorted_pair = sorted(pair)
-            combined = f"{sorted_pair[0]}{sorted_pair[1]}{behavior}"
-            result.append(combined)
-    
-    # Process asymmetric paired behaviors
-    for behavior in asymmetric_behaviors:
-        for pair in itertools.permutations(animal_ids, 2):
-            combined = f"{pair[0]}{pair[1]}{behavior}"
-            result.append(combined)
-    
-    # Process single mouse behaviors
-    for animal_id in animal_ids:
-        for behavior in single_behaviors:
-            if behavior != "missing" and behavior not in CONTINUOUS_BEHAVIORS:
-                combined = f"{animal_id}{behavior}"
-                result.append(combined)
-    
-    # Add missing
-    if "missing" in single_behaviors:            
-        result = result + [id + "missing" for id in animal_ids] 
-    # Add continuous behaviors
-    for cont_behavior in continuous_behaviors:
-        result = result + [id + cont_behavior for id in animal_ids]           
-    
-    return result
+    # Asymmetric (directional) pairs
+    for beh in asym:
+        c = custom_colors.get(beh, TWO_ANIMALS_COLOR_MAP_DIRECTIONAL.get(beh))
+        c0, c1 = c if isinstance(c, (tuple, list)) else (c, c)
+        remember=[]
+        for a, b in itertools.permutations(ids, 2):
+            key = f"{a}{b}{beh}"
+            result.append(key)
+            color_dict[key] = c0 if b+a not in remember else c1
+            remember.append(a+b)
+
+    # Single-mouse behaviors
+    for i, aid in enumerate(ids):
+        for beh in single:
+            if beh == "missing":
+                continue
+            key = f"{aid}{beh}"
+            result.append(key)
+
+            c = custom_colors.get(beh, ONE_ANIMAL_COLOR_MAP.get(beh))
+            if isinstance(c, (tuple, list)):
+                color_dict[key] = c[0] if n <= 1 else c[i % 2]
+            else:
+                color_dict[key] = c
+
+    # Special case for missing (if requested)
+    if "missing" in single:
+        for i, aid in enumerate(ids):
+            key = f"{aid}missing"
+            result.append(key)
+            c0, c1 = ONE_ANIMAL_COLOR_MAP["missing"]
+            color_dict[key] = c0 if n <= 1 else (c0 if i % 2 == 0 else c1)
+            
+    # continuous-mouse behaviors
+    for i, aid in enumerate(ids):
+        for beh in cont:
+
+            key = f"{aid}{beh}"
+            result.append(key)
+
+            c = custom_colors.get(beh, CONTINUOUS_COLOR_MAP.get(beh))
+            if isinstance(c, (tuple, list)):
+                color_dict[key] = c[0] if n <= 1 else c[i % 2]
+            else:
+                color_dict[key] = c
+
+    return result, color_dict
 
 
 def calculate_average_arena(
@@ -410,6 +414,162 @@ def _filter_embeddings(
     return embeddings, soft_counts, supervised_annotations, concat_hue
 
 
+def _preprocess_embedding_evaluation(
+    coordinates: "coordinates",
+    embeddings: "table_dict",
+    supervised_annotations: "table_dict",
+    include_behaviors: list = None,
+    window_size: int = None,
+    alignment_mode: str = "any",
+    minimum_number_of_positives: int = 200,
+    normalize: bool = True,
+    random_state: int = 0,
+) -> pd.DataFrame:
+    """Compute embedding-quality metrics for every detected binary behavior.
+
+    Detects binary behavior columns in *supervised_annotations*, aligns them
+    with the corresponding embeddings, and computes compactness, logistic-
+    regression separability, and kNN label agreement for each behavior.
+
+    Args:
+        coordinates (coordinates): deepOF project (reserved for future metadata).
+        embeddings (table_dict): Experiment ID → embedding array (T, D).
+        supervised_annotations (table_dict): Experiment ID → annotation DataFrame.
+        include_behaviors (list): list of behaviors to include in evaluation, if None, defaults to a subset of up behaviors
+        window_size(int): window size used for the model. If None, size get'S estmated from difference in size of embeddings and supervised annotations.
+        alignment_mode (str): How embedding windows and supervised detections should be aligned. Can be "center" (embedding window is labled as the behavior that occurs in its central frame) or "any" (embedding window is labled as the behavior(s) that occur in an of its frames).         
+        minimum_number_of_positives (int): minimum number of frame-wise occurences of a behavior to perform analysis.
+        normalize (bool): Normalizes ap and knn based on positive rate. 
+        random_state (int): random state used for computations for reproducibility. Default is 0
+        
+    Returns:
+        pd.DataFrame: One row per behavior with all metric columns.
+    """
+
+    # get all continuous behaviors
+    continuous_behaviors=[]
+    if coordinates._custom_behaviors is not None:
+        for custom_behavior in coordinates._custom_behaviors:
+            if custom_behavior.output_kind==Behavior_output.CONTINUOUS:
+                continuous_behaviors.append(custom_behavior.name)
+    continuous_behaviors = continuous_behaviors+CONTINUOUS_BEHAVIORS
+
+    first_key=list(supervised_annotations.keys())[0]
+    all_behaviors=get_dt(supervised_annotations, first_key, only_metainfo=True)['columns']
+    noncontinuous_behaviors = [behavior for behavior in all_behaviors if str.split(behavior,'_')[-1] not in continuous_behaviors ]
+
+    if include_behaviors is None:
+        behaviors, _ = generate_behavior_combinations(
+            coordinates._animal_ids, 
+            single_behaviors=["stat-active","stat-passive","moving","stat-lookaround","sniff-arena","climb-arena"],
+            symmetric_behaviors=["nose2nose","sidebyside"],
+            asymmetric_behaviors=["following"],
+            continuous_behaviors=False,
+        )
+        # re-sort behaviors to nicer order
+        behavior_order = ["moving", "stat-active", "stat-passive", "stat-lookaround", "sniff-arena", "climb-arena", "nose2nose", "sidebyside", "following"]
+        rank = {s: i for i, s in enumerate(behavior_order)}
+        resorted_behaviors = os_sorted(behaviors, key=lambda x: rank[x.rsplit("_", 1)[-1]])
+
+        include_behaviors = resorted_behaviors
+
+    noncontinuous_behaviors = [behavior for behavior in include_behaviors if behavior in noncontinuous_behaviors]
+
+    # Global embedding pool for compactness normalisation
+    Z_all = np.concatenate(
+        [np.asarray(get_dt(embeddings, k), np.float32) for k in embeddings],
+        axis=0,
+    )
+        
+    # Sample aligned embeddings and labels
+    Xs, ys = [], {}
+    for key in embeddings.keys():
+
+        current_emb, current_sup = deepof.utils.align_embeddings_at_key(
+            embeddings=embeddings,
+            supervised_annotations=supervised_annotations,
+            key=key,
+            window_size=window_size,
+            alignment_mode=alignment_mode,  
+        )
+
+        np.random.seed(seed=0)
+        sample_ids = np.random.choice(
+            range(current_emb.shape[0]), np.min([current_emb.shape[0], 1000]), replace=False,
+        )
+
+        Xs.append(current_emb[sample_ids])
+
+        for beh in noncontinuous_behaviors:
+
+            if beh not in ys.keys():
+                ys[beh]=[]
+            
+            ys[beh].append(np.asarray(current_sup[beh].iloc[sample_ids], dtype=np.float32))
+    
+    X = np.concatenate(Xs, axis=0)
+    y = {beh: np.concatenate(ys[beh], axis=0) for beh in noncontinuous_behaviors}
+
+    # Calculate metrics per behavior
+    rows = []
+    for beh in tqdm(noncontinuous_behaviors, desc="Evaluating embeddings", unit="behavior"):
+
+        yb = (y[beh] > 0.5)
+        n = int(X.shape[0]) if X.size > 0 else 0
+        n_pos = int(yb.sum()) if y[beh].size > 0 else 0
+        pos_rate = float(n_pos / max(1, n)) if n > 0 else float("nan")
+
+        row = {"behavior": beh, "n_windows": n, "pos_windows": n_pos, "pos_rate": pos_rate}
+
+        # Too few positives → NaN metrics
+        if n_pos < minimum_number_of_positives or X.size == 0: # pragma: no cover
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! Not enough instances found of behavior {beh} within supervised_annotations.\n"
+                f"Found {n_pos}, needed {minimum_number_of_positives}. You can adjust \"minimum_number_of_positives\" but measures may become imprecise."
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+            row.update({k: float("nan") for k in [
+                "trace_cov_pos", "trace_cov_pos_norm_global",
+                "ap_mean", "ap_std"]})
+            row.update({"ap_n_used": 0, "knn_k": 25,
+                        "pos_knn_agree_mean": float("nan"),
+                        "pos_knn_agree_std": float("nan"),
+                        "knn_n_ref": 0, "knn_n_pos_queries": 0})
+            rows.append(row)
+            continue
+
+        Z_pos = X[yb]
+
+        comp = deepof.utils.compute_compactness(Z_pos, Z_all)
+        row["trace_cov_pos"] = comp["trace_cov_pos"]
+        row["trace_cov_pos_norm_global"] = comp["trace_cov_pos_norm_global"]
+        
+        sep = deepof.utils.compute_separability_logreg(X, y[beh], seed=random_state)
+        row["ap_mean"] = sep["ap_mean"]
+        row["ap_std"] = sep["ap_std"]
+        row["ap_n_used"] = sep["n_used"]
+        if normalize: 
+            row["ap_mean"] = float(np.clip((row["ap_mean"] - pos_rate) / (1.0 - pos_rate), 0.0, 1.0))
+            row["ap_std"] = float(row["ap_std"] / (1.0 - pos_rate)) if np.isfinite(row["ap_std"]) else float("nan")
+
+        knn = deepof.utils.compute_knn_agreement(X, y[beh], seed=random_state)
+        row["knn_k"] = knn["k"]
+        row["pos_knn_agree_mean"] = knn["pos_knn_agree_mean"]
+        row["pos_knn_agree_std"] = knn["pos_knn_agree_std"]
+        row["knn_n_ref"] = knn["n_ref"]
+        row["knn_n_pos_queries"] = knn["n_pos_queries"]
+        if normalize:
+            row["pos_knn_agree_mean"] = float(np.clip((row["pos_knn_agree_mean"] - pos_rate) / (1.0 - pos_rate), 0.0, 1.0))
+            row["pos_knn_agree_std"] = float(row["pos_knn_agree_std"] / (1.0 - pos_rate)) if np.isfinite(row["pos_knn_agree_std"]) else float("nan")
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+
 def _get_polygon_coords(data, animal_id=""):
     """Generate polygons to animate for the indicated animal in the provided dataframe."""
     if animal_id:
@@ -473,6 +633,7 @@ def _process_animation_data(
     min_confidence: float,
     min_bout_duration: int,
     selected_cluster: np.ndarray,
+    umap_random_state: int = 0,
 ):
     """Auxiliary function to process data for animation outputs.
 
@@ -483,6 +644,7 @@ def _process_animation_data(
         min_confidence (float): Minimum confidence threshold to render a cluster assignment bout.
         min_bout_duration (int): Minimum number of frames to render a cluster assignment bout.
         selected_cluster (int): cluster to filter. If provided together with cluster_assignments,
+        umap_random_state (int): Random state of Umap, default 0. If None, no fixed random state is selected (different U-map representation every time)
 
         Returns:
         coords (table_dict): position data afetr preprocessing
@@ -511,8 +673,8 @@ def _process_animation_data(
     confidence_indices = full_confidence_indices.copy()
 
     # Reduce full embeddings to 2D UMAP
-    reducers = deepof.post_hoc.compute_UMAP(cur_embeddings, hard_counts)
-    twoDim_embeddings = reducers[1].transform(reducers[0].transform(cur_embeddings))
+    twoDim_embeddings = deepof.post_hoc.compute_UMAP(cur_embeddings, hard_counts, umap_random_state)
+    #twoDim_embeddings = reducers[1].fit_transform(reducers[0].fit_transform(cur_embeddings))
 
 
     # Ensure that shapes are matching
@@ -602,7 +764,8 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
-def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4):
+def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4, start_marker=None):
+
 
     # Init bin ranges if not given
     if not custom_time_bins:
@@ -630,7 +793,7 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
         # Convert time string elements to integers
         custom_time_bins = [
             [
-                int(np.round(time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                int(np.round(deepof.utils.time_to_seconds(sublist[k]) * coordinates._frame_rate))
                 if type(sublist[k]) == str
                 else sublist[k]
                 for k in range(len(sublist))
@@ -650,8 +813,10 @@ def validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins 
                 "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
             )  # pragma: no cover
         elif np.max(custom_time_bins) >= L_shortest:
+            prefix = f"Based on your start marker {start_marker}, " if start_marker is not None else ""
             raise ValueError(
-                f'"custom_time_bins" contains at least one element that exceeds the length of your shortest data set!'
+                f"{prefix}'custom_time_bins' contains at least one element that exceeds the length of your shortest data set!"
+
             )  # pragma: no cover
         # Warn in case of overlapping elements
         elif not (
@@ -790,26 +955,32 @@ class _BinningResult(NamedTuple):
 
 
 def _get_bins_from_precomputed(
-    precomputed_bins: np.ndarray, table_lengths: dict[str, int]
+    precomputed_bins: np.ndarray, start_frames: dict[str, int], table_lengths: dict[str, int]
 ) -> _BinningResult:
     """Strategy for when precomputed bins are provided."""
     bin_info = {}
     end_too_late = {key: False for key in table_lengths}
+    start_too_late = {key: False for key in table_lengths}
 
     for key, length in table_lengths.items():
         arr = np.full(length, False, dtype=bool)
-        effective_len = min(length, len(precomputed_bins))
+        effective_len = min(length-start_frames[key], len(precomputed_bins))
+        
+        if effective_len <= 0:
+            effective_len=0
+            start_too_late[key] = True
+
         arr[:effective_len] = precomputed_bins[:effective_len]
-        bin_info[key] = np.where(arr)[0]
+        bin_info[key] = np.where(arr)[0]+start_frames[key]
 
         if len(precomputed_bins) > length:
             end_too_late[key] = True
 
-    return _BinningResult(bin_info, {}, end_too_late, {})
+    return _BinningResult(bin_info, start_too_late, end_too_late, {}, len(precomputed_bins))
 
 
 def _get_bins_from_frames(
-    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+    bin_size: int, bin_index: int, start_frames: dict[str, int], table_lengths: dict[str, int], frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = bin_size
@@ -829,15 +1000,15 @@ def _get_bins_from_frames(
         if end_frame > length:
             end_too_late[key] = True
 
-        bin_start = min(length, start_frame)
-        bin_end = min(length, end_frame)
+        bin_start = min(length, start_frame+start_frames[key])
+        bin_end = min(length, end_frame+start_frames[key])
         bin_info[key] = np.arange(bin_start, bin_end)
 
     return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
 
 
 def _get_bins_from_integers(
-    bin_size: int, bin_index: int, table_lengths: dict[str, int], frame_rate: float
+    bin_size: int, bin_index: int, start_frames: dict[str, int], table_lengths: dict[str, int], frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as integers."""
     bin_size_frames = int(round(bin_size * frame_rate))
@@ -857,19 +1028,19 @@ def _get_bins_from_integers(
         if end_frame > length:
             end_too_late[key] = True
 
-        bin_start = min(length, start_frame)
-        bin_end = min(length, end_frame)
+        bin_start = min(length, start_frame+start_frames[key])
+        bin_end = min(length, end_frame+start_frames[key])
         bin_info[key] = np.arange(bin_start, bin_end)
 
     return _BinningResult(bin_info, start_too_late, end_too_late, {}, bin_size_frames)
 
 
 def _get_bins_from_strings(
-    bin_size_str: str, bin_index_str: str, table_lengths: dict[str, int],
-    start_times: dict[str, str], frame_rate: float
+    bin_size_str: str, bin_index_str: str, start_frames: dict[str, int], table_lengths: dict[str, int],
+    frame_rate: float
 ) -> _BinningResult:
     """Strategy for when bin size/index are given as time strings."""
-    bin_size_frames = int(round(time_to_seconds(bin_size_str) * frame_rate))
+    bin_size_frames = int(round(deepof.utils.time_to_seconds(bin_size_str) * frame_rate))
     if bin_size_frames <= 0:
         raise ValueError("bin_size string must represent a duration > 0.")  # pragma: no cover
 
@@ -878,23 +1049,18 @@ def _get_bins_from_strings(
     end_too_late = {key: False for key in table_lengths}
     pre_start_warnings = {}
 
-    bin_index_sec = time_to_seconds(bin_index_str)
+    bin_index_sec = deepof.utils.time_to_seconds(bin_index_str)
 
     for key, length in table_lengths.items():
-        exp_start_sec = time_to_seconds(start_times[key])
-        start_offset_frames = int(round((bin_index_sec - exp_start_sec) * frame_rate))
+        bin_start_raw = int(round((bin_index_sec) * frame_rate))
 
-        if start_offset_frames < 0:
-            truncated_len_sec = (start_offset_frames + bin_size_frames) / frame_rate
-            pre_start_warnings[key] = seconds_to_time(max(0, truncated_len_sec))
-        
-        if start_offset_frames >= length:
+        if bin_start_raw >= length:
             start_too_late[key] = True
         
-        bin_start = np.clip(start_offset_frames, 0, length)
-        bin_end = np.clip(start_offset_frames + bin_size_frames, 0, length)
+        bin_start = np.clip(bin_start_raw+start_frames[key], 0, length)
+        bin_end = np.clip(bin_start + bin_size_frames, 0, length)
         
-        if start_offset_frames + bin_size_frames > length:
+        if bin_start + bin_size_frames > length:
             end_too_late[key] = True
 
         bin_info[key] = np.arange(bin_start, bin_end)
@@ -902,9 +1068,12 @@ def _get_bins_from_strings(
     return _BinningResult(bin_info, start_too_late, end_too_late, pre_start_warnings, bin_size_frames)
 
 
-def _get_full_range_bins(table_lengths: dict[str, int]) -> _BinningResult:
+def _get_full_range_bins(start_frames: dict[str, int], table_lengths: dict[str, int]) -> _BinningResult:
     """Strategy to use the full time range for each experiment."""
-    bin_info = {key: np.arange(length) for key, length in table_lengths.items()}
+    bin_info = {}
+    for key in start_frames.keys():
+        bin_info[key] = np.arange(start_frames[key], table_lengths[key])
+    
     return _BinningResult(bin_info, {}, {}, {})
 
 
@@ -951,6 +1120,18 @@ def _downsample_bins(
     return downsampled_info
 
 
+def _align_bin_lengths(
+    result: Any,
+):
+    """Makes sure that all bins have the same length"""
+    min_len = min(len(arr) for arr in result.bin_info.values())
+    for key in result.bin_info:
+        result.bin_info[key] = result.bin_info[key][:min_len] 
+    
+    return result
+
+    
+
 def _validate_and_warn(
     result: Any,
     table_lengths: dict[str, int],
@@ -983,7 +1164,7 @@ def _validate_and_warn(
 
     for key, is_late in result.start_too_late.items():
         if is_late:
-            max_time = seconds_to_time(table_lengths[key] / frame_rate, False)
+            max_time = deepof.utils.seconds_to_time(table_lengths[key] / frame_rate, False)
             max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 1
             raise ValueError(
                 f"[Error in {key}]: bin_index is out of range. "
@@ -995,7 +1176,7 @@ def _validate_and_warn(
     for key, is_truncated in result.end_too_late.items():
         if is_truncated and not warned_once:
             if warned is None or "truncated_bin" not in warned:
-                truncated_len = seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
+                truncated_len = deepof.utils.seconds_to_time(len(result.bin_info[key]) / frame_rate, False)
                 message = (
                     "\033[38;5;208m\n"
                     f"[For {key} and possibly others]: Chosen time range exceeds signal length. "
@@ -1004,7 +1185,7 @@ def _validate_and_warn(
                 )
                 # Add helpful suggestion only if applicable
                 if result.bin_size_frames and table_lengths[key] > result.bin_size_frames:
-                    max_start_time = seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
+                    max_start_time = deepof.utils.seconds_to_time((table_lengths[key] - result.bin_size_frames) / frame_rate, False)
                     max_index = int(np.ceil(table_lengths[key] / result.bin_size_frames)) - 2
                     message += (
                         "\033[38;5;208m\n"
@@ -1025,6 +1206,7 @@ def _preprocess_time_bins(
     precomputed_bins: Optional[np.ndarray] = None,
     tab_dict_for_binning: Optional[table_dict] = None,
     experiment_id: Optional[str] = None,
+    start_marker: Optional[str] = None,
     samples_max: int = 20000,
     down_sample: bool = True,
     given_in_frames=False,
@@ -1048,6 +1230,7 @@ def _preprocess_time_bins(
         tab_dict_for_binning: Optional table dictionary to use as a reference for
                               video lengths. Defaults to `coordinates`.
         experiment_id: If specified, processing is limited to this single experiment.
+        start_marker: If specified, starting point of bins is chosen relativ to start_marker.
         samples_max: Maximum number of samples to return per experiment. Data is
                      downsampled or cut if the selection is larger.
         down_sample: If True, use uniform downsampling. If False, cut the data
@@ -1079,19 +1262,15 @@ def _preprocess_time_bins(
             if warned is not None:
                 warned.add("precomputed_ignores_args")
 
-    start_times = coordinates.get_start_times()
-    if tab_dict_for_binning:
-        table_lengths = {
-            k: int(get_dt(tab_dict_for_binning, k, only_metainfo=True)['shape'][0])
-            for k in tab_dict_for_binning
-        }
-    else:
-        table_lengths = coordinates.get_table_lengths()
+    start_times = coordinates.get_start_times(start_marker=start_marker)
+    start_frames = {key: np.round(deepof.utils.time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
+    table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
+    start_frames = {key: val for key, val in start_frames.items() if key in list(table_lengths.keys())}
 
     if experiment_id:
         if experiment_id not in table_lengths:
             raise KeyError(f"Experiment ID '{experiment_id}' not found.")
-        start_times = {experiment_id: start_times[experiment_id]}
+        start_frames = {experiment_id: start_frames[experiment_id]}
         table_lengths = {experiment_id: table_lengths[experiment_id]}
 
     # --- 2. Strategy Selection and Execution ---
@@ -1099,26 +1278,26 @@ def _preprocess_time_bins(
     result = None
 
     if precomputed_bins is not None:
-        result = _get_bins_from_precomputed(precomputed_bins, table_lengths)
+        result = _get_bins_from_precomputed(precomputed_bins, start_frames, table_lengths)
     
     elif isinstance(bin_size, int) and isinstance(bin_index, int) and given_in_frames:
         result = _get_bins_from_frames(
-            bin_size, bin_index, table_lengths, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif isinstance(bin_size, int) and isinstance(bin_index, int):
         result = _get_bins_from_integers(
-            bin_size, bin_index, table_lengths, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif (isinstance(bin_size, str) and re.match(TIME_STR_PATTERN, bin_size) and
           isinstance(bin_index, str) and re.match(TIME_STR_PATTERN, bin_index)):
         result = _get_bins_from_strings(
-            bin_size, bin_index, table_lengths, start_times, coordinates._frame_rate
+            bin_size, bin_index, start_frames, table_lengths, coordinates._frame_rate
         )
 
     elif bin_size is None and bin_index is None:
-        result = _get_full_range_bins(table_lengths)
+        result = _get_full_range_bins(start_frames, table_lengths)
 
     else:
         if warned is None or "invalid_format_default" not in warned:
@@ -1137,11 +1316,17 @@ def _preprocess_time_bins(
             samples_max=samples_max, down_sample=down_sample,
             warned=warned,
         )
+    
+    # --- 3. Post-processing (a): ensuring bin length alignment ---
+    result = _align_bin_lengths(result)
 
-    # --- 3. Post-processing: Validation and Downsampling ---
+    # --- 4. Post-processing (b): Validation and Downsampling ---
     _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)
 
-    final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
+    if samples_max is not None:
+        final_bins = _downsample_bins(result.bin_info, samples_max, down_sample, warned)
+    else:
+        final_bins = result.bin_info
 
     return final_bins
 
@@ -1151,6 +1336,7 @@ def _apply_rois_to_bin_info(
     roi_number: int,
     bin_info_time: dict = None,
     in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
 ):
     """Retrieve annotated behaviors that occured within a given roi.
 
@@ -1185,191 +1371,12 @@ def _apply_rois_to_bin_info(
 
                 tab = get_dt(coordinates._tables,key)
                 roi_polygon=coordinates._roi_dicts[key][roi_number]
-                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, coordinates._run_numba)
+                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, coordinates._run_numba)
 
                 # only keep boolean indices that were within the time bins for this mouse
                 bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
             
     return bin_info
-
-
-def _get_mousevise_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-):
-    """Filter out all frames in which the requested animals are not inside of the ROI"""
-    
-    # get list of masks for all animals
-    masks = [local_bin_info[aid] for aid in animal_ids]
-    if not masks:
-        return cur_supervised # No animals to filter by, return as is
-    
-    # Fancy numpy operation
-    combined_mask = np.logical_and.reduce(masks)
-    
-    # Apply the combined mask to the entire DataFrame at once.
-    cur_supervised.loc[~combined_mask, :] = np.nan
-    return cur_supervised  
-
-
-
-def _get_behaviorwise_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-):
-    """Filter out all frames in which the requested animals that take part in each individual behavior are not inside of the ROI"""
-
-    def _get_col_base_name(col: Any) -> str:
-        """Safely gets the first level of a column name, handling MultiIndex."""
-        return col[0] if isinstance(col, tuple) else col
-
-    # 1. Determine which columns are relevant (involve at least one target_id).
-    # This list comprehension is more direct than the original nested loop.
-    valid_cols = {
-        col for col in cur_supervised.columns 
-        if any(_get_col_base_name(col).startswith(animal_id) for animal_id in animal_ids)
-    }
-
-    # 2. Invalidate all columns that do not involve any of the target animals.
-    invalid_cols = cur_supervised.columns.difference(list(valid_cols))
-    if not invalid_cols.empty:
-        cur_supervised[invalid_cols] = np.nan
-
-    if not valid_cols:
-        return cur_supervised # No relevant columns to process further.
-
-    # 3. Apply ROI masks animal by animal, but only to their relevant columns.
-    for animal_id, roi_mask in local_bin_info.items():
-        if animal_id == "time":
-            continue
-        # if there is more than one mosue, add underscores
-        animal_id_suffix = animal_id
-        if len(local_bin_info)>2:
-            animal_id_suffix = animal_id + "_"
-            
-        # Find which of the valid_cols are associated with the current animal_id
-        cols_for_this_animal = [
-            col for col in valid_cols 
-            if (animal_id_suffix) in _get_col_base_name(col)
-        ]
-        
-        if cols_for_this_animal:
-            # Apply the specific ROI mask for this animal to its columns.
-            cur_supervised.loc[~roi_mask, cols_for_this_animal] = np.nan
-            
-    return cur_supervised
-    
-
-def get_supervised_behaviors_in_roi(
-    cur_supervised: pd.DataFrame,
-    local_bin_info: dict,
-    animal_ids: Union[str, list], 
-    roi_mode: str = "mousewise",
-):
-    """Filter supervised behaviors based on rois given by animal_ids.
-
-    Args:
-        cur_supervised (pd.DataFrame): data frame with supervised behaviors.
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-        roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
- 
-    Returns:
-        cur_supervised (pd.DataFrame): data frame with supervised behaviors with detections outside of the ROI set to NaN
-    """
-    
-    # Check and reformat input
-    if not animal_ids:
-        return cur_supervised  
-    animal_ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids)
-
-    cur_supervised=copy.copy(cur_supervised)
-
-    # Filter 
-    if roi_mode=="mousewise":
-        cur_supervised = _get_mousevise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
-    elif roi_mode == "behaviorwise":
-        cur_supervised = _get_behaviorwise_behaviors_in_roi(cur_supervised,local_bin_info,animal_ids)
-    else:
-        raise NotImplementedError("Currently only \"mousewise\" and \"behaviorwise\" are valid roi modes.")  # pragma: no cover
-            
-    return cur_supervised
-
-
-def get_unsupervised_behaviors_in_roi(
-        cur_unsupervised: np.array,
-        local_bin_info: dict,
-        animal_ids: str, 
-):
-    """Filter unsupervised behaviors based on rois given by animal_ids.
-
-    Args:
-        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors (can be soft or hard counts).
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-    
-    Returns:
-        cur_unsupervised (np.array): 1D or 2D array with unsupervised behaviors with detections outside of the ROI set to NaN (2D) or -1 (1D)
-    """
-
-    cur_unsupervised=copy.copy(cur_unsupervised)
-    if type(animal_ids)==str:
-        animal_ids=[animal_ids]
-    elif animal_ids is None:
-        animal_ids=[""] 
-
-    if len(cur_unsupervised.shape)==1:
-        for aid in animal_ids:
-            cur_unsupervised[~local_bin_info[aid]]=-1    
-    else:
-        for aid in animal_ids: 
-            cur_unsupervised[~local_bin_info[aid]]=np.NaN   
-
-    return cur_unsupervised
-
-
-def get_behavior_frames_in_roi(
-    behavior: str,
-    local_bin_info: dict,
-    animal_ids: Union[str, list],        
-):
-    """Filter unsupervised behaviors based on rois given by animal_ids.
-
-    Args:
-        behavior (str): Behavior for which frames in ROi get determined.
-        local_bin_info (dict): bin_info dictionary for one experiment, containing field "time" with array of included frames and fields "animal_id" with boolean arrays that denote which mace were within the selcted roi for these frames
-        animal_ids (Union[str, list]): single or multiple animal ids
-    
-    Returns:
-        frames (np.array): 1D array containing all frames for which the animal is (animals are) within the ROI
-    """
-
-    if isinstance(animal_ids, str):
-        animal_ids=[animal_ids]
-    elif animal_ids is None:
-        animal_ids=[""]   
-
-    local_bin_info = copy.copy(local_bin_info)
-    frames = copy.copy(local_bin_info["time"])
-
-    is_supervised_behavior = False
-    if behavior is not None:
-        is_supervised_behavior = any([aid+"_" in behavior for aid in animal_ids])
-       
-    if is_supervised_behavior:
-        for aid in local_bin_info.keys():
-            if aid == "time":
-                continue
-            if aid + "_" in behavior:
-                frames[~local_bin_info[aid]]=-1
-    else:
-        for aid in animal_ids:
-            frames[~local_bin_info[aid]]=-1
-    
-    frames=frames[frames >= 0]
-    return frames
     
 
 def calculate_FSTTC(preceding_behavior: pd.Series, proximate_behavior: pd.Series, frame_rate: float, delta_T: float=2.0):
@@ -1546,6 +1553,7 @@ def _check_enum_inputs(
     soft_counts: Optional[table_dict] = None,
     origin: Optional[str] = None,
     experiment_ids: Optional[Union[List[str],dict[List[str]]]] = None,
+    start_markers: Optional[Union[List[str],dict[List[str]]]] = None,
     exp_condition: Optional[str] = None,
     exp_condition_order: Optional[List[str]] = None,
     condition_values: Optional[List[str]] = None,
@@ -1605,6 +1613,7 @@ def _check_enum_inputs(
     experiment_ids = _to_list_if_str(experiment_ids)
     exp_condition_order = _to_list_if_str(exp_condition_order)
     condition_values = _to_list_if_str(condition_values)
+    start_markers = _to_list_if_str(start_markers)
     behaviors = _to_list_if_str(behaviors)
     bodyparts = _to_list_if_str(bodyparts)
     in_roi_bodyparts = _to_list_if_str(in_roi_bodyparts)
@@ -1634,8 +1643,11 @@ def _check_enum_inputs(
         all_conditions = [cond.columns.values for cond in coordinates.get_exp_conditions.values()]
         exp_cond_opts = np.unique(np.concatenate(all_conditions)).tolist()
         if exp_condition in exp_cond_opts:
-            all_values = [c[exp_condition].values.astype(str) for c in coordinates.get_exp_conditions.values()]
-            cond_val_opts = np.unique(np.concatenate(all_values)).tolist()
+            cond_val_opts = [str(v) for v in coordinates.get_condition_values(exp_condition)]
+    start_marker_opts = []
+    if coordinates.get_start_markers:
+        all_markers = [start_marker.columns.values for start_marker in coordinates.get_start_markers.values()]
+        start_marker_opts = np.unique(np.concatenate(all_markers)).tolist()
 
     all_bps = []
     for key, table in coordinates._tables.items():
@@ -1677,6 +1689,7 @@ def _check_enum_inputs(
         ("exp_condition", exp_condition, exp_cond_opts, False, "No experiment conditions loaded!", True, False),
         ("exp_condition_order", exp_condition_order, cond_val_opts, True, "No conditions to order; check 'exp_condition'.", False, False),
         ("condition_values", condition_values, cond_val_opts, True, "No condition values available; check 'exp_condition'.", True, False),
+        ("start_markers", start_markers, start_marker_opts, True, "No start markers available; check 'start_markers'.", True, False),
         ("normative_model", normative_model, cond_val_opts, False, "No condition values available to select a normative model.", True, False),
         ("behaviors", behaviors, behavior_opts, True, "No supervised annotations or soft counts loaded!", False, False),
         ("bodyparts", bodyparts, bodypart_opts, True, None, False, False),
@@ -1954,10 +1967,13 @@ def _preprocess_transitions(
     bin_size: Union[int, str] = None,
     bin_index: Union[int, str] = None,
     precomputed_bins: np.ndarray = None,
+    start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
     roi_number: int = None,
     animals_in_roi: list = None,
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
     delta_T: float = 0.5,
@@ -1996,6 +2012,7 @@ def _preprocess_transitions(
         coordinates,
         origin="plot_transitions",
         exp_condition=exp_condition,
+        start_markers=start_marker,
         visualization=visualization,
         supervised_annotations=supervised_annotations,
         animals_in_roi=animals_in_roi,
@@ -2039,9 +2056,9 @@ def _preprocess_transitions(
 
     # preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=soft_counts, samples_max=samples_max, down_sample=False,
     )
-    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time)
+    bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion=in_roi_criterion, invert_roi=invert_roi)
 
     grouped_transitions, columns, combined_columns = deepof.utils.count_transitions(
         tab_dict=tab_dict,
@@ -2053,7 +2070,8 @@ def _preprocess_transitions(
         silence_diagonal=silence_diagonal,
         aggregate=(exp_conditions is not None), 
         normalize=normalize,
-        diagonal_behavior_counting=diagonal_behavior_counting
+        diagonal_behavior_counting=diagonal_behavior_counting,
+        custom_continuous_behavior_names=coordinates._custom_continuous_behavior_names,
     )
 
     return grouped_transitions, columns, combined_columns, exp_conditions, normalize
@@ -2074,6 +2092,7 @@ def _preprocess_mouse_roi_interaction(
     # Time selection parameters
     N_time_bins: int = 24,
     custom_time_bins: List[List[Union[int, str]]] = None,
+    start_marker: str = None,
     samples_max=20000,
     # ROI functionality
     roi_number: int = None,
@@ -2112,7 +2131,7 @@ def _preprocess_mouse_roi_interaction(
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to compute (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
         unit_distance (str): Distance unit (m, cm, mm, …) used when mode is "distance".
-        fov_angle_deg (int): Angle of the field of view of teh mouse, defaults to 90 deg.
+        fov_angle_deg (int): Angle of the field of view of the mouse, defaults to 90 deg.
         get_raw_data (bool): If True, skips binning and returns raw per-frame interaction values. Defaults to False.
 
     Returns:
@@ -2133,6 +2152,7 @@ def _preprocess_mouse_roi_interaction(
         bodyparts=bodyparts,
         experiment_ids=experiment_ids,
         exp_condition=exp_condition,
+        start_markers=start_marker,
         condition_values=condition_values,
         animal_id=animal_id,
     )
@@ -2175,12 +2195,17 @@ def _preprocess_mouse_roi_interaction(
             )
             warnings.warn(warning_message)
 
+    latest_start=0
+    if start_marker is not None:
+        start_positions_dict=coordinates.get_start_marker_values(start_marker)
+        latest_start=int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+    
     L_shortest = min(
-        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows'] for key in coordinates._tables.keys()
+        get_dt(coordinates._tables,key,only_metainfo=True)['num_rows']-latest_start for key in coordinates._tables.keys()
     )
 
     # preprocess time bin info
-    custom_time_bins, hide_time_bins = validate_custom_bins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1)
+    custom_time_bins, hide_time_bins = build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required = 1, start_marker=start_marker)
     bin_lengths = [sublist[1] - sublist[0] for sublist in custom_time_bins]
 
     multi_bin_info={}
@@ -2190,7 +2215,7 @@ def _preprocess_mouse_roi_interaction(
 
         #create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, samples_max=int(samples_max/len(custom_time_bins)),
+        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, start_marker=start_marker, samples_max=int(samples_max/len(custom_time_bins)),
         given_in_frames=True, warned=warned,
         )
                 
@@ -2259,7 +2284,6 @@ def _preprocess_mouse_roi_interaction(
                     inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
                     dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
 
-                # Match old semantics:
                 # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
                 # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI
                 valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)

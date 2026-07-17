@@ -32,6 +32,7 @@ import deepof.utils
         st.just("csv"),
         st.just("npy"),
         st.just("slp"),
+        st.just("autodetect"),
     ),
     arena_detection=st.one_of(
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
@@ -84,6 +85,192 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
     )
 
     assert isinstance(prun, deepof.data.Coordinates)
+
+
+@settings(max_examples=20, deadline=None)
+@given(
+    table_type=st.one_of(
+        st.just("analysis.h5"),
+        st.just("h5"),
+        st.just("csv"),
+        st.just("slp"),
+        st.just("autodetect"),
+    ),
+    rename_len=st.sampled_from([8, 11, 14]),
+)
+def test_rename_bodyparts(table_type, rename_len):
+
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+
+    # Match existing test structure for table paths
+    tables_path = "Tables"
+    if table_type in ["slp", "analysis.h5"]:
+        tables_path = os.path.join(tables_path, "SLEAP")
+
+    # Fake bodypart names. In normal usage, this has to correspond the the actually correct DeepOF naming schemas
+    #(The purpose of rename_bodyparts is to FIX naming errors in the table after all, not cause them)
+    rename_bodyparts = [f"custom_bp_{i}" for i in range(rename_len)]
+
+    prun = deepof.data.Project(
+        project_path=base_path,
+        project_name=f"test_rename_bodyparts_{table_type}_{rename_len}",
+        video_path=os.path.join(base_path, "Videos"),
+        table_path=os.path.join(base_path, tables_path),
+        arena="circular-autodetect",
+        animal_ids="",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=table_type,
+        rename_bodyparts=rename_bodyparts,
+        bodypart_graph=f"deepof_{rename_len}",
+    )
+
+    # Ensure dict was created
+    assert isinstance(prun.rename_bodyparts_dict, dict)
+    assert set(prun.rename_bodyparts_dict.keys()) == set(rename_bodyparts)
+    assert len(prun.rename_bodyparts_dict) == rename_len
+
+    # Ensure mapping order matches connect_mouse(node order) for that preset
+    expected_nodes = list(
+        deepof.utils.connect_mouse(animal_ids="", graph_preset=f"deepof_{rename_len}").nodes
+    )
+    for custom_name, deepof_name in zip(rename_bodyparts, expected_nodes):
+        assert prun.rename_bodyparts_dict[custom_name] == deepof_name
+
+
+def test_arena_loading():
+
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+    video_path = os.path.join(base_path, "Videos")
+    table_path = os.path.join(base_path, "Tables")
+
+    tmp_dir = os.path.join(base_path, "_tmp_load_arena_data")
+    arena_file = os.path.join(tmp_dir, "arena_data.pkl")
+
+    project_name = "test_get_arena_loading_branch"
+    out_project_dir = os.path.join(base_path, project_name)
+
+    try:
+        # 1) Create and save arena data (file has 3 ROIs)
+        pr_raw = deepof.data.Project(
+            project_path=base_path,
+            project_name="test_get_arena_loading_save",
+            video_path=video_path,
+            table_path=table_path,
+            arena="polygonal-autodetect",
+            video_scale="380 mm",
+            video_format=".mp4",
+            table_format=".h5",
+            number_of_rois=2,
+        )
+        
+        pr_save=pr_raw.create(force=True, test=True) # Note: test mode will result in 2 rois independent from the number chosen
+
+        keys = list(pr_save._tables.keys())
+
+        arena_params = pr_save._arena_params
+        scales = pr_save._scales
+        video_resolution = pr_save._video_resolution
+        roi_dicts = pr_save._roi_dicts
+
+        pr_raw.save_arena_data(
+            arena_path=arena_file,
+            arena_params=arena_params,
+            roi_dicts=roi_dicts,
+            scales=scales,
+            video_resolution=video_resolution,
+        )
+
+        # 2) Loader project expects only 1 ROI -> load_arena_data will truncate -> skip_detection=True
+        if os.path.exists(out_project_dir):
+            rmtree(out_project_dir)
+
+        pr_load = deepof.data.Project(
+            project_path=base_path,
+            project_name=project_name,
+            video_path=video_path,
+            table_path=table_path,
+            arena="polygonal-autodetect",
+            video_scale="380 mm",
+            video_format=".mp4",
+            table_format=".h5",
+            number_of_rois=1,
+        )
+        pr_load.set_up_project_directory(debug=True)  # ensures Arena_detection/Coordinates exist
+
+        got_scales, got_arena, got_rois, got_res = pr_load.get_arena(
+            tables={k: None for k in keys},
+            arena_path=arena_file,
+            test=True,
+            load_also_rois=True,  # no UI
+        )
+
+        # Minimal correctness checks
+        k0 = keys[0]
+        assert list(got_rois[k0].keys()) == [1]
+        assert (got_rois[k0][1] == roi_dicts[k0][1]).all()
+        assert (got_arena[k0] == arena_params[k0]).all()
+        assert got_scales[k0] == scales[k0]
+        assert got_res[k0] == video_resolution[k0]
+
+        # get_arena always saves arena_data.pkl into the project
+        assert os.path.isfile(os.path.join(out_project_dir, "Coordinates", "arena_data.pkl"))
+
+    finally:
+        if os.path.exists(tmp_dir):
+            rmtree(tmp_dir)
+        if os.path.exists(out_project_dir):
+            rmtree(out_project_dir)
+
+
+def test_start_markers():
+
+    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
+    video_path = os.path.join(base_path, "Videos")
+    table_path = os.path.join(base_path, "Tables")
+    project_name = "test_start_markers"
+    keys = ['test2', 'test']
+
+    # 2) Define start markers 
+    # dict[key] -> DataFrame with one row, columns = marker names, values = time strings
+    marker_name = "trial_start"
+    start_time_str = "00:00:01.000"  # 1 second
+    start_markers = {k: pd.DataFrame({marker_name: [start_time_str]}) for k in keys}
+
+    try:
+        # 3) Create project WITH start_markers
+        coords = deepof.data.Project(
+            project_path=base_path,
+            project_name=project_name,
+            video_path=video_path,
+            table_path=table_path,
+            arena="polygonal-autodetect",
+            video_scale="380 mm",
+            video_format=".mp4",
+            table_format=".h5",
+            start_markers=start_markers,
+        ).create(force=True, test=True)
+
+        # 4) Validate start marker frame values
+        start_frames = coords.get_start_marker_values(marker_name, return_frames=True)
+        expected_start_frame = int(np.round(coords._frame_rate))  # 1 second * fps
+
+        for k in keys:
+            assert start_frames[k] == expected_start_frame
+
+        # 5) Validate table lengths are shortened accordingly
+        full_lengths = coords.get_table_lengths()
+        shortened_lengths = coords.get_table_lengths(start_marker=marker_name)
+
+        for k in keys:
+            assert shortened_lengths[k] == full_lengths[k] - expected_start_frame
+
+    finally:
+        out_dir = os.path.join(base_path, project_name)
+        if os.path.exists(out_dir):
+            rmtree(out_dir)
+
+test_start_markers()
 
 
 def test_project_extend():
@@ -485,6 +672,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
             "test2": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
         },
         fast_implementations_threshold=fast_implementations_threshold,
+        frame_rate=25,
     )
 
     #also use large table handling 
@@ -624,11 +812,12 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
     random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
+    test_videos=st.one_of(st.just(1),st.just(["test"])),
     full_nan_table=st.booleans(),
     dist_standardize_groups=st.booleans(),
     speed_standardize_groups=st.booleans(),
 )
-def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standardize_groups,speed_standardize_groups):
+def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -678,7 +867,7 @@ def test_get_graph_dataset(mode, sampler, random_id, full_nan_table, dist_standa
                 st.just(False),
             )
         ),
-        test_videos=1,
+        test_videos=test_videos,
         dist_standardize=dist_standardize,
         speed_standardize=speed_standardize,
     )
@@ -758,67 +947,69 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
             assert a_data.shape[0]<=10*N_windows_tab
 
 
-    @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-    @given(
-        table_type=st.just("h5"),
+@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(
+    table_type=st.just("h5"),
+)
+def test_deep_unsupervised_embedding(table_type):
+
+    tables_path = "Tables"
+
+    prun = deepof.data.Project(
+        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
+        video_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", "Videos"
+        ),
+        table_path=os.path.join(
+            ".", "tests", "test_examples", "test_multi_topview", tables_path
+        ),
+        project_name=f"test_{table_type[1:]}",
+        animal_ids=["B","W"],
+        bodypart_graph="deepof_11",
+        arena="circular-autodetect",
+        video_scale="380 mm",
+        video_format=".mp4",
+        table_format=table_type,
     )
-    def test_deep_unsupervised_embedding(table_type):
 
-        tables_path = "Tables"
+    prun = prun.create(test=True, force=True)
 
-        prun = deepof.data.Project(
-            project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-            video_path=os.path.join(
-                ".", "tests", "test_examples", "test_multi_topview", "Videos"
-            ),
-            table_path=os.path.join(
-                ".", "tests", "test_examples", "test_multi_topview", tables_path
-            ),
-            project_name=f"test_{table_type[1:]}",
-            animal_ids=["B","W"],
-            bodypart_graph="deepof_11",
-            arena="circular-autodetect",
-            video_scale="380 mm",
-            video_format=".mp4",
-            table_format=table_type,
-        )
+    (
+    graph_preprocessed_coords, meta_info, adj_matrix, to_preprocess, global_scaler
+    ) = prun.get_graph_dataset(
+        animal_id="B",  # Comment out for multi-animal embeddings
+        center="Center",
+        align="Spine_1",
+        window_size=25,
+        window_step=1,
+        test_videos=1,
+        preprocess=True,
+        scale="standard",
+    )
 
-        prun = prun.create(test=True, force=True)
+    model_val, model_score, model_part, log_summary = prun.deep_unsupervised_embedding(
+        preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
+        adjacency_matrix=adj_matrix,
+        meta_info=meta_info,
+        embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
+        epochs=10,
+        encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
+        n_clusters=10,
+        latent_dim=8,
+        batch_size=16,
+        interaction_regularization=0.0,
+        pretrained=False, # Set to False to train a new model!
+        use_turtle_teacher = False,
+    )
 
-        (
-        graph_preprocessed_coords, shapes, adj_matrix, to_preprocess, global_scaler
-        ) = prun.get_graph_dataset(
-            animal_id="B",  # Comment out for multi-animal embeddings
-            center="Center",
-            align="Spine_1",
-            window_size=25,
-            window_step=1,
-            test_videos=1,
-            preprocess=True,
-            scale="standard",
-        )
+    embeddings, soft_counts = deepof.clustering.model_utils_new.embedding_per_video(
+        coordinates=prun,
+        meta_info=meta_info,
+        to_preprocess=to_preprocess,
+        model=model_val,
+        animal_id="B",
+        global_scaler=global_scaler,
+    )
 
-        trained_model = prun.deep_unsupervised_embedding(
-            preprocessed_object=graph_preprocessed_coords,  # Use graph-preprocessed embeddings
-            adjacency_matrix=adj_matrix,
-            embedding_model="VaDE", # Can also be set to 'VQVAE' and 'Contrastive'
-            epochs=10,
-            encoder_type="recurrent", # Can also be set to 'TCN' and 'transformer'
-            n_components=10,
-            latent_dim=8,
-            batch_size=16,
-            verbose=True, # Set to True to follow the training loop
-            interaction_regularization=0.0,
-            pretrained=False, # Set to False to train a new model!
-        )
-
-        embeddings, soft_counts = deepof.model_utils.embedding_per_video(
-            coordinates=prun,
-            to_preprocess=to_preprocess,
-            model=trained_model,
-            animal_id="B",
-            global_scaler=global_scaler,
-        )
-
-        assert embeddings['test'].shape==(76,8)
-        assert embeddings['test2'].shape==(76,8)
+    assert embeddings['test'].shape==(76,8)
+    assert embeddings['test2'].shape==(76,8)
