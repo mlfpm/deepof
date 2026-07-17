@@ -64,7 +64,7 @@ import shutil
 import warnings
 from shutil import rmtree
 from time import time
-from typing import Any, Dict, List, NewType, Tuple, Union, Optional
+from typing import Any, Dict, List, NewType, Tuple, Union, Optional, Sequence
 from pathlib import Path
 
 import networkx as nx
@@ -3403,7 +3403,6 @@ class Coordinates:
         return model_val, model_score, model_part, log_summary
 
 
-
 class TableDict(dict):
     """Main class for storing a single dataset as a dictionary with individuals as keys and pandas.DataFrames as values.
 
@@ -3766,7 +3765,159 @@ class TableDict(dict):
 
     # ========== Main preprocess method ==========
 
+
+    # ---------------------------------------------------------------------
+    # Method to add to TableDict (keep preprocess() unchanged; add preprocess_new)
+    # ---------------------------------------------------------------------
     def preprocess(
+        self,
+        coordinates,
+        window_size: int = None,
+        window_step: int = 1,
+        bin_size=None,
+        bin_index=None,
+        precomputed_bins=None,
+        samples_max: int = 227272,
+        scale: str = "standard",
+        pretrained_scaler=None,
+        test_videos: int = 0,
+        interpolate_normalized: int = 10,
+        filter_low_variance: bool = False,
+        file_name: str = "preprocessed",
+        save_as_paths: Optional[bool] = None,
+        shuffle: bool = False,
+        quality_to_load=None,
+        dist_standardize: str = "groupwise",
+        speed_standardize: str = "groupwise",
+        coord_standardize: str = "groupwise",
+        log_distances: bool = True,
+    ) -> tuple:
+        """
+        Preprocess pose tables for model training (refactor of preprocess).
+
+        Pipeline:
+        1. Filter by time bins, drop all-NaN tables
+        2. Optionally replace speeds with quality scores
+        3. Collect samples to fit global scalers (size-normalized but not standardized)
+        4. Apply full scaling (size + statistical) and save
+        5. Extract sliding windows for training
+        """
+        SCALERS = {"standard", "minmax", "robust"}
+
+        # ========== Step 0: Validation & setup ==========
+
+        if window_size is None:
+            window_size = int(np.round(coordinates._frame_rate))
+        if scale and scale not in SCALERS:
+            raise ValueError(f"Invalid scaler: {scale}")
+        if save_as_paths is None:
+            save_as_paths = bool(coordinates._very_large_project)
+
+        keys_list = sorted(self.keys())
+        animal_ids = coordinates._animal_ids
+
+        # Time bins
+        bin_info = _preprocess_time_bins(
+            coordinates=coordinates,
+            bin_size=bin_size,
+            bin_index=bin_index,
+            precomputed_bins=precomputed_bins,
+            tab_dict_for_binning=self,
+            samples_max=samples_max,
+        )
+
+        # ========== Step 1: Collect samples for global scaler fitting ==========
+
+        valid_keys, samples, _refs = deepof.utils._pp_pass1_collect_samples(
+            self,
+            coordinates=coordinates,
+            keys_list=keys_list,
+            animal_ids=animal_ids,
+            bin_info=bin_info,
+            samples_max=samples_max,
+            scale=scale,
+            pretrained_scaler=pretrained_scaler,
+            filter_low_variance=filter_low_variance,
+            dist_standardize=dist_standardize,
+            speed_standardize=speed_standardize,
+            coord_standardize=coord_standardize,
+            log_distances=log_distances,
+            quality_to_load=quality_to_load,
+        )
+
+        # ========== Step 2: Fit global scaler ==========
+
+        global_scaler = deepof.utils._pp_fit_global_scaler(
+            scale=scale,
+            pretrained_scaler=pretrained_scaler,
+            samples=samples,
+            dist_standardize=dist_standardize,
+            speed_standardize=speed_standardize,
+            coord_standardize=coord_standardize,
+            log_distances=log_distances,
+        )
+
+        # ========== Step 3: Apply scaling + save ==========
+
+        table_temp = deepof.utils._pp_pass2_scale_and_save(
+            self,
+            coordinates=coordinates,
+            valid_keys=valid_keys,
+            bin_info=bin_info,
+            animal_ids=animal_ids,
+            scale=scale,
+            global_scaler=global_scaler,
+            filter_low_variance=filter_low_variance,
+            interpolate_normalized=interpolate_normalized,
+            dist_standardize=dist_standardize,
+            speed_standardize=speed_standardize,
+            coord_standardize=coord_standardize,
+            log_distances=log_distances,
+            file_name=file_name,
+            save_as_paths=save_as_paths,
+            quality_to_load=quality_to_load,
+        )
+
+        # ========== Step 4: Extract windows ==========
+
+        X_train, X_test, test_index = self.get_training_set(table_temp, test_videos)
+
+        X_train, train_shape = deepof.utils.extract_windows(
+            to_window=X_train,
+            window_size=window_size,
+            window_step=window_step,
+            save_as_paths=save_as_paths,
+            shuffle=shuffle,
+            windows_desc="Get training windows",
+        )
+
+        if test_videos and len(test_index) > 0:
+            X_test, test_shape = deepof.utils.extract_windows(
+                to_window=X_test,
+                window_size=window_size,
+                window_step=window_step,
+                save_as_paths=save_as_paths,
+                shuffle=shuffle,
+                windows_desc="Get testing windows",
+            )
+        else:
+            test_shape = (0,)
+
+        to_preprocess = (X_train, X_test)
+
+        metainfo = {
+            "shape_train": train_shape,
+            "shape_test": test_shape,
+            "dist_standardize": dist_standardize,
+            "speed_standardize": speed_standardize,
+            "coord_standardize": coord_standardize,
+        }
+
+        return to_preprocess, metainfo, global_scaler
+
+
+
+    def preprocess_old(
         self,
         coordinates,
         window_size: int = None,

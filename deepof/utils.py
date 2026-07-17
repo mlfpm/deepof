@@ -18,6 +18,7 @@ from typing import Any, List, NewType, Tuple, Union, Optional, Dict
 
 # For optional verification plots, will probably be removed later
 from matplotlib import pyplot as plt
+from dataclasses import dataclass
 
 
 import cv2
@@ -2296,6 +2297,47 @@ def rename_track_bps(
     return loaded_tab
 
 
+@dataclass
+class GlobalScalerSpec:
+    """
+    Container for global scalers fitted across videos.
+
+    Notes:
+        - We keep the legacy dict format at the boundary (return value) to guarantee
+          backward compatibility and make preprocess_new output identical to preprocess.
+    """
+    kind: str
+    speed_mode: Optional[str]
+    dist_mode: Optional[str]
+    coord_mode: Optional[str]
+    log_distances: bool
+    speed: Any = None
+    dist: Any = None
+    dist_inner: Any = None
+    dist_intra: Any = None
+    coord: Any = None
+
+    def to_legacy_dict(self) -> Dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "speed": self.speed,
+            "dist": self.dist,
+            "dist_inner": self.dist_inner,
+            "dist_intra": self.dist_intra,
+            "coord": self.coord,
+            "speed_mode": self.speed_mode,
+            "dist_mode": self.dist_mode,
+            "coord_mode": self.coord_mode,
+            "log_distances": self.log_distances,
+        }
+
+    def is_effectively_empty(self) -> bool:
+        return all(
+            self.to_legacy_dict().get(k) is None
+            for k in ("speed", "dist", "dist_inner", "dist_intra", "coord")
+        )
+    
+
 def infer_scalar_cols(df: pd.DataFrame):
     coord_cols = [c for c in df.columns
                 if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
@@ -2489,6 +2531,450 @@ def scale_table(
 
     return out
 
+
+
+def _pp_make_scaler(scale_kind: str):
+    SCALERS = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}
+    if scale_kind not in SCALERS:
+        raise ValueError(f"Invalid scaler: {scale_kind}. Choose from {set(SCALERS.keys())}")
+    return SCALERS[scale_kind]()
+
+
+def _pp_sanitize_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """Interpolate NaNs and fill remaining gaps with zeros."""
+    out = df.copy()
+    num_cols = out.select_dtypes(include=[np.number]).columns
+    if len(num_cols) > 0:
+        out[num_cols] = out[num_cols].interpolate(limit_direction="both").fillna(0.0)
+    return out
+
+
+def _pp_load_and_prepare_table(
+    table_dict,
+    key: str,
+    bin_indices,
+    quality_to_load=None,
+) -> pd.DataFrame:
+    """Load table, apply binning, and optionally replace speeds with quality scores."""
+    tab = get_dt(table_dict, key).iloc[bin_indices]
+
+    if quality_to_load is not None:  # pragma: no cover
+        quality = get_dt(quality_to_load.filter_videos([key]), key)
+        shared_cols = list(set(tab.columns) & set(quality.columns))
+        if shared_cols:
+            tab[shared_cols] = quality[shared_cols].iloc[bin_indices]
+
+    return tab
+
+
+def _pp_filter_low_variance(tab: pd.DataFrame, filter_low_variance: Any) -> pd.DataFrame:
+    """Filter low-variance columns, preserving pheno columns."""
+    if not filter_low_variance:
+        return tab
+
+    keep_cols = (
+        list(np.where(tab.var(axis=0) > filter_low_variance)[0])
+        + list(np.where(["pheno" in str(col) for col in tab.columns])[0])
+    )
+    tab = tab.iloc[:, keep_cols]
+    assert len(tab.columns) > 0, (
+        "Error! During preprocessing the entire table was filtered out due to low variance!\n"
+        "This may happen due to an exceedingly high number of NaNs in the section chosen for preprocessing!"
+    )
+    return tab
+
+
+def _pp_init_empty_output_container(table_dict):
+    """Create empty output container matching the input TableDict type."""
+    try:
+        return type(table_dict)({}, table_dict._type, table_dict._table_path)
+    except Exception:  # pragma: no cover
+        table_temp = copy.deepcopy(table_dict)
+        for k in list(table_temp.keys()):
+            del table_temp[k]
+        return table_temp
+
+
+def _pp_pass1_collect_samples(
+    table_dict,
+    *,
+    coordinates,
+    keys_list: List[str],
+    animal_ids,
+    bin_info: Dict[str, Any],
+    samples_max: int,
+    scale: Optional[str],
+    pretrained_scaler,
+    filter_low_variance: Any,
+    dist_standardize: Optional[str],
+    speed_standardize: Optional[str],
+    coord_standardize: Optional[str],
+    log_distances: bool,
+    quality_to_load=None,
+):
+    """
+    Pass 1: iterate tables and collect samples to fit global scalers.
+
+    Returns:
+        valid_keys, samples buffers + reference column lists for consistent per-column fitting.
+    """
+    rng = np.random.RandomState(2)
+
+    samples_speed, samples_dist, samples_coord, samples_inner, samples_intra = [], [], [], [], []
+    ref_speed_cols, ref_dist_cols, ref_coord_cols = None, None, None
+    valid_keys: List[str] = []
+
+    with tqdm(
+        total=len(keys_list),
+        desc=f"{'Sampling':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="table",
+    ) as pbar:
+        for key in keys_list:
+            tab = _pp_load_and_prepare_table(
+                table_dict, key, bin_info[key], quality_to_load=quality_to_load
+            )
+
+            if tab.isna().all().all():
+                pbar.update()
+                continue
+
+            valid_keys.append(key)
+
+            tab = _pp_filter_low_variance(tab, filter_low_variance)
+
+            if scale and pretrained_scaler is None:
+                # Size-normalize + local scaling (coords are only size-normalized; see coord_standardize=None)
+                tab_local = deepof.utils.scale_table(
+                    tab,
+                    scale=scale,
+                    animal_ids=animal_ids,
+                    standardize=True,
+                    dist_standardize=dist_standardize,
+                    speed_standardize=speed_standardize,
+                    coord_standardize=None,
+                    log_distances=log_distances,
+                )
+
+                col_types = deepof.utils.infer_column_types(tab_local)
+
+                n_take = min(samples_max, len(tab_local))
+                if n_take > 0:
+                    idx = rng.choice(len(tab_local), size=n_take, replace=False)
+
+                    # Speeds
+                    if speed_standardize is not None and col_types["speeds"]:
+                        if speed_standardize == "per_column":
+                            if ref_speed_cols is None:
+                                ref_speed_cols = col_types["speeds"]
+                            samples_speed.append(
+                                tab_local.iloc[idx]
+                                .reindex(columns=ref_speed_cols)[ref_speed_cols]
+                                .to_numpy(float)
+                            )
+                        else:  # groupwise
+                            samples_speed.append(
+                                tab_local.iloc[idx][col_types["speeds"]]
+                                .to_numpy(float)
+                                .reshape(-1)
+                            )
+
+                    # Distances (groupwise separately for inner vs intra)
+                    if dist_standardize is not None and col_types["dists"]:
+                        if dist_standardize == "per_column":
+                            if ref_dist_cols is None:
+                                ref_dist_cols = col_types["dists"]
+                            samples_dist.append(
+                                tab_local.iloc[idx]
+                                .reindex(columns=ref_dist_cols)[ref_dist_cols]
+                                .to_numpy(float)
+                            )
+                        else:  # groupwise
+                            if col_types["inner_dists"]:
+                                samples_inner.append(
+                                    tab_local.iloc[idx][col_types["inner_dists"]]
+                                    .to_numpy(float)
+                                    .reshape(-1)
+                                )
+                            if col_types["intra_dists"]:
+                                samples_intra.append(
+                                    tab_local.iloc[idx][col_types["intra_dists"]]
+                                    .to_numpy(float)
+                                    .reshape(-1)
+                                )
+
+                    # Coordinates
+                    coord_cols_local = [
+                        c
+                        for c in tab_local.columns
+                        if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")
+                    ]
+                    if coord_standardize is not None and coord_cols_local:
+                        if coord_standardize == "per_column":
+                            if ref_coord_cols is None:
+                                ref_coord_cols = coord_cols_local
+                            samples_coord.append(
+                                tab_local.iloc[idx]
+                                .reindex(columns=ref_coord_cols)[ref_coord_cols]
+                                .to_numpy(float)
+                            )
+                        else:  # groupwise
+                            samples_coord.append(
+                                tab_local.iloc[idx][coord_cols_local]
+                                .to_numpy(float)
+                                .reshape(-1)
+                            )
+
+            pbar.update()
+
+    samples = {
+        "speed": samples_speed,
+        "dist": samples_dist,
+        "coord": samples_coord,
+        "inner": samples_inner,
+        "intra": samples_intra,
+    }
+    refs = {
+        "speed": ref_speed_cols,
+        "dist": ref_dist_cols,
+        "coord": ref_coord_cols,
+    }
+    return valid_keys, samples, refs
+
+
+def _pp_fit_global_scaler(
+    *,
+    scale: Optional[str],
+    pretrained_scaler,
+    samples: Dict[str, list],
+    dist_standardize: Optional[str],
+    speed_standardize: Optional[str],
+    coord_standardize: Optional[str],
+    log_distances: bool,
+):
+    """
+    Fit the global scalers (legacy output format).
+
+    Returns:
+        - pretrained_scaler as-is if provided
+        - None if no scaling requested
+        - legacy dict {kind, speed, dist, dist_inner, dist_intra, coord, ...} otherwise
+    """
+
+    def _fit_global_per_column(samples_2d):
+        if not samples_2d:
+            return None
+        sc = _pp_make_scaler(scale)
+        sc.fit(np.vstack(samples_2d))
+        return sc
+
+    def _fit_global_groupwise(samples_1d):
+        if not samples_1d:
+            return None
+        sc = _pp_make_scaler(scale)
+        sc.fit(np.concatenate(samples_1d).reshape(-1, 1))
+        return sc
+
+    if pretrained_scaler is not None:
+        return pretrained_scaler
+    if not scale:
+        return None
+
+    gs = GlobalScalerSpec(
+        kind=scale,
+        speed_mode=speed_standardize,
+        dist_mode=dist_standardize,
+        coord_mode=coord_standardize,
+        log_distances=log_distances,
+    )
+
+    # Speeds
+    if speed_standardize == "per_column":
+        gs.speed = _fit_global_per_column(samples["speed"])
+    elif speed_standardize == "groupwise":
+        gs.speed = _fit_global_groupwise(samples["speed"])
+
+    # Distances
+    if dist_standardize == "per_column":
+        gs.dist = _fit_global_per_column(samples["dist"])
+    elif dist_standardize == "groupwise":
+        gs.dist_inner = _fit_global_groupwise(samples["inner"])
+        gs.dist_intra = _fit_global_groupwise(samples["intra"])
+
+    # Coordinates
+    if coord_standardize == "per_column":
+        gs.coord = _fit_global_per_column(samples["coord"])
+    elif coord_standardize == "groupwise":
+        gs.coord = _fit_global_groupwise(samples["coord"])
+
+    if gs.is_effectively_empty():
+        return None
+
+    return gs.to_legacy_dict()
+
+
+def _pp_apply_global(
+    tab_scaled: pd.DataFrame,
+    *,
+    speed_standardize: Optional[str],
+    dist_standardize: Optional[str],
+    coord_standardize: Optional[str],
+    global_scaler,
+) -> pd.DataFrame:
+    """
+    Apply global scalers according to configured modes.
+
+    Note:
+        This mirrors the original preprocess implementation. It uses the mode arguments
+        rather than reading them back from global_scaler.
+    """
+    if global_scaler is None:
+        return tab_scaled
+
+    def _apply_1d(cols, scaler):
+        if not cols or scaler is None:
+            return
+        arr = tab_scaled[cols].to_numpy(float)
+        tab_scaled.loc[:, cols] = scaler.transform(arr.reshape(-1, 1)).reshape(arr.shape)
+
+    def _apply_2d(cols, scaler):
+        if not cols or scaler is None:
+            return
+        tab_scaled.loc[:, cols] = scaler.transform(tab_scaled[cols].to_numpy(float))
+
+    col_types = infer_column_types(tab_scaled)
+
+    # Speeds
+    if speed_standardize == "per_column":
+        _apply_2d(col_types["speeds"], global_scaler.get("speed"))
+    elif speed_standardize == "groupwise":
+        _apply_1d(col_types["speeds"], global_scaler.get("speed"))
+
+    # Distances
+    if dist_standardize == "per_column":
+        _apply_2d(col_types["dists"], global_scaler.get("dist"))
+    elif dist_standardize == "groupwise":
+        _apply_1d(col_types["inner_dists"], global_scaler.get("dist_inner"))
+        _apply_1d(col_types["intra_dists"], global_scaler.get("dist_intra"))
+
+    # Coordinates
+    coord_cols_apply = [
+        c
+        for c in tab_scaled.columns
+        if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")
+    ]
+    if coord_standardize == "per_column":
+        _apply_2d(coord_cols_apply, global_scaler.get("coord"))
+    elif coord_standardize == "groupwise":
+        _apply_1d(coord_cols_apply, global_scaler.get("coord"))
+
+    return tab_scaled
+
+
+def _pp_pass2_scale_and_save(
+    table_dict,
+    *,
+    coordinates,
+    valid_keys: List[str],
+    bin_info: Dict[str, Any],
+    animal_ids,
+    scale: Optional[str],
+    global_scaler,
+    filter_low_variance: Any,
+    interpolate_normalized: int,
+    dist_standardize: Optional[str],
+    speed_standardize: Optional[str],
+    coord_standardize: Optional[str],
+    log_distances: bool,
+    file_name: str,
+    save_as_paths: bool,
+    quality_to_load=None,
+):
+    """
+    Pass 2: Apply scaling + clipping/interpolation + angle reattachment + saving.
+    """
+    table_temp = _pp_init_empty_output_container(table_dict)
+
+    with tqdm(
+        total=len(valid_keys),
+        desc=f"{'Scaling':<{PROGRESS_BAR_FIXED_WIDTH}}",
+        unit="table",
+    ) as pbar:
+        for key in valid_keys:
+            tab = _pp_load_and_prepare_table(
+                table_dict, key, bin_info[key], quality_to_load=quality_to_load
+            )
+            orig_cols = tab.columns
+
+            col_types = infer_column_types(tab)
+
+            # Separate angles (dimensionless; only need interpolation, not scaling)
+            angle_cols = col_types["angles"]
+            angles_df = tab[angle_cols].copy() if angle_cols else None
+            tab = tab.drop(columns=angle_cols, errors="ignore")
+
+            tab = _pp_filter_low_variance(tab, filter_low_variance)
+
+            # Apply full scaling (size + statistical)
+            if scale:
+                tab_local = scale_table(
+                    tab,
+                    scale=scale,
+                    animal_ids=animal_ids,
+                    standardize=True,
+                    dist_standardize=dist_standardize,
+                    speed_standardize=speed_standardize,
+                    coord_standardize=None,
+                    log_distances=log_distances,
+                )
+
+                tab = tab_local
+                tab = _pp_apply_global(
+                    tab,
+                    speed_standardize=speed_standardize,
+                    dist_standardize=dist_standardize,
+                    coord_standardize=coord_standardize,
+                    global_scaler=global_scaler,
+                )
+
+                # Clip outliers and interpolate (scalars + coords)
+                if scale == "standard" and interpolate_normalized:
+                    scalars = [c for c in col_types["scalars"] if c in tab.columns]
+                    coord_cols_clip = [
+                        c
+                        for c in tab.columns
+                        if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")
+                    ]
+                    clip_cols = list(dict.fromkeys(scalars + coord_cols_clip))
+                    if clip_cols:
+                        arr = tab[clip_cols].to_numpy(float)
+                        arr[np.abs(arr) > interpolate_normalized] = np.nan
+                        tab[clip_cols] = pd.DataFrame(
+                            arr, index=tab.index, columns=clip_cols
+                        ).interpolate(limit_direction="both")
+
+            # Reattach interpolated angles
+            if angles_df is not None:
+                angles_df = angles_df.apply(pd.to_numeric, errors="ignore").interpolate(
+                    limit_direction="both"
+                )
+                tab = pd.concat([tab, angles_df], axis=1)
+
+            # Restore column order
+            tab = tab.reindex(columns=orig_cols)
+
+            # Save
+            table_path = os.path.join(table_dict._table_path, key, f"{key}_{file_name}")
+            table_temp[key] = save_dt(_pp_sanitize_numeric(tab), table_path, save_as_paths)
+
+            pbar.update()
+
+            # Column order safety check (as in original)
+            orig_cols2 = get_dt(table_dict, key).iloc[bin_info[key]].columns
+            new_cols2 = get_dt(table_temp, key).columns
+            assert list(orig_cols2) == list(new_cols2), "Column order changed during preprocessing!"
+
+    return table_temp
+    
 
 def kleinberg(
     offsets: list, s: float = 2.0, gamma: float = 1.0, n=None, T=None, k=None
