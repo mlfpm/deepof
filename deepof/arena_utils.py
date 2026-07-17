@@ -1540,7 +1540,7 @@ def retrieve_corners_from_image(
 
     h_ratio = 1
     w_ratio = 1
-    if frame.shape[0] > IMG_H_MAX  or frame.shape[1] > IMG_W_MAX:
+    if frame.shape[0] > IMG_H_MAX or frame.shape[1] > IMG_W_MAX:
 
         if frame.shape[0]/IMG_H_MAX > frame.shape[1]/IMG_W_MAX:
             h_ratio = frame.shape[0]/IMG_H_MAX
