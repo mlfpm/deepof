@@ -3323,7 +3323,7 @@ class Coordinates:
             **kwargs: Additional keyword arguments to pass to the model.
 
         Returns:
-            Tuple: Tuple containing all trained models. See specific model documentation under deepof.models for details.
+            Tuple: Tuple containing all trained models. See specific model documentation under deepof.clustering.training for details.
         """
         
         ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###

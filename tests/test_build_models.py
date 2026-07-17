@@ -4,7 +4,7 @@
 
 """
 
-Testing module for deepof.models
+Testing module for deepof.clustering
 
 """
 
