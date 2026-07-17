@@ -1423,6 +1423,87 @@ class VectorQuantizerPT(nn.Module):
         return encoding_indices
     
 
+def init_encoder_decoder(
+    *,
+    encoder_type: str,
+    input_shape,
+    edge_feature_shape,
+    adjacency_matrix,
+    latent_dim: int,
+    use_gnn: bool,
+    interaction_regularization: float,
+    n_nodes: int,
+    n_features_per_node: int,
+    time_steps: int,
+):
+    """
+    Initialize encoder/decoder modules based on encoder type.
+
+    Args:
+        encoder_type: can be either "recurrent", "TCN", or "transformer".
+        input_shape, edge_feature_shape, adjacency_matrix: forwarded to encoders.
+        latent_dim, use_gnn, interaction_regularization: forwarded to encoders.
+        n_nodes, n_features_per_node, time_steps: used to compute decoder output shape.
+
+    Returns:
+        (encoder, decoder)
+    """
+    decoder_output_features = n_nodes * n_features_per_node
+
+    if encoder_type == "recurrent":
+        encoder = RecurrentEncoderPT(
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
+        )
+        decoder = RecurrentDecoderPT(
+            output_shape=(time_steps, decoder_output_features),
+            latent_dim=latent_dim,
+        )
+
+    elif encoder_type == "TCN":
+        encoder = TCNEncoderPT(
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
+        )
+        decoder = TCNDecoderPT(
+            output_shape=(time_steps, decoder_output_features),
+            latent_dim=latent_dim,
+        )
+
+    elif encoder_type == "transformer":
+        encoder = TFMEncoderPT(
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            # interaction_regularization=interaction_regularization,
+        )
+        decoder = TFMDecoderPT(
+            output_shape=(time_steps, decoder_output_features),
+            latent_dim=latent_dim,
+            num_layers=2,
+            num_heads=8,
+            dff=128,
+            dropout_rate=0.2,
+        )
+
+    else:  # pragma: no cover
+        raise NotImplementedError(
+            'invalid encoder type, try "recurrent", "TCN" or "transformer"'
+        )
+
+    return encoder, decoder
+
+
 class VQVAEPT(nn.Module):
     """
     PyTorch implementation of the VQ-VAE model adapted to the DeepOF setting.
@@ -1470,53 +1551,18 @@ class VQVAEPT(nn.Module):
         self.encoder_type = encoder_type
         
         # Initialize encoder based on type
-        if encoder_type == "recurrent":
-            self.encoder = RecurrentEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-                interaction_regularization=interaction_regularization,
-            )
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = RecurrentDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-            )
-        elif encoder_type == "TCN":
-            self.encoder = TCNEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-                interaction_regularization=interaction_regularization,
-            )
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = TCNDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-            ) 
-        elif encoder_type == "transformer":
-            self.encoder = TFMEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-            )
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = TFMDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-                num_layers=2,
-                num_heads=8,
-                dff=128,
-                dropout_rate=0.2,
-            )
-        else: # pragma: no cover
-            raise ValueError(f"Unknown encoder_type: {encoder_type}")
+        self.encoder, self.decoder = init_encoder_decoder(
+            encoder_type=encoder_type,
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
+            n_nodes=n_nodes,
+            n_features_per_node=n_features_per_node,
+            time_steps=time_steps,
+        )
         
         # Initialize Vector Quantizer
         self.vq_layer = VectorQuantizerPT(
@@ -1770,57 +1816,18 @@ class VaDEPT(nn.Module):
         self.window_size = time_steps #important for modal usage later
         self.lens_enabled=lens_enabled
 
-        if encoder_type == "recurrent":
-            self.encoder = RecurrentEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-                interaction_regularization=interaction_regularization,
-            )
-
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = RecurrentDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-            )
-        elif encoder_type == "TCN":
-            self.encoder = TCNEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-                interaction_regularization=interaction_regularization,
-            )
-
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = TCNDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-            ) 
-        elif encoder_type == "transformer":
-            self.encoder = TFMEncoderPT(
-                input_shape=input_shape,
-                edge_feature_shape=edge_feature_shape,
-                adjacency_matrix=adjacency_matrix,
-                latent_dim=latent_dim,
-                use_gnn=use_gnn,
-                #interaction_regularization=interaction_regularization,
-            )
-
-            decoder_output_features = n_nodes * n_features_per_node
-            self.decoder = TFMDecoderPT(
-                output_shape=(time_steps, decoder_output_features),
-                latent_dim=latent_dim,
-                num_layers=2,
-                num_heads=8,
-                dff=128,
-                dropout_rate=0.2,               # a bit more dropout helps
-            ) 
-        else: # pragma: no cover
-            raise NotImplementedError("invalid encoder type, try \"recurrent\", \"TCN\" or \"transformer\" ")          
+        self.encoder, self.decoder = init_encoder_decoder(
+            encoder_type=encoder_type,
+            input_shape=input_shape,
+            edge_feature_shape=edge_feature_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=latent_dim,
+            use_gnn=use_gnn,
+            interaction_regularization=interaction_regularization,
+            n_nodes=n_nodes,
+            n_features_per_node=n_features_per_node,
+            time_steps=time_steps,
+        )        
 
         self.latent_space = GaussianMixtureLatentPT(
             input_dim=latent_dim,
