@@ -417,10 +417,13 @@ class TemporalBlockPT(nn.Module):
         self.downsample = nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=True) if in_channels != out_channels else None
 
         # Init similar to keras random_normal
-        nn.init.normal_(self.conv1.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.conv1.bias)
-        nn.init.normal_(self.conv2.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.conv2.bias)
+        nn.init.normal_(self.conv1.weight, mean=0.0, std=conv_init_std)
+        nn.init.zeros_(self.conv1.bias)
+        nn.init.normal_(self.conv2.weight, mean=0.0, std=conv_init_std)
+        nn.init.zeros_(self.conv2.bias)
         if self.downsample is not None:
-            nn.init.normal_(self.downsample.weight, mean=0.0, std=conv_init_std); nn.init.zeros_(self.downsample.bias)
+            nn.init.normal_(self.downsample.weight, mean=0.0, std=conv_init_std)
+            nn.init.zeros_(self.downsample.bias)
 
     def _causal_pad(self, x: torch.Tensor) -> torch.Tensor:
         pad = (self.kernel_size - 1) * self.dilation
@@ -598,7 +601,8 @@ class TCNEncoderPT(nn.Module):
         )
         for m in self.head.modules():
             if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight); nn.init.zeros_(m.bias)
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         """
@@ -771,7 +775,8 @@ class TCNDecoderPT(nn.Module):
 
         # Init linear layers (BN stats copied by transfer)
         for m in [self.fc0, self.fc1, self.fc2]:
-            nn.init.xavier_uniform_(m.weight); nn.init.zeros_(m.bias)
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
 
     def _stabilize_latent(self, g: torch.Tensor) -> torch.Tensor:
         # Training-only guard for extreme latent magnitudes
