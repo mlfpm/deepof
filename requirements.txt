@@ -2,8 +2,6 @@ POT>=0.8.2
 Shapely>=1.8.5.post1
 catboost>=1.1.1
 imageio-ffmpeg>=0.4.8
-imbalanced_learn>=0.10.1
-imblearn>=0.0
 joblib>=1.2.0
 jupyter-sphinx==0.4.0
 jupyter_sphinx>=0.4.0
@@ -17,8 +15,8 @@ pandas~=1.5
 pomegranate>=1.0.0
 regex>=2022.10.31
 regex>=2022.3.15
-scikit_learn==1.2.0
-scipy==1.9.3
+scikit_learn>=1.2.0
+scipy>=1.9.3
 seaborn>=0.11.2
 seglearn>=1.2.5
 segment-anything==1.0
@@ -50,3 +48,6 @@ xgboost==2.1.4
 duckdb==1.2.2
 av==12.3.0
 numba==0.59.1
+optuna >= 4.8.0
+deeptime >= 0.4.5
+
