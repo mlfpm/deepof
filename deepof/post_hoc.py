@@ -896,7 +896,7 @@ def _gate_to_tag(gate: Any) -> str:
 def _preprocess_gates(
     coordinates,
     embeddings: Dict[str, np.ndarray],
-    animal_ids: Optional[Sequence[str]],
+    animal_ids: Optional[List[str]],
     window_size: int,
     supervised_annotations,
     M_gates: int,
