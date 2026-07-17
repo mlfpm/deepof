@@ -12,7 +12,7 @@ import warnings
 from collections import Counter, defaultdict
 from itertools import product, combinations
 from multiprocessing import cpu_count
-from typing import Optional, Any, Dict, NewType, Union, Tuple, List
+from typing import Optional, Any, Dict, NewType, Union, Tuple, List, Sequence
 from sklearn.cluster import MiniBatchKMeans
 from scipy.ndimage import uniform_filter1d
 from deeptime.markov import TransitionCountEstimator
