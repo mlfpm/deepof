@@ -238,7 +238,7 @@ def step_vade(
 
     base_m = unwrap_dp(model)
     T_high = float(getattr(ctx, "resp_temp_start", 1.8))
-    T_low  = 1.0
+    T_low = 1.0
     T_resp = T_high
     if hasattr(ctx.criterion, "kl_scheduler") and (ctx.criterion.kl_scheduler is not None):
         w = float(ctx.criterion.kl_scheduler.get_weight())
@@ -329,11 +329,11 @@ def step_vqvae_distill(
 
     with torch.amp.autocast(device_type=device.type, enabled=False):
         enc_rec_loss = -(encoding_recon.log_prob(x_flat.float())).mean()
-        rec_loss     = -(recon.log_prob(x_flat.float())).mean()
+        rec_loss = -(recon.log_prob(x_flat.float())).mean()
 
-    vq_loss     = float(vq_losses.get("vq_loss", 0.0))
+    vq_loss = float(vq_losses.get("vq_loss", 0.0))
     kmeans_loss = float(vq_losses.get("kmeans_loss", 0.0))
-    vq_total_t  = torch.as_tensor(vq_loss + kmeans_loss, device=device, dtype=enc_rec_loss.dtype)
+    vq_total_t = torch.as_tensor(vq_loss + kmeans_loss, device=device, dtype=enc_rec_loss.dtype)
 
     base_total = enc_rec_loss + rec_loss + vq_total_t
     distill_loss = torch.tensor(0.0, device=device, dtype=enc_rec_loss.dtype)
@@ -970,7 +970,7 @@ def train_deepof_model_base(
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False,  ddp_shard=False, 
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False, ddp_shard=False, 
         bootstrap_training=False,
     )
 
@@ -1195,7 +1195,7 @@ def fit_VQVAE(
         # Save best model based on total validation loss
         if v_total < best_val:
             best_val = v_total
-            if common_cfg.save_weights  and is_main:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -1230,7 +1230,7 @@ def fit_VQVAE(
         if improved_score and epoch > score_start_epoch: # pragma: no cover
             best_score = score_value
             best_score_val = v_total
-            if common_cfg.save_weights  and is_main:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_score,
                     stage="best_score",
@@ -1254,7 +1254,8 @@ def fit_VQVAE(
     )
 
     if writer:
-        writer.flush(); writer.close()
+        writer.flush()
+        writer.close()
 
     if tuning_mode:
         return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
@@ -1509,7 +1510,8 @@ def fit_contrastive(
     )
 
     if writer:
-        writer.flush(); writer.close()
+        writer.flush()
+        writer.close()
 
     if tuning_mode:
         return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
@@ -1859,7 +1861,7 @@ def fit_VADE(
             val_top_reached=True
             best_val = val_total
             val_tol=0.0
-            if common_cfg.save_weights  and is_main:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_val,
                     stage="best_val",
@@ -1881,7 +1883,7 @@ def fit_VADE(
         if improved_score and epoch > score_start_epoch: # pragma: no cover
             best_score = score_value
             best_score_val = val_total
-            if common_cfg.save_weights  and is_main:
+            if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_score,
                     stage="best_score",
@@ -1906,7 +1908,8 @@ def fit_VADE(
     )
 
     if writer:
-        writer.flush(); writer.close()
+        writer.flush()
+        writer.close()
 
     if tuning_mode:
         return unwrap_dp(model_val), unwrap_dp(model_score), teacher_init_model, log_summary, max_score 
@@ -2337,12 +2340,12 @@ def _augment_linear_interpolate_segments(
     # Gather endpoints: (B,N,3)
     b_idx = torch.arange(B, device=device)
     start = x_aug[b_idx, t_start]    # (B,N,3)
-    end   = x_aug[b_idx, t_end]      # (B,N,3)
+    end = x_aug[b_idx, t_end]      # (B,N,3)
 
     # Build mask over time: frames to replace are t0..t0+L-1
     tt = torch.arange(T, device=device).view(1, T)                    # (1,T)
     t0v = t0.view(B, 1)                                                # (B,1)
-    Lv  = L.view(B, 1)                                                 # (B,1)
+    Lv = L.view(B, 1)                                                 # (B,1)
     mask = (tt >= t0v) & (tt < (t0v + Lv)) & apply.view(B, 1)          # (B,T)
 
     # Alpha for each t in the segment: alpha = (t - (t0-1)) / (L+1)
@@ -2352,9 +2355,9 @@ def _augment_linear_interpolate_segments(
 
     # Interpolated frames: (B,T,N,3)
     start_e = start.unsqueeze(1)                                       # (B,1,N,3)
-    end_e   = end.unsqueeze(1)                                         # (B,1,N,3)
+    end_e = end.unsqueeze(1)                                         # (B,1,N,3)
     alpha_e = alpha.unsqueeze(-1).unsqueeze(-1)                        # (B,T,1,1)
-    interp  = (1.0 - alpha_e) * start_e + alpha_e * end_e              # (B,T,N,3)
+    interp = (1.0 - alpha_e) * start_e + alpha_e * end_e              # (B,T,N,3)
 
     # Apply only on masked frames
     x_aug = torch.where(mask.unsqueeze(-1).unsqueeze(-1), interp, x_aug)
