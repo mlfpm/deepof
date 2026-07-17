@@ -1096,6 +1096,196 @@ def get_contrastive_soft_counts_gmm(
     }
 
 
+def _collect_segments_for_gate_bin(
+    *,
+    keys,
+    gate_masks,
+    gate,
+    b: int,
+    Z_by_key,
+    embeddings,
+    lagtime: int,
+):
+    """
+    Collect spatial segments (for microstate clustering) and temporal segments (for MSM)
+    for a given (gate, bin).
+    """
+    seg_spatial: List[np.ndarray] = []
+    seg_temporal: List[np.ndarray] = []
+    n_windows = 0
+
+    for key in keys:
+        Z = _get_Z(Z_by_key, embeddings, key)
+        mask = gate_masks[gate][b][key]
+        n_windows += int(mask.sum())
+
+        for s, e in _mask_to_runs(mask, min_len=2):
+            seg = Z[s:e, :]
+            seg_spatial.append(seg)
+            if seg.shape[0] >= lagtime + 2:
+                seg_temporal.append(seg)
+
+    return seg_spatial, seg_temporal, n_windows
+
+
+def _fit_microstates_kmeans(
+    *,
+    seg_spatial: List[np.ndarray],
+    sample_size: int,
+    seed: int,
+    n_micro: int,
+    min_micro_per_macro: int,
+    N_clusters_per_gate: int,
+):
+    """
+    Fit scaler + kmeans microstates on sampled frames from seg_spatial.
+    """
+    X_fit = _reservoir_sample(seg_spatial, int(sample_size), seed=seed)
+
+    scaler = StandardScaler()
+    X_fit = scaler.fit_transform(X_fit)
+
+    n_micro_eff = int(
+        min(
+            n_micro,
+            max(
+                min_micro_per_macro * N_clusters_per_gate,
+                X_fit.shape[0] // 50,
+            ),
+        )
+    )
+    n_micro_eff = max(n_micro_eff, 2)
+
+    kmeans = MiniBatchKMeans(
+        n_clusters=n_micro_eff,
+        batch_size=4096,
+        max_iter=200,
+        random_state=seed,
+        init="k-means++",
+        n_init="auto",
+    ).fit(X_fit)
+
+    return scaler, kmeans, n_micro_eff
+
+
+def _segments_to_dtrajs(*, seg_temporal: List[np.ndarray], scaler, kmeans):
+    """
+    Convert temporal segments to discrete trajectories (microstate indices).
+    """
+    dtrajs = []
+    for seg in seg_temporal:
+        Xs = scaler.transform(seg)
+        dtrajs.append(np.asarray(kmeans.predict(Xs), dtype=np.int32))
+    return dtrajs
+
+
+def _get_active_state_symbols(count_model, msm):
+    """
+    Try to extract active state symbols (microstate ids) robustly across model versions.
+    Returns:
+        active_syms: np.ndarray[int32] of shape (n_active,) or None
+        n_msm: int or None
+    """
+    import types
+
+    n_msm = msm.n_states if hasattr(msm, "n_states") else None
+    active_syms = None
+
+    for src in (count_model, msm):
+        for attr in ("active_set", "state_symbols"):
+            cand = getattr(src, attr, None)
+            if (
+                cand is not None
+                and not isinstance(cand, types.MethodType)
+                and not isinstance(cand, types.FunctionType)
+            ):
+                cand = np.asarray(cand, dtype=np.int32)
+                if n_msm is None or cand.shape[0] == n_msm:
+                    active_syms = cand
+                    return active_syms, n_msm
+
+    return None, n_msm
+
+
+def _fit_pcca_memberships(
+    *,
+    dtrajs,
+    lagtime: int,
+    N_clusters_per_gate: int,
+):
+    """
+    Fit MSM and compute PCCA memberships.
+
+    Returns:
+        active_syms: np.ndarray[int32] of shape (n_active,)
+        chi: np.ndarray[float32] of shape (n_active, N_clusters_per_gate)
+    """
+    counts_est = TransitionCountEstimator(
+        lagtime=int(lagtime),
+        count_mode="sliding",
+    ).fit(dtrajs)
+    count_model = counts_est.fetch_model()
+
+    msm = MaximumLikelihoodMSM(reversible=True).fit(count_model).fetch_model()
+
+    active_syms, n_msm = _get_active_state_symbols(count_model, msm)
+
+    n_active = active_syms.shape[0] if active_syms is not None else (n_msm or 0)
+    if n_active < 2:
+        return None, None
+
+    if active_syms is None:
+        active_syms = np.arange(n_active, dtype=np.int32)
+
+    K_request = int(min(N_clusters_per_gate, n_active))
+    if K_request < 2:  # pragma: no cover
+        return None, None
+
+    chi_eff = _pcca_memberships(msm, K_request)
+    chi_eff = np.asarray(chi_eff, dtype=np.float32)
+
+    if chi_eff.shape[0] != n_active:  # pragma: no cover
+        return None, None
+
+    # Pad to N_clusters_per_gate if needed
+    if chi_eff.shape[1] == N_clusters_per_gate:
+        chi = chi_eff
+    else:
+        chi = np.zeros((n_active, N_clusters_per_gate), dtype=np.float32)
+        chi[:, : chi_eff.shape[1]] = chi_eff
+        rs = chi.sum(axis=1, keepdims=True)
+        good = rs.squeeze(-1) > 0
+        chi[good] /= rs[good]
+
+    return active_syms, chi
+
+
+def _build_micro2macro(
+    *,
+    n_micro_eff: int,
+    N_clusters_per_gate: int,
+    active_syms: np.ndarray,
+    chi: np.ndarray,
+):
+    """
+    Build microstate -> macrostate membership map.
+
+    Inactive microstates get uniform membership.
+    """
+    micro2macro = np.full(
+        (n_micro_eff, N_clusters_per_gate),
+        1.0 / N_clusters_per_gate,
+        dtype=np.float32,
+    )
+
+    for i in range(active_syms.shape[0]):
+        s = int(active_syms[i])
+        if 0 <= s < n_micro_eff:
+            micro2macro[s, :] = chi[i, :]
+
+    return micro2macro
+
+
 def _fit_msmpcca_models(
     *,
     keys,
@@ -1118,8 +1308,6 @@ def _fit_msmpcca_models(
         models: Dict[gate, List[model_or_None]] where list is length M_gates_eff and
                 each model is a dict with {"scaler","kmeans","micro2macro"}.
     """
-    import types
-
     models: Dict[Any, List] = {}
     total_steps = len(gates) * M_gates_eff
 
@@ -1130,154 +1318,74 @@ def _fit_msmpcca_models(
     ) as pbar:
         for gate_idx, gate in enumerate(gates):
             models[gate] = []
+
             for b in range(M_gates_eff):
                 seed_b = int(random_state + 1000 * gate_idx + 17 * b)
 
-                seg_spatial: List[np.ndarray] = []
-                seg_temporal: List[np.ndarray] = []
-                n_windows = 0
+                # ---- 1) collect segments ----
+                seg_spatial, seg_temporal, n_windows = _collect_segments_for_gate_bin(
+                    keys=keys,
+                    gate_masks=gate_masks,
+                    gate=gate,
+                    b=b,
+                    Z_by_key=Z_by_key,
+                    embeddings=embeddings,
+                    lagtime=lagtime,
+                )
 
-                # ---- collect segments from all keys for this (gate, bin) ----
-                for key in keys:
-                    Z = _get_Z(Z_by_key, embeddings, key)
-                    mask = gate_masks[gate][b][key]
-                    n_windows += int(mask.sum())
-
-                    for s, e in _mask_to_runs(mask, min_len=2):
-                        seg = Z[s:e, :]
-                        seg_spatial.append(seg)
-                        if seg.shape[0] >= lagtime + 2:
-                            seg_temporal.append(seg)
-
-                # not enough data => no model
                 if not seg_spatial or n_windows < max(50, 5 * N_clusters_per_gate):
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
-                # ---- microstate clustering on sampled frames ----
-                X_fit = _reservoir_sample(seg_spatial, int(sample_size), seed=seed_b)
-
-                scaler = StandardScaler()
-                X_fit = scaler.fit_transform(X_fit)
-
-                n_micro_eff = int(
-                    min(
-                        n_micro,
-                        max(
-                            min_micro_per_macro * N_clusters_per_gate,
-                            X_fit.shape[0] // 50,
-                        ),
-                    )
+                # ---- 2) fit microstates ----
+                scaler, kmeans, n_micro_eff = _fit_microstates_kmeans(
+                    seg_spatial=seg_spatial,
+                    sample_size=sample_size,
+                    seed=seed_b,
+                    n_micro=n_micro,
+                    min_micro_per_macro=min_micro_per_macro,
+                    N_clusters_per_gate=N_clusters_per_gate,
                 )
-                n_micro_eff = max(n_micro_eff, 2)
 
-                kmeans = MiniBatchKMeans(
-                    n_clusters=n_micro_eff,
-                    batch_size=4096,
-                    max_iter=200,
-                    random_state=seed_b,
-                    init="k-means++",
-                    n_init="auto",
-                ).fit(X_fit)
-
-                # ---- build discrete trajectories for MSM fitting ----
                 if not seg_temporal:
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
-                dtrajs = []
-                for seg in seg_temporal:
-                    Xs = scaler.transform(seg)
-                    dtrajs.append(np.asarray(kmeans.predict(Xs), dtype=np.int32))
-
+                # ---- 3) build dtrajs ----
+                dtrajs = _segments_to_dtrajs(
+                    seg_temporal=seg_temporal,
+                    scaler=scaler,
+                    kmeans=kmeans,
+                )
                 if not dtrajs:
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
-                # ---- MSM + PCCA ----
-                counts_est = TransitionCountEstimator(
-                    lagtime=int(lagtime),
-                    count_mode="sliding",
-                ).fit(dtrajs)
-                count_model = counts_est.fetch_model()
-
-                msm = MaximumLikelihoodMSM(
-                    reversible=True,
-                ).fit(count_model).fetch_model()
-
-                # figure out which microstates are active (library-dependent naming)
-                n_msm = msm.n_states if hasattr(msm, "n_states") else None
-                active_syms = None
-                for src in (count_model, msm):
-                    for attr in ("active_set", "state_symbols"):
-                        cand = getattr(src, attr, None)
-                        if (
-                            cand is not None
-                            and not isinstance(cand, types.MethodType)
-                            and not isinstance(cand, types.FunctionType)
-                        ):
-                            cand = np.asarray(cand, dtype=np.int32)
-                            if n_msm is None or cand.shape[0] == n_msm:
-                                active_syms = cand
-                                break
-                    if active_syms is not None:
-                        break
-
-                n_active = (
-                    active_syms.shape[0]
-                    if active_syms is not None
-                    else (n_msm or 0)
-                )
-                if n_active < 2:
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
-
-                if active_syms is None:
-                    active_syms = np.arange(n_active, dtype=np.int32)
-
-                K_request = int(min(N_clusters_per_gate, n_active))
-                if K_request < 2:  # pragma: no cover
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
-
+                # ---- 4) MSM + PCCA ----
                 try:
-                    chi_eff = _pcca_memberships(msm, K_request)
+                    active_syms, chi = _fit_pcca_memberships(
+                        dtrajs=dtrajs,
+                        lagtime=lagtime,
+                        N_clusters_per_gate=N_clusters_per_gate,
+                    )
                 except Exception:  # pragma: no cover
+                    active_syms, chi = None, None
+
+                if active_syms is None or chi is None:
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
-                chi_eff = np.asarray(chi_eff, dtype=np.float32)
-                if chi_eff.shape[0] != n_active:  # pragma: no cover
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
-
-                # pad to N_clusters_per_gate if PCCA returns fewer macrostates
-                if chi_eff.shape[1] == N_clusters_per_gate:
-                    chi = chi_eff
-                else:
-                    chi = np.zeros((n_active, N_clusters_per_gate), dtype=np.float32)
-                    chi[:, : chi_eff.shape[1]] = chi_eff
-                    rs = chi.sum(axis=1, keepdims=True)
-                    good = rs.squeeze(-1) > 0
-                    chi[good] /= rs[good]
-
-                # map microstates -> macro memberships (default uniform for inactive)
-                micro2macro = np.full(
-                    (n_micro_eff, N_clusters_per_gate),
-                    1.0 / N_clusters_per_gate,
-                    dtype=np.float32,
+                # ---- 5) micro -> macro mapping ----
+                micro2macro = _build_micro2macro(
+                    n_micro_eff=n_micro_eff,
+                    N_clusters_per_gate=N_clusters_per_gate,
+                    active_syms=active_syms,
+                    chi=chi,
                 )
-                for i in range(n_active):
-                    s = int(active_syms[i])
-                    if 0 <= s < n_micro_eff:
-                        micro2macro[s, :] = chi[i, :]
 
                 models[gate].append(
                     {"scaler": scaler, "kmeans": kmeans, "micro2macro": micro2macro}
