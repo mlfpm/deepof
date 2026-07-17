@@ -245,7 +245,7 @@ class MouseTrackingImputer:
             if not row.isna().any():
                 complete_frames.append(row)
 
-        if not complete_frames:
+        if not complete_frames: # pragma: no cover
             raise ValueError(
                 "No complete frames found in the data. Cannot initialize constraints."
             )
@@ -569,7 +569,7 @@ def str2bool(v: str) -> bool:
         return True
     elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
-    raise argparse.ArgumentTypeError("Boolean compatible value expected.")
+    raise argparse.ArgumentTypeError("Boolean compatible value expected.") # pragma: no cover
 
 
 def compute_animal_presence_mask(

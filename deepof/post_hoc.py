@@ -893,6 +893,62 @@ def _gate_to_tag(gate: Any) -> str:
     return str(gate).replace(os.sep, "-").replace(" ", "_")
 
 
+def _preprocess_gates(
+    coordinates,
+    embeddings: Dict[str, np.ndarray],
+    animal_ids: Optional[Sequence[str]],
+    window_size: int,
+    supervised_annotations,
+    M_gates: int,
+    embedding_gates: Any,
+    gate_edges: Optional[Dict[Any, np.ndarray]],
+) :
+
+    keys = list(embeddings.keys())
+    if not keys:
+        raise ValueError("Embeddings are empty.")
+
+    if animal_ids is None:
+        animal_ids = coordinates._animal_ids
+
+    # cache embeddings + lengths
+    Z_by_key, emb_len = _cache_embeddings(coordinates, embeddings, keys)
+
+    # compute effective number of bins (M_gates)
+    M_gates_eff = int(M_gates)
+    if not isinstance(embedding_gates, str):
+        M_gates_eff = 2 ** len(set(embedding_gates))
+
+    if len(animal_ids) == 1 or len(animal_ids) > 4:
+        M_gates_eff = 1
+
+    # gating series + masks
+    dist_series_dict, gates = _get_gating_series_and_gates(
+        coordinates=coordinates,
+        animal_ids=animal_ids,
+        window_size=window_size,
+        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
+    )
+
+    gate_masks = _build_gate_masks(
+        keys=keys,
+        emb_len=emb_len,
+        dist_series_dict=dist_series_dict,
+        gates=gates,
+        M_gates=M_gates_eff,
+        supervised_annotations=supervised_annotations,
+        gate_edges=gate_edges,
+    )
+
+    return (
+        keys,
+        gates,
+        gate_masks,
+        Z_by_key,
+        M_gates_eff,
+    )
+
 def get_contrastive_soft_counts_gmm(
     coordinates,
     embeddings: Dict[str, np.ndarray],
@@ -915,43 +971,27 @@ def get_contrastive_soft_counts_gmm(
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
     """
-    keys = list(embeddings.keys())
-    if not keys:
-        raise ValueError("Embeddings are empty.")
-    if animal_ids is None:
-        animal_ids = coordinates._animal_ids
-
-    # ---- cache embeddings + lengths ----
-    Z_by_key, emb_len = _cache_embeddings(coordinates, embeddings, keys)
-
-    if not isinstance(embedding_gates, str):
-        M_gates = 2 ** len(sorted(set(embedding_gates)))
-
-    # ---- gating series + masks ----
-    dist_series_dict, gates = _get_gating_series_and_gates(
+    
+    (
+        keys,
+        gates,
+        gate_masks,
+        Z_by_key,
+        M_gates_eff,
+    ) = _preprocess_gates(
         coordinates=coordinates,
+        embeddings=embeddings,
         animal_ids=animal_ids,
         window_size=window_size,
         supervised_annotations=supervised_annotations,
-        embedding_gates=embedding_gates,
-    )
-
-    if len(animal_ids) == 1 or len(animal_ids) > 4:
-        M_gates = 1
-
-    gate_masks = _build_gate_masks(
-        keys=keys,
-        emb_len=emb_len,
-        dist_series_dict=dist_series_dict,
-        gates=gates,
         M_gates=M_gates,
-        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
         gate_edges=gate_edges,
     )
 
     # ---- fit GMM per (gate, bin) ----
     models: Dict[Any, List] = {}
-    total_steps = len(gates) * M_gates
+    total_steps = len(gates) * M_gates_eff
 
     with tqdm.tqdm(
         total=total_steps,
@@ -960,7 +1000,7 @@ def get_contrastive_soft_counts_gmm(
     ) as pbar:
         for gate_idx, gate in enumerate(gates):
             models[gate] = []
-            for b in range(M_gates):
+            for b in range(M_gates_eff):
                 seed_b = int(random_state + 17 * b + 3 * gate_idx)
 
                 bin_segments = []
@@ -994,7 +1034,7 @@ def get_contrastive_soft_counts_gmm(
                 pbar.update(1)
 
     # ---- decode per gate ----
-    K_total = M_gates * N_clusters_per_gate
+    K_total = M_gates_eff * N_clusters_per_gate
     soft_counts_out_by_gate = {gate: {} for gate in gates}
     table_path = os.path.join(
         coordinates._project_path, coordinates._project_name, "Tables"
@@ -1010,7 +1050,7 @@ def get_contrastive_soft_counts_gmm(
         for gate in gates:
             P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
 
-            for b in range(M_gates):
+            for b in range(M_gates_eff):
                 model = models[gate][b]
                 mask = gate_masks[gate][b][key]
                 block = slice(
@@ -1080,43 +1120,26 @@ def get_contrastive_soft_counts_msm_pcca(
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
     """
-    keys = list(embeddings.keys())
-    if not keys:
-        raise ValueError("Embeddings are empty.")
-    if animal_ids is None:
-        animal_ids = coordinates._animal_ids
-
-    # ---- cache embeddings + lengths ----
-    Z_by_key, emb_len = _cache_embeddings(coordinates, embeddings, keys)
-
-    if not isinstance(embedding_gates, str):
-        M_gates = 2 ** len(sorted(set(embedding_gates)))
-
-    # ---- gating series + masks ----
-    dist_series_dict, gates = _get_gating_series_and_gates(
+    (
+        keys,
+        gates,
+        gate_masks,
+        Z_by_key,
+        M_gates_eff,
+    ) = _preprocess_gates(
         coordinates=coordinates,
+        embeddings=embeddings,
         animal_ids=animal_ids,
         window_size=window_size,
         supervised_annotations=supervised_annotations,
-        embedding_gates=embedding_gates,
-    )
-
-    if len(animal_ids) == 1 or len(animal_ids) > 4:
-        M_gates = 1
-
-    gate_masks = _build_gate_masks(
-        keys=keys,
-        emb_len=emb_len,
-        dist_series_dict=dist_series_dict,
-        gates=gates,
         M_gates=M_gates,
-        supervised_annotations=supervised_annotations,
+        embedding_gates=embedding_gates,
         gate_edges=gate_edges,
     )
 
     # ---- fit per (gate, bin) ----
     models: Dict[Any, List] = {}
-    total_steps = len(gates) * M_gates
+    total_steps = len(gates) * M_gates_eff
 
     with tqdm.tqdm(
         total=total_steps,
@@ -1125,7 +1148,7 @@ def get_contrastive_soft_counts_msm_pcca(
     ) as pbar:
         for gate_idx, gate in enumerate(gates):
             models[gate] = []
-            for b in range(M_gates):
+            for b in range(M_gates_eff):
                 seed_b = int(random_state + 1000 * gate_idx + 17 * b)
 
                 seg_spatial: List[np.ndarray] = []
@@ -1278,7 +1301,7 @@ def get_contrastive_soft_counts_msm_pcca(
                 pbar.update(1)
 
     # ---- decode per gate ----
-    K_total = M_gates * N_clusters_per_gate
+    K_total = M_gates_eff * N_clusters_per_gate
     soft_counts_out_by_gate = {gate: {} for gate in gates}
     table_path = os.path.join(
         coordinates._project_path, coordinates._project_name, "Tables"
@@ -1294,7 +1317,7 @@ def get_contrastive_soft_counts_msm_pcca(
         for gate in gates:
             P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
 
-            for b in range(M_gates):
+            for b in range(M_gates_eff):
                 model = models[gate][b]
                 mask = gate_masks[gate][b][key]
                 block = slice(
