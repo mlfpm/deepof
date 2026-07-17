@@ -24,7 +24,7 @@ ONE_ANIMAL_COLOR_MAP = {
 TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL = {
     "nose2nose": '#081ee4',
     "sidebyside": '#aa2e47',
-    "sidereside":  '#d62246',
+    "sidereside": '#d62246',
 }
 TWO_ANIMALS_COLOR_MAP_DIRECTIONAL = {
     "nose2tail": ('#179c79', '#06d6a0'),
@@ -143,11 +143,11 @@ class DistanceUnit(Enum):
 class TimeUnit(Enum):
     fr = 0.0 # identity (frames -> frames)
     frames = 0.0   
-    s     = 1.0   # seconds per unit
+    s = 1.0   # seconds per unit
     seconds = 1.0
-    min   = 60.0
+    min = 60.0
     minutes = 60.0
-    h     = 3600.0
+    h = 3600.0
     hours = 3600.0
 
     def factor(self, fps: float) -> float:
