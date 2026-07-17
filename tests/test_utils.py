@@ -1145,19 +1145,19 @@ def test_get_point_polygon_distance(poly_idx, rand_pts, x0, y0, w, h):
 def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
     # Fixed ROIs
     roi_front = np.array([[-1.0, 4.0], [1.0, 4.0], [1.0, 6.0], [-1.0, 6.0]], dtype=float)
-    roi_back  = np.array([[-1.0, -6.0], [1.0, -6.0], [1.0, -4.0], [-1.0, -4.0]], dtype=float)
-    roi_diag  = np.array([[9.9, 9.9], [10.1, 9.9], [10.1, 10.1], [9.9, 10.1]], dtype=float)  # ~45deg from +y
-    roi_far   = np.array([[9.9, 9809.9], [10.1, 9809.9], [10.1, 10010.1], [9.9, 10010.1]], dtype=float)
+    roi_back = np.array([[-1.0, -6.0], [1.0, -6.0], [1.0, -4.0], [-1.0, -4.0]], dtype=float)
+    roi_diag = np.array([[9.9, 9.9], [10.1, 9.9], [10.1, 10.1], [9.9, 10.1]], dtype=float)  # ~45deg from +y
+    roi_far = np.array([[9.9, 9809.9], [10.1, 9809.9], [10.1, 10010.1], [9.9, 10010.1]], dtype=float)
 
     # Fixed mouse head position examples
-    mouse_up  = np.array([[-1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=float)    # faces +y
-    mouse_dn  = np.array([[-1.0, 0.0], [0.0, -1.0], [1.0, 0.0]], dtype=float)   # faces -y
+    mouse_up = np.array([[-1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=float)    # faces +y
+    mouse_dn = np.array([[-1.0, 0.0], [0.0, -1.0], [1.0, 0.0]], dtype=float)   # faces -y
     mouse_bad = np.array([[0.0, 0.0], [0.0, 1.0], [0.0, 0.0]], dtype=float)     # degenerate ears
 
     # Test special cases
     small = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_diag, plot=False)[0]
     large = deepof.utils.in_field_of_view(mouse_up, 120.0, roi_diag, plot=False)[0]
-    far   = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_far, plot=False)[0]
+    far = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_far, plot=False)[0]
     updown = deepof.utils.in_field_of_view(mouse_up, 60.0, roi_back, plot=False)[0]
     downdown = deepof.utils.in_field_of_view(mouse_dn, 60.0, roi_back, plot=False)[0]
     
