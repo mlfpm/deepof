@@ -151,7 +151,7 @@ def output_videos_per_cluster(
     exp_ids_to_process = _filter_videos_by_condition(
         coordinates, list(behavior_dict.keys()), exp_conditions
     )
-    available_behaviors, behaviors_to_process, behaviors_renamed_to_process  = _determine_behaviors_to_process(behavior_dict, behaviors, behaviors_renamed)
+    available_behaviors, behaviors_to_process, behaviors_renamed_to_process = _determine_behaviors_to_process(behavior_dict, behaviors, behaviors_renamed)
     
     video_export_config = dataclasses.replace(
         video_export_config, display_behavior_names=False, display_counter=False,

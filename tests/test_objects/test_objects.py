@@ -37,7 +37,8 @@ import deepof.arena_utils
 # Generate soft counts
 @st.composite
 def get_soft_counts(draw, n_min=1, n_max=50, m_min=1, m_max=10):
-    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    n = draw(st.integers(n_min, n_max))
+    m = draw(st.integers(m_min, m_max))
     raw = draw(arrays(np.float32, (n, m), elements=st.floats(0.0010000000474974513, 1.0, allow_nan=False, allow_infinity=False, width=32)))
     return raw / raw.sum(axis=1, keepdims=True)
 
@@ -45,7 +46,8 @@ def get_soft_counts(draw, n_min=1, n_max=50, m_min=1, m_max=10):
 @st.composite
 def get_embeddings_tab_dict(draw, keys, n_min=1, n_max=50, m_min=1, m_max=10):
 
-    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    n = draw(st.integers(n_min, n_max))
+    m = draw(st.integers(m_min, m_max))
     emb_dict={}
     for key in keys:
         emb_dict[key]=draw(arrays(np.float32, (n, m), elements=st.floats(-3.0, 3.0, allow_nan=False, allow_infinity=False, width=32)))
@@ -72,7 +74,8 @@ def get_supervised_tables(draw, n_min=1, n_max=50, m_min=1, m_max=10):
 @st.composite
 def get_embeddings_tab_dict(draw, keys, n_min=1, n_max=50, m_min=1, m_max=10):
 
-    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    n = draw(st.integers(n_min, n_max))
+    m = draw(st.integers(m_min, m_max))
     emb_dict={}
     for key in keys:
         emb_dict[key]=draw(arrays(np.float32, (n, m), elements=st.floats(-3.0, 3.0, allow_nan=False, allow_infinity=False, width=32)))
@@ -91,7 +94,8 @@ def get_supervised_tab_dict(draw, keys, col_names=None, n_min=1, n_max=50, m_min
 
     if col_names is not None:
         assert len(col_names)==m_min and len(col_names)==m_max, "For this test-object if custom column names are given, number of columns must match with number of names"
-    n = draw(st.integers(n_min, n_max)); m = draw(st.integers(m_min, m_max))
+    n = draw(st.integers(n_min, n_max))
+    m = draw(st.integers(m_min, m_max))
     sup_dict={}
     for key in keys:
         data=draw(arrays(np.int8, (n, m), elements=st.integers(min_value=0, max_value=1)))

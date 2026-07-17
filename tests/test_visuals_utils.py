@@ -819,7 +819,7 @@ def test_contiguous_segments(binary_table):
 )
 def test_scale_units(fps, mm_to_px, value):
     key = "k"
-    coordinates =  SimpleNamespace(_frame_rate=fps, _scales={key: (0.0, 0.0, mm_to_px, 1.0)})
+    coordinates = SimpleNamespace(_frame_rate=fps, _scales={key: (0.0, 0.0, mm_to_px, 1.0)})
 
     out, out_u = deepof.visuals_utils.scale_units(coordinates, key, value, None)
     # unit=None returns unchanged

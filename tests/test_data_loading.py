@@ -73,7 +73,7 @@ def test_get_dt_and_subfunctions(table_type, return_path, only_metainfo, load_in
 
     #formatting load range to avoid multiple if-else cases later
     adj_load_range=load_range
-    if  load_range is not None and len(load_range)==2 and load_range[1]-load_range[0]>1:
+    if load_range is not None and len(load_range)==2 and load_range[1]-load_range[0]>1:
         adj_load_range=np.arange(load_range[0],load_range[1]+1)
     elif load_range is None:
         adj_load_range=np.arange(0,100)

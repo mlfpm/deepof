@@ -528,7 +528,7 @@ class _H5BatchIterableDataset(IterableDataset):
 
         # For efficient batching without boundary issues, add starts at step=bs.
         # (L is not required to be a multiple of bs)
-        batches_per_block =  int(max(1, np.ceil(L / bs)))
+        batches_per_block = int(max(1, np.ceil(L / bs)))
 
         out = np.empty((target_batches,), dtype=np.int64)
         filled = 0
