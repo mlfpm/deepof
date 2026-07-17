@@ -4,7 +4,7 @@
 # encoding: utf-8
 # module deepof
 
-"""Utility functions for both training autoencoder models in deepof.models and tuning hyperparameters with deepof.hypermodels."""
+"""Utility functions for training autoencoder models for functionality within deepof.clustering."""
 
 import os
 from typing import Any, NewType, Tuple, Dict, Optional, Mapping

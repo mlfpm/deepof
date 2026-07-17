@@ -23,7 +23,7 @@ sys.path.insert(0, "./")
 
 project = "deepof"
 copyright = "2024, Lucas Miranda"
-author = "Lucas Miranda"
+author = "Lucas Miranda and Patrick Schlegel"
 
 # The full version, including alpha/beta/rc tags
 release = "0.9.0"

@@ -12,6 +12,46 @@ deepof.annotation\_utils module
    :undoc-members:
    :show-inheritance:
 
+deepof.arena\_utils module
+-------------------------------
+
+.. automodule:: deepof.arena_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.config module
+-------------------------------
+
+.. automodule:: deepof.config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.data\_loading module
+-------------------------------
+
+.. automodule:: deepof.data_loading
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.data\_manager module
+-------------------------------
+
+.. automodule:: deepof.data_manager
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.export\_video module
+-------------------------------
+
+.. automodule:: deepof.export_video
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 deepof.data module
 ------------------
 
@@ -20,34 +60,10 @@ deepof.data module
    :undoc-members:
    :show-inheritance:
 
-deepof.deepof\_train\_embeddings module
----------------------------------------
+deepof.post\_hoc module
+-----------------------
 
-.. automodule:: deepof.deepof_train_embeddings
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.hypermodels module
--------------------------
-
-.. automodule:: deepof.hypermodels
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.model\_utils module
---------------------------
-
-.. automodule:: deepof.model_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-deepof.models module
---------------------
-
-.. automodule:: deepof.models
+.. automodule:: deepof.post_hoc
    :members:
    :undoc-members:
    :show-inheritance:
@@ -80,6 +96,70 @@ deepof.visuals\_utils module
 ----------------------------
 
 .. automodule:: deepof.visuals_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.censNetConv\_pt module
+----------------------------
+
+.. automodule:: deepof.clustering.censNetConv_pt
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.dataset module
+----------------------------
+
+.. automodule:: deepof.clustering.dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.logging module
+----------------------------
+
+.. automodule:: deepof.clustering.logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.losses module
+----------------------------
+
+.. automodule:: deepof.clustering.losses
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.model\_utils\_new module
+----------------------------
+
+.. automodule:: deepof.clustering.model_utils_new
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.models\_new module
+----------------------------
+
+.. automodule:: deepof.clustering.models_new
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.teacher\_model module
+----------------------------
+
+.. automodule:: deepof.clustering.teacher_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+deepof.clustering.training module
+----------------------------
+
+.. automodule:: deepof.clustering.training
    :members:
    :undoc-members:
    :show-inheritance:
