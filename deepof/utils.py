@@ -1063,7 +1063,60 @@ def extend_behaviors_numba(
     
     return extended_behaviors
 
-  
+
+def _compute_transition_matrices(
+    extended_behaviors: np.ndarray,
+    *,
+    frame_rate: float,
+    diagonal_behavior_counting: str,
+    normalize_events: bool,
+):
+    """
+    Compute transition association matrix (and optional paired events) from extended behaviors.
+
+    Args:
+        extended_behaviors: shape (n_behaviors, T) binary array after extend_behaviors_numba.
+        frame_rate: frames per second.
+        diagonal_behavior_counting: mode passed to count_events for i==j.
+        normalize_events: if True, also compute paired_events matrix.
+
+    Returns:
+        associations: (n_behaviors, n_behaviors)
+        paired_events: (n_behaviors, n_behaviors) or zeros if normalize_events=False
+    """
+    n_beh = extended_behaviors.shape[0]
+    L = extended_behaviors.shape[1]
+
+    associations = np.zeros((n_beh, n_beh), dtype=float)
+    paired_events = np.zeros((n_beh, n_beh), dtype=float)
+
+    for i in range(n_beh):
+        for j in range(n_beh):
+            if i == j:
+                associations[i, j] = count_events(
+                    extended_behaviors[i, :],
+                    counting_mode=diagonal_behavior_counting,
+                    frame_rate=frame_rate,
+                )
+            else:
+                preceding_active = extended_behaviors[i, :]
+                proximate_active = extended_behaviors[j, :]
+
+                proximate_onsets = np.zeros(L, dtype=np.int8)
+                proximate_onsets[:-1] = np.diff(proximate_active.astype(np.int8))
+                prox_onset_pos = np.where(proximate_onsets == 1)[0]
+
+                associations[i, j] = np.sum(preceding_active[prox_onset_pos])
+
+            if normalize_events:
+                paired_events[i, j] = (
+                    count_events(extended_behaviors[i, :], counting_mode="Events", frame_rate=frame_rate)
+                    + count_events(extended_behaviors[j, :], counting_mode="Events", frame_rate=frame_rate)
+                )
+
+    return associations, paired_events
+    
+      
 def count_transitions(
     tab_dict: table_dict,
     exp_conditions: dict,
@@ -1163,25 +1216,14 @@ def count_transitions(
                 transitions_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
                 paired_events_dict[exp_cond] = np.zeros([tab.shape[1], tab.shape[1]])
 
-        associations = np.zeros([tab.shape[1],tab.shape[1]])
-        paired_events = np.zeros([tab.shape[1],tab.shape[1]])
         combined_columns = [f"{var_i}-x-{var_j}" for var_i in columns for var_j in columns]
 
-
-        for i in range(0,tab.shape[1]):
-            for j in range(0, tab.shape[1]):
-                if i==j:
-                    associations[i,j]=count_events(extended_behaviors[i,:], counting_mode=diagonal_behavior_counting, frame_rate=frame_rate)                            
-                else:
-                    preceding_active=extended_behaviors[i,:]
-                    proximate_active=extended_behaviors[j,:]
-                    proximate_onsets = np.zeros(L, dtype=np.int8)
-                    proximate_onsets[:-1] = np.diff(proximate_active.astype(np.int8))
-                    prox_onset_pos = np.where(proximate_onsets == 1)[0]
-                    association_ij=np.sum(preceding_active[prox_onset_pos])
-                    associations[i,j]=association_ij
-                if normalize_events:
-                    paired_events[i,j]=count_events(extended_behaviors[i,:], counting_mode="Events", frame_rate=frame_rate) + count_events(extended_behaviors[j,:], counting_mode="Events", frame_rate=frame_rate)
+        associations, paired_events = _compute_transition_matrices(
+            extended_behaviors,
+            frame_rate=frame_rate,
+            diagonal_behavior_counting=diagonal_behavior_counting,
+            normalize_events=normalize_events,
+        )
 
         if silence_diagonal:
             np.fill_diagonal(associations, 0)
