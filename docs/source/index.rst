@@ -38,7 +38,7 @@ You can use this package to either extract pre-defined motifs from the time seri
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically
 compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
-On our `website <https://www.deepof.ai>`_ you can see in detail what DeepOF is capable of.
+On our `website <https://deepof.ai>`_ you can see in detail what DeepOF is capable of.
 
 Installation
 ------------
