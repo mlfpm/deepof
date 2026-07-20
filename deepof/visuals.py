@@ -96,6 +96,7 @@ def plot_heatmaps(
     animals_in_roi: list = None,
     display_rois: bool = True,
     in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
     # Others
     display_arena: bool = True,
     xlim: float = None,
@@ -155,7 +156,7 @@ def plot_heatmaps(
     if isinstance(bodyparts,str):
         bodyparts=[bodyparts]
 
-    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, animals_in_roi=animals_in_roi)
+    coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, invert_roi=invert_roi, animals_in_roi=animals_in_roi)
 
     #only keep requested experiment conditions
     if exp_condition is not None and condition_value is not None:

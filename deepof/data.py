@@ -2985,6 +2985,7 @@ class Coordinates:
         defaults = {
             "close_contact_tol": 25,                           # Body parts need to be 25 mm apart or closer
             "side_contact_tol": 50,                            # Sides need to be 50 mm apart or closer
+            #"rearing_tol": 50,                                 # Distance between nose and tail_base needs to be 50 mm or less (from top view as mosue stands up)
             "median_filter_width": int(self._frame_rate/2),    # Width of median filter, determins smoothing degree of behavior signals
             "follow_frames": int(self._frame_rate/2),          # Frames over which following is considered, Half of a second
             "min_follow_frames": int(self._frame_rate/4),      # Minimum time mouse needs to follow, Quarter of a second
