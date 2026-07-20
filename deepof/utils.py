@@ -2595,6 +2595,39 @@ def _pp_init_empty_output_container(table_dict):
         return table_temp
 
 
+def _section_standardize(
+    *,
+    tab_local: pd.DataFrame,
+    samples: list,
+    cols: list,
+    ref_cols: Optional[list],
+    idx: np.ndarray,
+    mode: str,  # "per_column" or "groupwise"
+):
+    """
+    Append samples for a section (speeds / dists / coords) using either per-column (2D)
+    or groupwise (flattened 1D) sampling.
+
+    Returns:
+        ref_cols (possibly initialized) so caller can keep a stable per-column schema.
+    """
+    if not cols:
+        return ref_cols
+
+    if mode == "per_column":
+        if ref_cols is None:
+            ref_cols = cols
+        samples.append(
+            tab_local.iloc[idx].reindex(columns=ref_cols)[ref_cols].to_numpy(float)
+        )
+        return ref_cols
+
+    # groupwise
+    samples.append(tab_local.iloc[idx][cols].to_numpy(float).reshape(-1))
+    return ref_cols
+
+
+
 def _pp_pass1_collect_samples(
     table_dict,
     *,
@@ -2612,12 +2645,6 @@ def _pp_pass1_collect_samples(
     log_distances: bool,
     quality_to_load=None,
 ):
-    """
-    Pass 1: iterate tables and collect samples to fit global scalers.
-
-    Returns:
-        valid_keys, samples buffers + reference column lists for consistent per-column fitting.
-    """
     rng = np.random.RandomState(2)
 
     samples_speed, samples_dist, samples_coord, samples_inner, samples_intra = [], [], [], [], []
@@ -2639,11 +2666,9 @@ def _pp_pass1_collect_samples(
                 continue
 
             valid_keys.append(key)
-
             tab = _pp_filter_low_variance(tab, filter_low_variance)
 
             if scale and pretrained_scaler is None:
-                # Size-normalize + local scaling (coords are only size-normalized; see coord_standardize=None)
                 tab_local = deepof.utils.scale_table(
                     tab,
                     scale=scale,
@@ -2663,66 +2688,60 @@ def _pp_pass1_collect_samples(
 
                     # Speeds
                     if speed_standardize is not None and col_types["speeds"]:
-                        if speed_standardize == "per_column":
-                            if ref_speed_cols is None:
-                                ref_speed_cols = col_types["speeds"]
-                            samples_speed.append(
-                                tab_local.iloc[idx]
-                                .reindex(columns=ref_speed_cols)[ref_speed_cols]
-                                .to_numpy(float)
-                            )
-                        else:  # groupwise
-                            samples_speed.append(
-                                tab_local.iloc[idx][col_types["speeds"]]
-                                .to_numpy(float)
-                                .reshape(-1)
-                            )
+                        ref_speed_cols = _section_standardize(
+                            tab_local=tab_local,
+                            samples=samples_speed,
+                            cols=col_types["speeds"],
+                            ref_cols=ref_speed_cols,
+                            idx=idx,
+                            mode=speed_standardize,
+                        )
 
-                    # Distances (groupwise separately for inner vs intra)
+                    # Distances (preserve original: groupwise -> inner and intra separately)
                     if dist_standardize is not None and col_types["dists"]:
                         if dist_standardize == "per_column":
-                            if ref_dist_cols is None:
-                                ref_dist_cols = col_types["dists"]
-                            samples_dist.append(
-                                tab_local.iloc[idx]
-                                .reindex(columns=ref_dist_cols)[ref_dist_cols]
-                                .to_numpy(float)
+                            ref_dist_cols = _section_standardize(
+                                tab_local=tab_local,
+                                samples=samples_dist,
+                                cols=col_types["dists"],
+                                ref_cols=ref_dist_cols,
+                                idx=idx,
+                                mode="per_column",
                             )
                         else:  # groupwise
                             if col_types["inner_dists"]:
-                                samples_inner.append(
-                                    tab_local.iloc[idx][col_types["inner_dists"]]
-                                    .to_numpy(float)
-                                    .reshape(-1)
+                                _section_standardize(
+                                    tab_local=tab_local,
+                                    samples=samples_inner,
+                                    cols=col_types["inner_dists"],
+                                    ref_cols=None,
+                                    idx=idx,
+                                    mode="groupwise",
                                 )
                             if col_types["intra_dists"]:
-                                samples_intra.append(
-                                    tab_local.iloc[idx][col_types["intra_dists"]]
-                                    .to_numpy(float)
-                                    .reshape(-1)
+                                _section_standardize(
+                                    tab_local=tab_local,
+                                    samples=samples_intra,
+                                    cols=col_types["intra_dists"],
+                                    ref_cols=None,
+                                    idx=idx,
+                                    mode="groupwise",
                                 )
 
                     # Coordinates
                     coord_cols_local = [
-                        c
-                        for c in tab_local.columns
+                        c for c in tab_local.columns
                         if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")
                     ]
                     if coord_standardize is not None and coord_cols_local:
-                        if coord_standardize == "per_column":
-                            if ref_coord_cols is None:
-                                ref_coord_cols = coord_cols_local
-                            samples_coord.append(
-                                tab_local.iloc[idx]
-                                .reindex(columns=ref_coord_cols)[ref_coord_cols]
-                                .to_numpy(float)
-                            )
-                        else:  # groupwise
-                            samples_coord.append(
-                                tab_local.iloc[idx][coord_cols_local]
-                                .to_numpy(float)
-                                .reshape(-1)
-                            )
+                        ref_coord_cols = _section_standardize(
+                            tab_local=tab_local,
+                            samples=samples_coord,
+                            cols=coord_cols_local,
+                            ref_cols=ref_coord_cols,
+                            idx=idx,
+                            mode=coord_standardize,
+                        )
 
             pbar.update()
 
