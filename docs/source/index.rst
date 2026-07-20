@@ -40,6 +40,11 @@ unsupervised way! Both of these can be used within the package, for example, to 
 compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
 On our `website <https://deepof.ai>`_ you can see in detail what DeepOF is capable of.
 
+.. image:: _static/deepof_pipelines.png
+   :width: 400
+   :align: center
+   :alt: DeepOF label scheme
+
 Installation
 ------------
 
@@ -61,12 +66,6 @@ Installation
 If you need a thorough guide of how to set up DeepOF, starting with the installation of Python, setting up a developer environment, 
 up to creating your first DeepOF project, just watch the video above. If you do not need this most thorough tutorial, just keep
 reading the following installation summary:
-
-
-.. image:: _static/deepof_pipelines.png
-   :width: 400
-   :align: center
-   :alt: DeepOF label scheme
 
 The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof>`_. Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
