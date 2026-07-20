@@ -2429,57 +2429,57 @@ def scale_table(
     size_ref=("Nose", "Tail_base"),
     inter_scale: str = "mean",    # {"mean","geom","global"}
     standardize: bool = True,     # if False: only size-normalize
-    dist_standardize: str = "per_column",   # <--- {"per_column","groupwise","none"}
-    speed_standardize: str = "per_column",  # <--- {"per_column","groupwise","none"}
+    dist_standardize: str = "per_column",   # {"per_column","groupwise", None}
+    speed_standardize: str = "per_column",  # {"per_column","groupwise", None}
     coord_standardize: str = "per_column",
-    log_distances: bool = True,   
+    log_distances: bool = True,
 ) -> pd.DataFrame:
     if not scale:
         return df.copy()
+
     if scale not in {"standard", "minmax", "robust"}:
         raise ValueError("scale must be one of {'standard','minmax','robust', None/False}")
     if dist_standardize not in {"per_column", "groupwise", None}:
-        raise ValueError("dist_standardize must be one of {'per_column','groupwise','None'}")
+        raise ValueError("dist_standardize must be one of {'per_column','groupwise', None}")
     if speed_standardize not in {"per_column", "groupwise", None}:
-        raise ValueError("speed_standardize must be one of {'per_column','groupwise','None'}")
+        raise ValueError("speed_standardize must be one of {'per_column','groupwise', None}")
     if coord_standardize not in {"per_column", "groupwise", None}:
-        raise ValueError("coord_standardize must be one of {'per_column','groupwise','None'}")
+        raise ValueError("coord_standardize must be one of {'per_column','groupwise', None}")
+    if inter_scale not in {"mean", "geom", "global"}:
+        raise ValueError("inter_scale must be one of {'mean','geom','global'}")
 
     out = df.copy()
 
     # ----- infer columns -----
-    coord_cols = [c for c in out.columns
-                  if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
-    bodyparts = sorted({c[0] for c in coord_cols})
-    bp_set = set(bodyparts)
+    col_types = infer_column_types(out)
+    coord_cols = col_types["coords"]
+    speed_cols = col_types["speeds"]
+    dist_cols = col_types["dists"]
+    inner_dist_cols = col_types["inner_dists"]
+    intra_dist_cols = col_types["intra_dists"]
+    bodyparts = sorted(col_types["bodyparts"])
 
     def _split_bp(bp: str):
         return bp.split("_", 1) if "_" in bp else (None, bp)
 
+    # Infer animal_ids from bodypart prefixes if not provided
     if animal_ids is None:
-        animal_ids = sorted({(_split_bp(bp)[0]) for bp in bodyparts if _split_bp(bp)[0] is not None}) or [None]
+        prefixes = {_split_bp(bp)[0] for bp in bodyparts if _split_bp(bp)[0] is not None}
+        animal_ids = sorted(prefixes) or [None]
     animal_ids = list(animal_ids)
 
-    speed_cols = [c for c in out.columns if isinstance(c, str) and c in bp_set]
-    dist_cols = [
-        c for c in out.columns
-        if isinstance(c, tuple) and len(c) == 2 and all(isinstance(x, str) for x in c)
-        and c[0] in bp_set and c[1] in bp_set
-    ]
-    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
-    inner_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) == bp_to_aid.get(d[1])]
-    intra_dist_cols = [d for d in dist_cols if bp_to_aid.get(d[0]) != bp_to_aid.get(d[1])]
-
-
+    # Map bodypart -> animal_id prefix (or None)
     bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 
     # ----- size factors per animal -----
     ref_a, ref_b = size_ref
     s_by_aid = {}
+
     for aid in animal_ids:
         a = ref_a if aid is None else f"{aid}_{ref_a}"
         b = ref_b if aid is None else f"{aid}_{ref_b}"
         need = [(a, "x"), (a, "y"), (b, "x"), (b, "y")]
+
         if all(c in out.columns for c in need):
             dx = out[(a, "x")].to_numpy(float) - out[(b, "x")].to_numpy(float)
             dy = out[(a, "y")].to_numpy(float) - out[(b, "y")].to_numpy(float)
@@ -2489,87 +2489,79 @@ def scale_table(
 
     valid = [v for v in s_by_aid.values() if np.isfinite(v) and v > 0]
     s_default = float(np.nanmedian(valid)) if valid else 1.0
-    s_by_aid = {aid: (v if np.isfinite(v) and v > 0 else s_default) for aid, v in s_by_aid.items()}
+    s_by_aid = {
+        aid: (v if np.isfinite(v) and v > 0 else s_default) for aid, v in s_by_aid.items()
+    }
 
-    def _comb(s1, s2):
+    def _comb(s1, s2) -> float:
         if inter_scale == "mean":
             return 0.5 * (s1 + s2)
         if inter_scale == "geom":
             return float(np.sqrt(s1 * s2))
-        if inter_scale == "global":
-            return s_default
-        raise ValueError("inter_scale must be one of {'mean','geom','global'}")
+        # "global"
+        return s_default
 
     # ----- stage 1: size-normalize -----
     for aid in animal_ids:
-        bps = [bp for bp in bodyparts if bp_to_aid.get(bp) == aid] if aid is not None \
-              else [bp for bp in bodyparts if bp_to_aid.get(bp) is None]
+        if aid is None:
+            bps = [bp for bp in bodyparts if bp_to_aid.get(bp) is None]
+        else:
+            bps = [bp for bp in bodyparts if bp_to_aid.get(bp) == aid]
+
         if not bps:
             continue
+
         s = s_by_aid[aid]
 
         xy = [(bp, ax) for bp in bps for ax in ("x", "y") if (bp, ax) in out.columns]
         if xy:
             out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / s
 
-        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp name
+        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp
         if sp:
             out.loc[:, sp] = out.loc[:, sp].to_numpy(float) / s
 
     for (bp1, bp2) in dist_cols:
         a1, a2 = bp_to_aid.get(bp1), bp_to_aid.get(bp2)
-        s = s_by_aid.get(a1, s_default) if a1 == a2 else _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
+        if a1 == a2:
+            s = s_by_aid.get(a1, s_default)
+        else:
+            s = _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
         out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
 
     if log_distances and dist_cols:
         arr = out[dist_cols].to_numpy(float)
-        arr[arr < 0] = 0.0  # safety (distances should be >= 0)
+        arr[arr < 0] = 0.0
         out.loc[:, dist_cols] = np.log1p(arr)
 
     if not standardize:
         return out
 
-    # ----- stage 2: per-column standardization of scalars (like original) -----
-    #if global_scaler is not None:
-    #    out.loc[:, scalar_cols] = global_scaler.transform(out[scalar_cols].to_numpy(float))
-    #    return out
-
-    # local (per-table) scaling if no global scaler is provided
+    # ----- stage 2: standardization -----
     scaler_cls = {"standard": StandardScaler, "minmax": MinMaxScaler, "robust": RobustScaler}[scale]
-    
-    def _fit_transform_per_column(cols):
-        if not cols:
-            return
-        sc = scaler_cls()
-        out.loc[:, cols] = sc.fit_transform(out[cols].to_numpy(float))
 
-    def _fit_transform_groupwise(cols):
-        if not cols:
+    def _fit_transform(cols, mode: Optional[str]):
+        if not cols or mode is None:
             return
         sc = scaler_cls()
-        arr = out[cols].to_numpy(float)
-        out.loc[:, cols] = sc.fit_transform(arr.reshape(-1, 1)).reshape(arr.shape)
+        if mode == "per_column":
+            out.loc[:, cols] = sc.fit_transform(out[cols].to_numpy(float))
+        elif mode == "groupwise":
+            arr = out[cols].to_numpy(float)
+            out.loc[:, cols] = sc.fit_transform(arr.reshape(-1, 1)).reshape(arr.shape)
 
     # Speeds
-    if speed_standardize == "per_column":
-        _fit_transform_per_column(speed_cols)
-    elif speed_standardize == "groupwise":
-        _fit_transform_groupwise(speed_cols)
-    # else: "none" -> do nothing
+    _fit_transform(speed_cols, speed_standardize)
 
     # Distances (groupwise separately for inner vs intra)
     if dist_standardize == "per_column":
-        _fit_transform_per_column(dist_cols)
+        _fit_transform(dist_cols, "per_column")
     elif dist_standardize == "groupwise":
-        _fit_transform_groupwise(inner_dist_cols)
-        _fit_transform_groupwise(intra_dist_cols)
-    # else: "none" -> do nothing
+        _fit_transform(inner_dist_cols, "groupwise")
+        _fit_transform(intra_dist_cols, "groupwise")
 
     # Coords
-    if coord_standardize == "per_column":
-        _fit_transform_per_column(coord_cols)
-    elif coord_standardize == "groupwise":
-        _fit_transform_groupwise(coord_cols)
+    _fit_transform(coord_cols, coord_standardize)
 
     return out
 
