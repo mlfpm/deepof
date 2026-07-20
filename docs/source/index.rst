@@ -38,14 +38,35 @@ You can use this package to either extract pre-defined motifs from the time seri
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically
 compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
+On our `website <http://www.deepof.ai>`_ you can see in detail what DeepOF is capable of.
+
+Installation
+------------
+
+.. only:: html
+
+   .. raw:: html
+
+      <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;">
+        <iframe
+          src="https://www.youtube-nocookie.com/embed/bz6cQScQReQ"
+          style="position:absolute;top:0;left:0;width:100%;height:100%;"
+          title="DeepOF (Setup from Scratch and Installation)"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen>
+        </iframe>
+      </div>
+
+If you need a thorough guide of how to set up DeepOF, starting with the installation of Python, setting up a developer environment, 
+up to creating your first DeepOF project, just watch the video above. If you do not need this most thorough tutorial, just keep
+reading the following installation summary:
+
 
 .. image:: _static/deepof_pipelines.png
    :width: 400
    :align: center
    :alt: DeepOF label scheme
-
-Installation
-------------
 
 The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof>`_. Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
