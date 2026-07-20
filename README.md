@@ -21,8 +21,19 @@ You can use this package to either extract pre-defined motifs from the time seri
 basic social interactions) or to embed your data into a sequence-aware latent space to extract meaningful motifs in an
 unsupervised way! Both of these can be used within the package, for example, to automatically 
 compare user-defined experimental groups. The package is compatible with single and multi-animal DLC 2.X, and SLEAP projects.
+On our [website](http://www.deepof.ai) you can see in detail what DeepOF is capable of.
 
 ### How do I start?
+
+Our video tutorial "DeepOF (Setup from scratch and Installation)" shows you how to set up DeepOF from scratch, including the 
+installation and setup of Python and VSCode as an example developer environment.
+
+<a href="https://www.youtube.com/watch?v=bz6cQScQReQ">
+  <img src="https://img.youtube.com/vi/bz6cQScQReQ/maxresdefault.jpg" alt="DeepOF (Set-up from scratch and Installation)" />
+</a>
+
+If you do not need this most thorough tutorial, just keep reading the following installation summary. 
+
 ##### Installation:
 
 The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
@@ -38,16 +49,6 @@ conda activate deepof
 pip install deepof
 ```
 
-Alternatively, you can download our pre-built [Docker image](https://hub.docker.com/repository/docker/lucasmiranda42/deepof),
-which contains all compatible dependencies:
-
-```bash
-# download the latest available image
-docker pull lucasmiranda42/deepof:latest
-# run the image in interactive mode, enabling you to open python and import deepof
-docker run -it lucasmiranda42/deepof
-```
-
 Or use [poetry](https://python-poetry.org/):
 
 ```bash
@@ -56,7 +57,7 @@ poetry install # from the main directory
 ```
 
 **NOTE**: installation via pip is at the moment not compatible with Apple Silicon. If you'd like to install DeepOF on such machines,
-please use either poetry or Docker. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
+please use poetry. You should also install hdf5 using [homebrew](https://brew.sh/), as described in [this](https://github.com/mlfpm/deepof/issues/15) issue.
 
 ##### Before we delve in:
 DeepOF relies heavily on DeepLabCut and SLEAP output. Thorough tutorials on how to get started with pose estimation using DLC can be found [here](https://www.mousemotorlab.org/deeplabcut), and for SLEAP [here](https://sleap.ai/tutorials/tutorial.html).
