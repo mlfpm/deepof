@@ -48,6 +48,9 @@ On our `website <https://deepof.ai>`_ you can see in detail what DeepOF is capab
 Installation
 ------------
 
+If you need a thorough guide of how to set up DeepOF, starting with the installation of Python, setting up a developer environment, 
+up to creating your first DeepOF project, just watch the video below.  
+
 .. only:: html
 
    .. raw:: html
@@ -63,9 +66,8 @@ Installation
         </iframe>
       </div>
 
-If you need a thorough guide of how to set up DeepOF, starting with the installation of Python, setting up a developer environment, 
-up to creating your first DeepOF project, just watch the video above. If you do not need this most thorough tutorial, just keep
-reading the following installation summary:
+
+If you do not need this most thorough tutorial, just keep reading the following installation summary:
 
 The easiest way to install DeepOF is to use `pip <https://pypi.org/project/deepof>`_. Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
 
