@@ -11,7 +11,7 @@
 <br>
 
 <div align="center">
-  <img width="350" height="350" src="https://gitlab.mpcdf.mpg.de/lucasmir/deepof/-/raw/master/logos/deepOF_logo_w_text.png">
+  <img width="350" height="350" src="logos/deepOF_logo_w_text.png">
 </div>
 
 ### A suite for postprocessing time-series extracted from videos of freely moving rodents using [DeepLabCut](http://www.mousemotorlab.org/deeplabcut) and [SLEAP](https://sleap.ai/).
