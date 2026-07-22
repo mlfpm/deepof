@@ -201,6 +201,7 @@ Advanced usage
 * `Using regions of interest <tutorial_notebooks/deepof_roi_tutorial.ipynb>`_
 * `Defining and using your own behaviors <tutorial_notebooks/deepof_custom_behaviors_tutorial.ipynb>`_
 * `Working with big datasets <tutorial_notebooks/deepof_big_data_tutorial.ipynb>`_
+* `Training different types of models <tutorial_notebooks/deepof_model_types_tutorial.ipynb>`_
 
 Cite us!
 ========
