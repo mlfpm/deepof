@@ -3831,7 +3831,6 @@ class TableDict(dict):
 
         valid_keys, samples, _refs = deepof.utils._pp_pass1_collect_samples(
             self,
-            coordinates=coordinates,
             keys_list=keys_list,
             animal_ids=animal_ids,
             bin_info=bin_info,

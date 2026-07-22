@@ -805,7 +805,7 @@ def load_start_markers(filepath, frame_rate):
             if is_frame:
                 start_point = seconds_to_time(start_point/frame_rate, cut_milliseconds=False)
             
-            assert (is_frame or is_time),'Start markers need to be integers for frames or deepOF time points (format "xx:xx:xx.xxx")!'
+            assert (is_frame or is_time),'Start markers need to be either integers for frames or deepOF time points (format "xx:xx:xx.xxx")!'
             
             start_markers[key][marker].iloc[0] = start_point
     return start_markers
@@ -2664,8 +2664,6 @@ def _section_standardize(
 
 def _pp_pass1_collect_samples(
     table_dict,
-    *,
-    coordinates,
     keys_list: List[str],
     animal_ids,
     bin_info: Dict[str, Any],
@@ -2778,6 +2776,20 @@ def _pp_pass1_collect_samples(
                         )
 
             pbar.update()
+
+    samples = {
+        "speed": samples_speed,
+        "dist": samples_dist,
+        "coord": samples_coord,
+        "inner": samples_inner,
+        "intra": samples_intra,
+    }
+    refs = {
+        "speed": ref_speed_cols,
+        "dist": ref_dist_cols,
+        "coord": ref_coord_cols,
+    }
+    return valid_keys, samples, refs
 
 
 def _pp_fit_global_scaler(
