@@ -2508,11 +2508,6 @@ def plot_embeddings(
         )
     if type(animals_in_roi)==str:
         animals_in_roi=[animals_in_roi]
-    palette=None
-    if colour_by[0]=="cluster" and aggregate_experiments is None and emb_to_plot is not None:
-        palette="tab20"
-    elif colour_by[0]=="exp_id" and aggregate_experiments is None and emb_to_plot is not None:
-        palette="viridis"
 
     # prevents crash due to axis issues
     if (
@@ -2567,6 +2562,12 @@ def plot_embeddings(
     )
     show = True
 
+    palette=None
+    if colour_by[0]=="cluster" and aggregate_experiments is None and emb_to_plot is not None:
+        palette="tab20"
+    elif colour_by[0]=="exp_id" and aggregate_experiments is None and emb_to_plot is not None:
+        palette="viridis"
+        
     # Plot unravelled temporal embeddings
     if not aggregate_experiments and emb_to_plot is not None:
 
