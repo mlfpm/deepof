@@ -1238,11 +1238,11 @@ def rearing(
     if animal_id != "":
         animal_id += "_"
 
-    nose_tail_close =  (np.linalg.norm(pos_dframe[animal_id + "Nose"] - pos_dframe[animal_id + "Tail_base"],axis=1)) < rearing_tol
+    nose_tail_close = (np.linalg.norm(pos_dframe[animal_id + "Nose"] - pos_dframe[animal_id + "Tail_base"],axis=1)) < rearing_tol
     #nose_likelihood = (likelihood_dframe[animal_id + "Nose"]>tol_likelihood)
     tail_base_speed = (tol_speed > speed_dframe[animal_id + "Tail_base"])
 
-    rearing = nose_tail_close &  tail_base_speed
+    rearing = nose_tail_close & tail_base_speed
 
     return rearing
 
