@@ -390,6 +390,14 @@ def compute_sniffing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
                                   float(ctx.params["nose_likelihood"]),
                                   center_name=center, animal_id=aid))
 
+def compute_rearing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+    aid = animal_id  # type: ignore[assignment]
+    center = ctx.extra.get("center", "Center")
+    return np.asarray(rearing(ctx.raw_coords, ctx.speeds, ctx.likelihoods,
+                                  float(ctx.params["rearing_tol"]),
+                                  float(ctx.params["nose_likelihood"]),
+                                  float(ctx.params["stationary_threshold"]),
+                                  animal_id=aid))
 
 ###############################
 # CONTINUOUS BEHAVIOR INSTANCES
@@ -1204,6 +1212,41 @@ def sniff_around(
     return lookaround
 
 
+def rearing(
+    pos_dframe: pd.DataFrame,
+    speed_dframe: pd.DataFrame,
+    likelihood_dframe: pd.DataFrame,
+    rearing_tol: float,
+    tol_likelihood: float,
+    tol_speed: float,
+    animal_id: str = "",
+):
+    """Return true when the mouse is sniffing around using simple rules.
+
+    Args:
+        speed_dframe (pandas.DataFrame): speed of body parts over time
+        likelihood_dframe (pandas.DataFrame): likelihood of body part tracker over time, as directly obtained from DeepLabCut
+        tol_speed (float): Maximum tolerated speed for the center of the mouse
+        tol_likelihood (float): Maximum tolerated likelihood for the nose.
+        center_name (str): Body part to center coordinates on. "Center" by default.
+        animal_id (str): ID of the current animal.
+
+    Returns:
+        lookaround (np.array): True if the animal is standing still and sniffing around, False otherwise
+
+    """
+    if animal_id != "":
+        animal_id += "_"
+
+    nose_tail_close =  (np.linalg.norm(pos_dframe[animal_id + "Nose"] - pos_dframe[animal_id + "Tail_base"],axis=1)) < rearing_tol
+    #nose_likelihood = (likelihood_dframe[animal_id + "Nose"]>tol_likelihood)
+    tail_base_speed = (tol_speed > speed_dframe[animal_id + "Tail_base"])
+
+    rearing = nose_tail_close &  tail_base_speed
+
+    return rearing
+
+
 def following_path(
     distance_dframe: pd.DataFrame,
     position_dframe: pd.DataFrame,
@@ -1495,6 +1538,13 @@ def supervised_tagging(
         postprocess=postprocess_identity,  
     )
 
+    behavior_rearing = DeepOF_behavior(
+        name="rearing",
+        scope=Behavior_scope.INDIVIDUAL,
+        output_type=Behavior_output.BINARY,
+        compute=compute_rearing,
+    )
+
     behavior_continuous = DeepOF_behavior(
         name="continuous",  # mutlti-behavior, name is not used in column naming for dict outputs
         scope=Behavior_scope.INDIVIDUAL,
@@ -1635,6 +1685,7 @@ def supervised_tagging(
         tag_dict[aid + undercond + "moving"] = activity_dict["moving"]
     
         tag_dict[aid + undercond + "sniffing"] = behavior_sniffing.annotate_behavior(behavior_ctx, aid)
+        #tag_dict[aid + undercond + "rearing"] = behavior_rearing.annotate_behavior(behavior_ctx, aid) currently disabled as it does not work good enough
     
         # Multi-behavior for continuous behaviors
         continuous_meaures = behavior_continuous.annotate_behavior(behavior_ctx, aid)
