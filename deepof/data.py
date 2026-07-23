@@ -85,7 +85,7 @@ from sklearn.preprocessing import (
 from tqdm import tqdm
 
 import deepof.annotation_utils
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warnings_context, DistanceUnit
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warnings_context, DistanceUnit, BitPrecision
 #import deepof.clustering.models_new
 import deepof.clustering.training
 import deepof.utils
@@ -238,7 +238,6 @@ def load_project(
 
     return coordinates
 
-
 class Project:
     """Class for loading and preprocessing motion tracking data of individual and multiple animals.
 
@@ -273,6 +272,7 @@ class Project:
         number_of_rois: int = 0,
         frame_rate: float = None,
         fast_implementations_threshold: int = 50000,
+        bit_precision: int = None,
     ):
         """Initialize a Project object.
 
@@ -437,31 +437,8 @@ class Project:
             self.very_large_project = True
 
         # If the bodypart names in his table deviate from the ones deepOF expects, the user can rename them 
-        rename_bodyparts_dict = None
-        if rename_bodyparts is not None and isinstance(rename_bodyparts, list) and "npy" not in table_format:
-            if len(rename_bodyparts) == 8:
-                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_8").nodes                            
-            elif len(rename_bodyparts) == 11:
-                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
-            elif len(rename_bodyparts) == 14:
-                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
-            else: # pragma: no cover
-                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") 
-            
-            # Creates a dictionary assigning table bp names to corresponding deepOF bp names
-            rename_bodyparts_dict = {}
-            node_assignment_string = f"Your custom bodypart names will be assigned to deepOF bodyparts as follows:\n"
-            for deepof_node, custom_node in zip(pattern, rename_bodyparts):
-                node_assignment_string += f"{deepof_node} : {custom_node},\n"
-                rename_bodyparts_dict[custom_node] = deepof_node
-            node_assignment_string+=f"If this assignment is incorrect, please update your \"bodypart_names\" list with the correct order and rerun the project creation" 
-            print(node_assignment_string)
-        # Special case table format npy with no headers. Here rename_bodyparts functions as a list of bodypart names with only the keys being used
-        elif "npy" in table_format:
-            rename_bodyparts_dict={}
-            for bp in rename_bodyparts:
-                rename_bodyparts_dict[bp]=bp
-
+        rename_bodyparts_dict = self.rename_bodyparts(rename_bodyparts, table_format)
+        
 
         # Init the rest of the parameters
         self.angles = True
@@ -553,6 +530,34 @@ class Project:
                 "Project already exists. Delete it or specify a different name."
             )  # pragma: no cover
 
+
+    def rename_bodyparts(self, rename_bodyparts, table_format):
+        rename_bodyparts_dict = None
+        if rename_bodyparts is not None and isinstance(rename_bodyparts, list) and "npy" not in table_format:
+            if len(rename_bodyparts) == 8:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_8").nodes                            
+            elif len(rename_bodyparts) == 11:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_11").nodes            
+            elif len(rename_bodyparts) == 14:
+                pattern=deepof.utils.connect_mouse(animal_ids="", graph_preset="deepof_14").nodes            
+            else: # pragma: no cover
+                raise NotImplementedError(f"Number of custom bodypart names should be 8, 11 or 14 but your list has {len(rename_bodyparts)} elements!") 
+            
+            # Creates a dictionary assigning table bp names to corresponding deepOF bp names
+            rename_bodyparts_dict = {}
+            node_assignment_string = f"Your custom bodypart names will be assigned to deepOF bodyparts as follows:\n"
+            for deepof_node, custom_node in zip(pattern, rename_bodyparts):
+                node_assignment_string += f"{deepof_node} : {custom_node},\n"
+                rename_bodyparts_dict[custom_node] = deepof_node
+            node_assignment_string+=f"If this assignment is incorrect, please update your \"bodypart_names\" list with the correct order and rerun the project creation" 
+            print(node_assignment_string)
+        # Special case table format npy with no headers. Here rename_bodyparts functions as a list of bodypart names with only the keys being used
+        elif "npy" in table_format:
+            rename_bodyparts_dict={}
+            for bp in rename_bodyparts:
+                rename_bodyparts_dict[bp]=bp
+        
+        return rename_bodyparts_dict
 
     def load_start_markers(self, filepath): # pragma: no cover
         """Load start markers analogous to experimental conditions and do some checks"""
