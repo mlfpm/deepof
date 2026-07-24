@@ -38,8 +38,11 @@ import deepof.utils
         st.just("circular-autodetect"), st.just("polygonal-autodetect")
     ),
     table_bodyparts=st.booleans(),
+    bit_precision=st.one_of(
+        st.just(64), st.just(32), st.just(None)
+    ),
 )
-def test_project_init(table_type, arena_detection, table_bodyparts):
+def test_project_init(table_type, arena_detection, table_bodyparts, bit_precision):
 
     if table_bodyparts or table_type == "npy":
         table_bodyparts = ["Nose", "Left_ear", "Right_ear", "Spine_1", "Center", "Spine_2", "Left_fhip", "Right_fhip", "Left_bhip", "Right_bhip", "Tail_base", "Tail_1", "Tail_2", "Tail_tip"]
@@ -68,6 +71,7 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
         video_scale="380 mm",
         video_format=".mp4",
         table_format=table_type,
+        bit_precision=bit_precision,
     )
 
     assert isinstance(prun, deepof.data.Project)
@@ -85,6 +89,23 @@ def test_project_init(table_type, arena_detection, table_bodyparts):
     )
 
     assert isinstance(prun, deepof.data.Coordinates)
+
+    # verify correct bit precision for all created table objects
+    stores = ("_tables", "_quality", "_angles", "_areas", "_distances")
+
+    for store_name in stores:
+        store = getattr(prun, store_name)
+        for key in store:
+            tab = deepof.data_loading.get_dt(store, key)
+            
+            for col_name in tab:
+                datatype = tab[col_name].dtype
+
+                if bit_precision==64 or bit_precision is None:
+                    assert datatype==np.float64
+                # Since duckdb cannot store 16 bit pyarrow tables natively, they get upcasted
+                elif bit_precision==32:
+                    assert datatype==np.float32
 
 
 @settings(max_examples=20, deadline=None)
@@ -269,8 +290,6 @@ def test_start_markers():
         out_dir = os.path.join(base_path, project_name)
         if os.path.exists(out_dir):
             rmtree(out_dir)
-
-test_start_markers()
 
 
 def test_project_extend():
@@ -816,8 +835,11 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     full_nan_table=st.booleans(),
     dist_standardize_groups=st.booleans(),
     speed_standardize_groups=st.booleans(),
+    bit_precision=st.one_of(
+        st.just(64), st.just(32), st.just(None)
+    ),
 )
-def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups):
+def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups, bit_precision):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -848,7 +870,9 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
         video_format=".mp4",
         animal_ids=animal_ids,
         table_format=".h5",
+        bit_precision=bit_precision,
     ).create(force=True, test=True)
+    prun._frame_rate=25
 
     if full_nan_table:
        #simulate missing data
@@ -856,6 +880,8 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
        prun._tables[key_with_nans].iloc[::]=np.nan 
        prun._distances[key_with_nans].iloc[::]=np.nan 
        prun._angles[key_with_nans].iloc[::]=np.nan
+    if bit_precision==32:
+        pass
 
     graph_dset, meta_info, adj_matrix, to_preprocess, global_scaler = prun.get_graph_dataset(
         animal_id=sampler.draw(st.one_of(st.just(None), st.just(animal_ids[0]))),
@@ -885,6 +911,25 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
+
+    # verify correct bit precision for all created table objects
+    tab_dicts=(graph_dset[0], graph_dset[1], to_preprocess)
+
+    for tab_dict in tab_dicts:
+        for key in tab_dict:
+            tabs = deepof.data_loading.get_dt(tab_dict, key)
+            
+            for tab in tabs:
+                if isinstance(tabs, pd.DataFrame):
+                    datatypes = tabs.dtypes
+                else:
+                    datatypes = [tab.dtype]
+
+                if bit_precision==64 or bit_precision is None:
+                    assert all([datatype==np.float64 for datatype in datatypes])
+                # Since duckdb cannot store 16 bit pyarrow tables natively, they get upcasted
+                elif bit_precision==32:
+                    assert all([datatype==np.float32 for datatype in datatypes])
     
     # data from nan table was removed
     if full_nan_table:

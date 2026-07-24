@@ -166,7 +166,31 @@ class TimeUnit(Enum):
 
 
 # Native time unit in DeepOF is 
-class Speed_Unit(Enum):
+class SpeedUnit(Enum):
     mm_s = 1 
     m_s = 0.001
     m_h = 3.6
+
+# bit precision 
+class BitPrecision(Enum):
+    f16 = 16
+    f32 = 32
+    f64 = 64
+    fauto = 0
+
+    @property
+    def dtype(self):
+        return {
+            16: np.float16,
+            32: np.float32,
+            64: np.float64,
+            0: np.float64,
+        }[self.value]
+
+    @classmethod
+    def parse(cls, unit: int) -> "BitPrecision":
+        try:
+            return cls(int(unit))   # lookup by value
+        except (ValueError, TypeError) as e:
+            opts = ", ".join(str(m.value) for m in cls)
+            raise ValueError(f'Unsupported bit precision "{unit}". Valid options are: {opts}') from e

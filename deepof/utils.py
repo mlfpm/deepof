@@ -45,7 +45,7 @@ from sklearn.model_selection import StratifiedKFold
 from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS, BitPrecision
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.legacy_smote_handling
@@ -603,7 +603,7 @@ def compute_animal_presence_mask(
 
 
 def iterative_imputation(
-    project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False
+    project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False,
 ):
     """Perform iterative imputation on occluded body parts. Run per animal and experiment.
 
@@ -882,7 +882,7 @@ def compute_dist(
 
 
 def bpart_distance(
-    dataframe: pd.DataFrame
+    dataframe: pd.DataFrame, bit_precision: BitPrecision = BitPrecision.f64,
 ) -> pd.DataFrame:
     """Return a pandas.DataFrame with the scaled distances between all pairs of body parts.
 
@@ -896,14 +896,14 @@ def bpart_distance(
     indexes = combinations(dataframe.columns.levels[0], 2)
     dists = []
     for idx in indexes:
-        dist = compute_dist(np.array(dataframe.loc[:, list(idx)]))
+        dist = compute_dist(np.array(dataframe.loc[:, list(idx)], dtype=bit_precision.dtype))
         dist.columns = [idx]
         dists.append(dist)
 
     return pd.concat(dists, axis=1)
 
 
-def angle(bpart_array: np.array) -> np.array:
+def angle(bpart_array: np.array, bit_precision: BitPrecision = BitPrecision.f64,) -> np.array:
     """Return a numpy.ndarray with the angles between the provided instances.
 
     Args:
@@ -924,7 +924,7 @@ def angle(bpart_array: np.array) -> np.array:
     #restrict to valid range
     cosine_angle=np.clip(cosine_angle, -1, 1)
 
-    ang = np.arccos(cosine_angle)
+    ang = np.arccos(cosine_angle, dtype=bit_precision.dtype)
 
     return ang
 
@@ -3015,7 +3015,7 @@ def _pp_pass2_scale_and_save(
 
             # Save
             table_path = os.path.join(table_dict._table_path, key, f"{key}_{file_name}")
-            table_temp[key] = save_dt(_pp_sanitize_numeric(tab), table_path, save_as_paths)
+            table_temp[key] = save_dt(_pp_sanitize_numeric(tab).astype(coordinates._bit_precision.dtype), table_path, save_as_paths)
 
             pbar.update()
 

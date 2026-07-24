@@ -297,6 +297,17 @@ class DataManager:
         if df_copy.shape[1]==0:
             df_copy['empty']=np.NaN
 
+        # convert foat16 to float32 (duckdb cannot save as 16 bit and will upcast to 64 (DOUBLE) otherwise)
+        for col_name in df_copy:
+            dtype = df_copy[col_name].dtype
+            
+            # Check if it is a numpy numeric type with more than 32 bits
+            if np.issubdtype(dtype, np.number) and dtype.itemsize < 4:
+                if np.issubdtype(dtype, np.integer):
+                    df_copy[col_name] = df_copy[col_name].astype(np.int32)
+                elif np.issubdtype(dtype, np.floating):
+                    df_copy[col_name] = df_copy[col_name].astype(np.float32)
+
         # Keep tables numeric-only: drop the index into a RangeIndex
         return df_copy.reset_index(drop=True)
 

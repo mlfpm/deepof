@@ -16,6 +16,7 @@ Added
 - Plotting and visualization updates: `bin_index` may denote an exact start position (string) or index; plot helpers and functions (including `animate_skeleton`, `plot_behavior_trends`, `plot_heatmaps`) now better support relative starting positions and precomputed bins.
 - CI and packaging: new `install-pypi-local` job, `regression_test` job, poetry build/wheel artifacts in pipeline, and use of `light-the-torch` in CI to provision pinned `torch` builds.
 - New notebooks and regression tests for clustering/contrastive translation and model parity verification added under `deepof/clustering/`.
+- New bit_precision input option for project definition. Allows to save tables at a lower bit precision to save save space and memory usage
 
 Changed
 -------
