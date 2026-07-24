@@ -176,6 +176,8 @@ def load_project(
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
     # Small fix for compatibility of pre 0.9 versions
+    if not (hasattr(coordinates, "_bit_precision")):
+        coordinates._bit_precision = BitPrecision.parse(64)
     if not (hasattr(coordinates, "_custom_behaviors")):
             coordinates._custom_behaviors = None
             coordinates._custom_continuous_behavior_names=[]
