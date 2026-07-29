@@ -1313,8 +1313,9 @@ def plot_enrichment(
 
         ax.set_ylabel(y_axis_label)
     handles, labels = ax.get_legend_handles_labels()
+    start_entry=int(len(handles)/2)
     ax.legend(
-        handles[2:], labels[2:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
+        handles[start_entry:], labels[start_entry:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
     )
 
     if add_stats:

@@ -2,6 +2,39 @@ Changelog
 =========
 
 
+[0.9.1] - 2026-XX-XX
+=====================
+
+Added
+-------
+- 
+
+Changed
+-------
+- 
+
+
+Bug Fixes
+---------
+- legend in `plot_enrichment` is now displayed correctly if an experiment condition with more than two condition values is used.
+
+Known Issues
+------------
+- Some of the new clustering / PyTorch translation code may require additional review for GPU usage on Windows; tests and transfer utilities are included to help.
+
+Compatibility
+-------------
+- Minor breaking change: `deepof.__init__` no longer auto-imports `models`. If your code relied on `import deepof; deepof.models`, please update to `import deepof.models`.
+
+Additional Information
+----------------------
+- Release Date: 2026-07-14
+- Supported Platforms: Windows, Linux, MacOS
+- Download Link: https://pypi.org/project/deepof/0.9.0/
+- Full Documentation: https://deepof.readthedocs.io/en/latest/index.html
+- Feedback and Bug Reports: https://github.com/mlfpm/deepof/issues
+
+
 [0.9.0] - 2026-07-18
 =====================
 
