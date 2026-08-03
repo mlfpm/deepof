@@ -1146,7 +1146,7 @@ def detect_activity(
     stationary_active=copy.copy(immobile)
     stationary_passive=copy.copy(immobile)
 
-    # Detect activity when speed and likelyhood is above a threshold for any of the available bodyparts from the list
+    # Detect activity when speed and likelihood is above a threshold for any of the available bodyparts from the list
     bodyparts=[animal_id+"Nose",animal_id+"Left_fhip",animal_id+"Right_fhip", animal_id+"Left_bhip", animal_id+"Right_bhip"]
 
     # Remove missing bodyparts from list

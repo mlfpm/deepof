@@ -3267,7 +3267,8 @@ class Coordinates:
                     self, 
                     table_dict, 
                     quality,
-                    animal_ids=self._animal_ids + ["supervised"]
+                    animal_ids=self._animal_ids + ["supervised"],
+                    animal_presence_threshold = self._animal_presence_threshold,
                     )
                 supervised_tags = table_dict[key]
 
