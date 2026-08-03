@@ -326,6 +326,14 @@ class Project:
         self.source_table_path = table_path
         self.trained_path = os.path.join(project_path, project_name, "trained_models")
 
+        if likelihood_tol < animal_presence_threshold:
+            warnings.warn(
+                f"\033[38;5;208m"
+                f"Your likelihood_tol: {likelihood_tol} is lower than the animal_presence_threshold: {animal_presence_threshold} Usually it is expected that \n"
+                f"the tolareance for outliers to be smoothed over should be higher than for animals not being tracked. \n"
+                f"\033[0m"
+            )
+
 
         # Detect files to load from disk
         self.table_format = table_format
