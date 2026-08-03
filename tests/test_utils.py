@@ -1166,7 +1166,7 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
 
     
     bad_py = deepof.utils.in_field_of_view(mouse_bad, 60.0, roi_front, plot=False)[0]
-    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64))[0]
+    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64))[0], np.float64,
     
     # degenerate geometry -> nan
     assert np.isnan(bad_py) and np.isnan(bad_nb)
@@ -1176,7 +1176,7 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
 
     # add small value to mouse to avoid numerical edge cases 
     out_py = deepof.utils.in_field_of_view(mouse+0.000001, float(fov_angle_deg), roi, plot=False)
-    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi)
+    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi, np.float64)
 
     # Both versions are the same for random head / angle / ROI combinations
     assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)

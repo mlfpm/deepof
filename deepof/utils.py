@@ -67,7 +67,7 @@ class KeyErrorMessage(str):
 
 
 @nb.njit()
-def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
+def rts_smoother_numba(measurements, F, H, Q, R, data_type: np.dtype = np.float64):  # pragma: no cover
     """
     Implements the Rauch-Tung-Striebel (RTS) smoother for state estimation.
 
@@ -90,26 +90,26 @@ def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
     n_dim_state = F.shape[0]
 
     # Ensure all inputs are float64
-    measurements = measurements.astype(np.float64)
-    F = F.astype(np.float64)
-    H = H.astype(np.float64)
-    Q = Q.astype(np.float64)
-    R = R.astype(np.float64)
+    measurements = measurements.astype(data_type)
+    F = F.astype(data_type)
+    H = H.astype(data_type)
+    Q = Q.astype(data_type)
+    R = R.astype(data_type)
 
     # Forward pass (Kalman filter)
-    filtered_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    filtered_states = np.zeros((n_timesteps, n_dim_state), dtype=data_type)
     filtered_covariances = np.zeros(
-        (n_timesteps, n_dim_state, n_dim_state), dtype=np.float64
+        (n_timesteps, n_dim_state, n_dim_state), dtype=data_type
     )
-    predicted_states = np.zeros((n_timesteps, n_dim_state), dtype=np.float64)
+    predicted_states = np.zeros((n_timesteps, n_dim_state), dtype=data_type)
     predicted_covariances = np.zeros(
-        (n_timesteps, n_dim_state, n_dim_state), dtype=np.float64
+        (n_timesteps, n_dim_state, n_dim_state), dtype=data_type
     )
 
     # Initialize
     filtered_states[0] = measurements[0]
     filtered_covariances[0] = (
-        np.eye(n_dim_state, dtype=np.float64) * 1000
+        np.eye(n_dim_state, dtype=data_type) * 1000
     )  # Large initial uncertainty
 
     for t in range(1, n_timesteps):
@@ -123,7 +123,7 @@ def rts_smoother_numba(measurements, F, H, Q, R):  # pragma: no cover
         K = predicted_covariances[t] @ H.T @ np.linalg.inv(S)
         filtered_states[t] = predicted_states[t] + K @ innovation
         filtered_covariances[t] = (
-            np.eye(n_dim_state, dtype=np.float64) - K @ H
+            np.eye(n_dim_state, dtype=data_type) - K @ H
         ) @ predicted_covariances[t]
 
     # Backward pass (RTS smoother)
@@ -210,16 +210,19 @@ class MouseTrackingImputer:
         skeleton_constraints (list): List of skeleton constraints.
         mouse_body_estimation_samples (int): Number of sample frames with non-nan data to estimate valid mouse shapes (default: 100).
         lin_interp_limit (int): Limit for linear interpolation (default: 3).
+        bit_precision (BitPrecision)
     """
 
-    def __init__(self, n_iterations=10, connectivity=None, full_imputation=False):
+    def __init__(self, bit_precision, n_iterations=10, connectivity=None, full_imputation=False):
         self.full_imputation = full_imputation
         self.n_iterations = n_iterations
         self.connectivity = connectivity
+        self.bit_precision = bit_precision 
         self.body_part_indices = None
         self.skeleton_constraints = None
         self.mouse_body_estimation_samples = 100
         self.lin_interp_limit = 3
+        
 
     def _initialize_constraints(self, data):
         """
@@ -376,7 +379,7 @@ class MouseTrackingImputer:
         for bp in range(n_body_parts):
             for coord in range(n_coords):
                 measurements = data[:, bp, coord].reshape(-1, 1)
-                smoothed_states = rts_smoother_numba(measurements, F, H, Q, R)
+                smoothed_states = rts_smoother_numba(measurements, F, H, Q, R, data_type= self.bit_precision.dtype)
                 smoothed_data[:, bp, coord] = smoothed_states[:, 0]
 
         return smoothed_data
@@ -645,6 +648,7 @@ def iterative_imputation(
                     n_iterations=5,
                     connectivity=project.connectivity[animal_id],
                     full_imputation=full_imputation,
+                    bit_precision=project.bit_precision,
                 )
                 imputed = imputer.fit_transform(sub_table)
 
@@ -981,7 +985,7 @@ def compute_areas(polygon_xy_stack: np.array) -> np.array:
 
 
 @nb.njit(parallel=True)
-def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no cover
+def compute_areas_numba(polygon_xy_stack: np.array, data_type: np.dtype = np.float64) -> np.array:  # pragma: no cover
     """
     Compute polygon areas for the provided stack of sets of data point-xy coordinates.
 
@@ -993,7 +997,7 @@ def compute_areas_numba(polygon_xy_stack: np.array) -> np.array:  # pragma: no c
 
     """
     n_polygons, n_vertices, n_dims = polygon_xy_stack.shape
-    polygon_areas = np.zeros(n_polygons, dtype=np.float64)
+    polygon_areas = np.zeros(n_polygons, dtype=data_type)
 
     for i in np.arange(n_polygons):
         polygon_areas[i] = polygon_area_numba(polygon_xy_stack[i])
@@ -1322,7 +1326,7 @@ def rotate(
 
 
 @nb.njit(parallel=True)
-def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: no cover
+def rotate_all_numba(data: np.array, angles: np.array, data_type: np.dtype = np.float64) -> np.array:  # pragma: no cover
     """Rotates Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
     Args:
@@ -1337,8 +1341,8 @@ def rotate_all_numba(data: np.array, angles: np.array) -> np.array:  # pragma: n
     # initializations
     aligned_trajs = np.zeros(data.shape)
     new_shape = (data.shape[1] // 2, 2)
-    rotated_frame = np.empty(new_shape, dtype=np.float64)
-    reshaped_frame = np.empty(new_shape, dtype=np.float64)
+    rotated_frame = np.empty(new_shape, dtype=data_type)
+    reshaped_frame = np.empty(new_shape, dtype=data_type)
 
     for frame in range(data.shape[0]):
 
@@ -1756,7 +1760,7 @@ def _rotate_vec(vx, vy, ang): # pragma: no cover
 
 
 @nb.njit(parallel=True, cache=True)
-def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pragma: no cover
+def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10, data_type: np.dtype = np.float64): # pragma: no cover
     """
     Numba version of in_field_of_view (no plotting, no shapely).
 
@@ -1765,7 +1769,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10): # pra
     returns:   (N,) float64 in {1.0, 0.0, nan}
     """
     n = mouse_pts.shape[0]
-    out = np.empty(n, dtype=np.float64)
+    out = np.empty(n, dtype=data_type)
     out[:] = np.nan
 
     # validate angle (numba-friendly: just produce all-nan for invalid)
@@ -2097,7 +2101,7 @@ def get_behavior_frames_in_roi(
 
 # noinspection PyArgumentList
 def align_trajectories(
-    data: np.array, mode: str = "all", run_numba: bool = False
+    data: np.array, mode: str = "all", run_numba: bool = False, data_type: np.dtype = np.float64
 ) -> np.array:  # pragma: no cover
     """Remove rotational variance on the trajectories.
 
@@ -2129,7 +2133,7 @@ def align_trajectories(
 
     # run numba version for large videos
     if run_numba:
-        aligned_trajs = rotate_all_numba(data, angles)
+        aligned_trajs = rotate_all_numba(data, angles, data_type)
     else:
         aligned_trajs = np.zeros(data.shape)
 

@@ -950,7 +950,7 @@ class Project:
             self._update_progress(pbar, "Iterative imputation of ocluded bodyparts", key)
             full_imputation = self.iterative_imputation == "full"
             table_dict = deepof.utils.iterative_imputation(
-                self, table_dict, lik_dict, full_imputation=full_imputation
+                self, table_dict, lik_dict, full_imputation=full_imputation,
             )
 
         # 4. Set missing animals
@@ -1296,7 +1296,7 @@ class Project:
                             if self.run_numba:
                                 areas_animal_dict[
                                     bp_pattern_key
-                                ] = deepof.utils.compute_areas_numba(polygon_xy_stack)
+                                ] = deepof.utils.compute_areas_numba(polygon_xy_stack, self.bit_precision.dtype)
                             else:
                                 areas_animal_dict[
                                     bp_pattern_key
@@ -1967,6 +1967,7 @@ class Coordinates:
                 np.array(partial_tab),
                 mode="all",
                 run_numba=self._run_numba,
+                data_type=self._bit_precision.dtype,
             )
             aligned_data[np.abs(aligned_data) < 1e-5] = 0.0
             

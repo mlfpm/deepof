@@ -17,6 +17,7 @@ Changed
 Bug Fixes
 ---------
 - legend in `plot_enrichment` is now displayed correctly if an experiment condition with more than two condition values is used.
+- In some systems bit_precisions below 64 were not automatically applied within some numba cofunctions nversions which led to crashes. This is fixed now
 
 Known Issues
 ------------

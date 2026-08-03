@@ -2269,7 +2269,7 @@ def _preprocess_mouse_roi_interaction(
                 pts = bps.to_numpy().reshape(-1, 3, 2)
                 polygon = np.asarray(polygon, dtype=np.float64)
                 interaction_full = deepof.utils.in_field_of_view_numba(
-                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon
+                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon, coordinates._bit_precision.dtype,
                 )  # shape (T,)
 
             elif mode == "distance":
