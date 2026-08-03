@@ -2269,7 +2269,7 @@ def _preprocess_mouse_roi_interaction(
                 pts = bps.to_numpy().reshape(-1, 3, 2)
                 polygon = np.asarray(polygon, dtype=np.float64)
                 interaction_full = deepof.utils.in_field_of_view_numba(
-                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon, coordinates._bit_precision.dtype,
+                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon, data_type=coordinates._bit_precision.dtype,
                 )  # shape (T,)
 
             elif mode == "distance":
@@ -2282,7 +2282,7 @@ def _preprocess_mouse_roi_interaction(
                 for k, bp in enumerate(bodyparts):
                     pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
                     inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
-                    dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon)
+                    dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon, data_type=coordinates._bit_precision.dtype)
 
                 # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
                 # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI

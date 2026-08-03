@@ -1141,8 +1141,10 @@ def test_get_point_polygon_distance(poly_idx, rand_pts, x0, y0, w, h):
     y0=st.floats(-50, 50, allow_nan=False, allow_infinity=False, width=32),
     w=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
     h=st.floats(0.0010000000474974513, 20, allow_nan=False, allow_infinity=False, width=32),
+    bit_precision=st.one_of(st.just(np.float32),st.just(np.float64))
 )
-def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
+def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h, bit_precision):
+    
     # Fixed ROIs
     roi_front = np.array([[-1.0, 4.0], [1.0, 4.0], [1.0, 6.0], [-1.0, 6.0]], dtype=float)
     roi_back = np.array([[-1.0, -6.0], [1.0, -6.0], [1.0, -4.0], [-1.0, -4.0]], dtype=float)
@@ -1166,7 +1168,7 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
 
     
     bad_py = deepof.utils.in_field_of_view(mouse_bad, 60.0, roi_front, plot=False)[0]
-    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64))[0], np.float64,
+    bad_nb = deepof.utils.in_field_of_view_numba(mouse_bad[None, ...].astype(np.float64), 60.0, roi_front.astype(np.float64), data_type=bit_precision)[0]
     
     # degenerate geometry -> nan
     assert np.isnan(bad_py) and np.isnan(bad_nb)
@@ -1176,7 +1178,7 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h):
 
     # add small value to mouse to avoid numerical edge cases 
     out_py = deepof.utils.in_field_of_view(mouse+0.000001, float(fov_angle_deg), roi, plot=False)
-    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi, np.float64)
+    out_nb = deepof.utils.in_field_of_view_numba(mouse+0.000001, float(fov_angle_deg), roi, data_type=bit_precision)
 
-    # Both versions are the same for random head / angle / ROI combinations
+    # Both versions are the same for random head / angle / ROI combinations / bit precisions (because views are binary and hence way above precision level))
     assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)
