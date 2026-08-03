@@ -1000,13 +1000,13 @@ def compute_areas_numba(polygon_xy_stack: np.array, data_type: np.dtype = np.flo
     polygon_areas = np.zeros(n_polygons, dtype=data_type)
 
     for i in np.arange(n_polygons):
-        polygon_areas[i] = polygon_area_numba(polygon_xy_stack[i])
+        polygon_areas[i] = polygon_area_numba(polygon_xy_stack[i], data_type)
 
     return polygon_areas
 
 
 @nb.njit()
-def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
+def polygon_area_numba(vertices: np.ndarray, data_type: np.dtype = np.float64) -> float:  # pragma: no cover
     """
     Calculate the area of a single polygon given its vertices.
 
@@ -1017,7 +1017,7 @@ def polygon_area_numba(vertices: np.ndarray) -> float:  # pragma: no cover
         float: Area of the polygon.
     """
     n = len(vertices)
-    area = 0.0
+    area = data_type(0.0)
 
     for i in range(n):
         j = (i + 1) % n
@@ -1339,7 +1339,7 @@ def rotate_all_numba(data: np.array, angles: np.array, data_type: np.dtype = np.
     """
 
     # initializations
-    aligned_trajs = np.zeros(data.shape)
+    aligned_trajs = np.zeros(data.shape, dtype=data_type)
     new_shape = (data.shape[1] // 2, 2)
     rotated_frame = np.empty(new_shape, dtype=data_type)
     reshaped_frame = np.empty(new_shape, dtype=data_type)
@@ -1352,7 +1352,7 @@ def rotate_all_numba(data: np.array, angles: np.array, data_type: np.dtype = np.
             reshaped_frame[i, 1] = data[frame][2 * i + 1]
 
         # rotate frame
-        rotated_frame = rotate_numba(reshaped_frame, angles[frame])
+        rotated_frame = rotate_numba(reshaped_frame, angles[frame], data_type=data_type)
 
         # undo reshaping
         for i in range(new_shape[0]):
@@ -1364,7 +1364,7 @@ def rotate_all_numba(data: np.array, angles: np.array, data_type: np.dtype = np.
 
 @nb.njit()
 def rotate_numba(
-    p: np.array, angles: np.array, origin: np.array = np.array([0, 0])
+    p: np.array, angles: np.array, origin: np.array = np.array([0, 0]), data_type: np.dtype =np.float64,
 ) -> np.array:  # pragma: no cover
     """Return a 2D numpy.ndarray with the initial values rotated by angles radians.
 
@@ -1379,8 +1379,8 @@ def rotate_numba(
     """
     # initializations
     arr_shape = p.shape
-    p_centered = np.zeros(arr_shape)
-    rotated = np.empty(arr_shape, dtype=np.float64)
+    p_centered = np.zeros(arr_shape, dtype=data_type)
+    rotated = np.empty(arr_shape, dtype=data_type)
 
     # define rotation matrix
     R = np.array([[np.cos(angles), -np.sin(angles)], [np.sin(angles), np.cos(angles)]])
@@ -1498,7 +1498,7 @@ def get_point_polygon_distance(points: np.ndarray, polygon: Polygon) -> np.ndarr
 
 
 @nb.njit(cache=True)
-def _seg_dist2(px, py, ax, ay, bx, by): # pragma: no cover
+def _seg_dist2_numba(px, py, ax, ay, bx, by): # pragma: no cover
     vx, vy = bx - ax, by - ay
     wx, wy = px - ax, py - ay
     c1 = wx * vx + wy * vy
@@ -1518,14 +1518,14 @@ def _seg_dist2(px, py, ax, ay, bx, by): # pragma: no cover
     return dx*dx + dy*dy
 
 @nb.njit(parallel=True, cache=True)
-def get_point_polygon_distance_numba(points, poly_xy): # pragma: no cover
+def get_point_polygon_distance_numba(points, poly_xy, data_type: np.dtype = np.float64): # pragma: no cover
     pts = points
     M = poly_xy.shape[0]
     # drop closing vertex if repeated
     if M >= 2 and poly_xy[0,0] == poly_xy[M-1,0] and poly_xy[0,1] == poly_xy[M-1,1]:
         M -= 1
 
-    out = np.empty(pts.shape[0], np.float64)
+    out = np.empty(pts.shape[0], dtype=data_type)
     out[:] = np.nan
 
     for i in nb.prange(pts.shape[0]):
@@ -1538,7 +1538,7 @@ def get_point_polygon_distance_numba(points, poly_xy): # pragma: no cover
             j = 0 if (k + 1 == M) else (k + 1)
             ax, ay = poly_xy[k, 0], poly_xy[k, 1]
             bx, by = poly_xy[j, 0], poly_xy[j, 1]
-            d2 = _seg_dist2(px, py, ax, ay, bx, by)
+            d2 = _seg_dist2_numba(px, py, ax, ay, bx, by)
             if d2 < best2:
                 best2 = d2
         out[i] = np.sqrt(best2)
@@ -1652,14 +1652,14 @@ def in_field_of_view(mouse_pts: np.ndarray,
     return out
 
 @nb.njit(cache=True)
-def _orient(ax, ay, bx, by, cx, cy): # pragma: no cover
+def _orient_numba(ax, ay, bx, by, cx, cy): # pragma: no cover
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 
 
 @nb.njit(cache=True)
-def _on_segment(ax, ay, bx, by, px, py, eps): # pragma: no cover
+def _on_segment_numba(ax, ay, bx, by, px, py, eps): # pragma: no cover
     # p collinear with segment a-b and within bounding box
-    if abs(_orient(ax, ay, bx, by, px, py)) > eps:
+    if abs(_orient_numba(ax, ay, bx, by, px, py)) > eps:
         return False
     if px < min(ax, bx) - eps or px > max(ax, bx) + eps:
         return False
@@ -1669,11 +1669,11 @@ def _on_segment(ax, ay, bx, by, px, py, eps): # pragma: no cover
 
 
 @nb.njit(cache=True)
-def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
-    o1 = _orient(ax, ay, bx, by, cx, cy)
-    o2 = _orient(ax, ay, bx, by, dx, dy)
-    o3 = _orient(cx, cy, dx, dy, ax, ay)
-    o4 = _orient(cx, cy, dx, dy, bx, by)
+def _segments_intersect_numba(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
+    o1 = _orient_numba(ax, ay, bx, by, cx, cy)
+    o2 = _orient_numba(ax, ay, bx, by, dx, dy)
+    o3 = _orient_numba(cx, cy, dx, dy, ax, ay)
+    o4 = _orient_numba(cx, cy, dx, dy, bx, by)
 
     # proper intersection
     if ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and \
@@ -1681,16 +1681,16 @@ def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy, eps): # pragma: no cover
         return True
 
     # collinear/touching
-    if abs(o1) <= eps and _on_segment(ax, ay, bx, by, cx, cy, eps): return True
-    if abs(o2) <= eps and _on_segment(ax, ay, bx, by, dx, dy, eps): return True
-    if abs(o3) <= eps and _on_segment(cx, cy, dx, dy, ax, ay, eps): return True
-    if abs(o4) <= eps and _on_segment(cx, cy, dx, dy, bx, by, eps): return True
+    if abs(o1) <= eps and _on_segment_numba(ax, ay, bx, by, cx, cy, eps): return True
+    if abs(o2) <= eps and _on_segment_numba(ax, ay, bx, by, dx, dy, eps): return True
+    if abs(o3) <= eps and _on_segment_numba(cx, cy, dx, dy, ax, ay, eps): return True
+    if abs(o4) <= eps and _on_segment_numba(cx, cy, dx, dy, bx, by, eps): return True
 
     return False
 
 
 @nb.njit(cache=True)
-def _point_in_poly(px, py, poly, eps): # pragma: no cover
+def _point_in_poly_numba(px, py, poly, eps): # pragma: no cover
     """Ray casting + boundary included."""
     m = poly.shape[0]
     inside = False
@@ -1699,7 +1699,7 @@ def _point_in_poly(px, py, poly, eps): # pragma: no cover
     for i in range(m):
         xi, yi = poly[i, 0], poly[i, 1]
 
-        if _on_segment(xj, yj, xi, yi, px, py, eps):
+        if _on_segment_numba(xj, yj, xi, yi, px, py, eps):
             return True
 
         # crossing test
@@ -1714,11 +1714,11 @@ def _point_in_poly(px, py, poly, eps): # pragma: no cover
 
 
 @nb.njit(cache=True)
-def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
+def _point_in_tri_numba(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     """Same-side test; boundary included."""
-    abp = _orient(ax, ay, bx, by, px, py)
-    bcp = _orient(bx, by, cx, cy, px, py)
-    cap = _orient(cx, cy, ax, ay, px, py)
+    abp = _orient_numba(ax, ay, bx, by, px, py)
+    bcp = _orient_numba(bx, by, cx, cy, px, py)
+    cap = _orient_numba(cx, cy, ax, ay, px, py)
 
     has_neg = (abp < -eps) or (bcp < -eps) or (cap < -eps)
     has_pos = (abp > eps) or (bcp > eps) or (cap > eps)
@@ -1726,17 +1726,17 @@ def _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
 
 
 @nb.njit(cache=True)
-def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
+def _tri_poly_intersects_numba(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
     # 1) triangle vertex in polygon
-    if _point_in_poly(ax, ay, poly, eps): return True
-    if _point_in_poly(bx, by, poly, eps): return True
-    if _point_in_poly(cx, cy, poly, eps): return True
+    if _point_in_poly_numba(ax, ay, poly, eps): return True
+    if _point_in_poly_numba(bx, by, poly, eps): return True
+    if _point_in_poly_numba(cx, cy, poly, eps): return True
 
     # 2) polygon vertex in triangle
     m = poly.shape[0]
     for i in range(m):
         px, py = poly[i, 0], poly[i, 1]
-        if _point_in_tri(px, py, ax, ay, bx, by, cx, cy, eps):
+        if _point_in_tri_numba(px, py, ax, ay, bx, by, cx, cy, eps):
             return True
 
     # 3) any edge intersection
@@ -1745,15 +1745,15 @@ def _tri_poly_intersects(poly, ax, ay, bx, by, cx, cy, eps): # pragma: no cover
         p1x, p1y = poly[i, 0], poly[i, 1]
         p2x, p2y = poly[j, 0], poly[j, 1]
 
-        if _segments_intersect(ax, ay, bx, by, p1x, p1y, p2x, p2y, eps): return True
-        if _segments_intersect(bx, by, cx, cy, p1x, p1y, p2x, p2y, eps): return True
-        if _segments_intersect(cx, cy, ax, ay, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect_numba(ax, ay, bx, by, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect_numba(bx, by, cx, cy, p1x, p1y, p2x, p2y, eps): return True
+        if _segments_intersect_numba(cx, cy, ax, ay, p1x, p1y, p2x, p2y, eps): return True
 
     return False
 
 
 @nb.njit(cache=True)
-def _rotate_vec(vx, vy, ang): # pragma: no cover
+def _rotate_vec_numba(vx, vy, ang): # pragma: no cover
     ca = np.cos(ang)
     sa = np.sin(ang)
     return ca * vx - sa * vy, sa * vx + ca * vy
@@ -1831,8 +1831,8 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10, data_t
         fwd_x = perp_x * invn
         fwd_y = perp_y * invn
 
-        d1x, d1y = _rotate_vec(fwd_x, fwd_y, +half)
-        d2x, d2y = _rotate_vec(fwd_x, fwd_y, -half)
+        d1x, d1y = _rotate_vec_numba(fwd_x, fwd_y, +half)
+        d2x, d2y = _rotate_vec_numba(fwd_x, fwd_y, -half)
 
         # degenerate rays
         cross = d1x * d2y - d1y * d2x
@@ -1867,10 +1867,10 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10, data_t
         cx, cy = apex_x + r * d2x, apex_y + r * d2y
 
         # triangle area check
-        if abs(_orient(ax, ay, bx, by, cx, cy)) < 1e-12:
+        if abs(_orient_numba(ax, ay, bx, by, cx, cy)) < 1e-12:
             continue
 
-        out[t] = 1.0 if _tri_poly_intersects(roi_poly, ax, ay, bx, by, cx, cy, eps) else 0.0
+        out[t] = 1.0 if _tri_poly_intersects_numba(roi_poly, ax, ay, bx, by, cx, cy, eps) else 0.0
 
     return out
 
