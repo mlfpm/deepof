@@ -121,6 +121,7 @@ def load_project(
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
+        animal_presence_threshold: float = 0.5,
         model: str = "mouse_topview",
         project_name: str = "deepof_project",
         video_path: str = None,
@@ -150,6 +151,7 @@ def load_project(
         interpolation_limit (int): maximum number of missing frames to interpolate.
         interpolation_std (int): maximum number of standard deviations to interpolate.
         likelihood_tol (float): likelihood threshold for outlier detection.
+        animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
         model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
         project_name (str): name of the current project.
         project_path (str): path to the folder containing the motion tracking output data.
@@ -181,6 +183,8 @@ def load_project(
     if not (hasattr(coordinates, "_custom_behaviors")):
             coordinates._custom_behaviors = None
             coordinates._custom_continuous_behavior_names=[]
+    if not (hasattr(coordinates, "_animal_presence_threshold")):        
+            coordinates._animal_presence_threshold = 0.5
     if not (hasattr(coordinates, "_start_markers")):        
             coordinates._start_markers = None
     # Error for not compatible versions
@@ -193,7 +197,7 @@ def load_project(
     # Compatibility fixes versions 0.7.0 to 0.7.2
     if isinstance(coordinates._table_paths, List):
         
-        print(f"Initiate project upgrade to 0.8")
+        print(f"Initiate project upgrade to 0.9")
         print(f"IMPORTANT: The following original input options cannot be transferred and the following values will be used:")
         print(f"(you can change these values using load_project input variables)")
         print(f"- iterative_imputation: " + str(iterative_imputation))
@@ -223,6 +227,7 @@ def load_project(
             interpolation_limit = interpolation_limit,
             interpolation_std = interpolation_std,
             likelihood_tol = likelihood_tol,
+            animal_presence_threshold = coordinates._animal_presence_threshold,
             model = model,
             project_name=coordinates._project_name,
             project_path=project_path,
@@ -263,6 +268,7 @@ class Project:
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
         likelihood_tol: float = 0.75,
+        animal_presence_threshold: float = 0.5,
         model: str = "mouse_topview",
         project_name: str = "deepof_project",
         project_path: str = os.path.join("."),
@@ -293,6 +299,7 @@ class Project:
             interpolation_limit (int): maximum number of missing frames to interpolate.
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
+            animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
             model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
             project_name (str): name of the current project.
             project_path (str): path to the folder containing the motion tracking output data.
@@ -478,6 +485,7 @@ class Project:
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
         self.likelihood_tolerance = likelihood_tol
+        self.animal_presence_threshold = animal_presence_threshold
         self.model = model
         self.smooth_alpha = smooth_alpha
         self.video_format = video_format
@@ -737,6 +745,17 @@ class Project:
                     f"If you cancel, only the arenas get loaded." 
                         ) 
             roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
+            
+            # Update scales
+            first_scale=False
+            for scale in scales.values():
+                if scale[-1] != self.arena_dims:
+                    if first_scale:
+                        print(
+                            f"\033[33mInfo! Scale changed! Update arena dimension from {scale[-1]} mm to {self.arena_dims} mm!\033[0m"
+                        )
+                        first_scale=False
+                    scale[-1] = self.arena_dims
 
             image_export_path=os.path.join(
                 self.project_path, 
@@ -927,7 +946,7 @@ class Project:
             )
 
         # 4. Set missing animals
-        table_dict = deepof.utils.set_missing_animals(self, table_dict, lik_dict)
+        table_dict = deepof.utils.set_missing_animals(self, table_dict, lik_dict, animal_presence_threshold= self.animal_presence_threshold)
 
         return table_dict, warn_nans_count
 
@@ -1436,6 +1455,7 @@ class Project:
             frame_rate=self.frame_rate,
             exp_conditions=self.exp_conditions,
             start_markers = self.start_markers,
+            animal_presence_threshold = self.animal_presence_threshold,
             path=self.project_path,
             quality=quality,
             scales=self.scales,
@@ -1615,6 +1635,7 @@ class Coordinates:
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
         start_markers: dict = None,
+        animal_presence_threshold: float = 0.5,
         number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
@@ -1647,6 +1668,7 @@ class Coordinates:
             excluded_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
             start_markers (dict): Dictionary containing the start markers of the experiment. See deepof.data.Project for more information.
+            animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
             number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
@@ -1665,6 +1687,7 @@ class Coordinates:
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._start_markers = start_markers
+        self._animal_presence_threshold = animal_presence_threshold
         self._frame_rate = frame_rate
         self._path = path
         self._quality = quality
@@ -2041,7 +2064,7 @@ class Coordinates:
             tab = self._calculate_derivatives(tab, speed)
 
         # 10. Handle missing animals based on quality data
-        table_dict = deepof.utils.set_missing_animals(self, {key: tab}, quality)
+        table_dict = deepof.utils.set_missing_animals(self, {key: tab}, quality, animal_presence_threshold=self._animal_presence_threshold)
         
         return table_dict[key].astype(self._bit_precision.dtype)
            
@@ -2154,7 +2177,7 @@ class Coordinates:
             tab = self._calculate_derivatives(tab, speed + 1, typ="dists")
 
         # 5. Handle missing animals based on quality data
-        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality, animal_presence_threshold=self._animal_presence_threshold)[key]
 
         if filter_on_graph:
             mouse_edges=deepof.utils.connect_mouse(animal_ids=self._animal_ids, graph_preset=self._bodypart_graph).edges
@@ -2280,7 +2303,7 @@ class Coordinates:
             tab = self._calculate_derivatives(tab, speed + 1, typ="angles")
 
         # 6. Handle missing animals based on quality data
-        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality, animal_presence_threshold=self._animal_presence_threshold)[key]
 
         return tab.astype(self._bit_precision.dtype)
     
@@ -2393,7 +2416,7 @@ class Coordinates:
             tab = self._calculate_derivatives(tab, speed + 1, typ="areas")
 
         # 6. Handle missing animals based on quality data
-        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality)[key]
+        tab = deepof.utils.set_missing_animals(self, {key: tab}, quality, animal_presence_threshold=self._animal_presence_threshold)[key]
     
         return tab.astype(self._bit_precision.dtype)
 
@@ -3241,7 +3264,7 @@ class Coordinates:
                 supervised_tags = table_dict[key]
 
                 # Add missing tags to all animals
-                presence_masks = deepof.utils.compute_animal_presence_mask(quality)   
+                presence_masks = deepof.utils.compute_animal_presence_mask(quality, animal_presence_threshold=self._animal_presence_threshold)   
                 for animal in self._animal_ids:
                     supervised_tags[
                         "{}missing".format(("{}_".format(animal) if animal else ""))

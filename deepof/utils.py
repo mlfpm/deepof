@@ -574,13 +574,13 @@ def str2bool(v: str) -> bool:
 
 
 def compute_animal_presence_mask(
-    quality: table_dict, threshold: float = 0.5
+    quality: table_dict, animal_presence_threshold: float = 0.5
 ) -> table_dict:
     """Compute a mask of the animal presence in the video.
 
     Args:
         quality (table_dict): Dictionary with the quality of the tracking for each body part and animal.
-        threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
+        animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
 
     Returns:
         animal_presence_mask (table_dict): Dictionary with the animal presence mask for each bodypart and animal.
@@ -592,7 +592,7 @@ def compute_animal_presence_mask(
         animal_presence_mask[exp] = {}
         for animal_id in quality._animal_ids:
             animal_presence_mask[exp][animal_id] = (
-                quality.filter_id(animal_id)[exp].median(axis=1) > threshold
+                quality.filter_id(animal_id)[exp].median(axis=1) > animal_presence_threshold
             ).astype(int)
 
         animal_presence_mask[exp] = pd.DataFrame(animal_presence_mask[exp])
@@ -674,7 +674,7 @@ def iterative_imputation(
 
 
 def set_missing_animals(
-    coordinates: project, tab_dict: dict, lik_dict: dict, animal_ids: list = None
+    coordinates: project, tab_dict: dict, lik_dict: dict, animal_ids: list = None, animal_presence_threshold = 0.5,
 ):
     """Set the coordinates of the missing animals to NaN.
 
@@ -683,6 +683,8 @@ def set_missing_animals(
         tab_dict (dict): Dictionary with the coordinates of the body parts.
         lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
         animal_ids (list): List with the animal ids to remove. If None, all the animals with missing data are processed.
+        animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
+
 
     Returns:
         tab_dict (dict): Dictionary with the coordinates of the body parts after removing missing animals.
@@ -697,7 +699,7 @@ def set_missing_animals(
             animal_ids = coordinates._animal_ids
         table_path=os.path.join(coordinates._project_path, coordinates._project_name, "Tables")
 
-    presence_masks = compute_animal_presence_mask(lik_dict)
+    presence_masks = compute_animal_presence_mask(lik_dict, animal_presence_threshold=animal_presence_threshold)
     tab_dict = deepof.data.TableDict(tab_dict, typ="qc", table_path=table_path, animal_ids=animal_ids)
 
     for animal_id in animal_ids:

@@ -7,11 +7,11 @@ Changelog
 
 Added
 -------
-- 
+- Added input option animal_presence_threshold to allow the user to adjust the likelihood threshold at which animals are set visible or not.
 
 Changed
 -------
-- 
+- For arena loading, scaling information will now be adopted from the new project and the user will be informed, if scales differ
 
 
 Bug Fixes
