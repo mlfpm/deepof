@@ -866,7 +866,14 @@ def postprocess_df_bins(df: pd.DataFrame, bin_lengths, hide_time_bins):
         )
         print(warning_message)    
 
-    assert np.sum(df[behavior_to_plot])>0.000001, "None of the selected behavior was measured within the given time bins and ROI!" 
+    if np.sum(df[behavior_to_plot])<0.000001:
+        "None of the selected behavior was measured within the given time bins and ROI!"
+        warning_message = (
+            "\033[38;5;208m"
+            f'Warning! No the selected behavior {behavior_to_plot} did not occur!'
+            "\033[0m"
+        )
+        print(warning_message)  
 
     return df, hide_time_bins
 

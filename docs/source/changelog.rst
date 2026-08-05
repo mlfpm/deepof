@@ -14,7 +14,7 @@ Added
 Changed
 -------
 - For arena loading, scaling information will now be adopted from the new project and the user will be informed, if scales differ
-
+- Changed "no behavior" error in `plot_behzavior_trends` to warning.
 
 Bug Fixes
 ---------
