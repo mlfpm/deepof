@@ -721,6 +721,36 @@ class Project:
 
         return roi_dicts, arena_params, scales, video_resolution
 
+    def adjust_scale(
+        self,
+        arena_params: dict,
+        scales: dict,
+        new_arena_dims: int,
+        roi_dicts: dict = None,
+    ):
+        """Rescale arena/ROIs (stored in mm) after changing scales[*][-1] (arena dims in mm)."""
+        
+        if not scales or not any((sc[-1] != new_arena_dims) for sc in scales.values()):
+            return scales, arena_params, roi_dicts
+
+        # scale to pixel with old scale
+        arena_px = deepof.arena_utils._scale_arenas_to_pixel(arena_params, scales)
+        rois_px = (deepof.arena_utils._scale_rois_to_pixel(roi_dicts, scales) if roi_dicts is not None else None)
+
+        # update scale dims 
+        old_dims = list(scales.values())[-1]
+        print(f"\033[33mInfo! Scale changed! Update arena dimension from {old_dims} mm to {new_arena_dims} mm!\033[0m")
+        for sc in scales.values():
+            sc[-1] = new_arena_dims
+
+        # scale back to mm with new scale
+        arena_params = deepof.arena_utils._scale_arenas_to_mm(arena_px, scales)
+        if rois_px is not None:
+            roi_dicts = deepof.arena_utils._scale_rois_to_mm(rois_px, scales)
+
+        return scales, arena_params, roi_dicts
+
+
     def get_arena(
         self,
         tables: dict,
@@ -755,16 +785,13 @@ class Project:
             roi_dicts, arena_params, scales, video_resolution = self.load_arena_data(arena_path, load_also_rois=load_also_rois)
             
             # Update scales
-            first_scale=False
-            for scale in scales.values():
-                if scale[-1] != self.arena_dims:
-                    if first_scale:
-                        print(
-                            f"\033[33mInfo! Scale changed! Update arena dimension from {scale[-1]} mm to {self.arena_dims} mm!\033[0m"
-                        )
-                        first_scale=False
-                    scale[-1] = self.arena_dims
-
+            scales, arena_params, roi_dicts = self.adjust_scale(
+                arena_params = arena_params,
+                scales = scales,
+                new_arena_dims = self.arena_dims,
+                roi_dicts = roi_dicts,
+            )
+            
             image_export_path=os.path.join(
                 self.project_path, 
                 self.project_name,

@@ -9,6 +9,7 @@ Added
 -------
 - Added input option animal_presence_threshold to allow the user to adjust the likelihood threshold at which animals are set visible or not.
 - Added method `subset_experiments` to `class Coordinates` to enable true project subsetting (i.e. make a copy of your project only containing specific experiments) 
+- Added scale adjustment that is automatically performed during loading of old arena data in case the scale of the new and old projects deviate. If scales deviate, teh user is notified with a print statement 
 
 Changed
 -------
@@ -19,6 +20,7 @@ Bug Fixes
 ---------
 - legend in `plot_enrichment` is now displayed correctly if an experiment condition with more than two condition values is used.
 - In some systems bit_precisions below 64 were not automatically applied within some numba cofunctions nversions which led to crashes. This is fixed now
+- Fixed minor bug that reset visual scaling for rois if all points of a roi were deleted and redrawn.
 
 Known Issues
 ------------

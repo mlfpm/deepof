@@ -1654,8 +1654,8 @@ def retrieve_corners_from_image(
                     cv2.LINE_AA
                 )
 
-            # Reset norm_dist
-            if len(corners) <= 1:
+            # Reset norm_dist if arena is drawn
+            if current_roi == 0 and len(corners) <= 1:
                 norm_dist=None
 
             # Close the polygon
