@@ -2134,6 +2134,8 @@ def enrichment_across_conditions(
     roi_mode: str = "mousewise",
     normalize: bool = False,
     custom_continuous_behavior_names: list = [],
+    behaviors: list = None,
+
 ):
     """Compute the population of each cluster across conditions.
 
@@ -2179,6 +2181,10 @@ def enrichment_across_conditions(
             current_sa=get_dt(supervised_annotations,key).iloc[bin_info[key]["time"]]
             if roi_number is not None:
                 current_sa=deepof.utils.get_supervised_behaviors_in_roi(current_sa, bin_info[key], animals_in_roi,roi_mode)
+            
+            # drop non listed behaviors
+            if behaviors is not None and not plot_speed:
+                current_sa=current_sa.drop(columns=set(current_sa.columns) - set(behaviors))
 
             #only keep speed column or only drop speed column
             if plot_speed:

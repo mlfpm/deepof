@@ -994,6 +994,7 @@ def plot_enrichment(
     in_roi_criterion: str = "Center",
     invert_roi: bool = False, 
     # Visualization parameters
+    behaviors: list = None,
     polar_depiction: bool = False,
     plot_speed: bool = False,
     add_stats: str = "Mann-Whitney",
@@ -1021,6 +1022,7 @@ def plot_enrichment(
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded        
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
+        behaviors (list): Behaviors to plot. If none is given, all are plottet. Note that only plotted behaviors will be included in the the statistics.
         polar_depiction (bool): if True, display as polar plot.
         plot_speed (bool): if supervised annotations are provided, display only speed. Useful to visualize speed.
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
@@ -1037,6 +1039,8 @@ def plot_enrichment(
     # initial check if enum-like inputs were given correctly
     _check_enum_inputs(
         coordinates,
+        supervised_annotations=supervised_annotations,
+        soft_counts=soft_counts,
         exp_condition=exp_condition,
         exp_condition_order=exp_condition_order,
         start_markers=start_marker,
@@ -1044,6 +1048,7 @@ def plot_enrichment(
         roi_number=roi_number,
         roi_mode = roi_mode,
         in_roi_bodyparts=in_roi_criterion,
+        behaviors=behaviors,
     )
     if animals_in_roi is None or roi_mode == "behaviorwise":
         animals_in_roi = coordinates._animal_ids
@@ -1111,6 +1116,7 @@ def plot_enrichment(
         normalize = normalize,
         roi_mode=roi_mode,
         custom_continuous_behavior_names=coordinates._custom_continuous_behavior_names,
+        behaviors=behaviors,
     )
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
