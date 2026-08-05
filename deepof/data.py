@@ -739,7 +739,7 @@ class Project:
 
         # update scale dims 
         old_dims = list(scales.values())[-1]
-        print(f"\033[33mInfo! Scale changed! Update arena dimension from {old_dims} mm to {new_arena_dims} mm!\033[0m")
+        print(f"\033[33mInfo! Scale changed! Update arena dimension from {old_dims[-1]} mm to {new_arena_dims} mm!\033[0m")
         for sc in scales.values():
             sc[-1] = new_arena_dims
 
