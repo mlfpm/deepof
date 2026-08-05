@@ -8,6 +8,7 @@ Changelog
 Added
 -------
 - Added input option animal_presence_threshold to allow the user to adjust the likelihood threshold at which animals are set visible or not.
+- Added method `subset_experiments` to `class Coordinates` to enable true project subsetting (i.e. make a copy of your project only containing specific experiments) 
 
 Changed
 -------

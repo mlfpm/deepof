@@ -64,7 +64,7 @@ import shutil
 import warnings
 from shutil import rmtree
 from time import time
-from typing import Any, Dict, List, NewType, Tuple, Union, Optional, Sequence
+from typing import Any, Dict, List, NewType, Tuple, Union, Optional, Sequence, Mapping
 from pathlib import Path
 
 import networkx as nx
@@ -2665,6 +2665,156 @@ class Coordinates:
 
         if verbose:
             print("Done!")
+
+    def subset_experiments(
+        self,
+        keys: Optional[Sequence[str]] = None,
+        conditions: Optional[Mapping[str, Sequence[Any]]] = None,
+    ):
+        """
+        Return a (shallow) subset of the Coordinates object containing only selected experiments.
+
+        Args:
+            keys: list/tuple of experiment keys to keep (e.g., ["F_Test 1", "F_Test 2"]).
+            conditions: dict mapping column name -> allowed values (e.g., {"sex": ["Female"]}).
+                       OR semantics: an experiment is kept if it matches ANY provided condition constraint.
+
+        Returns:
+            Coordinates: subset view/copy of the object.
+        """
+
+        def _warn(msg: str):
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! {msg}"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+
+        # Get keys
+        all_keys = list(self._tables.keys())
+        all_keys_set = set(all_keys)
+
+        # If nothing is requested, return a shallow copy
+        if keys is None and conditions is None:
+            return copy.copy(self)
+
+        keep_set = set()
+
+        # Get keys to keep based on keys input (if given)
+        if keys is not None:
+            keys = list(keys)
+            missing = sorted(set(keys) - all_keys_set)
+            if missing:
+                _warn(f"The following experiment keys do not exist and will be ignored: {missing}")
+            keep_set |= (set(keys) & all_keys_set)
+
+        # Get keys for conditions to keep based on conditions input (if given)
+        if conditions is not None:
+            if self._exp_conditions is None:
+                _warn("No experiment conditions are loaded for this project (self._exp_conditions is None). "
+                      "Condition-based filtering will be ignored.")
+            else:
+                # Turn strings into lists
+                conditions = {key: ([value] if isinstance(value, str) else value) for key, value in conditions.items()}
+                
+                # Validate condition names: warn if a condition column isn't present in ANY exp_condition df
+                # (and ignore that condition).
+                available_columns = set()
+                for k in all_keys:
+                    df = self._exp_conditions.get(k, None)
+                    if df is not None:
+                        available_columns |= set(df.columns)
+
+                valid_conditions = {}
+                invalid_condition_names = []
+                for col, allowed in conditions.items():
+                    if col in available_columns:
+                        valid_conditions[col] = set(list(allowed))
+                    else:
+                        invalid_condition_names.append(col)
+
+                if invalid_condition_names:
+                    _warn("Some requested experiment condition names do not exist in the condition tables "
+                          f"and will be ignored: {sorted(invalid_condition_names)}")
+
+                # If nothing valid remains, skip filtering by conditions
+                if valid_conditions:
+                    missing_condition_info = []
+                    condition_matched = set()
+
+                    for k in all_keys:
+                        df = self._exp_conditions.get(k, None)
+
+                        # Missing condition info -> ignore unless explicitly included by keys;
+                        # warn later if it wasn't included.
+                        if df is None:
+                            missing_condition_info.append(k)
+                            continue
+
+                        # OR semantics across all constraints:
+                        # match if ANY (col in df and df[col].iloc[0] in allowed_values)
+                        matched = False
+                        for col, allowed_values in valid_conditions.items():
+                            if col in df.columns:
+                                # Your tables look 1-row; this is the usual case
+                                try:
+                                    v = df[col].iloc[0]
+                                except Exception:
+                                    continue
+                                if v in allowed_values:
+                                    matched = True
+                                    break
+
+                        if matched:
+                            condition_matched.add(k)
+
+                    keep_set |= condition_matched
+
+                    # Warn about missing condition info only for those not explicitly included by keys
+                    not_explicitly_kept = [k for k in missing_condition_info if k not in keep_set]
+                    if not_explicitly_kept:
+                        _warn("Some experiments have no condition table assigned (None/missing) and were ignored "
+                              "during condition-based filtering: "
+                              f"{not_explicitly_kept[:10]}"
+                              + ("..." if len(not_explicitly_kept) > 10 else ""))
+
+        # Preserve original order
+        keep_keys = [k for k in all_keys if k in keep_set]
+
+        if len(keep_keys) == 0:
+            raise ValueError("Your selection resulted in 0 experiments!")
+
+        # Choose target object
+        target = copy.copy(self)
+
+        # Helper to filter dict-like attributes by key
+        def _filter_dict(d):
+            if d is None:
+                return None
+            return {k: d[k] for k in d.keys() if k in keep_set}
+
+        # Filter all per-experiment dictionaries (they share keys in your design)
+        target._tables = _filter_dict(getattr(target, "_tables", None))
+        target._quality = _filter_dict(getattr(target, "_quality", None))
+        target._scales = _filter_dict(getattr(target, "_scales", None))
+        target._arena_params = _filter_dict(getattr(target, "_arena_params", None))
+        target._roi_dicts = _filter_dict(getattr(target, "_roi_dicts", None))
+
+        target._distances = _filter_dict(getattr(target, "_distances", None))
+        target._angles = _filter_dict(getattr(target, "_angles", None))
+        target._areas = _filter_dict(getattr(target, "_areas", None))
+
+        target._videos = _filter_dict(getattr(target, "_videos", None))
+        target._video_resolution = _filter_dict(getattr(target, "_video_resolution", None))
+
+        target._exp_conditions = _filter_dict(getattr(target, "_exp_conditions", None))
+        # _start_markers can be None
+        target._start_markers = _filter_dict(getattr(target, "_start_markers", None))
+
+        target._table_paths = _filter_dict(getattr(target, "_table_paths", None))
+
+        return target
 
     def save(self, file=None, filename: str = None, timestamp: bool = True):
         """Save the current state of the Coordinates object to a pickled file.
