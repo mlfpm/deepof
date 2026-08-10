@@ -235,6 +235,13 @@ def get_arenas(
                 video_resolution[key]=(h, w)
                 pbar.update(1)
                 vid_idx=vid_idx+1
+                
+                #scale rois and arenas to mm
+                arena_params_complete, roi_dicts_complete, scales_to_save = _cut_to_complete(arena_params, roi_dicts, scales)
+                arena_params_to_save = _scale_arenas_to_mm(arena_params_complete, scales_to_save)
+                roi_dicts_to_save = _scale_rois_to_mm(roi_dicts_complete, scales_to_save)
+                # Save arena data seperately    
+                coordinates.save_arena_data(os.path.join(coordinates.project_path, coordinates.project_name, "Coordinates", "arena_data_part.pkl"), arena_params_to_save, roi_dicts_to_save, scales_to_save, video_resolution)
 
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
@@ -432,17 +439,31 @@ def get_arenas(
     return scales, arena_params, roi_dicts, video_resolution
 
 
+def _cut_to_complete(arena_params, roi_dicts, scales):
+    """retains only entries with complete information in all of arena_params, roi_dicts, and scales"""
+    arena_params_complete, roi_dicts_complete, scales_complete = {}, {}, {}
+    for key in arena_params.keys():
+        if len(arena_params[key]) > 0 and scales[key] is not None:
+            arena_params_complete[key] = arena_params[key]
+            scales_complete[key] = scales[key]
+            roi_dicts_complete[key] = roi_dicts[key]
+       
+    return arena_params_complete, roi_dicts_complete, scales_complete
+
 def _scale_arenas_to_mm(arena_params, scales):
     """Scales arenas from pixel to mm"""
     scaled_arena_params={}
     for key in arena_params.keys():
-        scaling_ratio = scales[key][3]/scales[key][2]
-        if isinstance(arena_params[key], np.ndarray) or isinstance(arena_params[key], list): # polygonal
-            scaled_arena_params[key]=np.array(arena_params[key])*scaling_ratio
-        elif isinstance(arena_params[key], Tuple): # circular
-            scaled_arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+        if not len(arena_params[key])==0:
+            scaling_ratio = scales[key][3]/scales[key][2]
+            if isinstance(arena_params[key], np.ndarray) or isinstance(arena_params[key], list): # polygonal
+                scaled_arena_params[key]=np.array(arena_params[key])*scaling_ratio
+            elif isinstance(arena_params[key], Tuple): # circular
+                scaled_arena_params[key]=(tuple(np.array(arena_params[key][0])*scaling_ratio),tuple(np.array(arena_params[key][1])*scaling_ratio),arena_params[key][2])
+            else:
+                raise ValueError("Could not scale arena to mm!")
         else:
-            raise ValueError("Could not scale arena to mm!")
+            scaled_arena_params[key] = []
     return scaled_arena_params
 
 
@@ -450,15 +471,18 @@ def _scale_arenas_to_pixel(arena_params, scales):
     """Scales arenas from pixel to mm"""
     scaled_arena_params={}
     for key in arena_params.keys():
-        scaling_ratio = scales[key][2]/scales[key][3]
-        if isinstance(arena_params[key], np.ndarray): # polygonal
-            scaled_arena_params[key]=np.round(np.array(arena_params[key])*scaling_ratio).astype(int)
-        # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
-        elif isinstance(arena_params[key], Tuple): # circular
-            arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
-            scaled_arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+        if not len(arena_params[key])==0:
+            scaling_ratio = scales[key][2]/scales[key][3]
+            if isinstance(arena_params[key], np.ndarray): # polygonal
+                scaled_arena_params[key]=np.round(np.array(arena_params[key])*scaling_ratio).astype(int)
+            # As we no longer support the old special saving format of the ellipse arena type it is converted to a multi-vertex polygon
+            elif isinstance(arena_params[key], Tuple): # circular
+                arena_ellipse=(tuple((np.array(arena_params[key][0])*scaling_ratio).astype(int)),tuple((np.array(arena_params[key][1])*scaling_ratio).astype(int)),arena_params[key][2])
+                scaled_arena_params[key] = np.round(extract_corners_from_arena(arena_ellipse)).astype(int)
+            else:
+                raise ValueError("Could not scale arena to pixel!")
         else:
-            raise ValueError("Could not scale arena to pixel!")
+            scaled_arena_params[key] = []
     return scaled_arena_params
 
 
@@ -466,10 +490,14 @@ def _scale_rois_to_mm(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
     scaled_roi_dicts={}
     for key in roi_dicts.keys():
-        scaled_roi_dicts[key]={}
-        for k, roi in roi_dicts[key].items():
-            scaling_ratio = scales[key][3]/scales[key][2]
-            scaled_roi_dicts[key][k] = np.array(roi)*scaling_ratio
+        # check if empty roi object
+        if not all([len(val)==0 for val in roi_dicts[key].values()]):
+            scaled_roi_dicts[key]={}
+            for k, roi in roi_dicts[key].items():
+                scaling_ratio = scales[key][3]/scales[key][2]
+                scaled_roi_dicts[key][k] = np.array(roi)*scaling_ratio
+        else: 
+            scaled_roi_dicts[key] = roi_dicts[key]
     return scaled_roi_dicts
 
 
@@ -477,10 +505,14 @@ def _scale_rois_to_pixel(roi_dicts, scales):
     """Scales ROIS from pixel to mm"""
     scaled_roi_dicts={}
     for key in roi_dicts.keys():
-        scaled_roi_dicts[key]={}
-        for k, roi in roi_dicts[key].items():
-            scaling_ratio = scales[key][2]/scales[key][3]
-            scaled_roi_dicts[key][k] = np.round(np.array(roi)*scaling_ratio).astype(int)
+        # check if empty roi object
+        if not all([len(val)==0 for val in roi_dicts[key].values()]):
+            scaled_roi_dicts[key]={}
+            for k, roi in roi_dicts[key].items():
+                scaling_ratio = scales[key][2]/scales[key][3]
+                scaled_roi_dicts[key][k] = np.round(np.array(roi)*scaling_ratio).astype(int)
+        else: 
+            scaled_roi_dicts[key] = roi_dicts[key]
     return scaled_roi_dicts
 
 
@@ -733,6 +765,10 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
         color=ARENA_COLOR
         add_overlay=False
 
+    # Early return in case Roi is empty
+    if roi is None or len(roi)==0:
+        return
+    
     if isinstance(roi, Tuple): # Circular (legacy) "circular" in arena_type:
         cv2.ellipse(
             img=frame_with_arena,
@@ -945,7 +981,7 @@ def extract_polygonal_arena_coordinates(
     roi_corners= {}
 
     for k in list_of_rois:
-        cur_corners=roi_dicts.get(key_current,[])
+        cur_corners=copy.deepcopy(roi_dicts.get(key_current,[]))
         if len(cur_corners)>0:
             cur_corners=cur_corners[k]
         cur_roi_corners, _, exit_flag_rois = retrieve_corners_from_image(
@@ -959,6 +995,7 @@ def extract_polygonal_arena_coordinates(
             arena_corners=arena_corners,
             corners=cur_corners,
             test=test,
+            roi_dict=roi_dicts,
         )
         # Get rid of very small distortions in the ROI that can lead to problems later (e.g. with Polygon.buffer) and go to next roi     
         if exit_flag_rois == Arena_GUI_exit_flag.NEXT:
@@ -1454,7 +1491,7 @@ class DropdownUI:
     
 
 def retrieve_corners_from_image(
-    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, corners: list=[], test: bool = False
+    frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, corners: list=[], test: bool = False, roi_dict = None,
 ):  # pragma: no cover
     """Open a window and waits for the user to click on all corners of the polygonal arena.
 

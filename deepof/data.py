@@ -641,7 +641,7 @@ class Project:
             k2=k1
         else:
             k2 = set(roi_dicts.keys())
-        if not (k1 == k2 == k3 == k4): # pragma: no cover
+        if not (k1 == k2 == k3): # pragma: no cover
             raise ValueError(
                 "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
             )
@@ -689,8 +689,26 @@ class Project:
             )
         
         expected_keys=set(arena_params.keys())
-        assert (set(roi_dicts.keys()) == expected_keys == set(scales.keys()) == set(video_resolution.keys())), "Arena objects have deviatin keys, could not load arena info." 
-        assert expected_keys == set(self.tables.keys()), "Keys of Arena objects do not match project keys, could not load arena info"
+        assert (set(roi_dicts.keys()) == expected_keys == set(scales.keys())), "Arena objects have deviatin keys, could not load arena info." 
+        if expected_keys == set(self.tables.keys()):
+            # everything matches, no further processing required
+            pass
+        elif not expected_keys.isdisjoint(set(self.tables.keys())):
+            warning_message = (
+                "\033[38;5;208m\n"
+                f"Warning! Keys of loaded arenas and current project do not fully match. Only matching share of keys will be loaded!.\n"
+                "\033[0m"
+            )
+            warnings.warn(warning_message)
+            
+            empty_roi_object={k+1 : [] for k in range(self.number_of_rois)}
+
+            roi_dicts = {k: roi_dicts.get(k, empty_roi_object) for k in self.tables} if roi_dicts is not None else None
+            arena_params = {k: arena_params.get(k, []) for k in self.tables} if arena_params is not None else None
+            scales = {k: scales.get(k, None) for k in self.tables} if scales is not None else None
+            video_resolution = {k: video_resolution.get(k, None) for k in self.tables} if video_resolution is not None else None
+        else: 
+            raise KeyError("None opf the keys in the current project and the loaded arenas match!")
 
         # If arena-only: skip ROI checks and do not return ROI dicts
         if not load_also_rois:
@@ -730,7 +748,7 @@ class Project:
     ):
         """Rescale arena/ROIs (stored in mm) after changing scales[*][-1] (arena dims in mm)."""
         
-        if not scales or not any((sc[-1] != new_arena_dims) for sc in scales.values()):
+        if not scales or not any((sc[-1] != new_arena_dims) for sc in scales.values() if sc is not None):
             return scales, arena_params, roi_dicts
 
         # scale to pixel with old scale
@@ -820,7 +838,7 @@ class Project:
                     for key in roi_dicts.keys():
                         for k in range(n_loaded_rois+1,self.number_of_rois+1):
                             roi_dicts[key][k]=[]
-                else:
+                elif not any(scale is None for scale in scales.values()):
                     skip_detection=True
         
         if not skip_detection:

@@ -2038,7 +2038,7 @@ class ContrastivePT(nn.Module):
                 use_gnn=use_gnn,
                 interaction_regularization=interaction_regularization,
             )
-        elif encoder_type == "TCN":
+        elif encoder_type == "tcn":
             self.encoder = TCNEncoderPT(
                 input_shape=(self.window_size, N, F_in),
                 edge_feature_shape=(self.window_size, E, Fe),

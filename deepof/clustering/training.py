@@ -908,11 +908,11 @@ def train_deepof_model_base(
     # Check for possible multiprocessing
     # ----------------------------------------------------
     is_ddp, rank, world_size, local_rank = ddp_init_if_needed()
-    print("Is DDP even active?")
-    print(is_ddp)
-    print(rank)
-    print(world_size)
-    print(local_rank)
+    #print("Is DDP even active?")
+    #print(is_ddp)
+    #print(rank)
+    #print(world_size)
+    #print(local_rank)
 
     # is main process
     is_main = (not is_ddp) or (rank == 0)

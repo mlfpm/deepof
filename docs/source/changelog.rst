@@ -15,12 +15,15 @@ Changed
 -------
 - For arena loading, scaling information will now be adopted from the new project and the user will be informed, if scales differ
 - Changed "no behavior" error in `plot_behzavior_trends` to warning.
+- Upgaded arena loading to also allow the loading of data with only partially matching keys to then complete the ROI labelling
 
 Bug Fixes
 ---------
 - legend in `plot_enrichment` is now displayed correctly if an experiment condition with more than two condition values is used.
 - In some systems bit_precisions below 64 were not automatically applied within some numba cofunctions nversions which led to crashes. This is fixed now
 - Fixed minor bug that reset visual scaling for rois if all points of a roi were deleted and redrawn.
+- Fixed DDP debug info print that was not supposed to be printed
+- Fixed tcn encoder selection
 
 Known Issues
 ------------
