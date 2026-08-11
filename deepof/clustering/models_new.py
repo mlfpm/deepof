@@ -1450,7 +1450,7 @@ def init_encoder_decoder(
     """
     decoder_output_features = n_nodes * n_features_per_node
 
-    if encoder_type == "recurrent":
+    if encoder_type.lower() == "recurrent":
         encoder = RecurrentEncoderPT(
             input_shape=input_shape,
             edge_feature_shape=edge_feature_shape,
@@ -1464,7 +1464,7 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
         )
 
-    elif encoder_type == "TCN":
+    elif encoder_type.lower() == "TCN":
         encoder = TCNEncoderPT(
             input_shape=input_shape,
             edge_feature_shape=edge_feature_shape,
@@ -1478,7 +1478,7 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
         )
 
-    elif encoder_type == "transformer":
+    elif encoder_type.lower() == "transformer":
         encoder = TFMEncoderPT(
             input_shape=input_shape,
             edge_feature_shape=edge_feature_shape,
@@ -1613,7 +1613,7 @@ class VQVAEPT(nn.Module):
         reconstruction_dist = self.decoder(encoder_output, x_for_decoder)
         
         # Handle transformer decoder outputs (which return attention weights)
-        if self.encoder_type == "transformer":
+        if self.encoder_type.lower() == "transformer":
             if isinstance(encoding_reconstruction_dist, tuple):
                 encoding_reconstruction_dist = encoding_reconstruction_dist[0]
             if isinstance(reconstruction_dist, tuple):
@@ -2029,7 +2029,7 @@ class ContrastivePT(nn.Module):
         self.tau = tau
         self.interaction_regularization = interaction_regularization
 
-        if encoder_type == "recurrent":
+        if encoder_type.lower() == "recurrent":
             self.encoder = RecurrentEncoderPT(
                 input_shape=(self.window_size, N, F_in),
                 edge_feature_shape=(self.window_size, E, Fe),
@@ -2038,7 +2038,7 @@ class ContrastivePT(nn.Module):
                 use_gnn=use_gnn,
                 interaction_regularization=interaction_regularization,
             )
-        elif encoder_type == "tcn":
+        elif encoder_type.lower() == "tcn":
             self.encoder = TCNEncoderPT(
                 input_shape=(self.window_size, N, F_in),
                 edge_feature_shape=(self.window_size, E, Fe),
@@ -2047,7 +2047,7 @@ class ContrastivePT(nn.Module):
                 use_gnn=use_gnn,
                 interaction_regularization=interaction_regularization,
             )
-        elif encoder_type == "transformer":
+        elif encoder_type.lower() == "transformer":
             self.encoder = TFMEncoderPT(
                 input_shape=(self.window_size, N, F_in),
                 edge_feature_shape=(self.window_size, E, Fe),

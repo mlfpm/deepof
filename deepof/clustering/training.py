@@ -165,7 +165,7 @@ def train_one_epoch_indexed(
                 torch.nn.utils.clip_grad_value_(model.parameters(), grad_clip_value)
             optimizer.step()
 
-        if ctx is not None and model_name=="vade":
+        if ctx is not None and model_name.lower()=="vade":
             if hasattr(ctx.criterion, "kl_scheduler") and ctx.criterion.kl_scheduler is not None:
                 ctx.criterion.kl_scheduler.step()
                 if(step==int(len(iterator)/2)):
@@ -745,7 +745,7 @@ def train_deepof_model(
     # Create configs for different models to avoid gigantic function signaturs
     common_cfg = CommonFitCfg(
         model_name=model_name.lower(),
-        encoder_type=encoder_type,
+        encoder_type=encoder_type.lower(),
         batch_size=batch_size,
         latent_dim=latent_dim,
         epochs=epochs,
@@ -920,7 +920,7 @@ def train_deepof_model_base(
     # ----------------------------------------------------
     # Prepare device and data
     # ----------------------------------------------------
-    model_name = common_cfg.model_name # Name defaults to "vade"
+    model_name = common_cfg.model_name.lower() # Name defaults to "vade"
     if device is None:
         if torch.cuda.is_available(): # pragma: no cover
             if is_ddp:
