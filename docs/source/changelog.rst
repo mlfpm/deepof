@@ -24,6 +24,7 @@ Bug Fixes
 - In some systems bit_precisions below 64 were not automatically applied within some numba cofunctions nversions which led to crashes. This is fixed now
 - Fixed minor bug that reset visual scaling for rois if all points of a roi were deleted and redrawn.
 - Fixed DDP debug info print that was not supposed to be printed
+- Fixed bug in arena creation "already exists" check in which projects with very similar names were falsely identified as the same project and hence arena loading was incorrectly prohibited
 
 
 Known Issues

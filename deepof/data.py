@@ -636,15 +636,17 @@ class Project:
         arena_path.parent.mkdir(parents=True, exist_ok=True)
 
         # All three must share identical first-level keys
-        k1, k3, k4 = set(arena_params.keys()), set(scales.keys()), set(video_resolution.keys())
-        if roi_dicts is None:
-            k2=k1
-        else:
-            k2 = set(roi_dicts.keys())
-        if not (k1 == k2 == k3): # pragma: no cover
+        k1, k2 = set(arena_params.keys()), set(scales.keys())
+        k_rois = k2 if roi_dicts is None else set(roi_dicts.keys())
+        if not (k1 == k2): # pragma: no cover
             raise ValueError(
-                "First-level (video) keys must be identical for roi_dicts, arena_params, and scales."
+                "First-level (video) keys must be identical for arena_params, and scales (each arena needs a scale)."
             )
+        if not (k_rois <= k1):
+            raise ValueError(
+                "If ROIS are present, each ROI needs to have an arena for teh same key!."
+            )
+
 
         payload = {"roi_dicts": roi_dicts, "arena_params": arena_params, "scales": scales, "video_resolution": video_resolution}
 
@@ -689,7 +691,7 @@ class Project:
             )
         
         expected_keys=set(arena_params.keys())
-        assert (set(roi_dicts.keys()) == expected_keys == set(scales.keys())), "Arena objects have deviatin keys, could not load arena info." 
+        assert (expected_keys == set(scales.keys())) and set(roi_dicts.keys()) <= expected_keys, "Arena objects have deviatin keys, could not load arena info." 
         if expected_keys == set(self.tables.keys()):
             # everything matches, no further processing required
             pass
@@ -795,7 +797,7 @@ class Project:
         skip_detection = False
         if arena_path is not None:
            
-            if not self.number_of_rois==0 and DISPLAY_AVAILABLE:
+            if False: #: not self.number_of_rois==0 and DISPLAY_AVAILABLE:
                 load_also_rois=deepof.arena_utils.confirm_action(
                     f"Do you want to additionally load the saved ROIs?\n" 
                     f"If you cancel, only the arenas get loaded." 
@@ -825,7 +827,7 @@ class Project:
             if roi_dicts is not None:
                 
                 scaled_roi_dicts=deepof.arena_utils._scale_rois_to_pixel(roi_dicts,scales)
-                for index, key in enumerate(self.videos.keys()):
+                for index, key in enumerate(scaled_roi_dicts.keys()):
                     video_path = os.path.join(self.video_path, self.videos[key])
                     # read random frame from video capture object
                     numpy_im = deepof.arena_utils.get_random_frame(video_path)
@@ -838,7 +840,7 @@ class Project:
                     for key in roi_dicts.keys():
                         for k in range(n_loaded_rois+1,self.number_of_rois+1):
                             roi_dicts[key][k]=[]
-                elif not any(scale is None for scale in scales.values()):
+                elif not any(scale is None for scale in scales.values()) and set(roi_dicts.keys())==set(scales.keys()):
                     skip_detection=True
         
         if not skip_detection:
@@ -1418,7 +1420,7 @@ class Project:
             print("Overwriting old project...")
         
         if force and os.path.exists(os.path.join(self.project_path, self.project_name)):
-            if arena_path is not None and self.project_name in arena_path and os.path.abspath(arena_path.split(self.project_name)[0]) == os.path.abspath(os.path.join(self.project_path)):
+            if arena_path is not None and self.project_name in Path(arena_path).parts and os.path.abspath(arena_path.split(self.project_name)[0]) == os.path.abspath(os.path.join(self.project_path)):
                 raise FileNotFoundError("When overwriting a project in force mode, the arena data cannot be loaded from the overwritten project!")
             rmtree(os.path.join(self.project_path, self.project_name))
 
@@ -2715,6 +2717,7 @@ class Coordinates:
         self,
         keys: Optional[Sequence[str]] = None,
         conditions: Optional[Mapping[str, Sequence[Any]]] = None,
+        match_all_conditions = False,
     ):
         """
         Return a (shallow) subset of the Coordinates object containing only selected experiments.
@@ -2800,6 +2803,7 @@ class Coordinates:
                         # OR semantics across all constraints:
                         # match if ANY (col in df and df[col].iloc[0] in allowed_values)
                         matched = False
+                        cond_counter = 0
                         for col, allowed_values in valid_conditions.items():
                             if col in df.columns:
                                 # Your tables look 1-row; this is the usual case
@@ -2807,9 +2811,15 @@ class Coordinates:
                                     v = df[col].iloc[0]
                                 except Exception:
                                     continue
-                                if v in allowed_values:
+                                if not match_all_conditions and v in allowed_values:
                                     matched = True
                                     break
+                                elif v in allowed_values:
+                                    cond_counter+=1
+                                    if cond_counter == len(valid_conditions):
+                                        matched = True
+                                        break
+
 
                         if matched:
                             condition_matched.add(k)

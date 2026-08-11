@@ -159,7 +159,13 @@ def test_rename_bodyparts(table_type, rename_len):
         assert prun.rename_bodyparts_dict[custom_name] == deepof_name
 
 
-def test_arena_loading():
+@settings(deadline=None)
+@given(
+    partial_save_data=st.booleans(),
+    load_also_rois=st.booleans(),
+    n_rois_to_load = st.integers(min_value=1,max_value=2),
+)
+def test_arena_loading(partial_save_data, load_also_rois, n_rois_to_load):
 
     base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
     video_path = os.path.join(base_path, "Videos")
@@ -188,11 +194,13 @@ def test_arena_loading():
         pr_save=pr_raw.create(force=True, test=True) # Note: test mode will result in 2 rois independent from the number chosen
 
         keys = list(pr_save._tables.keys())
+        if partial_save_data:
+            keys = [keys[0]]
 
         arena_params = pr_save._arena_params
         scales = pr_save._scales
         video_resolution = pr_save._video_resolution
-        roi_dicts = pr_save._roi_dicts
+        roi_dicts = {key: pr_save._roi_dicts[key] for key in keys}
 
         pr_raw.save_arena_data(
             arena_path=arena_file,
@@ -215,7 +223,7 @@ def test_arena_loading():
             video_scale="380 mm",
             video_format=".mp4",
             table_format=".h5",
-            number_of_rois=1,
+            number_of_rois=n_rois_to_load,
         )
         pr_load.set_up_project_directory(debug=True)  # ensures Arena_detection/Coordinates exist
 
@@ -223,16 +231,20 @@ def test_arena_loading():
             tables={k: None for k in keys},
             arena_path=arena_file,
             test=True,
-            load_also_rois=True,  # no UI
+            load_also_rois=load_also_rois,  # no UI
         )
 
-        # Minimal correctness checks
-        k0 = keys[0]
-        assert list(got_rois[k0].keys()) == [1]
-        assert (got_rois[k0][1] == roi_dicts[k0][1]).all()
-        assert (got_arena[k0] == arena_params[k0]).all()
-        assert got_scales[k0] == scales[k0]
-        assert got_res[k0] == video_resolution[k0]
+        # Load only one ROI if either only one was set to be loaded or only one was saved
+        if n_rois_to_load == 1:
+            rois = [1]
+        else:
+            rois = [1,2]
+        # check that correctly either only one or both rois got loaded    
+        assert all(list(got_rois[k].keys())==rois for k in keys)
+        assert all((got_rois[k][roi] == roi_dicts[k][roi]).all() for k in keys for roi in rois)
+        assert all((got_arena[k] == arena_params[k]).all() for k in keys)
+        assert all((got_scales[k] == scales[k]) for k in keys)
+        assert all((got_res[k] == video_resolution[k]) for k in keys)
 
         # get_arena always saves arena_data.pkl into the project
         assert os.path.isfile(os.path.join(out_project_dir, "Coordinates", "arena_data.pkl"))

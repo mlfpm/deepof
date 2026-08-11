@@ -45,6 +45,13 @@ class Arena_GUI_exit_flag(Enum):
     PROPAGATE = 4
     UNOPENED = 5
 
+def _scale_and_save_arena_data(coordinates: Union[project, coordinates], arena_params: dict, roi_dicts: dict, scales: dict, video_resolution: dict):
+    arena_params_complete, roi_dicts_complete, scales_to_save = _cut_to_complete(arena_params, roi_dicts, scales)
+    arena_params_to_save = _scale_arenas_to_mm(arena_params_complete, scales_to_save)
+    roi_dicts_to_save = _scale_rois_to_mm(roi_dicts_complete, scales_to_save)
+    # Save arena data seperately    
+    coordinates.save_arena_data(os.path.join(coordinates.project_path, coordinates.project_name, "Coordinates", "arena_data_part.pkl"), arena_params_to_save, roi_dicts_to_save, scales_to_save, video_resolution)
+
 
 def get_arenas(
     coordinates: Union[project, coordinates],
@@ -237,11 +244,7 @@ def get_arenas(
                 vid_idx=vid_idx+1
                 
                 #scale rois and arenas to mm
-                arena_params_complete, roi_dicts_complete, scales_to_save = _cut_to_complete(arena_params, roi_dicts, scales)
-                arena_params_to_save = _scale_arenas_to_mm(arena_params_complete, scales_to_save)
-                roi_dicts_to_save = _scale_rois_to_mm(roi_dicts_complete, scales_to_save)
-                # Save arena data seperately    
-                coordinates.save_arena_data(os.path.join(coordinates.project_path, coordinates.project_name, "Coordinates", "arena_data_part.pkl"), arena_params_to_save, roi_dicts_to_save, scales_to_save, video_resolution)
+                _scale_and_save_arena_data(coordinates,arena_params,roi_dicts,scales,video_resolution)
 
 
     elif arena in ["polygonal-autodetect", "circular-autodetect"]:
@@ -263,8 +266,10 @@ def get_arenas(
             if "polygonal" in arena:
                 scales={'test2': [279.5, 213.5, 420.12, 380], 'test': [279.5, 213.5, 420.12, 380]}
                 arena_params={'test2': np.array([(108, 30), (539, 29), (533, 438), (104, 431)]), 'test': np.array([(108, 30), (323, 29), (539, 29), (533, 434), (323, 434), (104, 431)])}
-                video_resolution={'test2': (480, 640), 'test': (480, 640)}
+                video_resolution={'test2': (480, 640), 'test': (480, 640)}              
                 rois={1: ((106, 230), (533, 230), (533, 438), (104, 431)), 2: ((106, 230), (323, 230), (323, 438), (104, 431))}
+                if coordinates.number_of_rois==1:
+                    rois={1: ((106, 230), (533, 230), (533, 438), (104, 431))}
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
                 arena_params = _scale_arenas_to_mm(arena_params, scales)
@@ -282,6 +287,8 @@ def get_arenas(
                 arena_params={'test2': cur_arena_params_1, 'test': cur_arena_params_2} 
                 video_resolution={'test2': (404, 416), 'test': (404, 416)}
                 rois={1: ((145, 130), (145, 255), (260, 255), (260, 130)) , 2: ((145, 190), (145, 255), (260, 255), (260, 190)) }
+                if coordinates.number_of_rois==1:
+                    rois={1: ((145, 130), (145, 255), (260, 255), (260, 130))}
                 roi_dicts={'test': rois, 'test2': rois} 
                 #scale rois and arenas to mm
                 arena_params = _scale_arenas_to_mm(arena_params, scales)
@@ -422,6 +429,10 @@ def get_arenas(
 
                     if exit_flag_arena == Arena_GUI_exit_flag.NEXT:
                         arena_reference = arena_corners
+
+                    #scale rois and arenas to mm
+                    _scale_and_save_arena_data(coordinates,arena_params,roi_dicts,scales,video_resolution)
+
                 vid_idx=vid_idx+1
 
     elif not arena:
@@ -446,9 +457,8 @@ def _cut_to_complete(arena_params, roi_dicts, scales):
         if len(arena_params[key]) > 0 and scales[key] is not None:
             arena_params_complete[key] = arena_params[key]
             scales_complete[key] = scales[key]
-            roi_dicts_complete[key] = roi_dicts[key]
        
-    return arena_params_complete, roi_dicts_complete, scales_complete
+    return arena_params_complete, roi_dicts, scales_complete
 
 def _scale_arenas_to_mm(arena_params, scales):
     """Scales arenas from pixel to mm"""
