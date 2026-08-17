@@ -29,7 +29,7 @@ from natsort import os_sorted
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
-from deepof.config import PROGRESS_BAR_FIXED_WIDTH, BODYPART_COLORS, ROI_COLORS
+from deepof.config import PROGRESS_BAR_FIXED_WIDTH, BODYPART_COLORS, ROI_COLORS, CONTINUOUS_BEHAVIORS, CONTINUOUS_UNITS
 from deepof.visuals_utils import hex_to_BGR, BGR_to_hex, RGB_to_hex, RGB_to_BGR, BGR_to_RGB
 
 
@@ -237,7 +237,7 @@ def output_videos_per_cluster(
 
 
 def _prepare_behavior_dataframe(
-    tab: pd.DataFrame, behaviors: List[str], behavior_renamed: List[str],
+    coordinates: coordinates, config: VideoExportConfig, tab: pd.DataFrame, behaviors: List[str], behaviors_renamed: List[str],
 ) -> pd.DataFrame:
     """
     Creates a DataFrame where cells contain the behavior name if the condition
@@ -245,9 +245,34 @@ def _prepare_behavior_dataframe(
     way to look up the active behavior string for a given frame.
     """
     behavior_df = pd.DataFrame(index=tab.index, columns=behaviors, data="")
-    for behavior, behavior_renamed in zip(behaviors, behavior_renamed):
-        mask = tab[behavior] > 0.1
-        behavior_df.loc[mask, behavior] = behavior_renamed
+    for behavior, behavior_renamed in zip(behaviors, behaviors_renamed):
+        mask = tab[behavior] > 0.0001
+        beh_base_name=behavior.split('_')[-1]
+        behavior_renamed = behavior_renamed+" "
+        # Map behavior name, value and unit of measurement to dataframe
+        if beh_base_name in CONTINUOUS_BEHAVIORS:
+            beh_pos=CONTINUOUS_BEHAVIORS.index(beh_base_name)
+            unit = " "+CONTINUOUS_UNITS[beh_pos].replace('[','').replace(']','')
+            lengths = tab[behavior].dropna().map(lambda x: len(f"{x:.2f}"))
+            max_len = lengths.max() if not lengths.empty else 0
+
+            behavior_df.loc[mask, behavior] = tab[behavior].map(
+                lambda x: f"{behavior_renamed}{x:>{max_len}.2f}{unit}" if pd.notnull(x) else x
+            )
+        else:
+            
+            # Map behavior name and time to dataframe
+            if config.display_counter:
+                seconds_series = mask.cumsum().mask(~mask, np.NaN) / coordinates._frame_rate
+                behavior_df.loc[mask, behavior] = seconds_series.map(
+                    lambda x: f"{behavior_renamed}{deepof.utils.seconds_to_time(x, cut_milliseconds=False)[3:11]}" if pd.notnull(x) else ''
+                )
+            # Only Map behavior name
+            else:
+                behavior_df.loc[mask, behavior] = mask.map(
+                    lambda x: f"{behavior_renamed}" if x else ''
+                )
+
     return behavior_df
 
 
@@ -383,14 +408,6 @@ def _draw_behavior_info(
             bottom_right = (v_width - params.padding, box_y + params.padding)
             cv2.rectangle(frame, top_left, bottom_right, hex_to_BGR(behavior_colors[i]), -1)
 
-            # Update and format text with counter if enabled
-            if config.display_counter:
-                behavior_counters[i] += 1
-                time_str = deepof.utils.seconds_to_time(
-                    behavior_counters[i] / frame_rate, cut_milliseconds=False
-                )[3:11]
-                behavior_text += f' {time_str}'
-
             # Draw behavior text
             text_pos = (v_width - text_width - params.padding, box_y)
             cv2.putText(frame, behavior_text, text_pos, params.font, params.font_scale, params.text_color, params.thickness)
@@ -447,7 +464,7 @@ def output_annotated_video(
         behaviors_renamed=behaviors
 
     # Rename behaviors to user given names 
-    behavior_df = _prepare_behavior_dataframe(tab=tab, behaviors=behaviors,behavior_renamed=behaviors_renamed)
+    behavior_df = _prepare_behavior_dataframe(coordinates=coordinates, config=video_export_config, tab=tab, behaviors=behaviors,behaviors_renamed=behaviors_renamed)
     
     cur_coords = get_dt(coordinates._tables, experiment_id)
 
@@ -483,7 +500,7 @@ def output_annotated_video(
 
     # --- Drawing & Annotation Parameter Setup ---
     params = VideoExportProps()
-    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, behavior_df, coordinates._custom_behaviors)
+    bg_colors = deepof.visuals_utils.get_behavior_colors(behaviors, behavior_df, coordinates._custom_behaviors, include_continuous = True)
     behavior_counters = np.zeros(len(behaviors))
 
     # Pre-calculate text size for layout purposes

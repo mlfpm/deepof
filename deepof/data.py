@@ -637,18 +637,22 @@ class Project:
 
         # All three must share identical first-level keys
         k1, k2 = set(arena_params.keys()), set(scales.keys())
-        k_rois = k2 if roi_dicts is None else set(roi_dicts.keys())
+        # non-empty roi keys
+        k_rois = k2 if roi_dicts is None else set([key for key in roi_dicts.keys() if len(roi_dicts[key][1])>0])
         if not (k1 == k2): # pragma: no cover
             raise ValueError(
                 "First-level (video) keys must be identical for arena_params, and scales (each arena needs a scale)."
             )
         if not (k_rois <= k1):
             raise ValueError(
-                "If ROIS are present, each ROI needs to have an arena for teh same key!."
+                "If ROIS are present, each ROI needs to have an arena for the same key!."
             )
+        roi_dicts_save={}
+        for key in k_rois:
+            roi_dicts_save[key] = roi_dicts[key]
 
 
-        payload = {"roi_dicts": roi_dicts, "arena_params": arena_params, "scales": scales, "video_resolution": video_resolution}
+        payload = {"roi_dicts": roi_dicts_save, "arena_params": arena_params, "scales": scales, "video_resolution": video_resolution}
 
         with arena_path.open("wb") as f:
             pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -797,7 +801,7 @@ class Project:
         skip_detection = False
         if arena_path is not None:
            
-            if False: #: not self.number_of_rois==0 and DISPLAY_AVAILABLE:
+            if not self.number_of_rois==0 and DISPLAY_AVAILABLE:
                 load_also_rois=deepof.arena_utils.confirm_action(
                     f"Do you want to additionally load the saved ROIs?\n" 
                     f"If you cancel, only the arenas get loaded." 

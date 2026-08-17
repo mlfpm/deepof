@@ -77,7 +77,7 @@ def BGR_to_RGB(bgr_color):
     b, g, r = bgr_color[0], bgr_color[1], bgr_color[2]
     return tuple([r,g,b])
 
-def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None, custom_behaviors: List[DeepOF_behavior] =None):
+def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=None, custom_behaviors: List[DeepOF_behavior] =None, include_continuous = False):
     """
     Gets corresponding colors for all supervised behaviors or clusters within behaviors list.
 
@@ -136,6 +136,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
 
     # Behavior name lists. 
     single_behaviors=list(ONE_ANIMAL_COLOR_MAP.keys())
+    continuous_behaviors=list(CONTINUOUS_COLOR_MAP.keys())
     symmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_NONDIRECTIONAL.keys())
     asymmetric_behaviors=list(TWO_ANIMALS_COLOR_MAP_DIRECTIONAL.keys())
 
@@ -143,6 +144,9 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     if animal_ids is None or animal_ids[0]=='':
         supervised = single_behaviors              
         supervised_colors = {key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
+        if include_continuous:
+            supervised = supervised + continuous_behaviors
+            supervised_colors = supervised_colors | {key: val[0] for key, val in CONTINUOUS_COLOR_MAP.items()}
 
         # append custom behaviors
         if custom_behaviors is not None:
@@ -152,14 +156,17 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     elif len(animal_ids)==1:
         supervised = [animal_ids[0] + "_" + behavior for behavior in single_behaviors]            
         supervised_colors = {animal_ids[0] + "_" + key: val[0] for key, val in ONE_ANIMAL_COLOR_MAP.items()}
-
+        if include_continuous:
+            supervised = supervised + [animal_ids[0] + "_" + behavior for behavior in continuous_behaviors]
+            supervised_colors = supervised_colors | {animal_ids[0] + "_" + key: val[0] for key, val in CONTINUOUS_COLOR_MAP.items()}
+        
         # append custom behaviors
         if custom_behaviors is not None:
             supervised = [animal_ids[0] + "_" + custom_behavior.name for custom_behavior in custom_behaviors] + supervised
             supervised_colors.update({animal_ids[0] + "_" + custom_behavior.name: custom_behavior.color[0] for custom_behavior in custom_behaviors})
 
     else:
-        supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, False, custom_behaviors)
+        supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, include_continuous, custom_behaviors)
 
     # Select appropriate color for all given behaviors
     colors=[]

@@ -3874,7 +3874,7 @@ def export_annotated_video(
         behavior_mask, _ = deepof.utils.get_behavior_mask_and_confidence(
             cur_tab, behaviors, video_export_config.supervised_export
         )
-        cur_tab=behavior_mask.astype(float)
+        cur_tab=cur_tab[behavior_mask][behavior_mask.columns]
         
         # Get frames for this experiment id
         if roi_number is not None:

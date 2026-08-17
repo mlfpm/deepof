@@ -421,8 +421,12 @@ def compute_continuous_measures(ctx: BehaviorContext, animal_id: animal_ids) -> 
     avg_speed = np.nanmedian(array.iloc[1:].to_numpy(), axis=1)
     avg_speed = np.insert(avg_speed, 0, np.nan, axis=0)
 
-    avg_distance = avg_speed * (1.0 / float(ctx.frame_rate))
-    cum_distance = np.cumsum(np.nan_to_num(avg_distance, copy=True))
+    center_speed = ctx.speeds[ctx.bp(aid,"Center")].to_numpy(dtype=float)
+    threshold_mm_s = 80.0
+    center_speed[center_speed < threshold_mm_s] = 0.0
+    avg_distance = np.array(center_speed * (1.0 / float(ctx.frame_rate)))
+
+    cum_distance = np.cumsum(np.nan_to_num(avg_distance, nan=0.0))
 
     return {
         "distance": avg_distance,

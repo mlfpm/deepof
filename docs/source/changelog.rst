@@ -14,9 +14,11 @@ Added
 Changed
 -------
 - For arena loading, scaling information will now be adopted from the new project and the user will be informed, if scales differ
-- Changed "no behavior" error in `plot_behzavior_trends` to warning.
+- Changed "no behavior" error in `plot_behavior_trends` to warning.
 - Upgaded arena loading to also allow the loading of data with only partially matching keys to then complete the ROI labelling
 - Encoder and model name name inputs are no longer case sensitive
+- Added minimum movement threshold to distancem measurement 
+- Updated arena export to also work for continuous behaviors by displaying current behavior value for continuous behavior, if detected.
 
 Bug Fixes
 ---------
