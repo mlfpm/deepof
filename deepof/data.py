@@ -638,7 +638,7 @@ class Project:
         # All three must share identical first-level keys
         k1, k2 = set(arena_params.keys()), set(scales.keys())
         # non-empty roi keys
-        k_rois = k2 if roi_dicts is None else set([key for key in roi_dicts.keys() if len(roi_dicts[key][1])>0])
+        k_rois = k2 if roi_dicts is None else set([key for key in roi_dicts.keys() if 1 in roi_dicts[key] and len(roi_dicts[key][1])>0])
         if not (k1 == k2): # pragma: no cover
             raise ValueError(
                 "First-level (video) keys must be identical for arena_params, and scales (each arena needs a scale)."
