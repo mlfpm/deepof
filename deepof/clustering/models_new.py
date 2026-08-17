@@ -1464,7 +1464,7 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
         )
 
-    elif encoder_type.lower() == "TCN":
+    elif encoder_type.lower() == "tcn":
         encoder = TCNEncoderPT(
             input_shape=input_shape,
             edge_feature_shape=edge_feature_shape,
