@@ -771,36 +771,107 @@ def create_bin_pairs(L_array: int, N_time_bins: int):
     return bin_pairs
 
 
-def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins = None, hide_time_bins = None, min_bins_required = 4, start_marker=None):
+def build_valid_multibins(
+    coordinates,
+    N_time_bins,
+    L_shortest,
+    custom_time_bins=None,
+    hide_time_bins=None,
+    min_bins_required=4,
+    start_marker=None,
+    bin_size: Union[int, str] = None,
+    bin_step: Union[int, str] = None,
+):
+    """
+    Validates/creates a multi-bin definition.
 
+    If custom_time_bins is provided, it is validated and returned.
+    If custom_time_bins is None:
+      - if bin_size is provided: create fixed-size or sliding windows (if bin_step < bin_size)
+      - else: create N_time_bins equal(-ish) partitions across L_shortest
+
+    Notes:
+      * bin_size/bin_step follow the conventions of other time-binning functions:
+        - int inputs are interpreted as seconds
+        - str inputs are interpreted as time strings 'HH:MM:SS(.ssss)'
+      * Returned bins are always frame indices [start_frame, end_frame] relative to the selected
+        start_marker (i.e., start at 0 in the post-marker time domain).
+    """
+
+    def _to_frames(x):
+        """Convert seconds/time-string to frames. Integers are interpreted as seconds."""
+        if x is None:
+            return None
+        if isinstance(x, str):
+            seconds = deepof.utils.time_to_seconds(x)
+            if seconds is None:
+                raise ValueError(
+                    'Invalid time string format! Use "HH:MM:SS" or "HH:MM:SS.SSS..."'
+                )  # pragma: no cover
+            return int(np.round(seconds * coordinates._frame_rate))
+        if isinstance(x, int):
+            return int(np.round(x * coordinates._frame_rate))
+        raise ValueError("bin_size/bin_step need to be int (seconds) or str (time)!")  # pragma: no cover
+
+    generated_sliding = False
 
     # Init bin ranges if not given
-    if not custom_time_bins:
-        custom_time_bins = create_bin_pairs(
-            L_shortest, N_time_bins
-        )
-    
+    if custom_time_bins is None:
+
+        if bin_size is not None:
+            bs = _to_frames(bin_size)
+            if bs is None or bs < 1:
+                raise ValueError('"bin_size" needs to be > 0!')  # pragma: no cover
+
+            if bin_step is None:
+                # fixed-size bins by default
+                st = bs
+            else:
+                st = _to_frames(bin_step)
+
+            if st is None or st < 1:
+                raise ValueError('"bin_step" needs to be > 0!')  # pragma: no cover
+
+            generated_sliding = st < bs
+
+            custom_time_bins = []
+            current_index = 0
+            while current_index < L_shortest:
+                end_index = current_index + bs - 1
+                if end_index >= L_shortest:
+                    end_index = L_shortest - 1  # include final partial bin to cover full range
+                custom_time_bins.append([current_index, end_index])
+                if end_index == L_shortest - 1:
+                    break
+                current_index += st
+
+
+        else:
+            custom_time_bins = create_bin_pairs(L_shortest, N_time_bins)
+
     # Init hidden bins if not given
-    if not hide_time_bins:
+    if hide_time_bins is None:
         hide_time_bins = np.array([False] * len(custom_time_bins))
     elif not len(hide_time_bins) == len(custom_time_bins):
         raise ValueError(
-            f'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
+            'The variables "hide_time_bins" and "custom_time_bins" need to have the same length!'
         )  # pragma: no cover
     else:
-       hide_time_bins= np.array(hide_time_bins)
+        hide_time_bins = np.array(hide_time_bins)
 
     # Check custom_time_bin validity
-    if len(
-        custom_time_bins
-    ) >= min_bins_required and all(  # list has at least 4 bins (less lead to failing of the interpol. function later)
+    if len(custom_time_bins) >= min_bins_required and all(
         isinstance(sublist, list) and len(sublist) == 2 for sublist in custom_time_bins
     ):  # List has shape Nx2
 
         # Convert time string elements to integers
         custom_time_bins = [
             [
-                int(np.round(deepof.utils.time_to_seconds(sublist[k]) * coordinates._frame_rate))
+                int(
+                    np.round(
+                        deepof.utils.time_to_seconds(sublist[k]) * coordinates._frame_rate
+                    )
+                )
                 if type(sublist[k]) == str
                 else sublist[k]
                 for k in range(len(sublist))
@@ -812,22 +883,28 @@ def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins
         if not all(
             all(isinstance(x, int) and x >= 0 for x in sublist)
             for sublist in custom_time_bins
-        ) or not all(  # Lists consist of positive integers
+        ) or not all(
             sublist[0] <= sublist[1] for sublist in custom_time_bins
-        ):  # List elements increase
+        ):
             raise ValueError(
-                f'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
+                'Each element of "custom_time_bins" needs to contain either two integers > 0 and int2 > int1\n'
                 "or the corresponding time strings given as HH:MM:SS.SS... with t_str2 > t_str1!"
             )  # pragma: no cover
         elif np.max(custom_time_bins) >= L_shortest:
-            prefix = f"Based on your start marker {start_marker}, " if start_marker is not None else ""
+            prefix = (
+                f"Based on your start marker {start_marker}, "
+                if start_marker is not None
+                else ""
+            )
             raise ValueError(
                 f"{prefix}'custom_time_bins' contains at least one element that exceeds the length of your shortest data set!"
-
             )  # pragma: no cover
+
         # Warn in case of overlapping elements
-        elif not (
-            list(itertools.chain(*custom_time_bins)) == sorted(list(itertools.chain(*custom_time_bins)))
+        # NOTE: Sliding windows overlap by design, so don't warn when bins were auto-generated from bin_size/bin_step.
+        elif not generated_sliding and not (
+            list(itertools.chain(*custom_time_bins))
+            == sorted(list(itertools.chain(*custom_time_bins)))
         ):
             warning_message = (
                 "\033[38;5;208m\n"
@@ -838,9 +915,9 @@ def build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins
             warnings.warn(warning_message)
     else:
         raise ValueError(
-            f'At least {min_bins_required} bins are required! If "custom_time_bins" is used, it needs to be a list of at least 4 elments with each element being a list!'
+            f'At least {min_bins_required} bins are required! If "custom_time_bins" is used, it needs to be a list of at least {min_bins_required} elments with each element being a list!'
         )  # pragma: no cover
-    
+
     return custom_time_bins, hide_time_bins
 
 
@@ -1225,6 +1302,8 @@ def _preprocess_time_bins(
     down_sample: bool = True,
     given_in_frames=False,
     warned: Optional[set] = None,
+    start_times: dict = None,
+    table_lengths: dict = None,
 ):
     """
     Preprocesses various time-bin formats into a consistent dictionary of indices.
@@ -1276,9 +1355,11 @@ def _preprocess_time_bins(
             if warned is not None:
                 warned.add("precomputed_ignores_args")
 
-    start_times = coordinates.get_start_times(start_marker=start_marker)
+    if start_times is None:
+        start_times = coordinates.get_start_times(start_marker=start_marker)
     start_frames = {key: np.round(deepof.utils.time_to_seconds(time)*coordinates._frame_rate).astype(int) for key, time in start_times.items()}
-    table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
+    if table_lengths is None:
+        table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=tab_dict_for_binning)
     start_frames = {key: val for key, val in start_frames.items() if key in list(table_lengths.keys())}
 
     if experiment_id:
@@ -1347,7 +1428,7 @@ def _preprocess_time_bins(
 
 def _apply_rois_to_bin_info(
     coordinates: coordinates,
-    roi_number: int,
+    roi_numbers: List[int],
     bin_info_time: dict = None,
     in_roi_criterion: str = "Center",
     invert_roi: bool = False,
@@ -1364,6 +1445,8 @@ def _apply_rois_to_bin_info(
     animal_ids=coordinates._animal_ids
     if animal_ids is None:
         animal_ids=[""]
+    if roi_numbers is not None and not isinstance(roi_numbers, List):
+        roi_numbers=[roi_numbers]
 
     # if no time bin info object was given, create one
     if bin_info_time is None:
@@ -1380,12 +1463,16 @@ def _apply_rois_to_bin_info(
     for key in bin_info_time.keys():
         bin_info[key] = {}
         bin_info[key]["time"]=bin_info_time[key]
-        if roi_number is not None:
+        if roi_numbers is not None:
+            roi_polygons=[]
+            for roi_number in roi_numbers:
+                roi_polygons.append(coordinates._roi_dicts[key][roi_number])
+            
             for aid in animal_ids:
 
                 tab = get_dt(coordinates._tables,key)
-                roi_polygon=coordinates._roi_dicts[key][roi_number]
-                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, coordinates._run_numba)
+                roi_polygon=coordinates._roi_dicts[key][roi_numbers]
+                mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygons, invert_roi, coordinates._run_numba)
 
                 # only keep boolean indices that were within the time bins for this mouse
                 bin_info[key][aid]=mouse_in_roi[bin_info_time[key]]
@@ -1580,7 +1667,7 @@ def _check_enum_inputs(
     normative_model: Optional[str] = None,
     aggregate_experiments: Optional[str] = None,
     colour_by: Optional[str] = None,
-    roi_number: Optional[int] = None,
+    roi_number: Optional[List[int]] = None,
     animals_in_roi: Optional[List[str]] = None,
     roi_mode: str = "mousewise",
     distance_unit: str = None,
@@ -1621,17 +1708,18 @@ def _check_enum_inputs(
     # 1. NORMALIZE INPUTS
     # Ensure that parameters expecting a list are lists, even if a single string was passed.
     # =========================================================================
-    def _to_list_if_str(value: Any) -> Any:
-        return [value] if isinstance(value, str) else value
+    def _to_list(value: Any) -> Any:
+        return [value] if isinstance(value, str) or isinstance(value, int) else value
 
-    experiment_ids = _to_list_if_str(experiment_ids)
-    exp_condition_order = _to_list_if_str(exp_condition_order)
-    condition_values = _to_list_if_str(condition_values)
-    start_markers = _to_list_if_str(start_markers)
-    behaviors = _to_list_if_str(behaviors)
-    bodyparts = _to_list_if_str(bodyparts)
-    in_roi_bodyparts = _to_list_if_str(in_roi_bodyparts)
-    animals_in_roi = _to_list_if_str(animals_in_roi)
+    experiment_ids = _to_list(experiment_ids)
+    exp_condition_order = _to_list(exp_condition_order)
+    condition_values = _to_list(condition_values)
+    start_markers = _to_list(start_markers)
+    behaviors = _to_list(behaviors)
+    bodyparts = _to_list(bodyparts)
+    in_roi_bodyparts = _to_list(in_roi_bodyparts)
+    animals_in_roi = _to_list(animals_in_roi)
+    roi_number = _to_list(roi_number)
     
 
     # =========================================================================
@@ -1690,7 +1778,7 @@ def _check_enum_inputs(
     color_by_opts = ["cluster", "exp_condition", "exp_id"]
     colour_by_is_behaviors=False
     if colour_by is not None and isinstance(colour_by,list):
-        colour_by = _to_list_if_str(colour_by)
+        colour_by = _to_list(colour_by)
         color_by_opts=behavior_opts
         colour_by_is_behaviors=True
 
@@ -1714,7 +1802,7 @@ def _check_enum_inputs(
         ("visualization", visualization, vis_opts, False, None, True, False),
         ("aggregate_experiments", aggregate_experiments, agg_exp_opts, False, None, True, False),
         ("colour_by", colour_by, color_by_opts, colour_by_is_behaviors, "color_by can either be \"cluster\", \"exp_condition\", \"exp_id\" or a list of behaviors!", False, False),
-        ("roi_number", roi_number, roi_num_opts, False, "No ROIs were defined for this project.", True, False),
+        ("roi_number", roi_number, roi_num_opts, True, "No ROIs were defined for this project.", False, False),
         ("roi_mode", roi_mode, roi_mode_opts, False, None, True, False),
         ("distance_unit", distance_unit, DistanceUnit._member_names_, False, None, False, False)
     ]
@@ -1984,7 +2072,7 @@ def _preprocess_transitions(
     start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     in_roi_criterion: str = "Center",
     invert_roi: bool = False,

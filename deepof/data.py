@@ -1794,7 +1794,7 @@ class Coordinates:
         align_inplace: bool = True,
         to_video: bool = False,
         selected_id: str = None,
-        roi_number: int = None,
+        roi_number: List[int] = None,
         animals_in_roi: str = None,
         in_roi_criterion: str = "Center",
         invert_roi: bool = False,
@@ -1882,7 +1882,7 @@ class Coordinates:
         return tab, quality
     
     
-    def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_number: int):
+    def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_numbers: List[int]):
         """Performs initial validation of function arguments."""
         if align:
             #if not any(center in bp for bp in tab.columns.levels[0]):
@@ -1890,17 +1890,19 @@ class Coordinates:
             if not any(align in bp for bp in tab.columns.levels[0]):
                 raise ValueError("'align' must be the name of a body part.")  # pragma: no cover
         
-        if roi_number is not None:
+        if roi_numbers is not None:
             if self._roi_dicts is None:
                 raise ValueError("ROIs not created for this project. Define ROIs during project creation.")  # pragma: no cover
-            if len(self._roi_dicts.get(key, [])) < roi_number:
-                raise ValueError(f"ROI {roi_number} does not exist for key '{key}'.")  # pragma: no cover
+            if len(self._roi_dicts.get(key, [])) < np.max(roi_numbers):
+                raise ValueError(f"ROI {roi_numbers} does not exist for key '{key}'.")  # pragma: no cover
             
     
-    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_number: int, animals_in_roi: List[str], in_roi_criterion: str, invert_roi: bool) -> pd.DataFrame:
+    def _filter_by_roi(self, tab: pd.DataFrame, key: str, roi_numbers: int, animals_in_roi: List[str], in_roi_criterion: str, invert_roi: bool) -> pd.DataFrame:
         """Filters the DataFrame to include only data within the specified ROI."""
-        if roi_number is None:
+        if roi_numbers is None:
             return tab
+        if not isinstance(roi_numbers, List):
+            roi_numbers=[roi_numbers]
 
         # Determine which animals to check for ROI inclusion
         if animals_in_roi and isinstance(animals_in_roi, str):
@@ -1910,11 +1912,13 @@ class Coordinates:
         else:
             animals_to_check = self._animal_ids
 
-        roi_polygon = self._roi_dicts[key][roi_number]
+        roi_polygons=[]
+        for roi_number in roi_numbers:
+            roi_polygons.append(self._roi_dicts[key][roi_number])
         tab_mouse_positions=get_dt(self._tables, key)
 
         for aid in animals_to_check:
-            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygon, invert_roi, self._run_numba)
+            mouse_in_polygon = deepof.utils.mouse_in_roi(tab_mouse_positions, aid, in_roi_criterion, roi_polygons, invert_roi, self._run_numba)
             
             # Get columns for the current animal
             mask = [any([col_sec.startswith(aid) for col_sec in col]) if isinstance(col,tuple) else col.startswith(aid) for col in tab.columns]
@@ -2063,7 +2067,7 @@ class Coordinates:
     align_inplace: bool = True,
     to_video: bool = False,
     selected_id: str = None,
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: str = None,
     in_roi_criterion: str = "Center",
     invert_roi: bool = False,
@@ -2089,6 +2093,9 @@ class Coordinates:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
 
         """
+        if not isinstance(roi_number, List):
+            roi_number = [roi_number]
+
         # 1. Load data and perform initial validation
         tab, quality = self._load_and_prepare_data(key, quality, data=self._tables)
         self._validate_inputs(tab, key, align, center, roi_number)
@@ -2133,7 +2140,7 @@ class Coordinates:
         self,
         speed: int = 0,
         selected_id: str = None,
-        roi_number: int = None,
+        roi_number: List[int] = None,
         animals_in_roi: str = None,
         invert_roi: bool = False,
         filter_on_graph: bool = True,
@@ -2201,7 +2208,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = None,
-        roi_number: int = None,
+        roi_number: List[int] = None,
         animals_in_roi: str = None,
         invert_roi: bool = False,
         filter_on_graph: bool = True,
@@ -2221,6 +2228,8 @@ class Coordinates:
             tab (pd.DataFrame): A pd.DataFrame with the distances between body parts of one animal as values.
 
         """
+        if not isinstance(roi_number, List):
+            roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
         tab, quality = self._load_and_prepare_data(key, quality, data=self._distances)
@@ -2256,7 +2265,7 @@ class Coordinates:
         degrees: bool = False,
         speed: int = 0,
         selected_id: str = None,
-        roi_number: int = None,
+        roi_number: List[int] = None,
         animals_in_roi: str = None,
         invert_roi: bool = False,
         file_name: str = 'got_angles',
@@ -2323,7 +2332,7 @@ class Coordinates:
     degrees: bool = False,
     speed: int = 0,
     selected_id: str = None,
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: str = None,
     invert_roi: bool = False,
 
@@ -2343,6 +2352,8 @@ class Coordinates:
             tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
 
         """  
+        if not isinstance(roi_number, List):
+            roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
         tab, quality = self._load_and_prepare_data(key, quality, data=self._angles)
@@ -2372,7 +2383,7 @@ class Coordinates:
             self, 
             speed: int = 0,
             selected_id: str = "all",
-            roi_number: int = None,
+            roi_number: List[int] = None,
             animals_in_roi: str = None,
             invert_roi: bool = False,
             file_name: str = 'got_areas',
@@ -2437,7 +2448,7 @@ class Coordinates:
         quality: table_dict = None,
         speed: int = 0,
         selected_id: str = "all",
-        roi_number: int = None,
+        roi_number: List[int] = None,
         animals_in_roi: str = None,
         invert_roi: bool = False,
         ) -> table_dict:
@@ -2454,6 +2465,8 @@ class Coordinates:
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
         """
+        if not isinstance(roi_number, List):
+            roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
         tab, quality = self._load_and_prepare_data(key, quality, data=self._areas)

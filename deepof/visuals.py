@@ -353,7 +353,7 @@ def _plot_experiment_gantt(
     start_marker: str = None,
     samples_max=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
@@ -570,7 +570,7 @@ def _plot_behavior_gantt(
     start_marker: str = None,
     samples_max=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
@@ -988,7 +988,7 @@ def plot_enrichment(
     start_marker: str = None,
     samples_max: int =100000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise", 
     in_roi_criterion: str = "Center",
@@ -1738,7 +1738,7 @@ def count_all_events(
     start_marker: str = None,
     samples_max: int=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     in_roi_criterion: str = "Center", 
     invert_roi: bool = False,
@@ -2141,7 +2141,7 @@ def plot_stationary_entropy(
     start_marker: str = None,
     samples_max=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     in_roi_criterion: str = "Center", 
     invert_roi: bool = False,
@@ -2437,7 +2437,7 @@ def plot_embeddings(
     start_marker: str = None,
     samples_max=20000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: Union[str,list] = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center",
@@ -3126,7 +3126,7 @@ def animate_skeleton(
     start_marker: str = None,
     samples_max: int = 20000,
     # ROI functionality
-    roi_number: Optional[int] = None,
+    roi_number: List[int] = None,
     animals_in_roi: Optional[Union[str, Sequence[str]]] = None,
     in_roi_criterion: Union[str, Sequence[str]] = "Center",
     invert_roi: bool = False,
@@ -3728,7 +3728,7 @@ def export_annotated_video(
     start_marker: str = None,
     frame_limit_per_video: int = None,
     # ROI functionality
-    roi_number: int =None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
@@ -4108,7 +4108,7 @@ def plot_behavior_trends(
     start_marker: str = None,
     samples_max=2000000,
     # ROI functionality
-    roi_number: int = None,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
@@ -4876,7 +4876,7 @@ def get_roi_data(
     coordinates: coordinates,
     table_dict: table_dict,
     # ROI functionality
-    roi_number: int,
+    roi_number: List[int] = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
     in_roi_criterion: str = "Center", 
@@ -4972,26 +4972,31 @@ def return_supervised_summary(
     roi_number: int = None,
     animals_in_roi: list = None,
     roi_mode: str = "mousewise",
-    in_roi_criterion: str = "Center", 
+    in_roi_criterion: str = "Center",
     invert_roi: bool = False,
     # Time selection parameters
     N_time_bins: int = 10,
     start_marker: str = None,
     custom_time_bins: List[List[Union[int, str]]] = None,
     hide_time_bins: List[bool] = None,
-    samples_max=20000,
+    bin_size: Union[int, str] = None,
+    bin_step: Union[int, str] = None,
+    samples_max=200000,
     unit_time: str = "s",
     unit_distance: str = "m",
-
-    save_table = True,
-    ): 
-    """ 
+    binary_units: str = "time",  # "time" | "fraction"
+    save_table=True,
+):
+    """
     Returns summary of supervised information
 
-    Args: 
+    Args:
     N_time_bins (int): Number of time bins for data separation. Defaults to 24.
-    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins if provided.
-    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins and bin_size/bin_step if provided.
+    bin_size (Union[int,str]): If provided and custom_time_bins is None, creates bins with a fixed size. Integer inputs are interpreted as seconds, strings as 'HH:MM:SS(.ssss)'.
+    bin_step (Union[int,str]): Step size between successive bins. If None and bin_size is provided, defaults to bin_size (non-overlapping fixed-size bins). If bin_step < bin_size, bins overlap.
+    binary_units (str): "time" to return absolute time occupied per bin, "fraction" to return fraction-of-frames occupied per bin (denominator is always the full time bin length).
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit (only relevant if binary_units="time").
     unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
     """
 
@@ -5003,114 +5008,185 @@ def return_supervised_summary(
         roi_mode=roi_mode,
         in_roi_bodyparts=in_roi_criterion,
     )
-    latest_start=0
+
+    if binary_units not in ["time", "fraction"]:
+        raise ValueError('binary_units needs to be either "time" or "fraction"!')  # pragma: no cover
+
+    latest_start = 0
     if start_marker is not None:
-        start_positions_dict=coordinates.get_start_marker_values(start_marker)
-        latest_start=int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
-    
+        start_positions_dict = coordinates.get_start_marker_values(start_marker)
+        latest_start = int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+
     L_shortest = min(
-        get_dt(supervised_annotations,key,only_metainfo=True)['num_rows']-latest_start for key in supervised_annotations.keys()
+        get_dt(supervised_annotations, key, only_metainfo=True)["num_rows"] - latest_start for key in supervised_annotations.keys()
     )
 
     # Prepare bin info
-    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(coordinates, N_time_bins, L_shortest, custom_time_bins, hide_time_bins, min_bins_required=1, start_marker=start_marker)
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(
+        coordinates,
+        N_time_bins,
+        L_shortest,
+        custom_time_bins,
+        hide_time_bins,
+        min_bins_required=1,
+        start_marker=start_marker,
+        bin_size=bin_size, 
+        bin_step=bin_step,
+    )
 
-    multi_bin_info={}
+    multi_bin_info = {}
     # Create bin_info objects for each custom time bin
     warned = set()
+    start_times = coordinates.get_start_times(start_marker=start_marker)
+    table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=supervised_annotations)
     for j, (bin_start, bin_end) in enumerate(custom_time_bins):
 
-        #create full time bins covering entire signal
+        # create full time bins covering entire signal
         bin_info_time = _preprocess_time_bins(
-        coordinates, bin_index=bin_start, bin_size=bin_end-bin_start+1, start_marker=start_marker, samples_max=int(samples_max/len(custom_time_bins)),
-        tab_dict_for_binning=supervised_annotations, given_in_frames=True, warned=warned,
+            coordinates,
+            bin_index=bin_start,
+            bin_size=bin_end - bin_start + 1,
+            start_marker=start_marker,
+            samples_max=int(samples_max / len(custom_time_bins)),
+            tab_dict_for_binning=supervised_annotations,
+            given_in_frames=True,
+            warned=warned,
+            start_times=start_times,
+            table_lengths=table_lengths,
         )
 
         # Create ROI bins
         roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
- 
-        
-        multi_bin_info[j]=roi_bin_info
+        multi_bin_info[j] = roi_bin_info
 
     animal_ids = coordinates._animal_ids
-    frame_rate=coordinates._frame_rate
+    frame_rate = coordinates._frame_rate
 
-    experiment_ids=list(supervised_annotations.keys())
+    experiment_ids = list(supervised_annotations.keys())
 
     for i, exp_id in enumerate(experiment_ids):
-   
-        supervised_exp=get_dt(supervised_annotations,exp_id)
+
+        supervised_exp = get_dt(supervised_annotations, exp_id)
         for bin in multi_bin_info.keys():
 
-            conditions=coordinates.get_exp_conditions[exp_id].copy()
-            frame_row_info=conditions.reset_index(drop=True)
-            frame_row_info.insert(0, 'experiment_id', exp_id)
+            conditions = coordinates.get_exp_conditions[exp_id].copy()
+            frame_row_info = conditions.reset_index(drop=True)
+            frame_row_info.insert(0, "experiment_id", exp_id)
             if len(multi_bin_info) > 1:
-                frame_row_info.insert(0, 'bin_number', bin)
+                frame_row_info.insert(0, "bin_number", bin)
 
-            supervised_binned=supervised_exp.iloc[multi_bin_info[bin][exp_id]['time']]
+            supervised_binned = supervised_exp.iloc[multi_bin_info[bin][exp_id]["time"]]
 
             if roi_number is not None:
-                supervised_binned=deepof.utils.get_supervised_behaviors_in_roi(supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode)
+                supervised_binned = deepof.utils.get_supervised_behaviors_in_roi(
+                    supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode
+                )
 
-            supervised_binary, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,True,True,True,False, custom_behaviors=coordinates._custom_behaviors)
+            supervised_binary, _ = deepof.visuals_utils.generate_behavior_combinations(
+                animal_ids, True, True, True, False, custom_behaviors=coordinates._custom_behaviors
+            )
 
-            # behaviors in seconds
-            frame_row_behavior_1=(np.sum(supervised_binned[supervised_binary])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)).to_frame().T.add_suffix(f' [{unit_time}]')
-            df_row=[frame_row_info, frame_row_behavior_1]
+            # --- Binary behaviors: time OR fraction-of-frames in bin ---
+            # NaNs (e.g. from ROI filtering) are treated as 0 occurrences.
+            X_bin = supervised_binned[supervised_binary].to_numpy()
+            X_bin = np.nan_to_num(X_bin, nan=0.0)
+            n_true = X_bin.sum(axis=0)
+
+            bin_len = len(supervised_binned)
+            bin_len = max(bin_len, 1)  # safeguard against zero-length bins
+
+            if binary_units == "time":
+                # behaviors in requested time unit
+                values = n_true * TimeUnit.parse(unit_time).factor(frame_rate)
+                frame_row_behavior_1 = (
+                    pd.Series(values, index=supervised_binary)
+                    .to_frame()
+                    .T.add_suffix(f" [{unit_time}]")
+                )
+            else:  # binary_units == "fraction"
+                # fraction-of-frames in bin (denominator is ALWAYS bin length)
+                values = n_true / bin_len
+                frame_row_behavior_1 = (
+                    pd.Series(values, index=supervised_binary)
+                    .to_frame()
+                    .T.add_suffix(" [fraction]")
+                )
+
+            df_row = [frame_row_info, frame_row_behavior_1]
 
             if coordinates._custom_behaviors is not None:
-                all_cont_beh = CONTINUOUS_BEHAVIORS+[ #re-collect custom continous names to ensure nothing got misaligned
-                    custom_behavior.name for 
-                    custom_behavior in coordinates._custom_behaviors 
-                    if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+                all_cont_beh = CONTINUOUS_BEHAVIORS + [
+                    # re-collect custom continous names to ensure nothing got misaligned
+                    custom_behavior.name
+                    for custom_behavior in coordinates._custom_behaviors
+                    if custom_behavior.output_kind
+                    == deepof.annotation_utils.Behavior_output.CONTINUOUS
                 ]
-                all_cont_units = CONTINUOUS_UNITS+[ #collect custom continous units
-                    custom_behavior.unit for 
-                    custom_behavior in coordinates._custom_behaviors 
-                    if custom_behavior.output_kind==deepof.annotation_utils.Behavior_output.CONTINUOUS
+                all_cont_units = CONTINUOUS_UNITS + [
+                    # collect custom continous units
+                    custom_behavior.unit
+                    for custom_behavior in coordinates._custom_behaviors
+                    if custom_behavior.output_kind
+                    == deepof.annotation_utils.Behavior_output.CONTINUOUS
                 ]
             else:
                 all_cont_beh = CONTINUOUS_BEHAVIORS
                 all_cont_units = CONTINUOUS_UNITS
 
             for behavior, unit in zip(all_cont_beh, all_cont_units):
-                supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(animal_ids,False,False,False,[behavior],  custom_behaviors=coordinates._custom_behaviors)
+                supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(
+                    animal_ids,
+                    False,
+                    False,
+                    False,
+                    [behavior],
+                    custom_behaviors=coordinates._custom_behaviors,
+                )
 
-                continuous_mean, converted_unit=deepof.visuals_utils.scale_units(
-                    coordinates, 
-                    exp_id, 
-                    supervised_binned[supervised_behavior].mean(), 
-                    unit, 
-                    unit_distance, 
-                    unit_time
-                    )
-                continuous_mean=continuous_mean.to_frame().T.add_suffix('_mean ' + f'[{converted_unit}]')
-                
-                continuous_std, converted_unit=deepof.visuals_utils.scale_units(
-                    coordinates, 
-                    exp_id, 
-                    supervised_binned[supervised_behavior].std(), 
-                    unit, 
-                    unit_distance, 
-                    unit_time
-                    )
-                continuous_std=continuous_std.to_frame().T.add_suffix('_std ' + f'[{converted_unit}]')
+                continuous_mean, converted_unit = deepof.visuals_utils.scale_units(
+                    coordinates,
+                    exp_id,
+                    supervised_binned[supervised_behavior].mean(),
+                    unit,
+                    unit_distance,
+                    unit_time,
+                )
+                continuous_mean = (
+                    continuous_mean.to_frame()
+                    .T.add_suffix("_mean " + f"[{converted_unit}]")
+                )
 
-                df_row=df_row+[continuous_mean, continuous_std]
+                continuous_std, converted_unit = deepof.visuals_utils.scale_units(
+                    coordinates,
+                    exp_id,
+                    supervised_binned[supervised_behavior].std(),
+                    unit,
+                    unit_distance,
+                    unit_time,
+                )
+                continuous_std = (
+                    continuous_std.to_frame()
+                    .T.add_suffix("_std " + f"[{converted_unit}]")
+                )
 
-
+                df_row = df_row + [continuous_mean, continuous_std]
 
             df_row = pd.concat(df_row, axis=1)
 
-            if bin == 0 and i==0:
+            if bin == 0 and i == 0:
                 df = df_row
-            else:   
+            else:
                 df = pd.concat([df, df_row], ignore_index=True)
 
     if save_table:
-        out_path = os.path.join(coordinates._project_path, coordinates._project_name, "./Out_tables")
+        out_path = os.path.join(
+            coordinates._project_path, coordinates._project_name, "./Out_tables"
+        )
         if not os.path.exists(out_path):
             os.mkdir(out_path)
-        df.to_csv(path_or_buf=os.path.join(out_path, "supervised_summary.csv"), sep=',', na_rep='')
+        df.to_csv(
+            path_or_buf=os.path.join(out_path, "supervised_summary.csv"),
+            sep=",",
+            na_rep="",
+        )
     return df

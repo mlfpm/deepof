@@ -1875,7 +1875,7 @@ def in_field_of_view_numba(mouse_pts, fov_angle_deg, roi_poly, eps=1e-10, data_t
     return out
 
 
-def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, run_numba=False):
+def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygons, invert_roi, run_numba=False):
     """Checks if a given animal for a given table is in a given roi by given criterion.
 
     Args:
@@ -1891,6 +1891,8 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, run_numba=
     
     if isinstance(in_roi_criterion, str):
         in_roi_criterion = [in_roi_criterion]
+    if not isinstance(roi_polygons, List):
+        roi_polygons=[roi_polygons]
 
     if aid:
         if "all" in in_roi_criterion:
@@ -1900,20 +1902,21 @@ def mouse_in_roi(tab, aid, in_roi_criterion, roi_polygon, invert_roi, run_numba=
     else:
         bodyparts = tab.columns.get_level_values(0).unique() if "all" in in_roi_criterion else in_roi_criterion
 
-    roi_polygon = np.asarray(roi_polygon)
+    mask = np.zeros(len(tab), dtype=bool)
+    for roi_polygons in roi_polygons:
+        roi_polygons = np.asarray(roi_polygons)
+        
+        for bp in bodyparts:
+            # select only x,y for that bodypart and immediately go to numpy
+            pts = tab.loc[:, pd.IndexSlice[bp, ["x", "y"]]].to_numpy(copy=False)
+            pts = np.ascontiguousarray(pts)  # good for numba
 
-    mask = np.ones(len(tab), dtype=bool)
-    for bp in bodyparts:
-        # select only x,y for that bodypart and immediately go to numpy
-        pts = tab.loc[:, pd.IndexSlice[bp, ["x", "y"]]].to_numpy(copy=False)
-        pts = np.ascontiguousarray(pts)  # good for numba
+            if run_numba:
+                mask |= deepof.utils.point_in_polygon_numba(pts, roi_polygons)
+            else:
+                mask |= deepof.utils.point_in_polygon(pts, roi_polygons)
 
-        if run_numba:
-            mask &= deepof.utils.point_in_polygon_numba(pts, roi_polygon)
-        else:
-            mask &= deepof.utils.point_in_polygon(pts, roi_polygon)
-
-    # to instead count if the specific bodyparts of the animal are NOT in the ROI
+        # to instead count if the specific bodyparts of the animal are NOT in the ROI
     if invert_roi:
         mask=np.invert(mask)
 
