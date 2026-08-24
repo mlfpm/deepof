@@ -2093,7 +2093,7 @@ class Coordinates:
             tab (pd.DataFrame): A data frame containing the coordinates for the selected key as values.
 
         """
-        if not isinstance(roi_number, List):
+        if roi_number is not None and not isinstance(roi_number, List):
             roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
@@ -2228,7 +2228,7 @@ class Coordinates:
             tab (pd.DataFrame): A pd.DataFrame with the distances between body parts of one animal as values.
 
         """
-        if not isinstance(roi_number, List):
+        if roi_number is not None and not isinstance(roi_number, List):
             roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
@@ -2352,7 +2352,7 @@ class Coordinates:
             tab (pd.DataFrame): A pd.DataFrame with the angles between body parts of one animal as values.
 
         """  
-        if not isinstance(roi_number, List):
+        if roi_number is not None and not isinstance(roi_number, List):
             roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
@@ -2465,7 +2465,7 @@ class Coordinates:
         Returns:
             tab (pd.DataFrame): A pd.DataFrame object with the areas of the body parts animal as values.
         """
-        if not isinstance(roi_number, List):
+        if roi_number is not None and not isinstance(roi_number, List):
             roi_number = [roi_number]
 
         # 1. Load data and perform initial validation
@@ -2570,6 +2570,15 @@ class Coordinates:
     def get_exp_conditions(self):
         """Return the stored dictionary with experimental conditions per subject."""
         return self._exp_conditions
+    
+    @property
+    def get_exp_condition_names(self):
+        """Return a list with the names of all experiment conditions."""
+        if self._exp_conditions is None:
+            raise ValueError("No experiment conditions were loaded!")
+        first_key=list(self._exp_conditions.keys())[0]
+        # all keys have the same exp conditions
+        return list(self._exp_conditions[first_key].columns)
     
     @property
     def get_start_markers(self):

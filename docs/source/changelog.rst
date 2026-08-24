@@ -29,6 +29,7 @@ Bug Fixes
 - Fixed minor bug that reset visual scaling for rois if all points of a roi were deleted and redrawn.
 - Fixed DDP debug info print that was not supposed to be printed
 - Fixed bug in arena creation "already exists" check in which projects with very similar names were falsely identified as the same project and hence arena loading was incorrectly prohibited
+- Fixed typo in contrastive_loss_function_ops that led to dcl loss not being usable
 
 
 Known Issues
