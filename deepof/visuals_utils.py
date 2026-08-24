@@ -15,6 +15,7 @@ from tqdm import tqdm
 import cv2
 import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter, FuncAnimation
+from matplotlib.ticker import MultipleLocator
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -22,6 +23,18 @@ from IPython.display import clear_output
 from matplotlib.patches import Ellipse, Patch
 from natsort import os_sorted
 from scipy.interpolate import interp1d
+from sklearn.impute import IterativeImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+import umap
+import hdbscan
+from hdbscan.validity import validity_index
+from scipy.stats import kruskal, chi2_contingency, entropy, mannwhitneyu
+from scipy.spatial.distance import pdist, squareform
+from statsmodels.stats.multitest import multipletests
+#from skbio.stats.distance import permanova, DistanceMatrix
+
+
 
 
 import deepof.post_hoc
@@ -42,6 +55,7 @@ from deepof.config import (
     SYMMETRIC_BEHAVIORS,
     ASYMMETRIC_BEHAVIORS,
     CONTINUOUS_BEHAVIORS,
+    CONTINUOUS_UNITS,
     ARENA_COLOR,
     ROI_COLORS,
     DistanceUnit,
@@ -500,7 +514,7 @@ def _preprocess_embedding_evaluation(
             alignment_mode=alignment_mode,  
         )
 
-        np.random.seed(seed=0)
+        np.random.seed(seed=random_state)
         sample_ids = np.random.choice(
             range(current_emb.shape[0]), np.min([current_emb.shape[0], 1000]), replace=False,
         )
@@ -1471,7 +1485,6 @@ def _apply_rois_to_bin_info(
             for aid in animal_ids:
 
                 tab = get_dt(coordinates._tables,key)
-                roi_polygon=coordinates._roi_dicts[key][roi_numbers]
                 mouse_in_roi = deepof.utils.mouse_in_roi(tab, aid, in_roi_criterion, roi_polygons, invert_roi, coordinates._run_numba)
 
                 # only keep boolean indices that were within the time bins for this mouse
@@ -2964,3 +2977,849 @@ def add_binned_legends(
                 loc="upper left",
                 fontsize=8,
             )
+
+def _preprocess_kovarova(
+    coordinates: coordinates,
+    supervised_annotations: table_dict,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
+    # Time selection parameters
+    start_marker: str = None,
+    bin_size = 2,
+    bin_step = 2,
+    samples_max = 2000000,
+    # Others
+    exclude_experiment_ids: list = None,  
+    exp_condition: str = None, 
+    random_state: int = 0,
+):
+    
+    with tqdm(total=5, desc=f"{'Processing':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="step") as pbar:
+        # Get summary dataframe from all experimental data
+        pbar.set_postfix(step="Summarizing data")
+        df_supervised_summary=_return_supervised_summary(
+            coordinates=coordinates,
+            supervised_annotations=supervised_annotations,
+            # ROI functionality
+            roi_number=roi_number,
+            animals_in_roi = animals_in_roi,
+            roi_mode=roi_mode,
+            in_roi_criterion=in_roi_criterion,
+            invert_roi=invert_roi,
+            # Time selection parameters
+            N_time_bins = None,
+            start_marker=start_marker,
+            custom_time_bins = None,
+            hide_time_bins = None,
+            bin_size = bin_size,
+            bin_step = bin_step,
+            samples_max=samples_max,
+            binary_units="fraction",
+            include_continuous_behaviors = False,
+        )
+        if exp_condition is None:
+            exp_condition = coordinates.get_exp_condition_names[0]
+        if exclude_experiment_ids is None:
+            exclude_experiment_ids = []
+        pbar.update()
+        pbar.set_postfix(step="Imputing data")
+        umap_params = dict(
+            n_components=2, # for 2D depiction
+            n_neighbors=30,
+            min_dist=0.1,
+            metric='euclidean',
+            verbose=False,
+            random_state=random_state,
+            n_jobs=1,                
+            low_memory=False, 
+            init='random'
+        )
+        hdbscan_params= dict(
+            min_cluster_size=500,
+            min_samples=90,
+        )
+        df_imp, impute_cols = deepof.visuals_utils.preprocess_kovarova(coordinates=coordinates, df_supervised_summary=df_supervised_summary, exp_condition=exp_condition,  exclude_exp_ids=exclude_experiment_ids, random_state=random_state)#, LAST_INTERVAL,)# BEHAVIOUR_COLS
+        pbar.update()
+        pbar.set_postfix(step="Running Umap")        
+        embedding = deepof.visuals_utils.umap_kovarova(df_imp, impute_cols, umap_params)
+        pbar.update()
+        pbar.set_postfix(step="Running hdbscan")
+        labels, clusterer = deepof.visuals_utils.hdbscan_kovarova(embedding, hdbscan_params)
+        df_imp['Cluster'] = labels
+        pbar.update()
+        pbar.set_postfix(step="Validating")
+        validation_metrics = deepof.visuals_utils.validate_kovarova(embedding, labels, clusterer)
+        pbar.update()
+        # ── 4. Subset non-outlier frames & build colour map ──────────────────────
+        df_no_out = df_imp[df_imp['Cluster'] != -1].reset_index(drop=True)
+        cluster_ids = sorted(df_no_out['Cluster'].unique())
+        cmap = plt.get_cmap('tab10')
+        cmap = {c: cmap(i % 10) for i, c in enumerate(cluster_ids)}
+        p_dict=deepof.visuals_utils.cluster_enrichment_stats(df_no_out, exp_condition)
+
+    return df_no_out, validation_metrics, p_dict, embedding, df_imp, impute_cols, cmap
+
+
+def preprocess_kovarova(
+    coordinates: coordinates,
+    df_supervised_summary: pd.DataFrame,
+    exp_condition: str,
+    exclude_exp_ids: list =[],
+    exclude_behaviours: list = [],
+    last_bin: int = None,
+    random_state: int = 0,
+) -> pd.DataFrame:
+    """
+    Filter out excluded animals / genotypes / late time bins, sort deterministically,
+    then apply multiple imputation (IterativeImputer) to behavioural features.
+
+    Returns the imputed DataFrame.
+    """
+    # Default for last bin is the highest bin that occurs for all included experiments
+    if last_bin is None:
+        last_bin = np.min(df_supervised_summary.loc[(~df_supervised_summary['experiment_id'].isin(exclude_exp_ids))].groupby('experiment_id')['bin_number'].max().reset_index(),axis=0)[1]
+
+    # Check if selected condition is valid and create 
+    exclude_conditions = coordinates.get_exp_condition_names
+    if exp_condition not in exclude_conditions:
+        raise ValueError("The given exp_condition name {exp_condition} does not occur in your experiment conditions {all_conditions}!")
+    exclude_conditions.remove(exp_condition) 
+
+    cols_to_keep = [c for c in df_supervised_summary.columns if c not in exclude_conditions and c not in exclude_behaviours]
+    filtered = (
+        df_supervised_summary[cols_to_keep] 
+        .loc[
+            (~df_supervised_summary['experiment_id'].isin(exclude_exp_ids)) &
+            (df_supervised_summary['bin_number'] <= last_bin)
+        ]
+        .copy()
+        .sort_values(['experiment_id', 'bin_number'])
+        .reset_index(drop=True)
+    )
+
+    # Columns used for imputation (exclude metadata)
+    impute_cols = [c for c in filtered.columns
+                   if c not in ['experiment_id', 'bin_number', exp_condition]]
+
+    imputer = IterativeImputer(random_state=random_state)
+    df_imputed = filtered.copy()
+    df_imputed[impute_cols] = imputer.fit_transform(filtered[impute_cols])
+
+    n_missing_before = filtered[impute_cols].isnull().sum().sum()
+    #print(f"Imputed {n_missing_before} missing values across {len(impute_cols)} features.")
+    return df_imputed, impute_cols
+
+def umap_kovarova(df_imputed: pd.DataFrame, feature_cols: list, umap_params: dict) -> np.ndarray:
+    """Scale features and compute UMAP 2D embedding."""
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df_imputed[feature_cols])
+
+    reducer = umap.UMAP(**umap_params)
+    embedding = reducer.fit_transform(X_scaled)
+    #print(f"UMAP embedding shape: {embedding.shape}")
+    return embedding
+
+#"""
+def hdbscan_kovarova(embedding: np.ndarray, hdbscan_params: dict) -> tuple[np.ndarray, hdbscan.HDBSCAN]:
+    #Cluster the UMAP embedding with HDBSCAN.
+    clusterer = hdbscan.HDBSCAN(**hdbscan_params)
+    labels = clusterer.fit_predict(embedding)
+    unique, counts = np.unique(labels, return_counts=True)
+    for lbl, cnt in zip(unique, counts):
+        tag = "noise" if lbl == -1 else f"cluster {lbl}"
+        #print(f"  {tag}: {cnt:,} frames ({cnt/len(labels):.1%})")
+    return labels, clusterer
+
+def validate_kovarova(
+    embedding: np.ndarray,
+    labels: np.ndarray,
+    clusterer: hdbscan.HDBSCAN,
+) -> dict:
+    
+    #Compute standard internal clustering validation metrics.
+    #
+    #Returns a dict with Silhouette, Davies–Bouldin, Calinski–Harabasz,
+    #DBCV, noise proportion, and mean membership probability.
+    
+    mask = labels != -1
+    X_c, y_c = embedding[mask], labels[mask]
+
+    metrics = {}
+
+    # DBCV (HDBSCAN-native)
+    metrics['DBCV'] = validity_index(np.asarray(embedding, dtype=np.float64), clusterer.labels_)
+
+    if len(np.unique(y_c)) > 1:
+        metrics['Silhouette']         = silhouette_score(X_c, y_c)
+        metrics['Davies_Bouldin']     = davies_bouldin_score(X_c, y_c)
+        metrics['Calinski_Harabasz']  = calinski_harabasz_score(X_c, y_c)
+
+    metrics['noise_proportion'] = np.mean(labels == -1)
+    if hasattr(clusterer, 'probabilities_'):
+        metrics['mean_membership_prob'] = np.mean(clusterer.probabilities_)
+
+    #print("\n── Cluster validation ──────────────────────────────")
+    #for k, v in metrics.items():
+        #print(f"  {k}: {v:.4f}")
+    return metrics
+#"""
+
+def build_cluster_colour_map(cluster_labels: list) -> dict:
+    """Assign a distinct colour to each cluster using the Matplotlib tab10 palette."""
+    cmap = plt.get_cmap('tab10')
+    return {c: cmap(i % 10) for i, c in enumerate(cluster_labels)}
+
+def plot_umap_embedding(
+    ax: any,
+    embedding: np.ndarray,
+    df_imputed: pd.DataFrame,
+    cluster_colour_map: dict,
+    exp_condition: str,
+    save_path: str = None,
+) -> None:
+    """Scatter plot of the UMAP embedding coloured by cluster and shaped by genotype."""
+    mask = df_imputed['Cluster'] != -1
+    emb  = embedding[mask]
+    meta = df_imputed[mask].reset_index(drop=True)
+
+    #fig, ax = plt.subplots(figsize=(13, 10))
+    sns.set_style("ticks")
+
+    colour_str_map = {str(int(k)): v for k, v in cluster_colour_map.items()}
+
+    sns.scatterplot(
+        x=emb[:, 0], y=emb[:, 1],
+        hue=meta['Cluster'].astype(str),
+        style=meta[exp_condition],
+        palette=colour_str_map,
+        alpha=0.7, ax=ax,
+    )
+
+    ax.set_xlabel('UMAP 1', fontsize=10, weight='bold')
+    ax.set_ylabel('UMAP 2', fontsize=10, weight='bold')
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.tick_params(axis='both', labelsize=10)
+    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+        lbl.set_fontweight('bold')
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(2.5)
+    ax.spines['left'].set_linewidth(2.5)
+
+    ax.legend(bbox_to_anchor=(1.05, 1), loc=2, fontsize=10,
+              title='', frameon=False, markerscale=2.5)
+    #plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+    #plt.show()
+
+
+def plot_polar_behavioural_profile(
+    ax: any,
+    df_no_outliers: pd.DataFrame,
+    behaviour_cols_renamed: list,
+    cluster_colour_map: dict,
+    save_path: str = None,
+) -> None:
+    """Radar / polar chart of mean behavioural scores per cluster."""
+    cluster_summary = df_no_outliers.groupby('Cluster')[behaviour_cols_renamed].mean()
+
+    N      = len(behaviour_cols_renamed)
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+    angles += angles[:1]
+
+    #fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(polar=True))
+
+    for cluster in cluster_summary.index:
+        values = cluster_summary.loc[cluster].tolist() + [cluster_summary.loc[cluster].tolist()[0]]
+        ax.plot(angles, values, label=f'Cluster {cluster}',
+                color=cluster_colour_map[cluster], linewidth=2.5)
+        ax.fill(angles, values, color=cluster_colour_map[cluster], alpha=0.10)
+
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(behaviour_cols_renamed, color='black', size=8, weight='bold')
+
+    for label, angle in zip(ax.get_xticklabels(), angles):
+        deg = np.degrees(angle)
+        label.set_horizontalalignment('left' if (deg >= 270 or deg <= 90) else 'right')
+        label.set_rotation(deg)
+        label.set_rotation_mode('anchor')
+
+    ax.set_rmax(1.0)
+    #plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+    #plt.show()
+
+
+def plot_cluster_heatmap(
+    ax: any,
+    df_no_outliers: pd.DataFrame,
+    behaviour_cols_renamed: list,
+    cluster_labels_dict: dict = None,
+    save_path: str = None,
+) -> None:
+    """
+    Heatmap of mean behavioural feature values per cluster.
+
+    Parameters
+    ----------
+    cluster_labels_dict : optional dict mapping cluster int → descriptive string label.
+    """
+    cluster_summary = df_no_outliers.groupby('Cluster')[behaviour_cols_renamed].mean().round(2)
+
+    #fig, ax = plt.subplots(figsize=(16, 9))
+    annotate_heatmap=False
+    if len(behaviour_cols_renamed)<10:
+        annotate_heatmap=True
+    sns.heatmap(cluster_summary, annot=annotate_heatmap, cmap='viridis', ax=ax,
+                annot_kws={'size': 8})
+
+
+
+    y_labels = (
+        [cluster_labels_dict[i] for i in cluster_summary.index]
+        if cluster_labels_dict else [str(i) for i in cluster_summary.index]
+    )
+
+    ax.set_xticklabels(behaviour_cols_renamed, rotation=40, ha='right',
+                        color='black', size=8, weight='bold')
+    ax.set_yticklabels(y_labels, rotation=0, color='black', size=8, weight='bold')
+    ax.set_title('Cluster Behavioural Profiles', size=12, weight='bold')
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+    
+
+def plot_cluster_statistics(
+    ax,
+    df_no_outliers: pd.DataFrame,
+    cluster_colour_map: dict,
+    behaviour_cols_renamed: list,
+    exp_condition: str,
+    p_values: dict,
+    show_points: bool = True,
+    save_path: str = None,
+    random_state: int = 0,
+):
+    """
+    Plot cluster composition by experimental condition.
+
+    Bars are coloured according to `cluster_colour_map`, and different
+    experimental conditions are distinguished by hatch patterns.
+    If `show_points` is True, individual animal data points are overlaid.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+    df : pd.DataFrame
+        Long‑format data with columns: 'experiment_id', 'Cluster', and `exp_condition`.
+    cluster_colour_map : dict
+        Mapping cluster_id → colour (used for bar faces).
+    behaviour_cols_renamed : list
+        Not used here; kept for compatibility.
+    exp_condition : str
+        Column name of the factor (any number of levels).
+    p_values : dict
+        Corrected p‑values per cluster (from `cluster_enrichment_stats`).
+        Used to annotate statistical significance above each cluster.
+    show_points : bool, default True
+        Overlay individual animal data points (proportions) for transparency.
+    save_path : str, optional
+        If given, the figure is saved to this path.
+    """
+    # Animal‑level proportions
+    animal_props = _compute_animal_proportions(df_no_outliers, exp_condition)
+
+    conditions = sorted(animal_props[exp_condition].unique())
+    clusters = sorted([col for col in animal_props.columns if col != exp_condition])
+    n_clusters = len(clusters)
+    n_conditions = len(conditions)
+
+    # Prepare hatch patterns for conditions (cycle if many)
+    hatch_list = ['', '//', '\\\\', 'xx', '..', 'oo', '**', '--', '++', 'O']
+    hatches = [hatch_list[i % len(hatch_list)] for i in range(n_conditions)]
+
+    # Bar layout
+    x = np.arange(n_clusters)          # cluster centres
+    width = 0.8 / n_conditions         # width per condition group
+    offsets = np.linspace(-0.4 + width/2, 0.4 - width/2, n_conditions)
+
+    # Compute means and SEMs
+    means = {}   # (cluster, condition) -> mean
+    stds = {}    # (cluster, condition) -> sem
+    for cl_idx, cl in enumerate(clusters):
+        for cond_idx, cond in enumerate(conditions):
+            vals = animal_props.loc[animal_props[exp_condition] == cond, cl]
+            means[(cl, cond)] = vals.mean()
+            stds[(cl, cond)] = vals.std()
+
+    # Plot bars
+    for cond_idx, cond in enumerate(conditions):
+        bar_means = [means[(cl, cond)] for cl in clusters]
+        bar_sems = [stds[(cl, cond)] for cl in clusters]
+        ax.bar(
+            x + offsets[cond_idx],
+            bar_means,
+            width,
+            yerr=bar_sems,
+            label=str(cond),
+            color=[cluster_colour_map[cl] for cl in clusters],
+            edgecolor='black',
+            linewidth=0.5,
+            hatch=hatches[cond_idx],
+            capsize=3,
+        )
+
+    # Overlay individual animal points
+    if show_points:
+        np.random.seed(random_state)  # reproducible jitter
+        for cl_idx, cl in enumerate(clusters):
+            for cond_idx, cond in enumerate(conditions):
+                vals = animal_props.loc[animal_props[exp_condition] == cond, cl]
+                jitter = np.random.uniform(-width*0.4, width*0.4, size=len(vals))
+                ax.scatter(
+                    x[cl_idx] + offsets[cond_idx] + jitter,
+                    vals,
+                    color='black', alpha=0.4, s=12,
+                    linewidth=0.5, edgecolor='none', zorder=5,
+                )
+        np.random.seed(None)
+
+    # Annotate significance stars above each cluster
+    def stars_from_p(p):
+        if p < 0.0001:
+            return '****'
+        elif p < 0.001:
+            return '***'
+        elif p < 0.01:
+            return '**'
+        elif p < 0.05:
+            return '*'
+        else:
+            return 'ns'
+
+    # Determine maximum bar height for each cluster (including error bars)
+    max_heights = []
+    for cl in clusters:
+        max_val = max(
+            means[(cl, cond)] + stds[(cl, cond)]
+            for cond in conditions
+        )
+        max_heights.append(max_val)
+
+    y_offset = 0.03 * max(max_heights) if max_heights else 0.05
+
+    for cl_idx, cl in enumerate(clusters):
+        if cl in p_values:
+            p = p_values[cl]
+            text = stars_from_p(p)
+            ax.text(
+                x[cl_idx],
+                max_heights[cl_idx] + y_offset,
+                text,
+                ha='center', va='bottom', fontsize=12,
+                color='black',
+            )
+
+    # Aesthetics
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"Cluster {cl}" for cl in clusters])
+    ax.set_ylabel("Proportion of time in cluster (per animal)")
+    ax.set_title(f"Cluster occupancy by {exp_condition}")
+    ax.set_ylim(0, max(max_heights) * 1.2 if max_heights else 1.0)
+
+    # Legend for experimental conditions (hatch patterns)
+    handles = [
+        plt.Rectangle((0,0),1,1, facecolor='white', edgecolor='black',
+                      hatch=hatches[i], label=str(cond))
+        for i, cond in enumerate(conditions)
+    ]
+    ax.legend(handles=handles, title=exp_condition, bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    # Clean spines
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    if save_path:
+        ax.figure.savefig(save_path, bbox_inches='tight')
+    plt.show()
+
+
+def _compute_animal_proportions(df: pd.DataFrame, exp_condition: str) -> pd.DataFrame:
+    """
+    Aggregate time‑bin data to animal level:
+    For each animal, compute the proportion of time spent in each cluster.
+    The returned DataFrame has one row per animal, columns = clusters + exp_condition.
+    """
+    # Count bins per animal and cluster
+    counts = df.groupby(['experiment_id', 'Cluster']).size().unstack(fill_value=0)
+
+    # Convert to proportions (divide by total bins per animal)
+    animal_props = counts.div(counts.sum(axis=1), axis=0)
+
+    # Add experimental condition
+    meta = df[['experiment_id', exp_condition]].drop_duplicates().set_index('experiment_id')
+    animal_props = animal_props.join(meta)
+
+    # Ensure all clusters (even those never visited by any animal) are columns
+    all_clusters = sorted(df['Cluster'].unique())
+    for cl in all_clusters:
+        if cl not in animal_props.columns:
+            animal_props[cl] = 0.0
+
+    return animal_props
+
+
+def cluster_enrichment_stats(
+    df: pd.DataFrame,
+    exp_condition: str,
+    correction: str = 'holm',
+    alpha: float = 0.05,
+) -> dict:
+    """
+    Test whether the animal‑level proportion of time in each cluster differs
+    across the levels of `exp_condition`.
+
+    Uses Kruskal–Wallis (non‑parametric one‑way ANOVA) per cluster.
+    For two conditions this is equivalent to a Mann–Whitney U test.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Long‑format data with columns: 'experiment_id', 'Cluster', and `exp_condition`.
+    exp_condition : str
+        Column name of the factor to test (e.g. 'genotype').
+    correction : str, default 'holm'
+        Multiple testing correction method passed to
+        `statsmodels.stats.multitest.multipletests`.
+    alpha : float, default 0.05
+        Significance level.
+
+    Returns
+    -------
+    p_dict : dict
+        {cluster_id: corrected_p_value}
+        Only clusters with at least two groups (conditions) are included.
+    """
+    # Animal‑level proportions
+    animal_props = _compute_animal_proportions(df, exp_condition)
+
+    conditions = animal_props[exp_condition].unique()
+    clusters = [col for col in animal_props.columns if col != exp_condition]
+
+    p_raw = {}
+    for cl in clusters:
+        # Extract proportions for each condition
+        groups = [
+            animal_props.loc[animal_props[exp_condition] == cond, cl].values
+            for cond in conditions
+        ]
+        # Kruskal‑Wallis requires at least two groups with non‑zero total size
+        if all(len(g) > 0 for g in groups):
+            _, p = kruskal(*groups)
+            p_raw[cl] = p
+
+    if not p_raw:
+        raise RuntimeError("No cluster with valid data across conditions.")
+
+    # Correct p‑values across clusters
+    tested_clusters = list(p_raw.keys())
+    pvals = [p_raw[cl] for cl in tested_clusters]
+    _, p_corrected, _, _ = multipletests(pvals, alpha=alpha, method=correction)
+
+    return {cl: p_corr for cl, p_corr in zip(tested_clusters, p_corrected)}
+
+
+def chi_square_cluster_composition(df_no_outliers: pd.DataFrame, factor: str) -> None:
+    """
+    Chi-square test + Cramér's V for overall cluster × factor association,
+    then per-cluster tests of in-cluster vs. out-of-cluster proportions.
+    """
+    print(f"\n══ Chi-square: Cluster × {factor} ══════════════════")
+
+    # Overall
+    ct = pd.crosstab(df_no_outliers['Cluster'], df_no_outliers[factor])
+    chi2, p, dof, _ = chi2_contingency(ct)
+    n   = ct.values.sum()
+    v   = np.sqrt(chi2 / (n * (min(ct.shape) - 1)))
+    print(f"  Overall  χ²={chi2:.2f}  p={p:.4g}  Cramér's V={v:.3f}")
+
+    p_dict = {}
+    for cluster in sorted(df_no_outliers['Cluster'].unique()):
+        mask = df_no_outliers['Cluster'] == cluster
+        ct_sub = pd.crosstab(mask, df_no_outliers[factor])
+        if ct_sub.shape[0] > 1 and ct_sub.shape[1] > 1:
+            chi2_c, p_c, _, _ = chi2_contingency(ct_sub)
+            p_dict[cluster] = p_c
+    return p_dict
+
+#"""
+def permanova_cluster_factor(
+    df_no_outliers: pd.DataFrame,
+    behaviour_cols: list,
+    factor: str,
+    n_permutations: int = 999,
+) -> pd.DataFrame:
+    
+    #PERMANOVA testing whether behavioural centroid differs by `factor`
+    #within each cluster. Returns a results DataFrame with FDR correction.
+    
+    results = []
+    for cid in sorted(df_no_outliers['Cluster'].unique()):
+        sub = df_no_outliers[df_no_outliers['Cluster'] == cid].copy()
+        sub.index = sub.index.astype(str)
+        if sub[factor].nunique() < 2:
+            continue
+        X   = sub[behaviour_cols].values
+        dm  = DistanceMatrix(squareform(pdist(X, 'euclidean')), ids=list(sub.index))
+        res = permanova(dm, sub.loc[list(sub.index), factor], permutations=n_permutations)
+        results.append({
+            'Cluster': cid, 'Factor': factor,
+            'pseudo-F': res['test statistic'],
+            'p-value': res['p-value'], 'n': len(sub),
+        })
+
+    df_res = pd.DataFrame(results)
+    if not df_res.empty:
+        _, p_fdr, _, _ = multipletests(df_res['p-value'], method='fdr_bh')
+        df_res['p-value_FDR'] = p_fdr
+        df_res['significant'] = p_fdr < 0.05
+    print(f"\n── PERMANOVA ({factor}) ──────────────────────────────")
+    print(df_res.to_string(index=False))
+    return df_res
+#"""
+
+def _return_supervised_summary(
+    coordinates: coordinates,
+    supervised_annotations: table_dict,
+    # ROI functionality
+    roi_number: int = None,
+    animals_in_roi: list = None,
+    roi_mode: str = "mousewise",
+    in_roi_criterion: str = "Center",
+    invert_roi: bool = False,
+    # Time selection parameters
+    N_time_bins: int = 10,
+    start_marker: str = None,
+    custom_time_bins: List[List[Union[int, str]]] = None,
+    hide_time_bins: List[bool] = None,
+    bin_size: Union[int, str] = None,
+    bin_step: Union[int, str] = None,
+    samples_max=200000,
+    unit_time: str = "s",
+    unit_distance: str = "m",
+    binary_units: str = "time",  # "time" | "fraction"
+    include_continuous_behaviors: bool = True,
+    save_table=True,
+):
+    """
+    Returns summary of supervised information
+
+    Args:
+    N_time_bins (int): Number of time bins for data separation. Defaults to 24.
+    custom_time_bins (List[List[Union[int,str]]]): Custom time bins array consisting of pairs of start- and stop positions given as integers or time strings. Overrides N_time_bins and bin_size/bin_step if provided.
+    bin_size (Union[int,str]): If provided and custom_time_bins is None, creates bins with a fixed size. Integer inputs are interpreted as seconds, strings as 'HH:MM:SS(.ssss)'.
+    bin_step (Union[int,str]): Step size between successive bins. If None and bin_size is provided, defaults to bin_size (non-overlapping fixed-size bins). If bin_step < bin_size, bins overlap.
+    binary_units (str): "time" to return absolute time occupied per bin, "fraction" to return fraction-of-frames occupied per bin (denominator is always the full time bin length).
+    unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit (only relevant if binary_units="time").
+    unit_distance (str): Distance unit (millimeters, centimeters, meters) to display the result in the given unit
+    """
+
+    _check_enum_inputs(
+        coordinates,
+        start_markers=start_marker,
+        animals_in_roi=animals_in_roi,
+        roi_number=roi_number,
+        roi_mode=roi_mode,
+        in_roi_bodyparts=in_roi_criterion,
+    )
+
+    if binary_units not in ["time", "fraction"]:
+        raise ValueError('binary_units needs to be either "time" or "fraction"!')  # pragma: no cover
+
+    latest_start = 0
+    if start_marker is not None:
+        start_positions_dict = coordinates.get_start_marker_values(start_marker)
+        latest_start = int(max(start_positions_dict[key] for key in start_positions_dict.keys()))
+
+    L_shortest = min(
+        get_dt(supervised_annotations, key, only_metainfo=True)["num_rows"] - latest_start for key in supervised_annotations.keys()
+    )
+
+    # Prepare bin info
+    custom_time_bins, hide_time_bins = deepof.visuals_utils.build_valid_multibins(
+        coordinates,
+        N_time_bins,
+        L_shortest,
+        custom_time_bins,
+        hide_time_bins,
+        min_bins_required=1,
+        start_marker=start_marker,
+        bin_size=bin_size, 
+        bin_step=bin_step,
+    )
+
+    multi_bin_info = {}
+    # Create bin_info objects for each custom time bin
+    warned = set()
+    start_times = coordinates.get_start_times(start_marker=start_marker)
+    table_lengths = coordinates.get_table_lengths(tab_dict_for_binning=supervised_annotations)
+    for j, (bin_start, bin_end) in enumerate(custom_time_bins):
+
+        # create full time bins covering entire signal
+        bin_info_time = _preprocess_time_bins(
+            coordinates,
+            bin_index=bin_start,
+            bin_size=bin_end - bin_start + 1,
+            start_marker=start_marker,
+            samples_max=int(samples_max / len(custom_time_bins)),
+            tab_dict_for_binning=supervised_annotations,
+            given_in_frames=True,
+            warned=warned,
+            start_times=start_times,
+            table_lengths=table_lengths,
+        )
+
+        # Create ROI bins
+        roi_bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)
+        multi_bin_info[j] = roi_bin_info
+
+    animal_ids = coordinates._animal_ids
+    frame_rate = coordinates._frame_rate
+
+    experiment_ids = list(supervised_annotations.keys())
+
+    for i, exp_id in enumerate(experiment_ids):
+
+        supervised_exp = get_dt(supervised_annotations, exp_id)
+        for bin in multi_bin_info.keys():
+
+            conditions = coordinates.get_exp_conditions[exp_id].copy()
+            frame_row_info = conditions.reset_index(drop=True)
+            frame_row_info.insert(0, "experiment_id", exp_id)
+            if len(multi_bin_info) > 1:
+                frame_row_info.insert(0, "bin_number", bin)
+
+            supervised_binned = supervised_exp.iloc[multi_bin_info[bin][exp_id]["time"]]
+
+            if roi_number is not None:
+                supervised_binned = deepof.utils.get_supervised_behaviors_in_roi(
+                    supervised_binned, multi_bin_info[bin][exp_id], animals_in_roi, roi_mode
+                )
+
+            supervised_binary, _ = generate_behavior_combinations(
+                animal_ids, True, True, True, False, custom_behaviors=coordinates._custom_behaviors
+            )
+
+            # --- Binary behaviors: time OR fraction-of-frames in bin ---
+            # NaNs (e.g. from ROI filtering) are treated as 0 occurrences.
+            X_bin = supervised_binned[supervised_binary].to_numpy()
+            X_bin = np.nan_to_num(X_bin, nan=0.0)
+            n_true = X_bin.sum(axis=0)
+
+            bin_len = len(supervised_binned)
+            bin_len = max(bin_len, 1)  # safeguard against zero-length bins
+
+            if binary_units == "time":
+                # behaviors in requested time unit
+                values = n_true * TimeUnit.parse(unit_time).factor(frame_rate)
+                frame_row_behavior_1 = (
+                    pd.Series(values, index=supervised_binary)
+                    .to_frame()
+                    .T.add_suffix(f" [{unit_time}]")
+                )
+            else:  # binary_units == "fraction"
+                # fraction-of-frames in bin (denominator is ALWAYS bin length)
+                values = n_true / bin_len
+                frame_row_behavior_1 = (
+                    pd.Series(values, index=supervised_binary)
+                    .to_frame().T
+                )
+
+            df_row = [frame_row_info, frame_row_behavior_1]
+
+            if include_continuous_behaviors:
+                if coordinates._custom_behaviors is not None:
+                    all_cont_beh = CONTINUOUS_BEHAVIORS + [
+                        # re-collect custom continous names to ensure nothing got misaligned
+                        custom_behavior.name
+                        for custom_behavior in coordinates._custom_behaviors
+                        if custom_behavior.output_kind
+                        == deepof.annotation_utils.Behavior_output.CONTINUOUS
+                    ]
+                    all_cont_units = CONTINUOUS_UNITS + [
+                        # collect custom continous units
+                        custom_behavior.unit
+                        for custom_behavior in coordinates._custom_behaviors
+                        if custom_behavior.output_kind
+                        == deepof.annotation_utils.Behavior_output.CONTINUOUS
+                    ]
+                else:
+                    all_cont_beh = CONTINUOUS_BEHAVIORS
+                    all_cont_units = CONTINUOUS_UNITS
+
+                for behavior, unit in zip(all_cont_beh, all_cont_units):
+                    supervised_behavior, _ = deepof.visuals_utils.generate_behavior_combinations(
+                        animal_ids,
+                        False,
+                        False,
+                        False,
+                        [behavior],
+                        custom_behaviors=coordinates._custom_behaviors,
+                    )
+
+                    continuous_mean, converted_unit = deepof.visuals_utils.scale_units(
+                        coordinates,
+                        exp_id,
+                        supervised_binned[supervised_behavior].mean(),
+                        unit,
+                        unit_distance,
+                        unit_time,
+                    )
+                    continuous_mean = (
+                        continuous_mean.to_frame()
+                        .T.add_suffix("_mean " + f"[{converted_unit}]")
+                    )
+
+                    continuous_std, converted_unit = deepof.visuals_utils.scale_units(
+                        coordinates,
+                        exp_id,
+                        supervised_binned[supervised_behavior].std(),
+                        unit,
+                        unit_distance,
+                        unit_time,
+                    )
+                    continuous_std = (
+                        continuous_std.to_frame()
+                        .T.add_suffix("_std " + f"[{converted_unit}]")
+                    )
+
+                    df_row = df_row + [continuous_mean, continuous_std]
+
+            df_row = pd.concat(df_row, axis=1)
+
+            if bin == 0 and i == 0:
+                df = df_row
+            else:
+                df = pd.concat([df, df_row], ignore_index=True)
+
+    if save_table:
+        out_path = os.path.join(
+            coordinates._project_path, coordinates._project_name, "./Out_tables"
+        )
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
+        df.to_csv(
+            path_or_buf=os.path.join(out_path, "supervised_summary.csv"),
+            sep=",",
+            na_rep="",
+        )
+    return df

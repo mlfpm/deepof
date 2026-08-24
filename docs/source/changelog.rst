@@ -9,7 +9,8 @@ Added
 -------
 - Added input option animal_presence_threshold to allow the user to adjust the likelihood threshold at which animals are set visible or not.
 - Added method `subset_experiments` to `class Coordinates` to enable true project subsetting (i.e. make a copy of your project only containing specific experiments) 
-- Added scale adjustment that is automatically performed during loading of old arena data in case the scale of the new and old projects deviate. If scales deviate, teh user is notified with a print statement 
+- Added scale adjustment that is automatically performed during loading of old arena data in case the scale of the new and old projects deviate. If scales deviate, the user is notified with a print statement 
+- Added new clustering plot for supervised behaviors
 
 Changed
 -------
