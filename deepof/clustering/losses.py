@@ -47,7 +47,7 @@ def select_contrastive_loss_pt(
     vicreg_gamma: float = 1.0,
     vicreg_eps: float = 1e-4,
     top_m_pos: int = 0,
-    sim_threshold: float | None = 0.9,
+    sim_threshold: float = 0.9,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     sim_fn = _SIMILARITIES[similarity]
 
@@ -204,7 +204,7 @@ def nce_loss_pt(
     temperature: float = 0.1,
     top_m_pos: int = 0,
     mutual: bool = False,
-    sim_threshold: float | None = 0.9,  # threshold on logits (after /T) or on raw sim? see note below
+    sim_threshold: float = 0.9,  # threshold on logits (after /T) or on raw sim? see note below
 ):
     """
     Multi-positive InfoNCE:
