@@ -74,10 +74,10 @@ class CommonFitCfg:
     limit_val_batches: Optional[int] = 1000
 
     #TCN encoder
-    tcn_conv_filters: Optional[int] = 32,
-    tcn_kernel_size: Optional[int] = 4,
-    tcn_conv_stacks: Optional[int] = 2,
-    tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8), 
+    tcn_conv_filters: Optional[int] = 32
+    tcn_kernel_size: Optional[int] = 4
+    tcn_conv_stacks: Optional[int] = 2
+    tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8)
 
 
 @dataclass
