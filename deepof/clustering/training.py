@@ -1508,7 +1508,7 @@ def fit_contrastive(
             tau_star=tau_star,
             distill_head=distill_head,
             lambda_scheduler=lambda_scheduler,
-            lr_scheduler= lr_scheduler,
+            lr_scheduler=None, #lr_scheduler,
             distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
