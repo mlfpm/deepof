@@ -2924,6 +2924,7 @@ def plot_embedding_evaluation(
     minimum_number_of_positives: int = 200,
     normalize: bool = True,
     random_state: int = 0,
+    save: bool = False,
 ) -> plt.Figure:
     """Plot embedding-quality scores for all detected binary behaviors.
 
@@ -3005,6 +3006,19 @@ def plot_embedding_evaluation(
         axes[i].set_visible(False)
 
     plt.tight_layout()
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_supervised_cluster_detection_type={}{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    visualization,
+                    calendar.timegm(time.gmtime()),
+                ),
+            )
+        )
 
 
 def plot_training_metrics(log_summary: dict) -> dict:

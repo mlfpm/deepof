@@ -11,6 +11,7 @@ Added
 - Added method `subset_experiments` to `class Coordinates` to enable true project subsetting (i.e. make a copy of your project only containing specific experiments) 
 - Added scale adjustment that is automatically performed during loading of old arena data in case the scale of the new and old projects deviate. If scales deviate, the user is notified with a print statement 
 - Added new clustering plot for supervised behaviors
+- Addedn vicereg loss as an option for contrastive model
 
 Changed
 -------
@@ -22,6 +23,8 @@ Changed
 - Updated arena export to also work for continuous behaviors by displaying current behavior value for continuous behavior, if detected.
 - Most plotting functions now also accept a list of roi numbers as input instead of a single roi number. In these instances rois will be processed by "or" logic, i.e. for input [1,2]: is the mouse in roi 1 or roi 2.
 - `return_supervised_summary` has now more binning options.
+- Exposed more model training options to user such as details to TCN settings
+- Updated contrastive model 
 
 Bug Fixes
 ---------

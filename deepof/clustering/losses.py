@@ -41,19 +41,36 @@ def select_contrastive_loss_pt(
     tau: float = 0.1,
     beta: float = 0.1,
     elimination_topk: float = 0.1,
+    vicreg_lambda_inv: float = 25.0,
+    vicreg_lambda_var: float = 25.0,
+    vicreg_lambda_cov: float = 0.5,
+    vicreg_gamma: float = 1.0,
+    vicreg_eps: float = 1e-4,
+    top_m_pos: int = 0,
+    sim_threshold: float | None = 0.9,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     sim_fn = _SIMILARITIES[similarity]
 
     if loss_fn == "nce":
-        return nce_loss_pt(history, future, sim_fn, temperature)
+        return nce_loss_pt(history, future, sim_fn, temperature, top_m_pos, sim_threshold)
     elif loss_fn == "dcl":
         return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
     elif loss_fn == "fc":
         return fc_loss_pt(history, future, sim_fn, temperature, elimination_topk=elimination_topk)
     elif loss_fn == "hard_dcl":
         return hard_loss_pt(history, future, sim_fn, temperature, beta=beta, debiased=True, tau_plus=tau)
+    elif loss_fn == "vicreg":
+        # VICReg does not use similarity/temperature
+        return vicreg_loss_pt(
+            history, future,
+            lambda_inv=vicreg_lambda_inv,
+            lambda_var=vicreg_lambda_var,
+            lambda_cov=vicreg_lambda_cov,
+            gamma=vicreg_gamma,
+            eps=vicreg_eps,
+        )
     else: # pragma: no cover
-        raise ValueError(f"Unknown loss_fn: {loss_fn}")
+        raise ValueError(f"Unknown loss_fn: {loss_fn}, try \"vicreg\", \"nce\", \"dcl\", \"fc\" or \"hard_dcl\"")
     
 
 def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -102,6 +119,44 @@ def _off_diagonal_rows(sim: torch.Tensor) -> torch.Tensor:
     return masked.reshape(N, N - 1)
 
 
+def vicreg_loss_pt(
+    z: torch.Tensor,
+    z_aug: torch.Tensor,
+    lambda_inv: float = 25.0,
+    lambda_var: float = 25.0,
+    lambda_cov: float = 0.1,
+    gamma: float = 1.0,
+    eps: float = 1e-4,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    VICReg loss: invariance, variance, covariance between two views.
+    Returns (total_loss, invariance_loss, variance_loss).
+    """
+    B, D = z.shape
+
+    # Invariance
+    inv_loss = F.mse_loss(z, z_aug)
+
+    # Variance
+    def variance_loss(x):
+        std = torch.sqrt(x.var(dim=0) + eps)
+        return F.relu(gamma - std).mean()
+
+    var_loss = variance_loss(z) + variance_loss(z_aug)
+
+    # Covariance
+    def covariance_loss(x):
+        x_centered = x - x.mean(dim=0, keepdim=True)   # (B, D)
+        cov = (x_centered.T @ x_centered) / (B - 1)    # (D, D)
+        off_diag = cov - torch.diag(torch.diag(cov))   # zero diagonal
+        return off_diag.pow(2).sum() / D
+
+    cov_loss = covariance_loss(z) + covariance_loss(z_aug)
+
+    total = lambda_inv * inv_loss + lambda_var * var_loss + lambda_cov * cov_loss
+    return total, inv_loss, var_loss, cov_loss
+
+
 def nce_loss_pt_old(
     history: torch.Tensor,
     future: torch.Tensor,
@@ -128,7 +183,7 @@ def nce_loss_pt_old(
     mean_neg = neg.mean()
     return loss, mean_sim, mean_neg
 
-def nce_loss_pt(history, future, similarity, temperature=0.1):
+def nce_loss_pt_old(history, future, similarity, temperature=0.1):
     """
     Standard NCE loss 
     """
@@ -139,7 +194,85 @@ def nce_loss_pt(history, future, similarity, temperature=0.1):
     mean_pos = torch.diag(sim).mean() * temperature
     off = _off_diagonal_rows(sim * temperature)  
     mean_neg = off.mean() if off.numel() else torch.tensor(0., device=sim.device)
-    return loss, mean_pos, mean_neg
+    return loss, mean_pos, mean_neg, None
+
+
+def nce_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    similarity: callable,
+    temperature: float = 0.1,
+    top_m_pos: int = 0,
+    mutual: bool = False,
+    sim_threshold: float | None = 0.9,  # threshold on logits (after /T) or on raw sim? see note below
+):
+    """
+    Multi-positive InfoNCE:
+      - Always uses diagonal (i,i) as positive.
+      - Optionally adds top_m_pos mined positives per row.
+      - If mutual=True: only keep mined pairs (i,j) where i is in topm(j) AND j in topm(i).
+      - If sim_threshold is not None: only keep mined positives with logits[i,j] >= sim_threshold.
+
+    Returns: loss, mean_pos, mean_neg, debug
+    """
+    logits = similarity(history, future) / float(temperature)  # (N,N)
+    N = logits.size(0)
+    device = logits.device
+    finfo = torch.finfo(logits.dtype)
+
+    m = int(top_m_pos)
+    m = max(0, min(m, N - 1))
+
+    diag_mask = torch.eye(N, dtype=torch.bool, device=device)
+    pos_mask = diag_mask.clone()
+
+    mined_mask = torch.zeros((N, N), dtype=torch.bool, device=device)
+
+    if m > 0:
+        cand = logits.clone()
+        cand.fill_diagonal_(-finfo.max)
+
+        topk_idx = torch.topk(cand, k=m, dim=1, largest=True).indices  # (N,m)
+        mined_mask.scatter_(dim=1, index=topk_idx, value=True)
+
+        if mutual:
+            mined_mask = mined_mask & mined_mask.t()
+
+        if sim_threshold is not None:
+            mined_mask = mined_mask & (logits >= float(sim_threshold) / temperature)
+
+        pos_mask = pos_mask | mined_mask
+
+    # Numerator / denominator
+    pos_logits = logits.masked_fill(~diag_mask, -finfo.max)
+    log_num = torch.logsumexp(pos_logits, dim=1)
+
+    # Denominator: all except mined false negatives (and keep diagonal)
+    den_logits = logits.masked_fill(mined_mask, -finfo.max)
+    log_den = torch.logsumexp(den_logits, dim=1)
+
+    loss = (log_den - log_num).mean()
+
+    neg_mask = ~pos_mask
+
+    # Debug + better logging diagnostics
+    diag_pos_mean = (logits[diag_mask].mean() * temperature) if diag_mask.any() else torch.tensor(0.0, device=device)
+    extra_pos_mean = (logits[mined_mask].mean() * temperature) if mined_mask.any() else torch.tensor(float("nan"), device=device)
+    mean_pos = (logits[pos_mask].mean() * temperature) if pos_mask.any() else torch.tensor(0.0, device=device)
+    mean_neg = (logits[neg_mask].mean() * temperature) if neg_mask.any() else torch.tensor(0.0, device=device)
+
+    # avg #extra positives per row
+    extra_per_row = mined_mask.sum(dim=1).float().mean()
+
+    debug = {
+        "top_m_pos": m,
+        "mutual": bool(mutual),
+        "extra_pos_per_row": float(extra_per_row.item()),
+        "diag_pos_mean": float(diag_pos_mean.item()),
+        "extra_pos_mean": float(extra_pos_mean.item()) if torch.isfinite(extra_pos_mean).item() else float("nan"),
+    }
+
+    return loss, mean_pos, mean_neg, debug
 
 
 def dcl_loss_pt(
@@ -170,7 +303,7 @@ def dcl_loss_pt(
 
     mean_sim = torch.diag(sim).mean()
     mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
+    return loss, mean_sim, mean_neg, None
 
 
 def fc_loss_pt(
@@ -206,7 +339,7 @@ def fc_loss_pt(
     mean_neg = trimmed.mean() * temperature if trimmed.numel() > 0 else torch.tensor(
         0.0, device=sim.device, dtype=sim.dtype
     )
-    return loss, mean_sim, mean_neg
+    return loss, mean_sim, mean_neg, None
 
 
 def hard_loss_pt(
@@ -246,7 +379,7 @@ def hard_loss_pt(
 
     mean_sim = torch.diag(sim).mean()
     mean_neg = neg.mean()
-    return loss, mean_sim, mean_neg
+    return loss, mean_sim, mean_neg, None
 
 
 #########################

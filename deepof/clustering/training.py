@@ -29,6 +29,7 @@ from torch.amp import autocast
 from torch.amp import GradScaler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -89,12 +90,12 @@ def _format_postfix(logs: Dict[str, float], max_items: int = 4) -> Dict[str, str
     ]
     out: Dict[str, str] = {}
     for k in priority:
-        if k in logs:
+        if k in logs and logs[k] is not None:
             out[k] = f"{logs[k]:.4f}"
             if len(out) >= max_items:
                 return out
     for k, v in logs.items():
-        if k not in out:
+        if k not in out and v is not None:
             out[k] = f"{v:.4f}"
             if len(out) >= max_items:
                 break
@@ -179,6 +180,9 @@ def train_one_epoch_indexed(
                 ctx.lambda_scheduler.step()
                 if(step==int(len(iterator)/2)):
                     mean_lambda_weight=ctx.lambda_scheduler.get_weight()
+            if hasattr(ctx, "lr_scheduler") and ctx.lr_scheduler is not None:
+                ctx.lr_scheduler.step()
+
 
         logs_accum.append(res.logs)
         if show_progress and hasattr(iterator, "set_postfix"):
@@ -514,6 +518,7 @@ def step_contrastive_distill(
         p_rot = contrastive_cfg.aug_p_rot,         
     )
 
+
     # Cut middle section from tensor
     half_len = x_full.shape[1] // 2
     starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
@@ -522,7 +527,25 @@ def step_contrastive_distill(
     a = slice_time_per_sample(a_full, starts, half_len)
         
     # Encode via forward for DP compatibility
-    z = model(x, a)
+    if base.loss_function != "vicreg":
+        z = model(x, a)
+    else:
+        x_aug2, a_aug2 = _make_augmented_view(
+            x_full, a_full, edge_index, rot_precomp,
+            min_shift = contrastive_cfg.aug_min_shift,
+            max_shift = contrastive_cfg.aug_max_shift,
+            p_shift = contrastive_cfg.aug_p_shift,
+            noise_sigma = contrastive_cfg.aug_noise_sigma,  
+            p_noise = contrastive_cfg.aug_p_noise,           
+            max_interp = contrastive_cfg.aug_max_interp,
+            min_interp = contrastive_cfg.aug_min_interp,         
+            p_interp = contrastive_cfg.aug_p_interp, 
+            max_rot = contrastive_cfg.aug_max_rot, 
+            n_rot = contrastive_cfg.aug_n_rot,
+            p_rot = contrastive_cfg.aug_p_rot,         
+        )
+        z = model(x_aug2, a_aug2)
+
     z_aug = model(x_aug, a_aug)
 
     labels = getattr(ctx, "labels", None) 
@@ -531,19 +554,49 @@ def step_contrastive_distill(
         seperability=label_separation_score(z,labels)
 
     # Normalize row-wise
-    z = torch.nn.functional.normalize(z, dim=1)
-    z_aug = torch.nn.functional.normalize(z_aug, dim=1)
+    if base.loss_function != "vicreg":
+        z = torch.nn.functional.normalize(z, dim=1)
+        z_aug = torch.nn.functional.normalize(z_aug, dim=1)
 
+
+    n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/10))]))
     # Base contrastive loss
-    loss, pos_mean, neg_mean = select_contrastive_loss_pt(
+    loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
         z, z_aug,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
-        temperature=base.temperature,
+        temperature=base.temperature, #float(base.temperature*0.9**n_pos_samples),
         tau=base.tau,
         beta=base.beta,
         elimination_topk=0.1,
+        vicreg_lambda_inv = ctx.contrastive_cfg.vicreg_lambda_inv, #25.0,
+        vicreg_lambda_var = ctx.contrastive_cfg.vicreg_lambda_var, #25.0,
+        vicreg_lambda_cov = ctx.contrastive_cfg.vicreg_lambda_cov, #0.5,
+        vicreg_gamma = ctx.contrastive_cfg.vicreg_gamma, #1.0,
+        vicreg_eps = ctx.contrastive_cfg.vicreg_eps, #1e-4,
+        top_m_pos=0, #n_pos_samples,#,int(ctx.epoch/35)
+        sim_threshold=0.0, #ctx.contrastive_cfg.sim_threshold, #0.95,
     )
+    pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
+    if base.loss_function != "vicreg":
+        pos_mean=l_term1
+        neg_mean=l_term2
+    else:
+        inv_loss=l_term1
+        var_loss=l_term2
+        cov_loss=l_term3
+
+    if False:
+        plot_mined_pairs(
+            x1=x, x2=x_aug,                 # the two views that correspond to z and z_aug
+            z1=z, z2=z_aug,                 # embeddings (preferably already normalized if your loss normalizes)
+            edge_index=edge_index,    # or global, whichever matches node indexing
+            top_m_pos=1,
+            mutual=True,
+            sim_threshold=0.9,
+            show_top_neg=3,
+            title_prefix="NCE mining debug:",
+        )
 
     distill_loss = torch.tensor(0.0, device=device, dtype=loss.dtype)
 
@@ -581,8 +634,11 @@ def step_contrastive_distill(
 
     logs = {
         "total_loss": float(total.detach().item()),
-        "pos_similarity": float(pos_mean.detach().item()),
-        "neg_similarity": float(neg_mean.detach().item()),
+        "pos_similarity": float(pos_mean.detach().item()) if pos_mean is not None else None,
+        "neg_similarity": float(neg_mean.detach().item()) if neg_mean is not None else None,
+        "invariance_loss" : float(inv_loss.detach().item()) if inv_loss is not None else None,
+        "variance_loss" : float(var_loss.detach().item()) if var_loss is not None else None,
+        "covariance_loss" : float(cov_loss.detach().item()) if cov_loss is not None else None,
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
         "seperability": float(seperability.detach().item())
     }
@@ -606,6 +662,11 @@ def train_deepof_model(
     pretrained: Optional[str] = None,
     save_weights: bool = True,
     run: int = 0,
+    # Encoder specific options
+    tcn_conv_filters: Optional[int] = 32,
+    tcn_kernel_size: Optional[int] = 4,
+    tcn_conv_stacks: Optional[int] = 2,
+    tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8),
     # VaDE-specific
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
@@ -696,6 +757,14 @@ def train_deepof_model(
     contrastive_loss_function: str = "nce",
     beta: float = 0.1,
     tau: float = 0.1,
+    # info nce
+    sim_threshold: float = 0.95,
+    # vicereg
+    vicreg_lambda_inv: float = 25.0,
+    vicreg_lambda_var: float = 25.0,
+    vicreg_lambda_cov: float = 0.5,
+    vicreg_gamma: float = 1.0,
+    vicreg_eps: float = 1e-4,
     # Contrastive augmentations
     aug_min_shift: int = 1,
     aug_max_shift: int = 3,
@@ -763,7 +832,11 @@ def train_deepof_model(
         interaction_regularization=interaction_regularization,
         kmeans_loss=kmeans_loss,
         diag_max_batches=diag_max_batches,
-        seed=random_seed, 
+        seed=random_seed,
+        tcn_conv_filters = tcn_conv_filters,
+        tcn_kernel_size = tcn_kernel_size,
+        tcn_conv_stacks = tcn_conv_stacks,
+        tcn_conv_dilations = tcn_conv_dilations, 
     )
 
     teacher_cfg = TurtleTeacherCfg(
@@ -864,6 +937,14 @@ def train_deepof_model(
         aug_max_rot=aug_max_rot,
         aug_n_rot=aug_n_rot,
         aug_p_rot=aug_p_rot,
+        # info nce
+        sim_threshold = sim_threshold,
+        # vicereg
+        vicreg_lambda_inv = vicreg_lambda_inv,
+        vicreg_lambda_var = vicreg_lambda_var,
+        vicreg_lambda_cov = vicreg_lambda_cov,
+        vicreg_gamma = vicreg_gamma,
+        vicreg_eps = vicreg_eps,
     )
 
     return train_deepof_model_base(
@@ -895,14 +976,17 @@ def train_deepof_model_base(
     device: str = None,
     bootstrap_training: bool = False,
     bootstrap_block_len: int = 250,
+    continue_training: bool = False,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
     # Load pretrained model if available + early return
+    model=None
     if common_cfg.pretrained:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
         model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained, device=device)
-        return unwrap_dp(model), None, None, log_summary
+        if not continue_training:
+            return unwrap_dp(model), None, None, log_summary
     
     # ----------------------------------------------------
     # Check for possible multiprocessing
@@ -1012,6 +1096,7 @@ def train_deepof_model_base(
             contrastive_cfg,
             writer,
             device,
+            model=model,
         )
 
     # ----------------------------------------------------
@@ -1064,6 +1149,10 @@ def fit_VQVAE(
         "encoder_type": common_cfg.encoder_type,
         "use_gnn": True,
         "interaction_regularization": common_cfg.interaction_regularization,
+        "tcn_conv_filters": common_cfg.tcn_conv_filters,
+        "tcn_kernel_size": common_cfg.tcn_kernel_size,
+        "tcn_conv_stacks": common_cfg.tcn_conv_stacks,
+        "tcn_conv_dilations": common_cfg.tcn_conv_dilations, 
     }
     
     # Create model
@@ -1077,6 +1166,10 @@ def fit_VQVAE(
         use_gnn=True,
         interaction_regularization=common_cfg.interaction_regularization,
         kmeans_loss=common_cfg.kmeans_loss,
+        tcn_conv_filters=common_cfg.tcn_conv_filters,
+        tcn_kernel_size=common_cfg.tcn_kernel_size,
+        tcn_conv_stacks=common_cfg.tcn_conv_stacks,
+        tcn_conv_dilations=common_cfg.tcn_conv_dilations,
     ).to(device, non_blocking=True)
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
@@ -1275,6 +1368,7 @@ def fit_contrastive(
     writer: SummaryWriter,
     device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
+    model: ContrastivePT = None,
 ):
     
     tuning_mode=False
@@ -1296,22 +1390,33 @@ def fit_contrastive(
         "encoder_type": common_cfg.encoder_type,
         "use_gnn": True,
         "interaction_regularization": common_cfg.interaction_regularization,
+        "tcn_conv_filters": common_cfg.tcn_conv_filters,
+        "tcn_kernel_size": common_cfg.tcn_kernel_size,
+        "tcn_conv_stacks": common_cfg.tcn_conv_stacks,
+        "tcn_conv_dilations": common_cfg.tcn_conv_dilations,        
     }
 
     # Create model
-    model = ContrastivePT(
-        input_shape=train_loader.dataset.x_shape,
-        edge_feature_shape=train_loader.dataset.a_shape,
-        adjacency_matrix=adjacency_matrix,
-        latent_dim=common_cfg.latent_dim,
-        encoder_type=common_cfg.encoder_type,
-        use_gnn=True,
-        similarity_function=contrastive_cfg.contrastive_similarity_function,
-        loss_function=contrastive_cfg.contrastive_loss_function,
-        temperature=contrastive_cfg.temperature,
-        beta=contrastive_cfg.beta,
-        tau=contrastive_cfg.tau,
-    ).to(device)
+    if model is None:
+        model = ContrastivePT(
+            input_shape=train_loader.dataset.x_shape,
+            edge_feature_shape=train_loader.dataset.a_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=common_cfg.latent_dim,
+            encoder_type=common_cfg.encoder_type,
+            use_gnn=True,
+            similarity_function=contrastive_cfg.contrastive_similarity_function,
+            loss_function=contrastive_cfg.contrastive_loss_function,
+            temperature=contrastive_cfg.temperature,
+            beta=contrastive_cfg.beta,
+            tau=contrastive_cfg.tau,
+            tcn_conv_filters=common_cfg.tcn_conv_filters,
+            tcn_kernel_size=common_cfg.tcn_kernel_size,
+            tcn_conv_stacks=common_cfg.tcn_conv_stacks,
+            tcn_conv_dilations=common_cfg.tcn_conv_dilations,
+        ).to(device)
+    else:
+        model.to(device)
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
@@ -1373,6 +1478,17 @@ def fit_contrastive(
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
+
+    lr_scheduler = None
+    warmup_epochs = 2
+    total_epochs = common_cfg.epochs
+    warmup_steps = warmup_epochs * len(train_loader)
+    total_steps = total_epochs * len(train_loader)
+
+    warmup = LinearLR(optimizer, start_factor=0.5, end_factor=1.0, total_iters=warmup_steps)
+    cosine = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=1e-5)
+    lr_scheduler = SequentialLR(optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps])
+
     # Set up best-val and best-score saving
     _, best_path_val, best_path_score, _ = ckpt_paths("contrastive", common_cfg=common_cfg)
     best_val = float("inf")
@@ -1392,6 +1508,7 @@ def fit_contrastive(
             tau_star=tau_star,
             distill_head=distill_head,
             lambda_scheduler=lambda_scheduler,
+            lr_scheduler= lr_scheduler,
             distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
@@ -1453,11 +1570,12 @@ def fit_contrastive(
 
    
         # Save best model based on total validation loss
-        if v_total < best_val:
-            best_val = v_total
+        if v_total < best_val or (np.mod(epoch+1, 10)==0 and epoch>0):
+            if v_total < best_val:
+                best_val = v_total
             if common_cfg.save_weights and is_main:
                 save_model_info(
-                    best_path_val,
+                    best_path_val+"_"+str(epoch)+".pth",
                     stage="best_val",
                     epoch=epoch,
                     train_steps=(epoch + 1) * len(train_loader),
@@ -1555,6 +1673,10 @@ def fit_VADE(
         use_gnn=True,
         kmeans_loss=vade_cfg.kmeans_loss_pretrain,
         interaction_regularization=common_cfg.interaction_regularization,
+        tcn_conv_filters=common_cfg.tcn_conv_filters,
+        tcn_kernel_size=common_cfg.tcn_kernel_size,
+        tcn_conv_stacks=common_cfg.tcn_conv_stacks,
+        tcn_conv_dilations=common_cfg.tcn_conv_dilations,
     ).to(device, non_blocking=True)
     step_fn = step_vade
 
@@ -1593,6 +1715,10 @@ def fit_VADE(
         "kmeans_loss": common_cfg.kmeans_loss,
         "interaction_regularization": common_cfg.interaction_regularization,
         "lens_enabled": False,
+        "tcn_conv_filters": common_cfg.tcn_conv_filters,
+        "tcn_kernel_size": common_cfg.tcn_kernel_size,
+        "tcn_conv_stacks": common_cfg.tcn_conv_stacks,
+        "tcn_conv_dilations": common_cfg.tcn_conv_dilations, 
     }
 
 
@@ -2370,6 +2496,107 @@ def _augment_linear_interpolate_segments(
     return x_aug
 
 
+def _augment_node_drop(
+    x: torch.Tensor,
+    edge_index: torch.Tensor,
+    min_drop: int = 1,
+    max_drop: int = 2,
+    p: float = 0.3,
+    plot: bool = False,
+) -> torch.Tensor:
+    if max_drop <= 0 or p <= 0.0:
+        return x
+
+    B, T, N, F = x.shape
+    if N <= 1:
+        return x
+
+    max_drop = min(max_drop, N - 1)
+    min_drop = min(min_drop, max_drop)
+
+    x_aug = x.clone()
+    device, dtype = x.device, x.dtype
+    eps = 1e-8
+    jitter_scale = 0.1
+
+    apply = torch.rand(B, device=device) < p
+    num_drop = torch.randint(min_drop, max_drop + 1, (B,), device=device)
+    num_drop = torch.clamp(num_drop * apply.long(), max=N - 1)
+
+    rand_order = torch.argsort(torch.rand(B, N, device=device), dim=1)
+    K = max_drop
+    drop_nodes = rand_order[:, :K]                                      # (B, K)
+    valid = torch.arange(K, device=device).unsqueeze(0) < num_drop.unsqueeze(1)  # (B, K)
+
+    centers = x.mean(dim=2)                                             # (B, T, 3)
+    r_max = (x - centers.unsqueeze(2)).norm(dim=-1).amax(dim=2)         # (B, T)
+    max_rad = 2.0 * r_max                                               # (B, T)
+
+    base_dir = torch.randn(B, K, 3, device=device, dtype=dtype)
+    base_dir = base_dir / (base_dir.norm(dim=-1, keepdim=True) + eps)
+    base_frac = (torch.rand(B, K, 1, device=device, dtype=dtype) ** (1.0 / 3.0)) * 2.0
+
+    anchor = centers.unsqueeze(2) + base_dir.unsqueeze(1) * (
+        base_frac.unsqueeze(1) * r_max[:, :, None, None]
+    )                                                                   # (B, T, K, 3)
+
+    j_dir = torch.randn(B, T, K, 3, device=device, dtype=dtype)
+    j_dir = j_dir / (j_dir.norm(dim=-1, keepdim=True) + eps)
+    j_rad = (torch.rand(B, T, K, 1, device=device, dtype=dtype) ** (1.0 / 3.0)) * (
+        jitter_scale * r_max[:, :, None, None]
+    )
+    new_pos = anchor + j_dir * j_rad
+
+    rel = new_pos - centers.unsqueeze(2)
+    rel_norm = rel.norm(dim=-1, keepdim=True)
+    scale = torch.minimum(torch.ones_like(rel_norm), max_rad[:, :, None, None] / (rel_norm + eps))
+    new_pos = centers.unsqueeze(2) + rel * scale
+
+    index = drop_nodes[:, None, :, None].expand(B, T, K, F)
+    orig_at = x_aug.gather(2, index)
+    src = torch.where(valid[:, None, :, None], new_pos, orig_at)
+    x_aug = x_aug.scatter(2, index, src)
+
+    if plot:  # pragma: no cover
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(x, x_aug)
+
+    return x_aug
+
+
+def _augment_full_rotation(
+    x: torch.Tensor,             # (B,T,N,3)
+    edge_index: torch.Tensor,    # only used for plotting
+    max_rot: float = 30.0,
+    p: float = 0.5,
+    plot: bool = False,
+) -> torch.Tensor:
+    """
+    Rotate the entire graph (all nodes) by a single angle per sample (constant over time).
+    Rotation is applied around the per-frame centroid (keeps the skeleton "in place").
+    """
+    if max_rot <= 0.0 or p <= 0.0:
+        return x
+    B = x.size(0)
+    x_aug = x.clone()
+    apply = (torch.rand(B, device=x.device) < p).to(x.dtype)  # (B,)
+    theta = (torch.rand(B, device=x.device, dtype=x.dtype) * 2.0 - 1.0) * (max_rot * math.pi / 180.0)
+    theta = theta * apply
+    cos_t = torch.cos(theta).view(B, 1, 1, 1)  # (B,1,1,1)
+    sin_t = torch.sin(theta).view(B, 1, 1, 1)
+    coords = x_aug[..., 0:2]                    # (B,T,N,2)
+    pivot = coords.mean(dim=2, keepdim=True)    # (B,T,1,2)
+    rel = coords - pivot                        # (B,T,N,2)
+    rx = rel[..., 0:1] * cos_t - rel[..., 1:2] * sin_t
+    ry = rel[..., 0:1] * sin_t + rel[..., 1:2] * cos_t
+    coords = torch.cat([rx, ry], dim=-1) + pivot
+    x_aug[..., 0:2] = coords
+    if plot:
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(x, x_aug)
+    return x_aug
+
+
 def _make_augmented_view(
     x: torch.Tensor,   # (B,T,N,3)
     a: torch.Tensor,   # (B,T,E,1)
@@ -2386,6 +2613,9 @@ def _make_augmented_view(
     p_interp: float = 0.6,
     noise_sigma: float = 0.02,
     p_noise: float = 1.0,
+    node_drop_min: float = 1,
+    node_drop_max: float = 2,
+    p_node_drop: float = 0.4,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
@@ -2397,7 +2627,144 @@ def _make_augmented_view(
     x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+    x_aug = _augment_node_drop(x_aug, edge_index, min_drop=node_drop_min, max_drop=node_drop_max, p=p_node_drop, plot=False)
 
     a_aug = recompute_edges(x_aug, edge_index) 
 
     return x_aug, a_aug
+
+
+import matplotlib.pyplot as plt
+
+def plot_mined_pairs(
+    x1: torch.Tensor,                  # (B,T,N,3) view1 windows (e.g., center or aug view A)
+    x2: torch.Tensor,                  # (B,T,N,3) view2 windows (e.g., aug view B)
+    z1: torch.Tensor,                  # (B,D) embeddings for x1 (the same ones used in loss)
+    z2: torch.Tensor,                  # (B,D) embeddings for x2 (the same ones used in loss)
+    edge_index: Optional[torch.Tensor] = None,
+    anchor_idx: Optional[int] = None,  # if None, random anchor
+    top_m_pos: int = 1,
+    mutual: bool = True,
+    sim_threshold: Optional[float] = 0.9,  # raw cosine threshold (NOT /T)
+    show_top_neg: int = 3,             # show K most similar negatives
+    frame_stride: int = 4,
+    dx: float = 2.5,
+    title_prefix: str = "",
+):
+    """
+    Visualize, for one anchor i:
+      - anchor sample from view1
+      - its paired positive (i in view2)
+      - extra positives mined by top-m (optionally mutual + threshold)
+      - top negatives (hardest negatives)
+    and annotate each with cosine similarity z1[i]·z2[j].
+
+    Assumes cosine similarity with L2-normalized embeddings as in your NCE setup.
+    """
+
+    assert x1.ndim == 4 and x2.ndim == 4, "x1/x2 must be (B,T,N,3)"
+    B = x1.size(0)
+    device = z1.device
+
+    # choose anchor
+    if anchor_idx is None:
+        anchor_idx = int(torch.randint(0, B, (1,), device=device).item())
+    i = anchor_idx
+
+    # ensure normalized for cosine
+    z1n = F.normalize(z1, dim=1)
+    z2n = F.normalize(z2, dim=1)
+
+    # cosine sim matrix (B,B)
+    sim = z1n @ z2n.t()
+
+    # build mined mask (same idea as your nce_loss_pt)
+    m = max(0, min(int(top_m_pos), B - 1))
+    diag_mask = torch.eye(B, dtype=torch.bool, device=device)
+
+    mined_mask = torch.zeros((B, B), dtype=torch.bool, device=device)
+    if m > 0:
+        cand = sim.clone()
+        cand.fill_diagonal_(-1e9)
+        topk_idx = torch.topk(cand, k=m, dim=1, largest=True).indices  # (B,m)
+        mined_mask.scatter_(1, topk_idx, True)
+
+        if mutual:
+            mined_mask = mined_mask & mined_mask.t()
+
+        if sim_threshold is not None:
+            mined_mask = mined_mask & (sim >= float(sim_threshold))
+
+    pos_mask = diag_mask | mined_mask
+    neg_mask = ~pos_mask
+
+    # indices for this anchor row
+    paired_j = i
+    extra_pos_js = torch.where(mined_mask[i])[0]
+    neg_js = torch.where(neg_mask[i])[0]
+
+    # pick hardest negatives (highest similarity among negatives)
+    if neg_js.numel() > 0 and show_top_neg > 0:
+        neg_sims = sim[i, neg_js]
+        k = min(show_top_neg, neg_js.numel())
+        topneg_rel = torch.topk(neg_sims, k=k, largest=True).indices
+        top_neg_js = neg_js[topneg_rel]
+    else:
+        top_neg_js = torch.empty((0,), dtype=torch.long, device=device)
+
+    # helper to draw one sequence as a row of skeletons over time
+    def draw_seq(ax, X, row_title: str):
+        # X: (T,N,2) on CPU
+        T = X.size(0)
+        for t in range(T):
+            off = t * dx
+            pts = X[t]  # (N,2)
+            xs = pts[:, 0].numpy() + off
+            ys = pts[:, 1].numpy()
+            ax.plot(xs, ys, "kx", ms=3)
+
+            if edge_index is not None:
+                ei = edge_index.detach().cpu().numpy()
+                for (u, v) in ei:
+                    ax.plot([xs[u], xs[v]], [ys[u], ys[v]], "k-", lw=0.8, alpha=0.7)
+
+        ax.set_title(row_title)
+        ax.axis("off")
+
+    # build list of rows to plot
+    rows = []
+
+    # anchor view1
+    rows.append(("anchor view1", x1[i]))
+
+    # paired positive view2
+    s_pair = float(sim[i, paired_j].item())
+    rows.append((f"paired pos view2 (j={paired_j}, cos={s_pair:.3f})", x2[paired_j]))
+
+    # extra positives
+    for j in extra_pos_js.tolist():
+        s = float(sim[i, j].item())
+        rows.append((f"extra POS view2 (j={j}, cos={s:.3f})", x2[j]))
+
+    # hard negatives
+    for j in top_neg_js.tolist():
+        s = float(sim[i, j].item())
+        rows.append((f"hard NEG view2 (j={j}, cos={s:.3f})", x2[j]))
+
+    # plot
+    nrows = len(rows)
+    fig, axes = plt.subplots(nrows, 1, figsize=(min(28, 2.4 * (x1.size(1)//frame_stride + 1)), 4.8 * nrows), sharey=True)
+    if nrows == 1:
+        axes = [axes]
+
+    for ax, (rt, xbt) in zip(axes, rows):
+        Xin = xbt[::frame_stride, :, 0:2].detach().cpu()  # (T',N,2)
+        draw_seq(ax, Xin, rt)
+
+    fig.suptitle(
+        f"{title_prefix} anchor i={i} | m={m} | mutual={mutual} | thr={sim_threshold} | extra_pos={len(extra_pos_js)}",
+        y=0.995
+    )
+    plt.tight_layout()
+    plt.show()
+    return fig

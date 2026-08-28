@@ -323,6 +323,9 @@ def init_log_summary(model_name: str):
         log_summary[data_type]['activity_l1']=[]
         log_summary[data_type]['pos_similarity']=[]
         log_summary[data_type]['neg_similarity']=[]
+        log_summary[data_type]['invariance_loss']=[]
+        log_summary[data_type]['variance_loss']=[]
+        log_summary[data_type]['covariance_loss']=[]
         log_summary[data_type]['conf_norm']=[]
         log_summary[data_type]['bal_norm']=[]
         log_summary[data_type]['alignment_score']=[]
@@ -376,7 +379,8 @@ def print_losses(model_name: str,
         return f"{val:<{width}.{precision}f}"
 
     loss_names = [
-        "total_loss", "pos_similarity", "neg_similarity", "reconstruct_loss", "prior_loss", "kl_div",
+        "total_loss", "pos_similarity", "neg_similarity", "invariance_loss", 
+        "variance_loss", "covariance_loss", "reconstruct_loss", "prior_loss", "kl_div",
         "kmeans_loss", "cat_clust_loss", "distill_loss", "temporal_loss", 
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
@@ -401,6 +405,7 @@ def print_losses(model_name: str,
             key_label = name.replace("_loss", "").replace("_", "")
             key_label = key_label.replace("reconstruct", "recon")
             key_label = key_label.replace("similarity", "-sim")
+            key_label = key_label.replace("variance", "var")
             line += f" {key_label[:9]:<9}: {_fmt_loss(name, logs)} |"
             if (z + 1) % 5 == 0 and z != len(loss_names) - 1:  # line wrap for long outputs
                 line += "\n          "
@@ -428,8 +433,9 @@ def average_logs(logs_list: Iterable[Dict[str, float]]) -> Dict[str, float]:
     out: Dict[str, Tuple[float, int]] = {}
     for logs in logs_list:
         for k, v in logs.items():
-            s, n = out.get(k, (0.0, 0))
-            out[k] = (s + float(v), n + 1)
+            if v is not None:
+                s, n = out.get(k, (0.0, 0))
+                out[k] = (s + float(v), n + 1)
     return {k: s / max(n, 1) for k, (s, n) in out.items()}
 
 

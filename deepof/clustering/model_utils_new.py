@@ -73,6 +73,12 @@ class CommonFitCfg:
     limit_train_batches: Optional[int] = 1000
     limit_val_batches: Optional[int] = 1000
 
+    #TCN encoder
+    tcn_conv_filters: Optional[int] = 32,
+    tcn_kernel_size: Optional[int] = 4,
+    tcn_conv_stacks: Optional[int] = 2,
+    tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8), 
+
 
 @dataclass
 class TurtleTeacherCfg:
@@ -187,6 +193,17 @@ class ContrastiveCfg:
     aug_p_interp: float = 0.3
     aug_noise_sigma: float = 0.03
     aug_p_noise: float = 0.0
+
+    #info nce
+    sim_threshold: float = 0.95,
+
+    # vicereg
+    vicreg_lambda_inv: float = 25.0,
+    vicreg_lambda_var: float = 25.0,
+    vicreg_lambda_cov: float = 0.5,
+    vicreg_gamma: float = 1.0,
+    vicreg_eps: float = 1e-4,
+
 
 
 #################
@@ -368,7 +385,7 @@ def recompute_edges(
 def ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
     ckpt_dir = os.path.join(common_cfg.output_path, "models", model_name.lower(), f"run_{common_cfg.run}")
     os.makedirs(ckpt_dir, exist_ok=True)
-    best_val_path = os.path.join(ckpt_dir, "best_model_val.pth")
+    best_val_path = os.path.join(ckpt_dir, "best_model_val")
     best_score_path = os.path.join(ckpt_dir, "best_model_score.pth")
     teacher_init_path = os.path.join(ckpt_dir, "model_teacher_init.pth")
     return ckpt_dir, best_val_path, best_score_path, teacher_init_path
@@ -431,7 +448,7 @@ def check_model_inputs(
     encoder_opts = ["recurrent", "tcn", "transformer"]
     kl_annealing_mode_opts = ["linear","sigmoid","tf_sigmoid"]
     contrastive_similarity_function_opts = ["cosine","dot","euclidean","edit"]
-    contrastive_loss_function_ops=["nce","fc", "dlc", "hard_dcl"]
+    contrastive_loss_function_ops=["nce","fc", "dcl", "hard_dcl", "vicreg"]
 
     # =========================================================================
     # 4. Configure and run valid checks
@@ -857,6 +874,10 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             use_gnn=bool(spec.get("use_gnn", True)),
             interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
             kmeans_loss=float(spec.get("kmeans_loss", 0.0)),
+            tcn_conv_filters=int(spec.get("tcn_conv_filters", 32)),
+            tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
+            tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
+            tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
         )
 
     elif model_name == "contrastive":
@@ -874,6 +895,10 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             beta=float(spec.get("beta", 0.1)),
             tau=float(spec.get("tau", 0.1)),
             interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
+            tcn_conv_filters=int(spec.get("tcn_conv_filters", 32)),
+            tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
+            tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
+            tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
         )
 
     elif model_name == "vade":
@@ -889,6 +914,10 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             kmeans_loss=float(spec.get("kmeans_loss", 1.0)),
             interaction_regularization=float(spec.get("interaction_regularization", 0.0)),
             lens_enabled=bool(spec.get("lens_enabled", False)),
+            tcn_conv_filters=int(spec.get("tcn_conv_filters", 32)),
+            tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
+            tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
+            tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
         )
 
     else: # pragma: no cover

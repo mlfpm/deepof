@@ -538,10 +538,10 @@ class TCNEncoderPT(nn.Module):
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         use_gnn: bool = True,
-        conv_filters: int = 32,
+        conv_filters: int = 32, #16,
         kernel_size: int = 4,
-        conv_stacks: int = 2,
-        conv_dilations: Iterable[int] = (1, 2, 4, 8),
+        conv_stacks: int = 2, #1,
+        conv_dilations: Iterable[int] = (1, 2, 4, 8), #(1,2,4),
         padding: str = "causal",
         use_skip_connections: bool = True,
         dropout_rate: float = 0.0,
@@ -565,7 +565,7 @@ class TCNEncoderPT(nn.Module):
             conv_dilations=tuple(conv_dilations),
             padding=padding,
             use_skip_connections=use_skip_connections,
-            dropout_rate=float(dropout_rate),
+            dropout_rate=float(0.0), #no dropout for TCN blocks
             activation=activation,
             use_batch_norm=use_batch_norm,
             return_sequences=False,
@@ -593,10 +593,14 @@ class TCNEncoderPT(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(final_in, 2 * latent_dim),
             nn.ReLU(),
-            BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
+            nn.Dropout(dropout_rate),          # add dropout here too
+            nn.LayerNorm(2 * latent_dim),      # safer than BN
+            #BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
             nn.Linear(2 * latent_dim, latent_dim),
             nn.ReLU(),
-            BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
+            nn.Dropout(dropout_rate),
+            nn.LayerNorm(latent_dim),
+            #BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
             nn.Linear(latent_dim, latent_dim),
         )
         for m in self.head.modules():
@@ -1435,6 +1439,10 @@ def init_encoder_decoder(
     n_nodes: int,
     n_features_per_node: int,
     time_steps: int,
+    tcn_conv_filters: int = 32,
+    tcn_kernel_size: int = 4,
+    tcn_conv_stacks: int = 2,
+    tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
 ):
     """
     Initialize encoder/decoder modules based on encoder type.
@@ -1472,6 +1480,10 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
             use_gnn=use_gnn,
             interaction_regularization=interaction_regularization,
+            conv_filters=tcn_conv_filters,
+            kernel_size=tcn_kernel_size,
+            conv_stacks=tcn_conv_stacks,
+            conv_dilations=tcn_conv_dilations,
         )
         decoder = TCNDecoderPT(
             output_shape=(time_steps, decoder_output_features),
@@ -1525,6 +1537,10 @@ class VQVAEPT(nn.Module):
         kmeans_loss: float = 0.0,
         interaction_regularization: float = 0.0,      
         beta: float = 1.0,
+        tcn_conv_filters: int = 32,
+        tcn_kernel_size: int = 4,
+        tcn_conv_stacks: int = 2,
+        tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
     ):
         """Initialize a VQ-VAE model.
 
@@ -1562,6 +1578,10 @@ class VQVAEPT(nn.Module):
             n_nodes=n_nodes,
             n_features_per_node=n_features_per_node,
             time_steps=time_steps,
+            conv_filters=tcn_conv_filters,
+            kernel_size=tcn_kernel_size,
+            conv_stacks=tcn_conv_stacks,
+            conv_dilations=tcn_conv_dilations,
         )
         
         # Initialize Vector Quantizer
@@ -1807,6 +1827,10 @@ class VaDEPT(nn.Module):
         kmeans_loss: float = 1.0,
         interaction_regularization: float = 0.0,
         lens_enabled = False,
+        tcn_conv_filters: int = 32,
+        tcn_kernel_size: int = 4,
+        tcn_conv_stacks: int = 2,
+        tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
     ):
         super().__init__()
         
@@ -1827,6 +1851,10 @@ class VaDEPT(nn.Module):
             n_nodes=n_nodes,
             n_features_per_node=n_features_per_node,
             time_steps=time_steps,
+            conv_filters=tcn_conv_filters,
+            kernel_size=tcn_kernel_size,
+            conv_stacks=tcn_conv_stacks,
+            conv_dilations=tcn_conv_dilations,
         )        
 
         self.latent_space = GaussianMixtureLatentPT(
@@ -2003,6 +2031,10 @@ class ContrastivePT(nn.Module):
         beta: float = 0.1,
         tau: float = 0.1,
         interaction_regularization: float = 0.0,
+        tcn_conv_filters: int = 32,
+        tcn_kernel_size: int = 4,
+        tcn_conv_stacks: int = 2,
+        tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
     ):
         super().__init__()
 
@@ -2046,6 +2078,10 @@ class ContrastivePT(nn.Module):
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
                 interaction_regularization=interaction_regularization,
+                conv_filters=tcn_conv_filters,
+                kernel_size=tcn_kernel_size,
+                conv_stacks=tcn_conv_stacks,
+                conv_dilations=tcn_conv_dilations,
             )
         elif encoder_type.lower() == "transformer":
             self.encoder = TFMEncoderPT(
