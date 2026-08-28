@@ -1578,10 +1578,10 @@ class VQVAEPT(nn.Module):
             n_nodes=n_nodes,
             n_features_per_node=n_features_per_node,
             time_steps=time_steps,
-            conv_filters=tcn_conv_filters,
-            kernel_size=tcn_kernel_size,
-            conv_stacks=tcn_conv_stacks,
-            conv_dilations=tcn_conv_dilations,
+            tcn_conv_filters=tcn_conv_filters,
+            tcn_kernel_size=tcn_kernel_size,
+            tcn_conv_stacks=tcn_conv_stacks,
+            tcn_conv_dilations=tcn_conv_dilations,
         )
         
         # Initialize Vector Quantizer
@@ -1851,10 +1851,10 @@ class VaDEPT(nn.Module):
             n_nodes=n_nodes,
             n_features_per_node=n_features_per_node,
             time_steps=time_steps,
-            conv_filters=tcn_conv_filters,
-            kernel_size=tcn_kernel_size,
-            conv_stacks=tcn_conv_stacks,
-            conv_dilations=tcn_conv_dilations,
+            tcn_conv_filters=tcn_conv_filters,
+            tcn_kernel_size=tcn_kernel_size,
+            tcn_conv_stacks=tcn_conv_stacks,
+            tcn_conv_dilations=tcn_conv_dilations,
         )        
 
         self.latent_space = GaussianMixtureLatentPT(
