@@ -205,7 +205,7 @@ def test_embedding_model_fittingPT(model_name):
         return dummy_return
 
     def fake_fit_contrastive(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer, device):
+                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer, device, model):
         fit_calls["contrastive"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -216,6 +216,7 @@ def test_embedding_model_fittingPT(model_name):
             "contrastive_cfg": contrastive_cfg,
             "writer": writer,
             "device": device,
+            "model": model,
         })
         return dummy_return
 
@@ -797,6 +798,7 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
         teacher_cfg=teacher_cfg,
         vade_cfg=vade_cfg,
         writer=writer,
+        device=torch.device("cpu"),
     )
 
     assert isinstance(model_val, deepof.clustering.models_new.VaDEPT)
@@ -1046,6 +1048,7 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
         common_cfg=common_cfg,
         teacher_cfg=teacher_cfg,
         writer=writer,
+        device=torch.device("cpu"),
     )
 
     assert isinstance(model_val, deepof.clustering.models_new.VQVAEPT)
@@ -1326,6 +1329,7 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
         teacher_cfg=teacher_cfg,
         contrastive_cfg=contrastive_cfg,
         writer=writer,
+        device=torch.device("cpu"),
     )
 
     assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
@@ -1409,7 +1413,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
     a = torch.randn(B, T, E, F_edge, device=device)
     idx = torch.arange(B, device=device)
 
-    result = step_fn(model, (x, a, idx), SimpleNamespace(edge_index=edge_index_global, edge_index_local=edge_index_local, contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, apply_distill=False))
+    result = step_fn(model, (x, a, idx), SimpleNamespace(edge_index=edge_index_global, edge_index_local=edge_index_local, contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, apply_distill=False, epoch=0))
 
     optimizer.zero_grad()
     result.loss.backward()
@@ -1553,6 +1557,7 @@ def test_contrastive_backward_step_with_distillation(
             distill_sharpen_T=0.5,
             distill_conf_weight=False,
             distill_conf_thresh=0.6,
+            epoch=0,
         ),
     )
 
