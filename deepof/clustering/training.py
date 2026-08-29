@@ -527,7 +527,7 @@ def step_contrastive_distill(
     a = slice_time_per_sample(a_full, starts, half_len)
         
     # Encode via forward for DP compatibility
-    if base.loss_function != "vicreg":
+    if False: #base.loss_function != "vicreg":
         z = model(x, a)
     else:
         x_aug2, a_aug2 = _make_augmented_view(
@@ -565,7 +565,7 @@ def step_contrastive_distill(
         z, z_aug,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
-        temperature=base.temperature, #float(base.temperature*0.9**n_pos_samples),
+        temperature=float(base.temperature*0.9**n_pos_samples),
         tau=base.tau,
         beta=base.beta,
         elimination_topk=0.1,
@@ -574,8 +574,8 @@ def step_contrastive_distill(
         vicreg_lambda_cov = ctx.contrastive_cfg.vicreg_lambda_cov, #0.5,
         vicreg_gamma = ctx.contrastive_cfg.vicreg_gamma, #1.0,
         vicreg_eps = ctx.contrastive_cfg.vicreg_eps, #1e-4,
-        top_m_pos=0, #n_pos_samples,#,int(ctx.epoch/35)
-        sim_threshold=0.0, #ctx.contrastive_cfg.sim_threshold, #0.95,
+        top_m_pos=n_pos_samples,#,int(ctx.epoch/35)
+        sim_threshold=ctx.contrastive_cfg.sim_threshold, #0.95,
     )
     pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
     if base.loss_function != "vicreg":
