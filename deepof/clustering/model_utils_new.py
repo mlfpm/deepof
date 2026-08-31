@@ -198,9 +198,9 @@ class ContrastiveCfg:
     aug_p_interp: float = 0.3
     aug_noise_sigma: float = 0.03
     aug_p_noise: float = 0.0
-    node_drop_min: int = 1
-    node_drop_max: int = 2
-    p_node_drop: float = 0.4  
+    aug_node_drop_min: int = 1
+    aug_node_drop_max: int = 2
+    aug_p_node_drop: float = 0.4  
 
     #info nce
     sim_threshold: float = 0.95,

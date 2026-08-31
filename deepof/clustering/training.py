@@ -779,9 +779,9 @@ def train_deepof_model(
     aug_p_interp: float = 0.4, 
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 0.4, 
-    node_drop_min: int = 1,
-    node_drop_max: int = 2,
-    p_node_drop: float = 0.4,  
+    aug_node_drop_min: int = 1,
+    aug_node_drop_max: int = 2,
+    aug_p_node_drop: float = 0.4,  
     # Dataset management 
     device: str = None,
     h5_dataset_folder: Optional[str] = None,
@@ -945,9 +945,9 @@ def train_deepof_model(
         aug_max_rot=aug_max_rot,
         aug_n_rot=aug_n_rot,
         aug_p_rot=aug_p_rot,
-        node_drop_min = node_drop_min,
-        node_drop_max = node_drop_max,
-        p_node_drop = p_node_drop,  
+        aug_node_drop_min = aug_node_drop_min,
+        aug_node_drop_max = aug_node_drop_max,
+        aug_p_node_drop = aug_p_node_drop,  
         # info nce
         sim_threshold = sim_threshold,
         # vicereg
