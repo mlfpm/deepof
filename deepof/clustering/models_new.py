@@ -593,14 +593,14 @@ class TCNEncoderPT(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(final_in, 2 * latent_dim),
             nn.ReLU(),
-            nn.Dropout(dropout_rate),          # add dropout here too
-            nn.LayerNorm(2 * latent_dim),      # safer than BN
-            #BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
+            #nn.Dropout(dropout_rate),          # add dropout here too
+            #nn.LayerNorm(2 * latent_dim),      # safer than BN
+            BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
             nn.Linear(2 * latent_dim, latent_dim),
             nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.LayerNorm(latent_dim),
-            #BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
+            #nn.Dropout(dropout_rate),
+            #nn.LayerNorm(latent_dim),
+            BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
             nn.Linear(latent_dim, latent_dim),
         )
         for m in self.head.modules():
