@@ -503,8 +503,12 @@ def step_contrastive_distill(
     if rot_precomp is None: # pragma: no cover
         raise RuntimeError("ctx.rot_precomp is required (build it once in fit_contrastive).")
 
-    x_aug, a_aug = _make_augmented_view(
-        x_full, a_full, edge_index, rot_precomp,
+    # Run Augmentation on duplicated batches to create two different augmented views efficiently
+    x_full_twice = torch.cat((x_full, x_full), dim=0)
+    a_full_twice = torch.cat((a_full, a_full), dim=0)
+
+    x_aug_twice, a_aug_twice = _make_augmented_view(
+        x_full_twice, a_full_twice, edge_index, rot_precomp,
         min_shift = contrastive_cfg.aug_min_shift,
         max_shift = contrastive_cfg.aug_max_shift,
         p_shift = contrastive_cfg.aug_p_shift,
@@ -520,25 +524,12 @@ def step_contrastive_distill(
         node_drop_max = contrastive_cfg.aug_node_drop_max,
         p_node_drop = contrastive_cfg.aug_p_node_drop,          
     )
-    x_aug2, a_aug2 = _make_augmented_view(
-        x_full, a_full, edge_index, rot_precomp,
-        min_shift = contrastive_cfg.aug_min_shift,
-        max_shift = contrastive_cfg.aug_max_shift,
-        p_shift = contrastive_cfg.aug_p_shift,
-        noise_sigma = contrastive_cfg.aug_noise_sigma,  
-        p_noise = contrastive_cfg.aug_p_noise,           
-        max_interp = contrastive_cfg.aug_max_interp,
-        min_interp = contrastive_cfg.aug_min_interp,         
-        p_interp = contrastive_cfg.aug_p_interp, 
-        max_rot = contrastive_cfg.aug_max_rot, 
-        n_rot = contrastive_cfg.aug_n_rot,
-        p_rot = contrastive_cfg.aug_p_rot, 
-        node_drop_min = contrastive_cfg.aug_node_drop_min,
-        node_drop_max = contrastive_cfg.aug_node_drop_max,
-        p_node_drop = contrastive_cfg.aug_p_node_drop,        
-    )     
 
-    z_view1 = model(x_aug, a_aug)
+    # Split back into two views
+    x_aug1, x_aug2 = torch.chunk(x_aug_twice, chunks=2, dim=0)  
+    a_aug1, a_aug2 = torch.chunk(a_aug_twice, chunks=2, dim=0)  
+
+    z_view1 = model(x_aug1, a_aug1)
     z_view2 = model(x_aug2, a_aug2)
 
     labels = getattr(ctx, "labels", None) 
@@ -586,7 +577,7 @@ def step_contrastive_distill(
 
         x = slice_time_per_sample(x_full, starts, half_len)
         plot_mined_pairs(
-            x1=x, x2=x_aug,                 # the two views that correspond to z and z_aug
+            x1=x, x2=x_aug1,                 # the two views that correspond to z and z_aug
             z1=z_view1, z2=z_view2,                 # embeddings (preferably already normalized if your loss normalizes)
             edge_index=edge_index,    # or global, whichever matches node indexing
             top_m_pos=1,
