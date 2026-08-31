@@ -1482,7 +1482,7 @@ def fit_contrastive(
 
 
     lr_scheduler = None
-    warmup_epochs = common_cfg.lr_warmup_epochs
+    warmup_epochs = np.min([common_cfg.lr_warmup_epochs,common_cfg.epochs-1])
     total_epochs = common_cfg.epochs
     warmup_steps = warmup_epochs * len(train_loader)
     total_steps = total_epochs * len(train_loader)
