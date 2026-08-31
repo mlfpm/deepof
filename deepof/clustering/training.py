@@ -515,54 +515,47 @@ def step_contrastive_distill(
         p_interp = contrastive_cfg.aug_p_interp, 
         max_rot = contrastive_cfg.aug_max_rot, 
         n_rot = contrastive_cfg.aug_n_rot,
-        p_rot = contrastive_cfg.aug_p_rot,         
+        p_rot = contrastive_cfg.aug_p_rot, 
+        node_drop_min = contrastive_cfg.aug_node_drop_min,
+        node_drop_max = contrastive_cfg.aug_node_drop_max,
+        p_node_drop = contrastive_cfg.aug_p_node_drop,          
     )
+    x_aug2, a_aug2 = _make_augmented_view(
+        x_full, a_full, edge_index, rot_precomp,
+        min_shift = contrastive_cfg.aug_min_shift,
+        max_shift = contrastive_cfg.aug_max_shift,
+        p_shift = contrastive_cfg.aug_p_shift,
+        noise_sigma = contrastive_cfg.aug_noise_sigma,  
+        p_noise = contrastive_cfg.aug_p_noise,           
+        max_interp = contrastive_cfg.aug_max_interp,
+        min_interp = contrastive_cfg.aug_min_interp,         
+        p_interp = contrastive_cfg.aug_p_interp, 
+        max_rot = contrastive_cfg.aug_max_rot, 
+        n_rot = contrastive_cfg.aug_n_rot,
+        p_rot = contrastive_cfg.aug_p_rot, 
+        node_drop_min = contrastive_cfg.aug_node_drop_min,
+        node_drop_max = contrastive_cfg.aug_node_drop_max,
+        p_node_drop = contrastive_cfg.aug_p_node_drop,        
+    )     
 
-
-    # Cut middle section from tensor
-    half_len = x_full.shape[1] // 2
-    starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
-
-    x = slice_time_per_sample(x_full, starts, half_len)
-    a = slice_time_per_sample(a_full, starts, half_len)
-        
-    # Encode via forward for DP compatibility
-    if False: #base.loss_function != "vicreg":
-        z = model(x, a)
-    else:
-        x_aug2, a_aug2 = _make_augmented_view(
-            x_full, a_full, edge_index, rot_precomp,
-            min_shift = contrastive_cfg.aug_min_shift,
-            max_shift = contrastive_cfg.aug_max_shift,
-            p_shift = contrastive_cfg.aug_p_shift,
-            noise_sigma = contrastive_cfg.aug_noise_sigma,  
-            p_noise = contrastive_cfg.aug_p_noise,           
-            max_interp = contrastive_cfg.aug_max_interp,
-            min_interp = contrastive_cfg.aug_min_interp,         
-            p_interp = contrastive_cfg.aug_p_interp, 
-            max_rot = contrastive_cfg.aug_max_rot, 
-            n_rot = contrastive_cfg.aug_n_rot,
-            p_rot = contrastive_cfg.aug_p_rot,         
-        )
-        z = model(x_aug2, a_aug2)
-
-    z_aug = model(x_aug, a_aug)
+    z_view1 = model(x_aug, a_aug)
+    z_view2 = model(x_aug2, a_aug2)
 
     labels = getattr(ctx, "labels", None) 
     seperability=torch.tensor(0)
     if labels is not None:
-        seperability=label_separation_score(z,labels)
+        seperability=label_separation_score(z_view1,labels)
 
     # Normalize row-wise
     if base.loss_function != "vicreg":
-        z = torch.nn.functional.normalize(z, dim=1)
-        z_aug = torch.nn.functional.normalize(z_aug, dim=1)
+        z_view1 = torch.nn.functional.normalize(z_view1, dim=1)
+        z_view2 = torch.nn.functional.normalize(z_view2, dim=1)
 
 
     n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/10))]))
     # Base contrastive loss
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
-        z, z_aug,
+        z_view1, z_view2,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
         temperature=float(base.temperature*0.9**n_pos_samples),
@@ -587,9 +580,14 @@ def step_contrastive_distill(
         cov_loss=l_term3
 
     if False:
+        # Cut middle section from tensor
+        half_len = x_full.shape[1] // 2
+        starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
+
+        x = slice_time_per_sample(x_full, starts, half_len)
         plot_mined_pairs(
             x1=x, x2=x_aug,                 # the two views that correspond to z and z_aug
-            z1=z, z2=z_aug,                 # embeddings (preferably already normalized if your loss normalizes)
+            z1=z_view1, z2=z_view2,                 # embeddings (preferably already normalized if your loss normalizes)
             edge_index=edge_index,    # or global, whichever matches node indexing
             top_m_pos=1,
             mutual=True,
@@ -606,7 +604,7 @@ def step_contrastive_distill(
         lambda_distill = float(ctx.lambda_scheduler.get_weight())
 
     if apply_distill and hasattr(ctx, "distill_head") and lambda_distill > 0.0:
-        z_main = z
+        z_main = z_view1
         logits = ctx.distill_head(z_main)
 
         idx = idx.to(device).long()
@@ -667,6 +665,10 @@ def train_deepof_model(
     tcn_kernel_size: Optional[int] = 4,
     tcn_conv_stacks: Optional[int] = 2,
     tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8),
+    # LEarning rate adjust5ments:
+    lr_warmup_start_factor: float = 0.5,
+    lr_warmup_end_factor : float = 1.0,
+    lr_warmup_epochs: int = 2,
     # VaDE-specific
     reg_cat_clusters: float = 0.0,
     recluster: bool = False,
@@ -777,6 +779,9 @@ def train_deepof_model(
     aug_p_interp: float = 0.4, 
     aug_noise_sigma: float = 0.03,  
     aug_p_noise: float = 0.4, 
+    node_drop_min: int = 1,
+    node_drop_max: int = 2,
+    p_node_drop: float = 0.4,  
     # Dataset management 
     device: str = None,
     h5_dataset_folder: Optional[str] = None,
@@ -820,6 +825,9 @@ def train_deepof_model(
         epochs=epochs,
         n_components=n_clusters,
         learning_rate=learning_rate,
+        lr_warmup_start_factor=lr_warmup_start_factor,
+        lr_warmup_end_factor=lr_warmup_end_factor,
+        lr_warmup_epochs = lr_warmup_epochs,
         output_path=output_path,
         data_path=data_path,
         log_history=log_history,
@@ -937,6 +945,9 @@ def train_deepof_model(
         aug_max_rot=aug_max_rot,
         aug_n_rot=aug_n_rot,
         aug_p_rot=aug_p_rot,
+        node_drop_min = node_drop_min,
+        node_drop_max = node_drop_max,
+        p_node_drop = p_node_drop,  
         # info nce
         sim_threshold = sim_threshold,
         # vicereg
@@ -1480,12 +1491,12 @@ def fit_contrastive(
 
 
     lr_scheduler = None
-    warmup_epochs = 2
+    warmup_epochs = common_cfg.lr_warmup_epochs
     total_epochs = common_cfg.epochs
     warmup_steps = warmup_epochs * len(train_loader)
     total_steps = total_epochs * len(train_loader)
 
-    warmup = LinearLR(optimizer, start_factor=0.5, end_factor=1.0, total_iters=warmup_steps)
+    warmup = LinearLR(optimizer, start_factor=common_cfg.lr_warmup_start_factor, end_factor=common_cfg.lr_warmup_end_factor, total_iters=warmup_steps)
     cosine = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=1e-5)
     lr_scheduler = SequentialLR(optimizer, schedulers=[warmup, cosine], milestones=[warmup_steps])
 

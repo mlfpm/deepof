@@ -48,6 +48,11 @@ class CommonFitCfg:
     epochs: int = 10
     n_components: int = 10
 
+    # Learning rate adjustments:
+    lr_warmup_start_factor: float = 0.5
+    lr_warmup_end_factor : float = 1.0
+    lr_warmup_epochs: int = 2
+
     # IO / logging
     output_path: str = "."
     data_path: str = "."
@@ -193,6 +198,9 @@ class ContrastiveCfg:
     aug_p_interp: float = 0.3
     aug_noise_sigma: float = 0.03
     aug_p_noise: float = 0.0
+    node_drop_min: int = 1
+    node_drop_max: int = 2
+    p_node_drop: float = 0.4  
 
     #info nce
     sim_threshold: float = 0.95,
