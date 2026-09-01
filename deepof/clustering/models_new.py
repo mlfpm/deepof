@@ -373,6 +373,29 @@ class RecurrentDecoderPT(nn.Module):
         return final_dist
     
 
+class ChannelLayerNorm1d(nn.Module):
+    """LayerNorm over C for (B, C, T). Per-timestep, causal-safe."""
+    def __init__(self, num_channels: int, eps: float = 1e-5):
+        super().__init__()
+        self.ln = nn.LayerNorm(num_channels, eps=eps)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.ln(x.transpose(1, 2)).transpose(1, 2)
+    
+
+def _make_norm(kind: str, channels: int) -> nn.Module:
+    if kind in (None, "none", "identity"):
+        return nn.Identity()
+    if kind in ("bn", "batch", "batchnorm"):
+        return nn.BatchNorm1d(channels, eps=1e-3)
+    if kind in ("ln", "layer", "layernorm"):
+        return ChannelLayerNorm1d(channels, eps=1e-5)
+    if kind in ("gn", "group", "groupnorm"):
+        groups = 8 if channels >= 8 and channels % 8 == 0 else 1
+        return nn.GroupNorm(groups, channels, eps=1e-5)
+    raise ValueError(f"unknown norm_type={kind}")
+
+
 class TemporalBlockPT(nn.Module):
     """
     Residual TCN block compatible with keras-tcn:
@@ -392,7 +415,7 @@ class TemporalBlockPT(nn.Module):
         padding: str = "causal",
         dropout_rate: float = 0.0,
         activation: str = "relu",
-        use_batch_norm: bool = True,
+        use_batch_norm: bool = False,
         conv_init_std: float = 0.05,
     ):
         super().__init__()
@@ -406,11 +429,13 @@ class TemporalBlockPT(nn.Module):
         pad = lambda: ((self.kernel_size - 1) * self.dilation) // 2 if padding == "same" else 0
 
         self.conv1 = nn.Conv1d(in_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
-        self.bn1 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        self.n1 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
+        #self.bn1 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
         self.drop1 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
 
         self.conv2 = nn.Conv1d(out_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
-        self.bn2 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        self.n2 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
+        #self.bn2 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
         self.drop2 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
 
         # 1x1 residual projection if channels differ
@@ -432,10 +457,10 @@ class TemporalBlockPT(nn.Module):
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # x: (B, C_in, T)
         y = self._causal_pad(x) if self.padding_mode == "causal" else x
-        y = self.drop1(self.act(self.bn1(self.conv1(y))))
+        y = self.drop1(self.act(self.n1(self.conv1(y))))
 
         y = self._causal_pad(y) if self.padding_mode == "causal" else y
-        y = self.drop2(self.act(self.bn2(self.conv2(y))))
+        y = self.drop2(self.act(self.n2(self.conv2(y))))
 
         skip = y  # per-block skip is the post-second-activation output
 
