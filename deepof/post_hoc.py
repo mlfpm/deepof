@@ -14,6 +14,8 @@ from itertools import product, combinations
 from multiprocessing import cpu_count
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List, Sequence
 from sklearn.cluster import MiniBatchKMeans
+from scipy.special import logsumexp
+from scipy.linalg import fractional_matrix_power
 from scipy.ndimage import uniform_filter1d
 from deeptime.markov import TransitionCountEstimator
 from deeptime.markov.msm import MaximumLikelihoodMSM
@@ -1031,7 +1033,7 @@ def get_contrastive_soft_counts_gmm(
     animal_ids: list,
     window_size: int = 12,
     supervised_annotations=None,
-    N_clusters_per_gate: int = 8,
+    N_clusters_per_gate: list = [16,4,4],
     M_gates: int = 3,
     gate_edges: Optional[Dict[Any, np.ndarray]] = None,
     reg_covar: float = 1e-5,
@@ -1089,7 +1091,7 @@ def get_contrastive_soft_counts_gmm(
                     if idx.size > 0:
                         bin_segments.append(Z[idx, :])
 
-                if n_windows < max(10, N_clusters_per_gate):
+                if n_windows < max(10, N_clusters_per_gate[b]):
                     models[gate].append(None)
                     pbar.update(1)
                     continue
@@ -1097,7 +1099,7 @@ def get_contrastive_soft_counts_gmm(
                 X_fit = _reservoir_sample(bin_segments, int(sample_size), seed=seed_b)
 
                 gmm = GaussianMixture(
-                    n_components=int(N_clusters_per_gate),
+                    n_components=int(N_clusters_per_gate[b]),
                     covariance_type="full",
                     reg_covar=float(reg_covar),
                     random_state=seed_b,
@@ -1110,11 +1112,12 @@ def get_contrastive_soft_counts_gmm(
                 pbar.update(1)
 
     # ---- decode per gate ----
-    K_total = M_gates_eff * N_clusters_per_gate
+    K_total = np.sum(np.array(N_clusters_per_gate))
     soft_counts_out_by_gate = {gate: {} for gate in gates}
     table_path = os.path.join(
         coordinates._project_path, coordinates._project_name, "Tables"
     )
+    N_cumulative_clusters=np.cumsum([0]+N_clusters_per_gate)
 
     for key in tqdm.tqdm(
         keys,
@@ -1123,20 +1126,20 @@ def get_contrastive_soft_counts_gmm(
     ):
         Z0 = _get_Z(Z_by_key, embeddings, key)
 
-        for gate in gates:
+        for  gate_idx, gate in enumerate(gates):
             P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
 
             for b in range(M_gates_eff):
                 model = models[gate][b]
                 mask = gate_masks[gate][b][key]
                 block = slice(
-                    b * N_clusters_per_gate,
-                    (b + 1) * N_clusters_per_gate,
+                    N_cumulative_clusters[b],
+                    N_cumulative_clusters[b+1],
                 )
 
                 if model is None:
                     if np.any(mask):
-                        P[mask, block] = 1.0 / N_clusters_per_gate
+                        P[mask, block] = 1.0 / N_clusters_per_gate[b]
                     continue
 
                 idx = np.flatnonzero(mask)
@@ -1290,11 +1293,17 @@ def _fit_pcca_memberships(
     N_clusters_per_gate: int,
 ):
     """
-    Fit MSM and compute PCCA memberships.
+    Fit MSM + PCCA.
 
-    Returns:
-        active_syms: np.ndarray[int32] of shape (n_active,)
-        chi: np.ndarray[float32] of shape (n_active, N_clusters_per_gate)
+    Returns dict with:
+      active_syms : (n_active,) microstate ids in k-means label space
+      chi         : (n_active, N_clusters_per_gate) PCCA memberships
+      P_micro     : (n_active, n_active) MSM transition matrix at `lagtime`
+      pi_micro    : (n_active,) stationary distribution
+      P_macro     : (K, K) coarse-grained transitions  (K = N_clusters_per_gate)
+      pi_macro    : (K,)
+      lagtime     : int
+    or None on failure.
     """
     counts_est = TransitionCountEstimator(
         lagtime=int(lagtime),
@@ -1308,24 +1317,59 @@ def _fit_pcca_memberships(
 
     n_active = active_syms.shape[0] if active_syms is not None else (n_msm or 0)
     if n_active < 2:
-        return None, None
+        return None
 
     if active_syms is None:
         active_syms = np.arange(n_active, dtype=np.int32)
 
     K_request = int(min(N_clusters_per_gate, n_active))
     if K_request < 2:  # pragma: no cover
-        return None, None
+        return None
 
-    chi_eff = _pcca_memberships(msm, K_request)
-    chi_eff = np.asarray(chi_eff, dtype=np.float32)
+    # Transition matrix / stationary on the *active* set (same order as chi rows)
+    P_micro = np.asarray(msm.transition_matrix, dtype=np.float64)
+    if P_micro.shape != (n_active, n_active):  # pragma: no cover
+        return None
+    P_micro = _row_normalize(P_micro)
 
+    if hasattr(msm, "stationary_distribution") and msm.stationary_distribution is not None:
+        pi_micro = np.asarray(msm.stationary_distribution, dtype=np.float64).reshape(-1)
+    else:  # pragma: no cover
+        pi_micro = np.ones(n_active, dtype=np.float64)
+    pi_micro = np.maximum(pi_micro, 0.0)
+    pi_micro = pi_micro / max(pi_micro.sum(), 1e-12)
+
+    pcca = msm.pcca(int(K_request))
+    chi_eff = None
+    for attr in ("memberships", "chi"):
+        if hasattr(pcca, attr):
+            chi_eff = np.asarray(getattr(pcca, attr), dtype=np.float32)
+            break
+    if chi_eff is None:  # pragma: no cover
+        raise RuntimeError("Could not obtain PCCA memberships. Check deeptime version.")
     if chi_eff.shape[0] != n_active:  # pragma: no cover
-        return None, None
+        return None
 
-    # Pad to N_clusters_per_gate if needed
+    # Prefer deeptime's coarse matrix when it matches K_request
+    P_macro_eff = None
+    pi_macro_eff = None
+    if hasattr(pcca, "coarse_grained_transition_matrix"):
+        cand = np.asarray(pcca.coarse_grained_transition_matrix, dtype=np.float64)
+        if cand.shape == (K_request, K_request) and np.all(np.isfinite(cand)):
+            P_macro_eff = _row_normalize(np.clip(cand, 0.0, None))
+    if hasattr(pcca, "coarse_grained_stationary_probability"):
+        cand = np.asarray(pcca.coarse_grained_stationary_probability, dtype=np.float64).reshape(-1)
+        if cand.shape[0] == K_request:
+            pi_macro_eff = cand
+
+    if P_macro_eff is None or pi_macro_eff is None:
+        P_macro_eff, pi_macro_eff = _coarse_grain_transition(P_micro, pi_micro, chi_eff)
+
+    # Pad to a fixed N_clusters_per_gate so decode blocks have constant width
     if chi_eff.shape[1] == N_clusters_per_gate:
-        chi = chi_eff
+        chi = chi_eff.astype(np.float32, copy=False)
+        P_macro = P_macro_eff
+        pi_macro = pi_macro_eff
     else:
         chi = np.zeros((n_active, N_clusters_per_gate), dtype=np.float32)
         chi[:, : chi_eff.shape[1]] = chi_eff
@@ -1333,7 +1377,22 @@ def _fit_pcca_memberships(
         good = rs.squeeze(-1) > 0
         chi[good] /= rs[good]
 
-    return active_syms, chi
+        K = chi_eff.shape[1]
+        P_macro = np.eye(N_clusters_per_gate, dtype=np.float64)
+        P_macro[:K, :K] = P_macro_eff
+        pi_macro = np.zeros(N_clusters_per_gate, dtype=np.float64)
+        pi_macro[:K] = pi_macro_eff
+        pi_macro = pi_macro / max(pi_macro.sum(), 1e-12)
+
+    return {
+        "active_syms": np.asarray(active_syms, dtype=np.int32),
+        "chi": chi,
+        "P_micro": P_micro,
+        "pi_micro": pi_micro,
+        "P_macro": P_macro,
+        "pi_macro": pi_macro,
+        "lagtime": int(lagtime),
+    }
 
 
 def _build_micro2macro(
@@ -1370,7 +1429,7 @@ def _fit_msmpcca_models(
     Z_by_key,
     embeddings,
     M_gates_eff: int,
-    N_clusters_per_gate: int,
+    N_clusters_per_gate: list,
     sample_size: int,
     random_state: int,
     n_micro: int,
@@ -1409,7 +1468,7 @@ def _fit_msmpcca_models(
                     lagtime=lagtime,
                 )
 
-                if not seg_spatial or n_windows < max(50, 5 * N_clusters_per_gate):
+                if not seg_spatial or n_windows < max(50, 5 * N_clusters_per_gate[b]):
                     models[gate].append(None)
                     pbar.update(1)
                     continue
@@ -1421,7 +1480,7 @@ def _fit_msmpcca_models(
                     seed=seed_b,
                     n_micro=n_micro,
                     min_micro_per_macro=min_micro_per_macro,
-                    N_clusters_per_gate=N_clusters_per_gate,
+                    N_clusters_per_gate=N_clusters_per_gate[b],
                 )
 
                 if not seg_temporal:
@@ -1442,33 +1501,313 @@ def _fit_msmpcca_models(
 
                 # ---- 4) MSM + PCCA ----
                 try:
-                    active_syms, chi = _fit_pcca_memberships(
+                    pcca_fit = _fit_pcca_memberships(
                         dtrajs=dtrajs,
                         lagtime=lagtime,
-                        N_clusters_per_gate=N_clusters_per_gate,
+                        N_clusters_per_gate=N_clusters_per_gate[b],
                     )
                 except Exception:  # pragma: no cover
-                    active_syms, chi = None, None
+                    pcca_fit = None
 
-                if active_syms is None or chi is None:
+                if pcca_fit is None:
                     models[gate].append(None)
                     pbar.update(1)
                     continue
 
-                # ---- 5) micro -> macro mapping ----
+                # ---- 5) micro -> macro mapping (kept for lookup / fallback) ----
                 micro2macro = _build_micro2macro(
                     n_micro_eff=n_micro_eff,
-                    N_clusters_per_gate=N_clusters_per_gate,
-                    active_syms=active_syms,
-                    chi=chi,
+                    N_clusters_per_gate=N_clusters_per_gate[b],
+                    active_syms=pcca_fit["active_syms"],
+                    chi=pcca_fit["chi"],
                 )
 
                 models[gate].append(
-                    {"scaler": scaler, "kmeans": kmeans, "micro2macro": micro2macro}
+                    {
+                        "scaler": scaler,
+                        "kmeans": kmeans,
+                        "micro2macro": micro2macro,
+                        # kinetic decode
+                        "active_syms": pcca_fit["active_syms"],
+                        "chi": pcca_fit["chi"],
+                        "P_micro": pcca_fit["P_micro"],
+                        "pi_micro": pcca_fit["pi_micro"],
+                        "P_macro": pcca_fit["P_macro"],
+                        "pi_macro": pcca_fit["pi_macro"],
+                        "lagtime": pcca_fit["lagtime"],
+                        "n_micro_eff": int(n_micro_eff),
+                    }
                 )
                 pbar.update(1)
 
     return models
+
+
+def _decode_segment_kinetic(
+    Z_seg: np.ndarray,
+    model: dict,
+    *,
+    method: str = "viterbi_macro",
+    sticky: float = 0.4,
+    emit_tau: float = 1.0,
+) -> np.ndarray:
+    """
+    Decode one contiguous gated run to a (T, n_macro) row-stochastic matrix.
+
+    methods
+    -------
+    lookup:
+        old behaviour — independent k-means, then χ lookup. No MSM at decode.
+    viterbi_macro / forward_backward_macro:
+        HMM on *macro* states. Transitions = coarse PCCA matrix (per-frame + sticky).
+        Emissions = p(micro | z) @ χ, i.e. soft vote from distance to centroids.
+        This is the recommended default: state space is small and matches the ethogram.
+    viterbi_micro / forward_backward_micro:
+        HMM on *active microstates*, then map the path/posterior through χ.
+        Use if macros still flicker and you want kinetic smoothing at codebook level.
+
+    Viterbi returns (near) one-hot rows; forward-backward returns posteriors.
+    """
+    scaler = model["scaler"]
+    kmeans = model["kmeans"]
+    m2m = model["micro2macro"]  # (n_micro, n_macro)
+    n_macro = int(m2m.shape[1])
+
+    Xs = scaler.transform(Z_seg).astype(np.float32, copy=False)
+    T = int(Xs.shape[0])
+    if T == 0:  # pragma: no cover
+        return np.zeros((0, n_macro), dtype=np.float32)
+
+    method = str(method).lower()
+
+    # ----- old path (no MSM) -----
+    if method == "lookup":
+        d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
+        d = np.clip(d, 0, m2m.shape[0] - 1)
+        return np.asarray(m2m[d, :], dtype=np.float32)
+
+    # Need kinetic matrices; fall back to lookup if an old model dict is passed
+    if "P_macro" not in model or "active_syms" not in model:
+        d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
+        d = np.clip(d, 0, m2m.shape[0] - 1)
+        return np.asarray(m2m[d, :], dtype=np.float32)
+
+    active_syms = np.asarray(model["active_syms"], dtype=np.int32)
+    chi = np.asarray(model["chi"], dtype=np.float64)  # (n_active, n_macro)
+    n_active = int(active_syms.shape[0])
+    if n_active < 2:
+        d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
+        d = np.clip(d, 0, m2m.shape[0] - 1)
+        return np.asarray(m2m[d, :], dtype=np.float32)
+
+    centers_all = np.asarray(kmeans.cluster_centers_, dtype=np.float64)
+    # Only MSM-active centroids participate (inactive cells have no kinetics)
+    centers_act = centers_all[active_syms]
+    log_emit_micro = _log_emissions_to_centers(Xs, centers_act, tau=emit_tau)  # (T, n_active)
+    p_micro = np.exp(log_emit_micro)  # already log-softmaxed
+
+    lagtime = int(model.get("lagtime", 1))
+
+    if method.endswith("_micro"):
+        P = _per_frame_transition(model["P_micro"], lagtime, sticky=sticky)
+        pi = np.asarray(model["pi_micro"], dtype=np.float64).reshape(-1)
+        pi = pi / max(pi.sum(), 1e-12)
+        log_pi = _safe_log(pi)
+        log_A = _safe_log(P)
+        log_B = log_emit_micro
+
+        if method.startswith("forward_backward"):
+            gamma = _log_forward_backward(log_pi, log_A, log_B)  # (T, n_active)
+            P_out = (gamma.astype(np.float64) @ chi).astype(np.float32)
+        else:
+            path = _log_viterbi(log_pi, log_A, log_B)  # indices in active set
+            P_out = chi[path].astype(np.float32)
+            # hard-ish: peak the decoded macro (χ can be diffuse)
+            hard = np.zeros_like(P_out)
+            hard[np.arange(T), np.argmax(P_out, axis=1)] = 1.0
+            P_out = hard
+
+    elif method.endswith("_macro"):
+        P = _per_frame_transition(model["P_macro"], lagtime, sticky=sticky)
+        pi = np.asarray(model["pi_macro"], dtype=np.float64).reshape(-1)
+        pi = pi / max(pi.sum(), 1e-12)
+        log_pi = _safe_log(pi)
+        log_A = _safe_log(P)
+
+        # Soft vote: p(macro | z) = p(micro | z) χ
+        p_macro = p_micro @ chi  # (T, n_macro)
+        p_macro = np.clip(p_macro, 0.0, None)
+        p_macro = p_macro / np.maximum(p_macro.sum(axis=1, keepdims=True), 1e-12)
+        log_B = _safe_log(p_macro)
+
+        if method.startswith("forward_backward"):
+            P_out = _log_forward_backward(log_pi, log_A, log_B)
+        else:
+            path = _log_viterbi(log_pi, log_A, log_B)
+            P_out = np.zeros((T, n_macro), dtype=np.float32)
+            P_out[np.arange(T), path] = 1.0
+    else:
+        raise ValueError(
+            f"Unknown decode method '{method}'. "
+            "Use lookup, viterbi_macro, viterbi_micro, "
+            "forward_backward_macro, or forward_backward_micro."
+        )
+
+    rs = P_out.sum(axis=1, keepdims=True)
+    P_out = P_out / np.maximum(rs, 1e-12)
+    return P_out.astype(np.float32, copy=False)
+
+
+def _row_normalize(P: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    """Row-stochastic; safe for all-zero rows."""
+    P = np.asarray(P, dtype=np.float64)
+    P = np.clip(P, 0.0, None)
+    rs = P.sum(axis=1, keepdims=True)
+    rs = np.maximum(rs, eps)
+    return P / rs
+
+
+def _safe_log(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    return np.log(np.maximum(np.asarray(x, dtype=np.float64), eps))
+
+
+def _per_frame_transition(
+    P_lag: np.ndarray,
+    lagtime: int,
+    sticky: float = 0.4,
+) -> np.ndarray:
+    """
+    MSM is estimated at lag τ, but we decode every frame.
+
+    Using P_τ as a *per-frame* transition overstates jump probability
+    (P_τ ≈ P_1^τ has more off-diagonal mass than P_1). Try P_1 ≈ P_τ^{1/τ};
+    if that is not a valid stochastic matrix, keep P_τ and rely on `sticky`.
+
+    sticky mixes in Identity so isolated 1-frame k-means flips are expensive.
+    """
+    P = _row_normalize(P_lag)
+    lag = max(int(lagtime), 1)
+
+    if lag > 1:
+        try:
+            P1 = np.real(fractional_matrix_power(P, 1.0 / lag))
+            P1 = np.clip(P1, 0.0, None)
+            if (not np.all(np.isfinite(P1))) or np.any(P1.sum(axis=1) <= 0):
+                raise FloatingPointError("invalid fractional transition")
+            P = _row_normalize(P1)
+        except Exception:
+            # Conservative fallback: stickier than the true P_1.
+            P = _row_normalize(P)
+
+    sticky = float(np.clip(sticky, 0.0, 1.0))
+    if sticky > 0.0:
+        P = (1.0 - sticky) * P + sticky * np.eye(P.shape[0], dtype=np.float64)
+        P = _row_normalize(P)
+    return P
+
+
+def _coarse_grain_transition(
+    P: np.ndarray,
+    pi: np.ndarray,
+    chi: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Reversible-style PCCA coarse-graining:
+        W = χᵀ diag(π) P χ
+        P_macro = row-normalise(W)
+        π_macro = χᵀ π
+    chi: (n_micro_active, n_macro)
+    """
+    P = _row_normalize(P)
+    pi = np.asarray(pi, dtype=np.float64).reshape(-1)
+    pi = np.maximum(pi, 0.0)
+    pi = pi / max(pi.sum(), 1e-12)
+    chi = np.asarray(chi, dtype=np.float64)
+
+    W = chi.T @ (pi[:, None] * P) @ chi  # (M, M)
+    P_macro = _row_normalize(W)
+    pi_macro = chi.T @ pi
+    pi_macro = np.maximum(pi_macro, 0.0)
+    pi_macro = pi_macro / max(pi_macro.sum(), 1e-12)
+    return P_macro, pi_macro
+
+
+def _log_viterbi(
+    log_pi: np.ndarray,
+    log_A: np.ndarray,
+    log_B: np.ndarray,
+) -> np.ndarray:
+    """
+    Standard log-space Viterbi.
+
+    log_pi: (K,)
+    log_A:  (K, K)   log P(j | i)  [from row i to column j]
+    log_B:  (T, K)   log emission
+    returns path: (T,) int32
+    """
+    T, K = log_B.shape
+    if T == 1:
+        return np.array([int(np.argmax(log_pi + log_B[0]))], dtype=np.int32)
+
+    delta = np.empty((T, K), dtype=np.float64)
+    psi = np.empty((T, K), dtype=np.int32)
+
+    delta[0] = log_pi + log_B[0]
+    psi[0] = 0
+
+    for t in range(1, T):
+        scores = delta[t - 1][:, None] + log_A  # (K, K): from → to
+        psi[t] = np.argmax(scores, axis=0)
+        delta[t] = scores.max(axis=0) + log_B[t]
+
+    path = np.empty(T, dtype=np.int32)
+    path[-1] = int(np.argmax(delta[-1]))
+    for t in range(T - 2, -1, -1):
+        path[t] = psi[t + 1, path[t + 1]]
+    return path
+
+
+def _log_forward_backward(
+    log_pi: np.ndarray,
+    log_A: np.ndarray,
+    log_B: np.ndarray,
+) -> np.ndarray:
+    """
+    Posterior γ_t(k) = P(s_t = k | observations). Returns (T, K) float32.
+    """
+    T, K = log_B.shape
+    log_alpha = np.empty((T, K), dtype=np.float64)
+    log_alpha[0] = log_pi + log_B[0]
+    for t in range(1, T):
+        log_alpha[t] = log_B[t] + logsumexp(log_alpha[t - 1][:, None] + log_A, axis=0)
+
+    log_beta = np.empty((T, K), dtype=np.float64)
+    log_beta[-1] = 0.0
+    for t in range(T - 2, -1, -1):
+        log_beta[t] = logsumexp(log_A + (log_B[t + 1] + log_beta[t + 1])[None, :], axis=1)
+
+    log_gamma = log_alpha + log_beta
+    log_gamma -= logsumexp(log_gamma, axis=1, keepdims=True)
+    return np.exp(log_gamma).astype(np.float32)
+
+
+def _log_emissions_to_centers(
+    Xs: np.ndarray,
+    centers: np.ndarray,
+    tau: float = 1.0,
+) -> np.ndarray:
+    """
+    log p(z_t | state k) ∝ -||z_t - c_k||² / (2τ), then log-softmax over k.
+    Xs, centers are in the *scaled* space used by k-means.
+    """
+    Xs = np.asarray(Xs, dtype=np.float64)
+    centers = np.asarray(centers, dtype=np.float64)
+    x2 = np.sum(Xs * Xs, axis=1, keepdims=True)
+    c2 = np.sum(centers * centers, axis=1)[None, :]
+    d2 = np.maximum(x2 + c2 - 2.0 * (Xs @ centers.T), 0.0)
+    log_B = -0.5 * d2 / max(float(tau), 1e-8)
+    log_B -= logsumexp(log_B, axis=1, keepdims=True)
+    return log_B
 
 
 def get_contrastive_soft_counts_msm_pcca(
@@ -1477,20 +1816,37 @@ def get_contrastive_soft_counts_msm_pcca(
     animal_ids: list,
     window_size: int = 12,
     supervised_annotations=None,
-    N_clusters_per_gate: int = 10,
+    N_clusters_per_gate: list = [16,4,4],
     M_gates: int = 3,
     gate_edges: Optional[Dict[Any, np.ndarray]] = None,
     sample_size: int = 200000,
     random_state: int = 0,
     embedding_gates: Any = "Center",
-    temporal_smooth_win: Optional[int] = 3,
+    temporal_smooth_win: Optional[int] = None,  # was 3; Viterbi replaces this
     n_micro: int = 400,
     min_micro_per_macro: int = 3,
     lagtime: int = 3,
-):  
+    # --- step 1: kinetic decode ---
+    decode_method: str = "viterbi_macro",
+    decode_sticky: float = 0.4,
+    decode_emit_tau: float = 1.0,
+):
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
+    
+    decode_method:
+        "viterbi_macro" (default) — MSM/PCCA Viterbi on macrostates.
+        "lookup" — old per-frame k-means + χ (set temporal_smooth_win=3 to match before).
+        "forward_backward_macro" — soft posteriors, same HMM.
+        "*_micro" — same but hidden chain is the active microstates.
 
+    decode_sticky:
+        Mix Identity into the per-frame transition matrix in [0, 1].
+        0.3–0.6 is a reasonable starting range.
+
+    decode_emit_tau:
+        Temperature on ||z - centroid||² emissions. Smaller → peakier votes.
+    
     Returns:
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
@@ -1529,11 +1885,12 @@ def get_contrastive_soft_counts_msm_pcca(
     )
 
     # ---- decode per gate ----
-    K_total = M_gates_eff * N_clusters_per_gate
+    K_total = np.sum(np.array(N_clusters_per_gate))
     soft_counts_out_by_gate = {gate: {} for gate in gates}
     table_path = os.path.join(
         coordinates._project_path, coordinates._project_name, "Tables"
     )
+    N_cumulative_clusters=np.cumsum([0]+N_clusters_per_gate)
 
     for key in tqdm.tqdm(
         keys,
@@ -1542,20 +1899,20 @@ def get_contrastive_soft_counts_msm_pcca(
     ):
         Z0 = _get_Z(Z_by_key, embeddings, key)
 
-        for gate in gates:
+        for gate_idx, gate in enumerate(gates):
             P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
 
             for b in range(M_gates_eff):
                 model = models[gate][b]
                 mask = gate_masks[gate][b][key]
                 block = slice(
-                    b * N_clusters_per_gate,
-                    (b + 1) * N_clusters_per_gate,
+                    N_cumulative_clusters[b],
+                    N_cumulative_clusters[b+1],
                 )
 
                 if model is None: # pragma: no cover
                     if np.any(mask):
-                        P[mask, block] = 1.0 / N_clusters_per_gate
+                        P[mask, block] = 1.0 / N_clusters_per_gate[b]
                     continue
 
                 scaler = model["scaler"]
@@ -1564,9 +1921,13 @@ def get_contrastive_soft_counts_msm_pcca(
 
                 for s, e in _mask_to_runs(mask, min_len=1):
                     seg = Z0[s:e, :]
-                    Xs = scaler.transform(seg)
-                    d = np.asarray(kmeans.predict(Xs), dtype=np.int32)
-                    P[s:e, block] = m2m[d, :]
+                    P[s:e, block] = _decode_segment_kinetic(
+                        seg,
+                        model,
+                        method=decode_method,
+                        sticky=decode_sticky,
+                        emit_tau=decode_emit_tau,
+                    )
 
             if temporal_smooth_win and temporal_smooth_win > 1:
                 P = _temporal_smooth(P, temporal_smooth_win)

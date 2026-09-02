@@ -493,6 +493,10 @@ def embedding_per_video(
     M_gates: int = 3,
     n_micro: int = 200,
     lagtime: int = 3,
+    temporal_smooth_win: int = 3,
+    decode_method: str = "lookup",
+    decode_sticky: float = 0.4,
+    decode_emit_tau: float = 1.0,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -725,12 +729,16 @@ def embedding_per_video(
             animal_ids=animal_id,
             supervised_annotations=supervised_annotations,
             embedding_gates=embedding_gates,
-            temporal_smooth_win=1,
             N_clusters_per_gate=states_per_gate,
             M_gates=M_gates,
+            n_micro=n_micro,
+            lagtime=lagtime,
+            decode_method=decode_method,
+            decode_sticky=decode_sticky,
+            decode_emit_tau=decode_emit_tau,
+            temporal_smooth_win=temporal_smooth_win,
             gate_edges=gate_edges,
-            n_micro=n_micro,  # 400
-            lagtime=lagtime,    # 3
+
         )
         if softcounts_extraction_method == "combined":
 
