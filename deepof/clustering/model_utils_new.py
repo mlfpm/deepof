@@ -218,7 +218,7 @@ class ContrastiveCfg:
 # MULTIPROCESSING
 #################
 
-def ddp_init_if_needed(backend: str = "nccl"):
+def ddp_init_if_needed(use_ddp: bool = True, backend: str = "nccl"):
     import os
     import torch
     import torch.distributed as dist
@@ -231,7 +231,7 @@ def ddp_init_if_needed(backend: str = "nccl"):
         os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
         os.environ.setdefault("MASTER_PORT", "29500")
 
-    if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ or not torch.cuda.is_available():
+    if not use_ddp or "RANK" not in os.environ or "WORLD_SIZE" not in os.environ or not torch.cuda.is_available():
         return False, 0, 1, 0
 
     if dist.is_initialized():
@@ -486,7 +486,7 @@ def embedding_per_video(
     global_scaler: Any = None,
     softcounts_extraction_method = None,
     embedding_gates: str = "Center",
-    states_per_gate: int = 8,
+    states_per_gate: list = [16,4,4],
     quality_threshold: float = 0.75,
     frac_bps_below: float = 0.5,
     samples_max: int = 227272,

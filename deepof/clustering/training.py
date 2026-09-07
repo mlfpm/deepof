@@ -778,6 +778,7 @@ def train_deepof_model(
     h5_dataset_folder: Optional[str] = None,
     bootstrap_training: Optional[bool]=False,
     bootstrap_block_len: int = 250,
+    use_ddp: bool = False,
     # Random seed
     random_seed: int = 0,
 
@@ -961,6 +962,7 @@ def train_deepof_model(
         device=device,
         bootstrap_training=bootstrap_training,
         bootstrap_block_len=bootstrap_block_len,
+        use_ddp=use_ddp,
     )
 
    
@@ -979,6 +981,7 @@ def train_deepof_model_base(
     bootstrap_training: bool = False,
     bootstrap_block_len: int = 250,
     continue_training: bool = False,
+    use_ddp: bool = False,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
 
 
@@ -993,7 +996,7 @@ def train_deepof_model_base(
     # ----------------------------------------------------
     # Check for possible multiprocessing
     # ----------------------------------------------------
-    is_ddp, rank, world_size, local_rank = ddp_init_if_needed()
+    is_ddp, rank, world_size, local_rank = ddp_init_if_needed(use_ddp)
     #print("Is DDP even active?")
     #print(is_ddp)
     #print(rank)

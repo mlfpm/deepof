@@ -12,6 +12,8 @@ Added
 - Added scale adjustment that is automatically performed during loading of old arena data in case the scale of the new and old projects deviate. If scales deviate, the user is notified with a print statement 
 - Added new clustering plot for supervised behaviors
 - Addedn vicereg loss as an option for contrastive model
+- Added new viterbi extraction option for contrastive soft_counts to `embedding_per_video`
+ 
 
 Changed
 -------
