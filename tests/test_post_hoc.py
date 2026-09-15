@@ -101,7 +101,7 @@ def test_get_contrastive_soft_counts(states):
 
 @settings(deadline=None, max_examples=25)
 @given(
-    N_clusters_per_gate=st.sampled_from([3, 2]),
+    N_clusters_per_gate=st.sampled_from([[3], [2,2]]),
     M_gates=st.sampled_from([1, 2]), 
     window_size=st.sampled_from([6, 12]),
     distance_bp=st.sampled_from(["Nose", "Center"]),
@@ -202,7 +202,7 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
 
 @settings(deadline=None, max_examples=25)
 @given(
-    N_clusters_per_gate=st.sampled_from([3, 2]),
+    N_clusters_per_gate=st.sampled_from([[3], [2,2]]),
     M_gates=st.sampled_from([1, 2]), 
     window_size=st.sampled_from([6, 12]),
     distance_bp=st.sampled_from(["Nose", "Center"]),
