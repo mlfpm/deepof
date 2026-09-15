@@ -497,6 +497,7 @@ def embedding_per_video(
     decode_method: str = "lookup",
     decode_sticky: float = 0.4,
     decode_emit_tau: float = 1.0,
+    cluster_mode: bool = False,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -643,6 +644,7 @@ def embedding_per_video(
                     _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
                     sc_list.append(sc_out.detach().cpu())
                 elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
+                    model.cluster_mode=cluster_mode
                     emb_out = model(xb, ab)
                 else: # pragma: no cover
                     raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
@@ -876,6 +878,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
 
     model_name = spec["model_name"].lower()
     log_summary['model_type']=model_name
+    legacy_tcn = not 'tcn_conv_filters' in spec.keys()
 
     # --- rebuild ---
     if model_name == "vqvae":
@@ -894,6 +897,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
+            legacy_tcn=legacy_tcn,
         )
 
     elif model_name == "contrastive":
@@ -915,6 +919,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
+            legacy_tcn=legacy_tcn,
         )
 
     elif model_name == "vade":
@@ -934,6 +939,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             tcn_kernel_size=int(spec.get("tcn_kernel_size", 4)),
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
+            legacy_tcn=legacy_tcn,
         )
 
     else: # pragma: no cover

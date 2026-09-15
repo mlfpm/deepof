@@ -417,6 +417,7 @@ class TemporalBlockPT(nn.Module):
         activation: str = "relu",
         use_batch_norm: bool = False,
         conv_init_std: float = 0.05,
+        legacy_tcn: bool = False,
     ):
         super().__init__()
         assert padding in {"causal", "same"}
@@ -429,13 +430,17 @@ class TemporalBlockPT(nn.Module):
         pad = lambda: ((self.kernel_size - 1) * self.dilation) // 2 if padding == "same" else 0
 
         self.conv1 = nn.Conv1d(in_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
-        self.n1 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
-        #self.bn1 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        if legacy_tcn:
+            self.n1 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        else:
+            self.n1 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
         self.drop1 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
 
         self.conv2 = nn.Conv1d(out_channels, out_channels, self.kernel_size, dilation=self.dilation, padding=pad(), bias=True)
-        self.n2 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
-        #self.bn2 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        if legacy_tcn:
+            self.n2 = nn.BatchNorm1d(out_channels, eps=1e-3) if use_batch_norm else nn.Identity()
+        else:
+            self.n2 = _make_norm("layer" if not use_batch_norm else "batch", out_channels)
         self.drop2 = nn.Dropout(float(dropout_rate)) if dropout_rate else nn.Identity()
 
         # 1x1 residual projection if channels differ
@@ -489,6 +494,7 @@ class TCN1DPT(nn.Module):
         activation: str = "relu",
         use_batch_norm: bool = True,
         return_sequences: bool = False,
+        legacy_tcn: bool = False,
     ):
         super().__init__()
         self.use_skip_connections = use_skip_connections
@@ -509,6 +515,7 @@ class TCN1DPT(nn.Module):
                         dropout_rate=dropout_rate,
                         activation=activation,
                         use_batch_norm=use_batch_norm,
+                        legacy_tcn=legacy_tcn,
                     )
                 )
                 c_in = conv_filters
@@ -573,6 +580,7 @@ class TCNEncoderPT(nn.Module):
         activation: str = "relu",
         interaction_regularization: float = 0.0,  # not used explicitly in PT
         use_batch_norm: bool = True,
+        legacy_tcn: bool = False,
     ):
         super().__init__()
         self.use_gnn = use_gnn
@@ -598,8 +606,8 @@ class TCNEncoderPT(nn.Module):
 
         if use_gnn:
             # Per-node and per-edge TCNs
-            self.node_tcn = TCN1DPT(in_channels=F_node, **tcn_cfg)
-            self.edge_tcn = TCN1DPT(in_channels=F_edge, **tcn_cfg)
+            self.node_tcn = TCN1DPT(in_channels=F_node, legacy_tcn=legacy_tcn, **tcn_cfg)
+            self.edge_tcn = TCN1DPT(in_channels=F_edge, legacy_tcn=legacy_tcn, **tcn_cfg)
 
             # Graph block and buffers
             self.spatial_gnn_block = CensNetConvPT(node_channels=latent_dim, edge_channels=latent_dim, activation="relu")
@@ -611,27 +619,40 @@ class TCNEncoderPT(nn.Module):
             final_in = (N * latent_dim) + (E * latent_dim)
         else:
             # Single TCN over flattened node features
-            self.flat_tcn = TCN1DPT(in_channels=N * F_node, **tcn_cfg)
+            self.flat_tcn = TCN1DPT(in_channels=N * F_node, legacy_tcn=legacy_tcn, **tcn_cfg)
             final_in = conv_filters
 
         # Head MLP: Dense(2*latent) -> BN -> Dense(latent) -> BN -> Dense(latent)
-        self.head = nn.Sequential(
-            nn.Linear(final_in, 2 * latent_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),          # add dropout here too
-            nn.LayerNorm(2 * latent_dim),      # safer than BN
-            nn.Linear(2 * latent_dim, latent_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.LayerNorm(latent_dim),
-            nn.Linear(latent_dim, latent_dim),
-        )
+        if legacy_tcn:
+            self.head = nn.Sequential(
+                nn.Linear(final_in, 2 * latent_dim),
+                nn.ReLU(),
+                BatchNorm1dKerasFP32(2 * latent_dim, eps=1e-3),
+                nn.Linear(2 * latent_dim, latent_dim),
+                nn.ReLU(),
+                BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
+                nn.Linear(latent_dim, latent_dim),
+            )
+        else:
+            self.head = nn.Sequential(
+                nn.Linear(final_in, 2 * latent_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate),          
+                nn.LayerNorm(2 * latent_dim),     
+                nn.Linear(2 * latent_dim, latent_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate),
+                nn.LayerNorm(latent_dim),
+                nn.Linear(latent_dim, latent_dim),
+            )
+
+
         for m in self.head.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
         """
         x: (B, W, N, NF)  a: (B, W, E, EF)  -> returns (B, latent_dim)
         """
@@ -681,7 +702,7 @@ class TCNEncoderPT(nn.Module):
         # As a final guard: replace any NaN/Inf just in case
         head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
         head_out = self.head(head_in)
-        return head_out
+        return head_out if not cluster_mode else head_in
 
 
 class AffineTransformedDistribution(TransformedDistribution):
@@ -766,6 +787,7 @@ class TCNDecoderPT(nn.Module):
         dropout_rate: float = 0.0,
         activation: str = "relu",
         use_batch_norm: bool = True,
+        legacy_tcn: bool = False,
     ):
         super().__init__()
         self.W, self.data_dim = int(output_shape[0]), int(output_shape[1])
@@ -796,6 +818,7 @@ class TCNDecoderPT(nn.Module):
             activation=activation,
             use_batch_norm=use_batch_norm,
             return_sequences=True,
+            legacy_tcn=legacy_tcn,
         )
         # Probabilistic reconstruction head
         self.prob_decoder = ProbabilisticDecoderPT(hidden_dim=conv_filters, data_dim=self.data_dim)
@@ -1466,6 +1489,7 @@ def init_encoder_decoder(
     tcn_kernel_size: int = 4,
     tcn_conv_stacks: int = 2,
     tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
+    legacy_tcn: bool = False,
 ):
     """
     Initialize encoder/decoder modules based on encoder type.
@@ -1507,10 +1531,12 @@ def init_encoder_decoder(
             kernel_size=tcn_kernel_size,
             conv_stacks=tcn_conv_stacks,
             conv_dilations=tcn_conv_dilations,
+            legacy_tcn=legacy_tcn,
         )
         decoder = TCNDecoderPT(
             output_shape=(time_steps, decoder_output_features),
             latent_dim=latent_dim,
+            legacy_tcn=legacy_tcn,
         )
 
     elif encoder_type.lower() == "transformer":
@@ -1563,7 +1589,8 @@ class VQVAEPT(nn.Module):
         tcn_conv_filters: int = 32,
         tcn_kernel_size: int = 4,
         tcn_conv_stacks: int = 2,
-        tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
+        tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8),
+        legacy_tcn: bool = False,
     ):
         """Initialize a VQ-VAE model.
 
@@ -1605,6 +1632,7 @@ class VQVAEPT(nn.Module):
             tcn_kernel_size=tcn_kernel_size,
             tcn_conv_stacks=tcn_conv_stacks,
             tcn_conv_dilations=tcn_conv_dilations,
+            legacy_tcn=legacy_tcn,
         )
         
         # Initialize Vector Quantizer
@@ -1854,6 +1882,7 @@ class VaDEPT(nn.Module):
         tcn_kernel_size: int = 4,
         tcn_conv_stacks: int = 2,
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
+        legacy_tcn: bool = False,
     ):
         super().__init__()
         
@@ -1878,6 +1907,7 @@ class VaDEPT(nn.Module):
             tcn_kernel_size=tcn_kernel_size,
             tcn_conv_stacks=tcn_conv_stacks,
             tcn_conv_dilations=tcn_conv_dilations,
+            legacy_tcn=legacy_tcn,
         )        
 
         self.latent_space = GaussianMixtureLatentPT(
@@ -2058,6 +2088,8 @@ class ContrastivePT(nn.Module):
         tcn_kernel_size: int = 4,
         tcn_conv_stacks: int = 2,
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
+        legacy_tcn: bool = False,
+        cluster_mode: bool = False,
     ):
         super().__init__()
 
@@ -2066,6 +2098,8 @@ class ContrastivePT(nn.Module):
         
         if T != Te: # pragma: no cover
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
+        
+        self.cluster_mode=cluster_mode
 
         self.full_time_steps = T
         self.window_size = T // 2 # To enable length shift augmentation
@@ -2105,6 +2139,7 @@ class ContrastivePT(nn.Module):
                 kernel_size=tcn_kernel_size,
                 conv_stacks=tcn_conv_stacks,
                 conv_dilations=tcn_conv_dilations,
+                legacy_tcn=legacy_tcn,
             )
         elif encoder_type.lower() == "transformer":
             self.encoder = TFMEncoderPT(
@@ -2125,5 +2160,5 @@ class ContrastivePT(nn.Module):
         Encode a half-window:
           x: (B, T_half, N, F), a: (B, T_half, E, Fe) -> (B, D)
         """
-        return self.encoder(x, a)
+        return self.encoder(x, a, self.cluster_mode)
  
