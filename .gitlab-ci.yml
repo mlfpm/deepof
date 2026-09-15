@@ -8,7 +8,7 @@ install-pypi:
   retry: 1
 
   image:
-    name: python:3.9.14
+    name: python:3.9
 
   script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
@@ -27,7 +27,7 @@ install-pypi-local:
   retry: 1
 
   image:
-    name: python:3.9.14
+    name: python:3.9
 
   before_script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6 curl
@@ -52,7 +52,7 @@ install-poetry:
   retry: 1
 
   image:
-    name: python:3.9.14
+    name: python:3.9
 
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
@@ -72,7 +72,7 @@ regression_test:
   retry: 1
 
   image:
-    name: python:3.9.14
+    name: python:3.9
 
   needs:
     - job: install-pypi-local
@@ -103,7 +103,7 @@ test:
   retry: 1
 
   image:
-    name: python:3.9.14
+    name: python:3.9
 
   needs:
     - job: install-pypi-local
