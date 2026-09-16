@@ -1049,6 +1049,19 @@ def get_contrastive_soft_counts_gmm(
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
     """
+
+    if isinstance(N_clusters_per_gate, int):
+        N_clusters_per_gate = [N_clusters_per_gate]*M_gates
+    elif isinstance(N_clusters_per_gate, List) and len(N_clusters_per_gate) != M_gates:
+        N_clusters_per_gate=[N_clusters_per_gate[0]]*M_gates
+        warning_message = (
+            "\033[38;5;208m\n"  # Set text color to orange
+            "Warning! If numbers of clusters per gate are given as a list, the list must be as long as the number\n"
+            f"of gates that were given. For {M_gates} instead the clusters per gate {N_clusters_per_gate} will be used!.\n"
+            "\033[0m"  # Reset text color
+        )
+        warnings.warn(warning_message)
+    
     
     (
         keys,
@@ -1851,6 +1864,18 @@ def get_contrastive_soft_counts_msm_pcca(
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
     """
+    
+    if isinstance(N_clusters_per_gate, int):
+        N_clusters_per_gate = [N_clusters_per_gate]*M_gates
+    elif isinstance(N_clusters_per_gate, List) and len(N_clusters_per_gate) != M_gates:
+        N_clusters_per_gate=[N_clusters_per_gate[0]]*M_gates
+        warning_message = (
+            "\033[38;5;208m\n"  # Set text color to orange
+            "Warning! If numbers of clusters per gate are given as a list, the list must be as long as the number\n"
+            f"of gates that were given. For {M_gates} instead the clusters per gate {N_clusters_per_gate} will be used!.\n"
+            "\033[0m"  # Reset text color
+        )
+        warnings.warn(warning_message)
     (
         keys,
         gates,

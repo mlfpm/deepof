@@ -137,7 +137,7 @@ class RecurrentEncoderPT(nn.Module):
         out = tmp.permute(3, 2, 1, 0).contiguous()
         return out
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
         """
         x: (B, T, N_nodes, F_per_node)
         a: (B, T, E_edges, F_per_edge)
@@ -178,7 +178,11 @@ class RecurrentEncoderPT(nn.Module):
             encoder = self.recurrent_block(x_grouped).squeeze(1)  # (B, 2*latent)
 
         # Final projection
-        return self.final_dense(encoder)
+        if not cluster_mode:
+            out = self.final_dense(encoder)
+        else:
+            out = encoder
+        return out
         
 
 class RecurrentBlockPT(nn.Module):
@@ -1137,7 +1141,7 @@ class TFMEncoderPT(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
         """
         Args:
             x: (B, W, N, NF) - node features over time
@@ -1205,7 +1209,10 @@ class TFMEncoderPT(nn.Module):
         head_in = head_in.clamp(min=-1e4, max=1e4)
         head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
         
-        out = self.head(head_in)
+        if not cluster_mode:
+            out = self.head(head_in)
+        else:
+            out = head_in
 
         # Force diversity during training by batch standardization
         if self.training and out.size(0) > 1:

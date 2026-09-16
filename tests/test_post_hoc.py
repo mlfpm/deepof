@@ -101,7 +101,7 @@ def test_get_contrastive_soft_counts(states):
 
 @settings(deadline=None, max_examples=25)
 @given(
-    N_clusters_per_gate=st.sampled_from([[3], [2,2]]),
+    N_clusters_per_gate=st.sampled_from([[3], [2,2], [2,3]]),
     M_gates=st.sampled_from([1, 2]), 
     window_size=st.sampled_from([6, 12]),
     distance_bp=st.sampled_from(["Nose", "Center"]),
@@ -194,11 +194,11 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     assert all([np.round(np.sum(soft_counts_out[animal_pair][key]))==100-window_size+1 for key in soft_counts_out[animal_pair].keys()])
 
     # Check if the states determined correspond to the requested states
+    total_clusters = np.sum(N_clusters_per_gate) if M_gates == len(N_clusters_per_gate) else np.sum(N_clusters_per_gate[0]*M_gates) 
     if exp_type=="test_single_topview":
-        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==total_clusters for key in soft_counts_out[animal_pair].keys()])
     else:
-        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
-
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==total_clusters for key in soft_counts_out[animal_pair].keys()])
 
 @settings(deadline=None, max_examples=25)
 @given(
@@ -296,10 +296,11 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
     assert all([np.round(np.sum(soft_counts_out[animal_pair][key]))==100-window_size+1 for key in soft_counts_out[animal_pair].keys()])
 
     # Check if the states determined correspond to the requested states
+    total_clusters = np.sum(N_clusters_per_gate) if M_gates == len(N_clusters_per_gate) else np.sum(N_clusters_per_gate[0]*M_gates) 
     if exp_type=="test_single_topview":
-        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate for key in soft_counts_out[animal_pair].keys()])
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==total_clusters for key in soft_counts_out[animal_pair].keys()])
     else:
-        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==N_clusters_per_gate*M_gates for key in soft_counts_out[animal_pair].keys()])
+        assert all([np.shape(soft_counts_out[animal_pair][key])[1]==total_clusters for key in soft_counts_out[animal_pair].keys()])
 
 
 @settings(deadline=None, max_examples=25)
