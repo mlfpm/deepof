@@ -1413,7 +1413,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
     a = torch.randn(B, T, E, F_edge, device=device)
     idx = torch.arange(B, device=device)
 
-    result = step_fn(model, (x, a, idx), SimpleNamespace(edge_index=edge_index_global, edge_index_local=edge_index_local, contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, apply_distill=False, epoch=0))
+    result = step_fn(model, (x, a, idx), SimpleNamespace(edge_index=edge_index_global, edge_index_local=edge_index_local, contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, apply_distill=False, epoch=0, num_epochs=1))
 
     optimizer.zero_grad()
     result.loss.backward()
@@ -1558,6 +1558,7 @@ def test_contrastive_backward_step_with_distillation(
             distill_conf_weight=False,
             distill_conf_thresh=0.6,
             epoch=0,
+            num_epochs=1,
         ),
     )
 

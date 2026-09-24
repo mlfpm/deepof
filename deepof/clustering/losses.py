@@ -87,24 +87,27 @@ def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool 
 
 
 def _dot_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = True) -> torch.Tensor:
+    # x: (N, D), y: (N, D) -> (N, N) or row-wise (N,)
     if create_matrix:
         return x @ y.t()
-    else: 
-        return torch.diagonal(x @ y.t())
+    else:
+        return (x * y).sum(dim=-1)
 
 
-def _euclidean_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    x1 = x.unsqueeze(1)  # (N, 1, D)
-    y1 = y.unsqueeze(0)  # (1, N, D)
-    d = torch.sqrt(torch.clamp(((x1 - y1) ** 2).sum(dim=2), min=0.0))
+def _euclidean_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = True) -> torch.Tensor:
+    # x: (N, D), y: (N, D) -> (N, N) or row-wise (N,)
+    if create_matrix:
+        x = x.unsqueeze(1)  # (N, 1, D)
+        y = y.unsqueeze(0)  # (1, N, D)
+    d = torch.sqrt(torch.clamp(((x - y) ** 2).sum(dim=-1), min=0.0))
     s = 1.0 / (1.0 + d)
     return s
 
 
 
-def _edit_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+def _edit_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = True) -> torch.Tensor:
     # Matches provided TF code (same as euclidean similarity transform)
-    return _euclidean_similarity_pt(x, y)
+    return _euclidean_similarity_pt(x, y, create_matrix=create_matrix)
 
 
 _SIMILARITIES: Dict[str, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
