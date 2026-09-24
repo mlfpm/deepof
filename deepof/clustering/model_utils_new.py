@@ -187,6 +187,7 @@ class ContrastiveCfg:
     contrastive_loss_function: str = "nce"
     beta: float = 0.1
     tau: float = 0.1        
+    contrastive_window: int = 12  # frames per contrastive view, cut from the preprocessed window
     aug_min_shift: int = 1
     aug_max_shift: int = 6
     aug_p_shift: float = 0.8
@@ -906,6 +907,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
             input_shape=tuple(spec["x_shape"]),
             edge_feature_shape=tuple(spec["a_shape"]),
             adjacency_matrix=np.asarray(spec["adjacency_matrix"]),
+            window_len=int(spec.get("window_len", 12)), 
             latent_dim=int(spec["latent_dim"]),
             encoder_type=str(spec["encoder_type"]),
             use_gnn=bool(spec.get("use_gnn", True)),

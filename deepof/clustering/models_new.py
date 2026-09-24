@@ -2082,6 +2082,7 @@ class ContrastivePT(nn.Module):
         input_shape: Tuple[int, int, int],         # (T, N, F)
         edge_feature_shape: Tuple[int, int, int],  # (T, E, F_edge)
         adjacency_matrix,
+        window_len: int = None,
         latent_dim: int = 8,
         encoder_type: str = "TCN",
         use_gnn: bool = True,
@@ -2109,7 +2110,9 @@ class ContrastivePT(nn.Module):
         self.cluster_mode=cluster_mode
 
         self.full_time_steps = T
-        self.window_size = T // 2 # To enable length shift augmentation
+        if window_len is None:
+            window_len = T // 2
+        self.window_size = window_len # To enable length shift augmentation
         self.input_shape = input_shape
         self.edge_feature_shape = edge_feature_shape
         self.adjacency_matrix = adjacency_matrix

@@ -3010,7 +3010,7 @@ class Coordinates:
                 pbar.update()
                 pbar.set_postfix(step="Loading speeds")
 
-                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
+                speeds = self.get_coords(selected_id=animal_id, speed=1, align=align, align_group=True, file_name='speed', return_path=return_as_paths)
 
                 pbar.update()
                 pbar.set_postfix(step="Loading distances")

@@ -35,6 +35,7 @@ table_dict = NewType("deepof_table_dict", Any)
 def select_contrastive_loss_pt(
     history: torch.Tensor,
     future: torch.Tensor,
+    shift: torch.Tensor,
     similarity: str,
     loss_fn: str = "nce",
     temperature: float = 0.1,
@@ -48,11 +49,12 @@ def select_contrastive_loss_pt(
     vicreg_eps: float = 1e-4,
     top_m_pos: int = 0,
     sim_threshold: float = 0.9,
+    weighting_level: float = 0.0,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     sim_fn = _SIMILARITIES[similarity]
 
     if loss_fn == "nce":
-        return nce_loss_pt(history, future, sim_fn, temperature, top_m_pos, sim_threshold)
+        return nce_loss_pt(history, future, shift, sim_fn, temperature, weighting_level=weighting_level)
     elif loss_fn == "dcl":
         return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
     elif loss_fn == "fc":
@@ -73,15 +75,22 @@ def select_contrastive_loss_pt(
         raise ValueError(f"Unknown loss_fn: {loss_fn}, try \"vicreg\", \"nce\", \"dcl\", \"fc\" or \"hard_dcl\"")
     
 
-def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+def _cosine_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = True) -> torch.Tensor:
     # x: (N, D), y: (N, D) -> (N, N)
-    x1 = x.unsqueeze(1)  # (N, 1, D)
-    y1 = y.unsqueeze(0)  # (1, N, D)
-    return F.cosine_similarity(x1, y1, dim=2)
+    if create_matrix:
+        x1 = x.unsqueeze(1)  # (N, 1, D)
+        y1 = y.unsqueeze(0)  # (1, N, D)
+        similarity = F.cosine_similarity(x1, y1, dim=2)
+    else:
+        similarity = F.cosine_similarity(x, y, dim=-1)
+    return similarity
 
 
-def _dot_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    return x @ y.t()
+def _dot_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = True) -> torch.Tensor:
+    if create_matrix:
+        return x @ y.t()
+    else: 
+        return torch.diagonal(x @ y.t())
 
 
 def _euclidean_similarity_pt(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -197,7 +206,7 @@ def nce_loss_pt_old(history, future, similarity, temperature=0.1):
     return loss, mean_pos, mean_neg, None
 
 
-def nce_loss_pt(
+def nce_loss_pt_alt(
     history: torch.Tensor,
     future: torch.Tensor,
     similarity: callable,
@@ -272,6 +281,152 @@ def nce_loss_pt(
         "extra_pos_mean": float(extra_pos_mean.item()) if torch.isfinite(extra_pos_mean).item() else float("nan"),
     }
 
+    return loss, mean_pos, mean_neg, debug
+
+
+def nce_loss_pt(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    shift: torch.Tensor,
+    similarity: callable,
+    temperature: float = 0.1,
+    weighting_level: float = 1.0,   # +neg / -pos on shift only; 1.0 = old recipe
+    sigmoid_start: float = 0.90, #0.6
+    sigmoid_end: float = 1.0, #0.9
+):
+    """
+    InfoNCE (history vs. future). Diagonal = sole in-batch positive.
+
+    `weighting_level` controls only the temporal shift term:
+      > 0  hard negative in the denominator.
+           softmax weight = weighting_level * (N-1)  →  1.0 matches the old boost
+      < 0  extra positive (numerator and denominator).
+           base weight = |weighting_level|, then *sigmoid(similarity)
+           so dissimilar shifts are downweighted (high sim → ~1, low sim → ~0)
+      = 0  drop the shift term
+
+    sigmoid_start / sigmoid_end only apply when weighting_level < 0.
+    """
+    sim = similarity(history, future)                            # (N, N)
+    sim2 = similarity(history, shift, create_matrix=False)       # (N,)
+    logits = sim / float(temperature)
+    logits2 = sim2 / float(temperature)
+    N = logits.size(0)
+    device = logits.device
+
+    log_num = logits.diag()                                      # (N,)
+    mean_shift_w = torch.tensor(1.0, device=device)
+
+    if weighting_level > 0.0:
+        w = float(weighting_level) * max(N - 1, 1)
+        shift_logit = logits2 + math.log(w)
+        full = torch.cat([logits, shift_logit.unsqueeze(1)], dim=1)
+        log_den = torch.logsumexp(full, dim=1)
+    elif weighting_level < 0.0:
+        low = min(float(sigmoid_start), float(sigmoid_end))
+        high = max(float(sigmoid_start), float(sigmoid_end))
+        rng = high - low
+        if rng > 1e-8:
+            frac = (sim2 - low) / rng                            # 0 at low, 1 at high
+            x = 10.0 * frac - 5.0                                # ~[-5, +5]
+            sig_w = torch.sigmoid(x)                             # dissimilar → ~0
+        else:
+            sig_w = torch.ones_like(sim2)
+        w = abs(float(weighting_level)) * sig_w                  # (N,)
+        mean_shift_w = w.mean()
+        shift_logit = logits2 + torch.log(w.clamp(min=1e-12))
+        full = torch.cat([logits, shift_logit.unsqueeze(1)], dim=1)
+        log_den = torch.logsumexp(full, dim=1)
+        log_num = torch.logaddexp(log_num, shift_logit)
+    else:
+        log_den = torch.logsumexp(logits, dim=1)
+
+    loss = (log_den - log_num).mean()
+
+    diag_mask = torch.eye(N, dtype=torch.bool, device=device)
+    mean_pos = sim[diag_mask].mean() if N > 0 else torch.tensor(0.0, device=device)
+    mean_neg = sim[~diag_mask].mean() if N > 1 else torch.tensor(0.0, device=device)
+    mean_shift = sim2.mean() if N > 0 else torch.tensor(0.0, device=device)
+
+    debug = {
+        "weighting_level": float(weighting_level),
+        "diag_pos_mean": float(mean_pos.item()),
+        "offdiag_sim_mean": float(mean_neg.item()),
+        "shift_sim_mean": float(mean_shift.item()),
+        "shift_pos_gate_mean": float(mean_shift_w.item()),
+        "shift_role": ("neg" if weighting_level > 0 else "pos" if weighting_level < 0 else "off"),
+    }
+    return loss, mean_pos, mean_neg, debug
+
+
+def nce_loss_pt_alt2(
+    history: torch.Tensor,
+    future: torch.Tensor,
+    shift: torch.Tensor,
+    similarity: callable,
+    temperature: float = 0.1,
+    weighting_level: float = 0.0,
+    sigmoid_start: float = 0.90,
+    sigmoid_end: float = 1.0,
+):
+    """
+    InfoNCE (history vs. future views).
+
+    - Diagonal entries are the sole positives.
+    - If apply_weighting=True, off-diagonal (negative) terms whose cosine
+      similarity lies in [min(start,end), max(start,end)] receive a logistic
+      weight that decays from ~1 to ~0.  Terms outside that interval saturate
+      at ~1 or ~0 respectively.  A cosine of 1.0 therefore contributes
+      (almost) nothing to the denominator.
+
+    Returns
+    -------
+    loss, mean_pos_sim, mean_neg_sim, debug_dict
+    """
+    sim = similarity(history, future)          # (N, N), cosine in [-1, 1]
+    sim2 = similarity(history, shift, create_matrix=False) # pure hard negative mined negative similarity
+    logits = sim / float(temperature)
+    logits2 = sim2 / float(temperature)
+    N = logits.size(0)
+    device = logits.device
+
+    low = min(float(sigmoid_start), float(sigmoid_end))
+    high = max(float(sigmoid_start), float(sigmoid_end))
+    rng = high - low
+
+    if weighting_level > 0.0 and rng > 1e-8:
+        frac = (sim - low) / rng                 # 0 at low, 1 at high
+        x = 10.0 * frac - 5.0                    # maps interval onto ~[-5, +5]
+        w = (1-weighting_level)*torch.ones(x.shape).to(x.device)+weighting_level*torch.sigmoid(-x)                    # ~0.993 ... ~0.007
+    else:
+        w = torch.ones_like(sim)
+
+    w = w.clone()
+    w.fill_diagonal_(1.0)                        # never down-weight true positives
+
+    # weighted log-sum-exp denominator
+    log_w = torch.log(w.clamp(min=1e-12))
+    shift_logit = logits2 + math.log(max(N - 1, 1))         # (N,)
+    full    = torch.cat([logits + log_w, shift_logit.unsqueeze(1)], dim=1)  # (N, N+1)
+    log_den = torch.logsumexp(full, dim=1)                  # (N,)
+    #log_den = torch.logsumexp(logits + log_w, dim=1)
+    log_num = logits.diag()
+    loss = (log_den - log_num).mean()
+
+    # diagnostics on the raw cosine scale
+    diag_mask = torch.eye(N, dtype=torch.bool, device=device)
+    mean_pos = sim[diag_mask].mean() if N > 0 else torch.tensor(0.0, device=device)
+    mean_neg = sim[~diag_mask].mean() if N > 1 else torch.tensor(0.0, device=device)
+    mean_neg_w = w[~diag_mask].mean() if N > 1 else torch.tensor(1.0, device=device)
+
+    debug = {
+        "weighting_level": float(weighting_level),
+        "sigmoid_low": low,
+        "sigmoid_high": high,
+        "mean_neg_weight": float(mean_neg_w.item()),
+        "diag_pos_mean": float(mean_pos.item()),
+        "offdiag_sim_mean": float(mean_neg.item()),
+    }
     return loss, mean_pos, mean_neg, debug
 
 

@@ -626,6 +626,10 @@ def _get_polygon_coords(data, animal_id=""):
         body_names = [f"{animal_id}Left_fhip", f"{animal_id}Right_fhip", 
                       f"{animal_id}Tail_base"]
         tail_names = [f"{animal_id}Tail_base", f"{animal_id}Tail_tip"]
+    elif isinstance(bodypart_list,List):
+        head_names = [f"{animal_id}{h}" for h in ["Nose","Left_ear","Spine_1","Right_ear"] if h in bodypart_list]
+        body_names = [f"{animal_id}{h}" for h in ["Spine_1","Left_fhip","Left_bhip","Tail_base","Right_bhip","Right_fhip"] if h in bodypart_list]  
+        tail_names = [f"{animal_id}{h}" for h in ["Tail_base","Tail_1","Tail_2","Tail_tip"] if h in bodypart_list] 
     else:
         raise ValueError(f"Invalid configuration: {list(data.columns.levels[0]).sort()}")  # pragma: no cover
 
@@ -3086,7 +3090,7 @@ def preprocess_kovarova(
     # Check if selected condition is valid and create 
     exclude_conditions = coordinates.get_exp_condition_names
     if exp_condition not in exclude_conditions:
-        raise ValueError("The given exp_condition name {exp_condition} does not occur in your experiment conditions {all_conditions}!")
+        raise ValueError(f"The given exp_condition name {exp_condition} does not occur in your experiment conditions!")
     exclude_conditions.remove(exp_condition) 
 
     cols_to_keep = [c for c in df_supervised_summary.columns if c not in exclude_conditions and c not in exclude_behaviours]

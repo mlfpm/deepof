@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import os
+import warnings
 import numpy as np
 import math
 
@@ -497,6 +498,7 @@ def step_contrastive_distill(
         raise RuntimeError("ctx.edge_index is required for contrastive augmentation!")
     
     contrastive_cfg=getattr(ctx, "contrastive_cfg", None)
+    window_len = getattr(ctx, "window_len", None) or contrastive_cfg.contrastive_window
     
     a_full = recompute_edges(x_full, edge_index)
     rot_precomp = getattr(ctx, "rot_precomp", None)
@@ -508,10 +510,28 @@ def step_contrastive_distill(
     a_full_twice = torch.cat((a_full, a_full), dim=0)
 
     x_aug_twice, a_aug_twice = _make_augmented_view(
-        x_full_twice, a_full_twice, edge_index, rot_precomp,
+        x_full_twice, a_full_twice, edge_index, window_len, rot_precomp,
         min_shift = contrastive_cfg.aug_min_shift,
         max_shift = contrastive_cfg.aug_max_shift,
         p_shift = contrastive_cfg.aug_p_shift,
+        noise_sigma = contrastive_cfg.aug_noise_sigma,  
+        p_noise = contrastive_cfg.aug_p_noise,           
+        max_interp = contrastive_cfg.aug_max_interp,
+        min_interp = contrastive_cfg.aug_min_interp,         
+        p_interp = contrastive_cfg.aug_p_interp, 
+        max_rot = contrastive_cfg.aug_max_rot, 
+        n_rot = contrastive_cfg.aug_n_rot,
+        p_rot = contrastive_cfg.aug_p_rot, 
+        node_drop_min = contrastive_cfg.aug_node_drop_min,
+        node_drop_max = contrastive_cfg.aug_node_drop_max,
+        p_node_drop = contrastive_cfg.aug_p_node_drop,          
+    )
+
+    x_aug_shift, a_aug_shift = _make_augmented_view(
+        x_full, a_full, edge_index, window_len, rot_precomp,
+        min_shift = max(1, window_len // 3),  # hard-negative shift scales with the view (4-12 for 12 frames)
+        max_shift = window_len,
+        p_shift = 1.0,
         noise_sigma = contrastive_cfg.aug_noise_sigma,  
         p_noise = contrastive_cfg.aug_p_noise,           
         max_interp = contrastive_cfg.aug_max_interp,
@@ -531,6 +551,7 @@ def step_contrastive_distill(
 
     z_view1 = model(x_aug1, a_aug1)
     z_view2 = model(x_aug2, a_aug2)
+    z_view3 = model(x_aug_shift, a_aug_shift)
 
     labels = getattr(ctx, "labels", None) 
     seperability=torch.tensor(0)
@@ -541,15 +562,59 @@ def step_contrastive_distill(
     if base.loss_function != "vicreg":
         z_view1 = torch.nn.functional.normalize(z_view1, dim=1)
         z_view2 = torch.nn.functional.normalize(z_view2, dim=1)
+        z_view3 = torch.nn.functional.normalize(z_view3, dim=1)
 
 
-    n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/10))]))
+    n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/90))]))
+    weighting_step=np.max([0,ctx.epoch-60])
+    #weighting_level=-ctx.epoch*1.5/ctx.num_epochs+0.75 #weighting_step/ctx.num_epochs
+
+
+	# currently suboptimal, ugly insert, needs fixing
+    def _cosine01(u: float) -> float:
+        u = 0.0 if u < 0.0 else 1.0 if u > 1.0 else u
+        return 0.5 * (1.0 - math.cos(math.pi * u))
+
+
+    def shift_weighting_level(
+        epoch: int,
+        num_epochs: int,
+        pos_hold: float = 1.0,
+        neg_hold: float = -1.0,
+    ) -> float:
+        """
+        Fractions of num_epochs (40-epoch example in parentheses):
+        [0.00, 0.25)  hold +0.75              (epochs 0–9)   boosted hard neg
+        [0.25, 0.40)  log-cosine +0.75 → ~0   (10–15)        kill boost evenly in logit space
+        [0.40, 0.425) 0                       (16)           one epoch off
+        [0.425, 0.70) cosine 0 → -0.4         (17–27)        gated soft positive
+        [0.70, 1.00]  hold -0.4               (28–end)       fixed objective for MSM
+        """
+        t = epoch / max(float(num_epochs), 1.0)
+        t_a, t_b, t_off, t_c = 0.05, 0.45, 0.55, 0.95
+
+        if t < t_a:
+            return pos_hold
+        if t < t_b:
+            u = _cosine01((t - t_a) / (t_b - t_a))
+            floor = 1e-3
+            log_w = math.log(pos_hold) + u * (math.log(floor) - math.log(pos_hold))
+            return math.exp(log_w)
+        if t < t_off:
+            return 0.0
+        if t < t_c:
+            u = _cosine01((t - t_off) / (t_c - t_off))
+            return u * neg_hold
+        return neg_hold
+
+
+    weighting_level = shift_weighting_level(ctx.epoch, ctx.num_epochs)
     # Base contrastive loss
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
-        z_view1, z_view2,
+        z_view1, z_view2, z_view3,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
-        temperature=float(base.temperature*0.9**n_pos_samples),
+        temperature=base.temperature, #float(base.temperature*1.01**ctx.epoch), #0.98  #0.95
         tau=base.tau,
         beta=base.beta,
         elimination_topk=0.1,
@@ -560,6 +625,7 @@ def step_contrastive_distill(
         vicreg_eps = ctx.contrastive_cfg.vicreg_eps, #1e-4,
         top_m_pos=n_pos_samples,#,int(ctx.epoch/35)
         sim_threshold=ctx.contrastive_cfg.sim_threshold, #0.95,
+        weighting_level=weighting_level,
     )
     pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
     if base.loss_function != "vicreg":
@@ -570,7 +636,7 @@ def step_contrastive_distill(
         var_loss=l_term2
         cov_loss=l_term3
 
-    if False:
+    if False: #ctx.epoch > 1:
         # Cut middle section from tensor
         half_len = x_full.shape[1] // 2
         starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
@@ -759,6 +825,7 @@ def train_deepof_model(
     vicreg_gamma: float = 1.0,
     vicreg_eps: float = 1e-4,
     # Contrastive augmentations
+    contrastive_window: int = 12,
     aug_min_shift: int = 1,
     aug_max_shift: int = 3,
     aug_p_shift: int = 0.4,
@@ -926,6 +993,7 @@ def train_deepof_model(
         contrastive_loss_function=contrastive_loss_function,
         beta=beta,
         tau=tau,
+        contrastive_window=contrastive_window,
         aug_min_shift=aug_min_shift,
         aug_max_shift=aug_max_shift,
         aug_p_shift=aug_p_shift,
@@ -1043,11 +1111,13 @@ def train_deepof_model_base(
     preprocessed_train, preprocessed_val = preprocessed_object
     train_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_train, data_path, "train_", force_rebuild=False,
-        h5_chunk_len=common_cfg.batch_size, supervised_dict=None
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=None, 
+        global_shuffle=True if model_name == "contrastive" else False
     )
     val_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_val, data_path, "val_", force_rebuild=False,
-        h5_chunk_len=common_cfg.batch_size, supervised_dict=None
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=None,
+        global_shuffle=True if model_name == "contrastive" else False
     )
 
     train_loader = train_dataset.make_loader(
@@ -1385,8 +1455,20 @@ def fit_contrastive(
     n_batches_per_epoch = len(train_loader)
 
     model_name = "contrastive"
+    window_len = int(contrastive_cfg.contrastive_window)
+    full_window = int(train_loader.dataset.x_shape[0])
+    if not 1 <= window_len <= full_window:
+        raise ValueError(
+            f"contrastive_window={window_len} must be between 1 and the preprocessed window size ({full_window})."
+        )
+    if window_len + 2 * contrastive_cfg.aug_max_shift > full_window:
+        warnings.warn(
+            f"contrastive_window + 2 * aug_max_shift = {window_len + 2 * contrastive_cfg.aug_max_shift} exceeds the "
+            f"preprocessed window size ({full_window}); time shifts will be clipped at the window edges."
+        )
     rebuild_spec={                    
         "model_name": model_name,
+        "window_len": window_len,
         "x_shape": train_loader.dataset.x_shape,
         "a_shape": train_loader.dataset.a_shape,
         "adjacency_matrix": adjacency_matrix.astype("float32"),
@@ -1407,6 +1489,7 @@ def fit_contrastive(
             input_shape=train_loader.dataset.x_shape,
             edge_feature_shape=train_loader.dataset.a_shape,
             adjacency_matrix=adjacency_matrix,
+            window_len=window_len,
             latent_dim=common_cfg.latent_dim,
             encoder_type=common_cfg.encoder_type,
             use_gnn=True,
@@ -1522,6 +1605,7 @@ def fit_contrastive(
             edge_index_local=edge_index_local,
             contrastive_cfg=contrastive_cfg,
             rot_precomp=rot_precomp,
+            window_len=window_len,
         )
 
         # Train and validate
@@ -1533,7 +1617,7 @@ def fit_contrastive(
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len,), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         score_value = float("nan")
@@ -2259,19 +2343,22 @@ def build_rotation_precomp(edge_index: torch.Tensor, n_nodes: int, device: torch
 def _augment_time_shift(
     x: torch.Tensor,             # (B,T_full,N,3)
     edge_index: torch.Tensor,    # (E,2) (not used here, kept for signature consistency / plotting)
+    window_len: Optional[int] = None,
     min_shift: int = 1,
     max_shift: int = 3,
     p: float = 0.8,
     plot: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Returns a half-window slice (T_full//2) from the middle of the full window.
+    Returns a window slice of length `window_len` (default T_full//2) from the middle of the full window.
     If triggered, shifts the slice start by +/- U[min_shift, max_shift] (per sample).
     Shift is consistent across the whole window (no frame-to-frame jitter).
     """
     B, T = x.shape[0], x.shape[1]
-    half_len = T // 2
-    base = (T - half_len) // 2  # == T//4 when T even
+    if window_len is None:
+        window_len = T // 2
+    window_len = min(max(window_len, 1), T)
+    base = (T - window_len) // 2
 
     # vvvvv sample shifts per sample vvvvv
     apply = (torch.rand(B, device=x.device) < p)
@@ -2282,15 +2369,15 @@ def _augment_time_shift(
     shift = shift * apply.long()  # (B,) zero if not applied
 
     start = base + shift
-    start = start.clamp(0, T - half_len)  # keep valid
+    start = start.clamp(0, T - window_len)  # keep valid
     # <^^^^ sample shifts <^^^^
 
-    x_cut = slice_time_per_sample(x, start, half_len)
+    x_cut = slice_time_per_sample(x, start, window_len)
 
     if plot: # pragma: no cover
         # show what changed (note: this plots only the cut windows)
         _plot_augmentation._edge_index = edge_index
-        _plot_augmentation(slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - half_len) // 2).int(), half_len), x_cut)
+        _plot_augmentation(slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - window_len) // 2).int(), window_len), x_cut)
 
     return x_cut
 
@@ -2448,7 +2535,6 @@ def _augment_linear_interpolate_segments(
 
     x_aug = x.clone()
 
-    # vvvvv VECTORIZED interpolation (no python loops over bs / frames) vvvvv
     device = x.device
     dtype = x_aug.dtype
 
@@ -2606,6 +2692,7 @@ def _make_augmented_view(
     x: torch.Tensor,   # (B,T,N,3)
     a: torch.Tensor,   # (B,T,E,1)
     edge_index: torch.Tensor,
+    window_len: int,
     rot_precomp: RotationPrecomp,
     min_shift: int = 1,
     max_shift: int = 6,
@@ -2627,7 +2714,7 @@ def _make_augmented_view(
     """
     x_aug_raw = x
 
-    x_aug = _augment_time_shift(x_aug_raw, edge_index, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
+    x_aug = _augment_time_shift(x_aug_raw, edge_index, window_len, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
     #x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
     x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)

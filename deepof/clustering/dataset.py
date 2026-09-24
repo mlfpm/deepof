@@ -12,6 +12,11 @@ from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_in
 import torch.distributed as dist
 from typing import Dict, Tuple, Optional
 from deepof.data_loading import get_dt
+from tqdm import tqdm
+
+_DEFAULT_SHUFFLE_SEED = 42
+_SHUFFLE_COPY_RAM = 256 * 1024 ** 2  # ~256 MiB per permute chunk
+
 
 def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
     assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, speed)!"
@@ -37,13 +42,17 @@ class BatchDictDataset:
         return_angles: Optional[bool] = False,
         supervised_dict: Optional[Dict] = None,
         read_only: bool = False,
+        global_shuffle: bool = False,
+        shuffle_seed: Optional[int] = None,
     ):
         self.dataset_folder = dataset_folder
         self.dataset_name = dataset_name
         self.return_angles = return_angles
         self.supervised_dict = supervised_dict
-        self.read_only = read_only 
-        
+        self.read_only = read_only
+        self.global_shuffle = bool(global_shuffle)
+        self.shuffle_seed = None if shuffle_seed is None else int(shuffle_seed)
+
         # Determine if the dataset has angles
         self.has_angles = False
         if get_dt(preprocessed_dict, list(preprocessed_dict.keys())[0])[2].size > 0:
@@ -57,6 +66,8 @@ class BatchDictDataset:
 
         self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len, read_only=read_only)
 
+    def _effective_shuffle_seed(self) -> int:
+        return _DEFAULT_SHUFFLE_SEED if self.shuffle_seed is None else int(self.shuffle_seed)
 
     def _does_need_build(self, preprocessed_dict: Dict) -> Tuple[bool, str]:
         """Check if HDF5 dataset needs rebuild by comparing metadata."""
@@ -101,6 +112,15 @@ class BatchDictDataset:
                     return True, "X shape mismatch"
                 n_samples = f['X'].shape[0]
 
+                stored_shuffle = bool(f.attrs.get('global_shuffle', False))
+                if stored_shuffle != bool(self.global_shuffle):
+                    return True, "global_shuffle setting changed"
+
+                if self.global_shuffle:
+                    stored_seed = int(f.attrs.get('shuffle_seed', -1))
+                    if stored_seed != self._effective_shuffle_seed():
+                        return True, "shuffle_seed changed"
+
             # Check other HDF5 files
             checks = [('a', self.a_path, 'a')]
             if self.has_angles and 'ang' in expected_shapes:
@@ -143,17 +163,34 @@ class BatchDictDataset:
             if need_build:
                 print(f"BatchDictDataset: building HDF5 at {self.dataset_folder}...")
                 print(f"  Reason: {reason}")
+                if self.global_shuffle:
+                    print(
+                        f"  global_shuffle=True (seed={self._effective_shuffle_seed()}); "
+                        "build uses temporary files and may take a while."
+                    )
                 self._build_hdf5(preprocessed_dict, h5_chunk_len=h5_chunk_len)
             else:
                 print(f"BatchDictDataset: reusing existing HDF5 at {self.dataset_folder}")
         else:
-            
+
             print(f"BatchDictDataset: reusing existing HDF5 at {self.dataset_folder}")
 
         with h5py.File(self.X_path, 'r') as f:
             X_ds = f['X']
             self.x_shape = tuple(X_ds.shape[1:])
             self.length = int(X_ds.shape[0])
+            if 'global_shuffle' in f.attrs:
+                file_gs = bool(f.attrs.get('global_shuffle', False))
+                if file_gs != self.global_shuffle:
+                    print(
+                        f"Warning: requested global_shuffle={self.global_shuffle} but "
+                        f"HDF5 has global_shuffle={file_gs}. Using file value for loading."
+                    )
+                self.global_shuffle = file_gs
+            if 'shuffle_seed' in f.attrs:
+                stored = int(f.attrs.get('shuffle_seed', -1))
+                if stored >= 0:
+                    self.shuffle_seed = stored
         with h5py.File(self.a_path, 'r') as f:
             A_ds = f['a']
             self.a_shape = tuple(A_ds.shape[1:])
@@ -178,12 +215,256 @@ class BatchDictDataset:
         self._h5_X = None
         self._h5_A = None
         self._h5_Ang = None
-        print(f"HDF5 dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, a_shape: {self.a_shape}, ang_shape: {self.ang_shape}")
+        print(
+            f"HDF5 dataset ready. Samples: {self.length}, x_shape: {self.x_shape}, "
+            f"a_shape: {self.a_shape}, ang_shape: {self.ang_shape}, "
+            f"global_shuffle: {self.global_shuffle}"
+        )
+
+    def _tmp_path(self, path: str) -> str:
+        return path + '.tmp'
+
+    def _cleanup_tmp_files(self):
+        for p in (self.X_path, self.a_path, self.ang_path, self.y_path):
+            tmp = self._tmp_path(p)
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+    def _mark_build_incomplete(self):
+        """Ensure a crashed rebuild cannot be mistaken for a complete cached dataset."""
+        if os.path.exists(self.X_path):
+            try:
+                with h5py.File(self.X_path, 'a') as f:
+                    f.attrs['build_complete'] = False
+            except Exception:
+                pass
+
+    def _write_h5_attrs(self, f_X, keys_hash: str, n_videos: int, total_samples: int, shuffled: bool, shuffle_seed: int):
+        f_X.attrs['keys_hash'] = keys_hash
+        f_X.attrs['n_videos'] = n_videos
+        f_X.attrs['n_samples'] = total_samples
+        f_X.attrs['global_shuffle'] = bool(shuffled)
+        f_X.attrs['shuffle_seed'] = int(shuffle_seed) if shuffled else -1
+        f_X.attrs['build_complete'] = True
+
+    def _sequential_write(
+        self,
+        preprocessed_dict: Dict,
+        keys,
+        x_path: str,
+        a_path: str,
+        ang_path: str,
+        y_path: Optional[str],
+        total_samples: int,
+        shapes_X,
+        shapes_A,
+        shapes_Ang,
+        shapes_Y,
+        h5_chunk_len: int,
+        keys_hash: str,
+        write_final_attrs: bool,
+        shuffle_seed: int,
+    ):
+        f_X = h5py.File(x_path, 'w')
+        f_A = h5py.File(a_path, 'w')
+        f_Ang = h5py.File(ang_path, 'w')
+        f_Y = h5py.File(y_path, 'w') if y_path is not None else None
+
+        try:
+            f_X.attrs['build_complete'] = False
+
+            X_dset = f_X.create_dataset(
+                'X', shape=(total_samples, *shapes_X), dtype='float32',
+                chunks=(h5_chunk_len, *shapes_X), compression=None, shuffle=False, fletcher32=False,
+                maxshape=(total_samples, *shapes_X),
+            )
+            A_dset = f_A.create_dataset(
+                'a', shape=(total_samples, *shapes_A), dtype='float32',
+                chunks=(h5_chunk_len, *shapes_A), compression=None, shuffle=False, fletcher32=False,
+                maxshape=(total_samples, *shapes_A),
+            )
+            Ang_dset = None
+            if self.has_angles:
+                Ang_dset = f_Ang.create_dataset(
+                    'ang', shape=(total_samples, *shapes_Ang), dtype='float32',
+                    chunks=(h5_chunk_len, *shapes_Ang), compression=None, shuffle=False, fletcher32=False,
+                    maxshape=(total_samples, *shapes_Ang),
+                )
+
+            Y_dset = None
+            if f_Y is not None:
+                Y_dset = f_Y.create_dataset(
+                    'y', shape=(total_samples, *shapes_Y), dtype='float32',
+                    chunks=(h5_chunk_len, *shapes_Y), compression=None, shuffle=False, fletcher32=False,
+                    maxshape=(total_samples, *shapes_Y),
+                )
+
+            idx = 0
+            for key in tqdm(keys, desc="BatchDictDataset: writing HDF5", unit="video"):
+                X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
+                n = int(X_batch.shape[0])
+                X_re = reorder_and_reshape(X_batch).astype(np.float32, copy=False)
+                A_re = np.expand_dims(a_batch, -1).astype(np.float32, copy=False)
+                Ang_re = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
+
+                X_dset[idx:idx+n] = X_re
+                A_dset[idx:idx+n] = A_re
+                if self.has_angles and ang_batch.size > 0:
+                    Ang_dset[idx:idx+n] = Ang_re
+
+                if Y_dset is not None:
+                    y_batch = self.supervised_dict[key]
+                    assert y_batch.shape[0] == n, \
+                        f"Shape mismatch for key {key}: X has {n} rows, Y has {y_batch.shape[0]}. Check windowing."
+
+                    Y_re = y_batch.astype(np.float32, copy=False)
+                    Y_dset[idx:idx+n] = Y_re
+
+                idx += n
+
+            if write_final_attrs:
+                self._write_h5_attrs(
+                    f_X,
+                    keys_hash=keys_hash,
+                    n_videos=len(keys),
+                    total_samples=total_samples,
+                    shuffled=False,
+                    shuffle_seed=shuffle_seed,
+                )
+        finally:
+            f_X.close()
+            f_A.close()
+            f_Ang.close()
+            if f_Y is not None:
+                f_Y.close()
+
+    def _write_shuffled_from_sequential(
+        self,
+        src_x: str,
+        src_a: str,
+        src_ang: Optional[str],
+        src_y: Optional[str],
+        perm: np.ndarray,
+        total_samples: int,
+        shapes_X,
+        shapes_A,
+        shapes_Ang,
+        shapes_Y,
+        h5_chunk_len: int,
+        keys_hash: str,
+        n_videos: int,
+        shuffle_seed: int,
+    ):
+        bytes_per = int(np.prod(shapes_X)) * 4 + int(np.prod(shapes_A)) * 4
+        if self.has_angles and shapes_Ang is not None:
+            bytes_per += int(np.prod(shapes_Ang)) * 4
+        if src_y is not None and shapes_Y is not None:
+            bytes_per += int(np.prod(shapes_Y)) * 4
+        copy_chunk = max(1, min(total_samples, _SHUFFLE_COPY_RAM // max(int(bytes_per), 1)))
+
+        rdcc_nbytes = _SHUFFLE_COPY_RAM
+        rdcc_nslots = 1_000_000
+
+        fx_s = h5py.File(src_x, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
+        fa_s = h5py.File(src_a, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
+        fang_s = (
+            h5py.File(src_ang, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
+            if (src_ang is not None and self.has_angles) else None
+        )
+        fy_s = (
+            h5py.File(src_y, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
+            if src_y is not None else None
+        )
+
+        fx_d = h5py.File(self.X_path, 'w')
+        fa_d = h5py.File(self.a_path, 'w')
+        fang_d = h5py.File(self.ang_path, 'w') if self.has_angles else None
+        fy_d = h5py.File(self.y_path, 'w') if src_y is not None else None
+
+        try:
+            fx_d.attrs['build_complete'] = False
+
+            Xd = fx_d.create_dataset(
+                'X', shape=(total_samples, *shapes_X), dtype='float32',
+                chunks=(h5_chunk_len, *shapes_X), compression=None, shuffle=False, fletcher32=False,
+                maxshape=(total_samples, *shapes_X),
+            )
+            Ad = fa_d.create_dataset(
+                'a', shape=(total_samples, *shapes_A), dtype='float32',
+                chunks=(h5_chunk_len, *shapes_A), compression=None, shuffle=False, fletcher32=False,
+                maxshape=(total_samples, *shapes_A),
+            )
+            Angd = None
+            if fang_d is not None:
+                Angd = fang_d.create_dataset(
+                    'ang', shape=(total_samples, *shapes_Ang), dtype='float32',
+                    chunks=(h5_chunk_len, *shapes_Ang), compression=None, shuffle=False, fletcher32=False,
+                    maxshape=(total_samples, *shapes_Ang),
+                )
+            Yd = None
+            if fy_d is not None:
+                Yd = fy_d.create_dataset(
+                    'y', shape=(total_samples, *shapes_Y), dtype='float32',
+                    chunks=(h5_chunk_len, *shapes_Y), compression=None, shuffle=False, fletcher32=False,
+                    maxshape=(total_samples, *shapes_Y),
+                )
+
+            Xs, As = fx_s['X'], fa_s['a']
+            Angs = fang_s['ang'] if fang_s is not None else None
+            Ys = fy_s['y'] if fy_s is not None else None
+
+            n_chunks = (total_samples + copy_chunk - 1) // copy_chunk
+            for s in tqdm(
+                range(0, total_samples, copy_chunk),
+                desc="BatchDictDataset: global shuffle",
+                unit="chunk",
+                total=n_chunks,
+            ):
+                e = min(s + copy_chunk, total_samples)
+                src_idx = perm[s:e]
+                # h5py integer fancy indexing requires monotonically increasing indices
+                order = np.argsort(src_idx, kind='mergesort')
+                sorted_idx = np.ascontiguousarray(src_idx[order], dtype=np.int64)
+                inv = np.empty_like(order)
+                inv[order] = np.arange(order.shape[0])
+
+                Xd[s:e] = np.asarray(Xs[sorted_idx])[inv]
+                Ad[s:e] = np.asarray(As[sorted_idx])[inv]
+                if Angs is not None:
+                    Angd[s:e] = np.asarray(Angs[sorted_idx])[inv]
+                if Ys is not None:
+                    Yd[s:e] = np.asarray(Ys[sorted_idx])[inv]
+
+            self._write_h5_attrs(
+                fx_d,
+                keys_hash=keys_hash,
+                n_videos=n_videos,
+                total_samples=total_samples,
+                shuffled=True,
+                shuffle_seed=shuffle_seed,
+            )
+        finally:
+            fx_s.close()
+            fa_s.close()
+            fx_d.close()
+            fa_d.close()
+            if fang_s is not None:
+                fang_s.close()
+            if fang_d is not None:
+                fang_d.close()
+            if fy_s is not None:
+                fy_s.close()
+            if fy_d is not None:
+                fy_d.close()
 
     def _build_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int]):
         keys = list(preprocessed_dict.keys())
         keys_hash = hashlib.md5(','.join(sorted(str(k) for k in keys)).encode()).hexdigest()
-        
+        shuffle_seed = self._effective_shuffle_seed()
+
         total_samples = 0
         shapes_X = None
         shapes_A = None
@@ -201,7 +482,6 @@ class BatchDictDataset:
                 shapes_A = tuple(sample_A.shape[1:])
                 shapes_Ang = tuple(sample_Ang.shape[1:])
 
-                # Check Y shape
                 if self.supervised_dict is not None:
                     sample_Y = self.supervised_dict[key][:1]
                     shapes_Y = tuple(sample_Y.shape[1:])
@@ -211,83 +491,76 @@ class BatchDictDataset:
             video_indices.append(np.full(n, i, dtype=np.int32))
 
         if h5_chunk_len is None:
-            h5_chunk_len = min(512, total_samples)
+            h5_chunk_len = min(512, max(1, total_samples))
 
-        f_X = h5py.File(self.X_path, 'w')
-        f_A = h5py.File(self.a_path, 'w')
-        f_Ang = h5py.File(self.ang_path, 'w')
-        f_Y = h5py.File(self.y_path, 'w') if self.supervised_dict is not None else None
+        video_indices = np.concatenate(video_indices, axis=0) if video_indices else np.zeros((0,), dtype=np.int32)
+
+        self._cleanup_tmp_files()
+        self._mark_build_incomplete()
+
+        y_final = self.y_path if self.supervised_dict is not None else None
+        do_shuffle = bool(self.global_shuffle) and total_samples > 1
+
+        if do_shuffle:
+            x_seq = self._tmp_path(self.X_path)
+            a_seq = self._tmp_path(self.a_path)
+            ang_seq = self._tmp_path(self.ang_path)
+            y_seq = self._tmp_path(self.y_path) if y_final is not None else None
+        else:
+            x_seq, a_seq, ang_seq, y_seq = self.X_path, self.a_path, self.ang_path, y_final
 
         try:
-            # Mark build as incomplete at start
-            f_X.attrs['build_complete'] = False
-            
-            X_dset = f_X.create_dataset(
-                'X', shape=(total_samples, *shapes_X), dtype='float32',
-                chunks=(h5_chunk_len, *shapes_X), compression=None, shuffle=False, fletcher32=False,
-                maxshape=(total_samples, *shapes_X),
+            self._sequential_write(
+                preprocessed_dict=preprocessed_dict,
+                keys=keys,
+                x_path=x_seq,
+                a_path=a_seq,
+                ang_path=ang_seq,
+                y_path=y_seq,
+                total_samples=total_samples,
+                shapes_X=shapes_X,
+                shapes_A=shapes_A,
+                shapes_Ang=shapes_Ang,
+                shapes_Y=shapes_Y,
+                h5_chunk_len=h5_chunk_len,
+                keys_hash=keys_hash,
+                write_final_attrs=not do_shuffle,
+                shuffle_seed=shuffle_seed,
             )
-            A_dset = f_A.create_dataset(
-                'a', shape=(total_samples, *shapes_A), dtype='float32',
-                chunks=(h5_chunk_len, *shapes_A), compression=None, shuffle=False, fletcher32=False,
-                maxshape=(total_samples, *shapes_A),
-            )
-            if self.has_angles:
-                Ang_dset = f_Ang.create_dataset(
-                    'ang', shape=(total_samples, *shapes_Ang), dtype='float32',
-                    chunks=(h5_chunk_len, *shapes_Ang), compression=None, shuffle=False, fletcher32=False,
-                    maxshape=(total_samples, *shapes_Ang),
+
+            if do_shuffle:
+                rng = np.random.default_rng(shuffle_seed)
+                perm = rng.permutation(total_samples).astype(np.int64, copy=False)
+                print(
+                    f"BatchDictDataset: permuting {total_samples} windows globally "
+                    f"(temporary extra disk ≈ one full copy of the dataset)."
                 )
-
-            # Create Y dataset
-            Y_dset = None
-            if f_Y is not None:
-                Y_dset = f_Y.create_dataset(
-                    'y', shape=(total_samples, *shapes_Y), dtype='float32',
-                    chunks=(h5_chunk_len, *shapes_Y), compression=None, shuffle=False, fletcher32=False,
-                    maxshape=(total_samples, *shapes_Y),
+                self._write_shuffled_from_sequential(
+                    src_x=x_seq,
+                    src_a=a_seq,
+                    src_ang=ang_seq if self.has_angles else None,
+                    src_y=y_seq,
+                    perm=perm,
+                    total_samples=total_samples,
+                    shapes_X=shapes_X,
+                    shapes_A=shapes_A,
+                    shapes_Ang=shapes_Ang,
+                    shapes_Y=shapes_Y,
+                    h5_chunk_len=h5_chunk_len,
+                    keys_hash=keys_hash,
+                    n_videos=len(keys),
+                    shuffle_seed=shuffle_seed,
                 )
-
-            idx = 0
-            for key in keys:
-                X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
-                n = int(X_batch.shape[0])
-                X_re = reorder_and_reshape(X_batch).astype(np.float32, copy=False)
-                A_re = np.expand_dims(a_batch, -1).astype(np.float32, copy=False)
-                Ang_re = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
-
-                X_dset[idx:idx+n] = X_re
-                A_dset[idx:idx+n] = A_re
-                if ang_batch.size > 0:
-                    Ang_dset[idx:idx+n] = Ang_re
-
-                # Write Y data with assertion
-                if Y_dset is not None:
-                    y_batch = self.supervised_dict[key]
-                    assert y_batch.shape[0] == n, \
-                        f"Shape mismatch for key {key}: X has {n} rows, Y has {y_batch.shape[0]}. Check windowing."
-
-                    Y_re = y_batch.astype(np.float32, copy=False)
-                    Y_dset[idx:idx+n] = Y_re
-
-                idx += n
-
-            # Store metadata and mark build complete
-            f_X.attrs['keys_hash'] = keys_hash
-            f_X.attrs['n_videos'] = len(keys)
-            f_X.attrs['n_samples'] = total_samples
-            f_X.attrs['build_complete'] = True
-            
+                video_indices = video_indices[perm]
         finally:
-            f_X.close()
-            f_A.close()
-            f_Ang.close()
-            if f_Y is not None:
-                f_Y.close()
+            if do_shuffle:
+                self._cleanup_tmp_files()
 
-        video_indices = np.concatenate(video_indices, axis=0)
         np.save(self.idx_path, video_indices)
-        print(f"HDF5 built. Samples: {total_samples}, chunks: {h5_chunk_len}")
+        print(
+            f"HDF5 built. Samples: {total_samples}, chunks: {h5_chunk_len}, "
+            f"global_shuffle: {bool(do_shuffle)}"
+        )
 
     def __len__(self):
         return self.length
@@ -346,12 +619,12 @@ class BatchDictDataset:
         permute_within_block: bool = False,
         prefetch_factor: int = 4,
         persistent_workers: Optional[bool] = None,
-        seed: Optional[int] = None,  
-        ddp_shard: bool = True, 
+        seed: Optional[int] = None,
+        ddp_shard: bool = True,
         bootstrap_training: bool = False,
         bootstrap_block_len: int = 250,
     ) -> DataLoader:
-        
+
         # get DDP identity (if needed)
         ddp_rank = 0
         ddp_world_size = 1
@@ -361,7 +634,7 @@ class BatchDictDataset:
 
         if persistent_workers is None:
             persistent_workers = num_workers > 0
-        
+
         gen = None
         if seed is not None:
             gen = torch.Generator()
@@ -384,11 +657,12 @@ class BatchDictDataset:
                 block_shuffle=block_shuffle,
                 permute_within_block=permute_within_block,
                 return_angles=self.return_angles,
-                seed=seed, 
-                ddp_rank=ddp_rank,                 
-                ddp_world_size=ddp_world_size, 
+                seed=seed,
+                ddp_rank=ddp_rank,
+                ddp_world_size=ddp_world_size,
                 bootstrap_training=bootstrap_training,
                 bootstrap_block_len=bootstrap_block_len,
+                global_shuffle=self.global_shuffle,
             )
             return DataLoader(
                 iterable,
@@ -398,7 +672,7 @@ class BatchDictDataset:
                 pin_memory=pin_memory,
                 persistent_workers=persistent_workers,
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
-                generator=gen, 
+                generator=gen,
             )
         else:
             return DataLoader(
@@ -410,7 +684,7 @@ class BatchDictDataset:
                 pin_memory=pin_memory,
                 persistent_workers=persistent_workers,
                 prefetch_factor=prefetch_factor if num_workers > 0 else None,
-                generator=gen, 
+                generator=gen,
             )
 
 
@@ -433,10 +707,11 @@ class _H5BatchIterableDataset(IterableDataset):
         permute_within_block: bool = False,
         return_angles: int = False,
         seed: Optional[int] = None,
-        ddp_rank: int = 0,                 
-        ddp_world_size: int = 1,  
-        bootstrap_training: bool = False,   
-        bootstrap_block_len: int = 250,     
+        ddp_rank: int = 0,
+        ddp_world_size: int = 1,
+        bootstrap_training: bool = False,
+        bootstrap_block_len: int = 250,
+        global_shuffle: bool = False,
     ):
         super().__init__()
         self.base_dataset = base_dataset
@@ -459,13 +734,12 @@ class _H5BatchIterableDataset(IterableDataset):
         self.ddp_world_size = ddp_world_size
         self.bootstrap_training = bootstrap_training
         self.bootstrap_block_len = int(bootstrap_block_len)
-
+        self.global_shuffle = bool(global_shuffle)
 
     def __getattr__(self, name):
         # Called only if attribute not found on self
         return getattr(self.base_dataset, name)
-    
-    
+
     def __len__(self) -> int:
         if self.n_samples is None:
             with h5py.File(self.x_path, 'r') as f:
@@ -483,12 +757,12 @@ class _H5BatchIterableDataset(IterableDataset):
 
         return total_batches
 
-    def _compute_video_ranges(self, video_idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _compute_video_ranges(self, video_idx: np.ndarray) -> tuple:
         """
         Returns:
         starts: (n_videos,) start index in [0,n)
         ends:   (n_videos,) end index (exclusive)
-        Assumes each video is contiguous in the concatenated dataset (true for your build).
+        Assumes each video is contiguous in the concatenated dataset (true without global_shuffle).
         """
         vid = np.asarray(video_idx)
         n = vid.shape[0]
@@ -500,7 +774,6 @@ class _H5BatchIterableDataset(IterableDataset):
         starts = bounds[:-1]
         ends = bounds[1:]
         return starts, ends
-
 
     def _block_bootstrap_batch_starts(
         self,
@@ -522,7 +795,6 @@ class _H5BatchIterableDataset(IterableDataset):
         v_starts, v_ends, v_lens = v_starts[ok], v_ends[ok], v_lens[ok]
         if len(v_lens) == 0:
             raise RuntimeError("No video segment long enough to provide a full batch.")
-
 
         L = int(self.bootstrap_block_len)
 
@@ -600,18 +872,31 @@ class _H5BatchIterableDataset(IterableDataset):
         if self.ddp_world_size > 1:
             n_full = (len(starts) // self.ddp_world_size) * self.ddp_world_size
             starts = starts[:n_full]
-        
-        # Bootstrap mode: Sample with replacement from ranges with a length of bootstrap_block_len
-        if self.bootstrap_training:
 
-            target_batches = len(starts)
-            starts = self._block_bootstrap_batch_starts(
-                rng=rng,
-                video_idx=video_idx,
-                n=n,
-                bs=bs,
-                target_batches=target_batches,
-            )
+        # Bootstrap: temporal blocks if storage is video-contiguous; i.i.d. batch
+        # resampling if the HDF5 was globally shuffled at build time.
+        if self.bootstrap_training:
+            if self.global_shuffle:
+                if (
+                    self.bootstrap_block_len != 1
+                    and worker_id == 0
+                    and self.ddp_rank == 0
+                ):
+                    print(
+                        "BatchDictDataset: global_shuffle=True; using i.i.d. batch "
+                        f"bootstrap (ignoring bootstrap_block_len={self.bootstrap_block_len})."
+                    )
+                if len(starts) > 0:
+                    starts = rng.choice(starts, size=len(starts), replace=True)
+            else:
+                target_batches = len(starts)
+                starts = self._block_bootstrap_batch_starts(
+                    rng=rng,
+                    video_idx=video_idx,
+                    n=n,
+                    bs=bs,
+                    target_batches=target_batches,
+                )
 
         # DDP shard first
         if self.ddp_world_size > 1:
@@ -637,7 +922,7 @@ class _H5BatchIterableDataset(IterableDataset):
             y_np = Y[s:e] if Y is not None else None
 
             if self.shuffle and self.permute_within_block:
-                perm = rng.permutation(e - s) 
+                perm = rng.permutation(e - s)
                 x_np = x_np[perm]
                 a_np = a_np[perm]
                 if ang_np is not None:
