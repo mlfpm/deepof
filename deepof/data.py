@@ -22,6 +22,9 @@ import subprocess
 import cv2
 
 def is_display_available(): # pragma: no cover
+    # Explicit headless mode, e.g. for tests on machines with a display (set DEEPOF_HEADLESS=1)
+    if os.environ.get("DEEPOF_HEADLESS", "").lower() in ("1", "true", "yes"):
+        return False
     # Check for Linux and X display
     if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
         return False
@@ -247,6 +250,25 @@ def load_project(
         coordinates=redone_project.create(force=True)
 
     return coordinates
+
+
+def _merge_animal_conditions(old: dict, new: dict, exp_conditions: dict):
+    """Merge animal-level conditions when extending a project.
+
+    They are only kept if they cover every experiment with video-level conditions; otherwise they are
+    dropped with a warning and only the video-level conditions remain.
+    """
+    if old is None and new is None:
+        return None
+    merged = {**(old or {}), **(new or {})}
+    if exp_conditions is None or set(merged.keys()) != set(exp_conditions.keys()):
+        warnings.warn(
+            "Animal-level conditions do not cover all experiments of the extended project and were dropped. "
+            "Video-level conditions are kept; reload animal-level conditions for all experiments to restore them."
+        )
+        return None
+    return merged
+
 
 class Project:
     """Class for loading and preprocessing motion tracking data of individual and multiple animals.
@@ -481,6 +503,7 @@ class Project:
         self.connectivity = None
         self.distances = "all"
         self.ego = False
+        self.animal_conditions = None
         if isinstance(exp_conditions, str):
             self.load_exp_conditions(exp_conditions)
         else:
@@ -599,11 +622,16 @@ class Project:
     def load_exp_conditions(self, filepath):  # pragma: no cover
         """Load experimental conditions from a wide-format csv table.
 
+        If the table has an "animal_id" column, conditions are loaded per animal and the video-level
+        conditions are derived from them (see deepof.conditions).
+
         Args:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
-        self.exp_conditions = deepof.utils.load_exp_conditions(filepath)
+        self.exp_conditions, self.animal_conditions = deepof.utils.load_exp_conditions(
+            filepath, animal_ids=self.animal_ids, return_animal_conditions=True
+        )
 
 
     @property
@@ -1498,6 +1526,9 @@ class Project:
                 }
             except TypeError:
                 pass
+            self.animal_conditions = _merge_animal_conditions(
+                getattr(_to_extend, "_animal_conditions", None), self.animal_conditions, self.exp_conditions
+            )
 
         coords = Coordinates(
             project_path=self.project_path,
@@ -1513,6 +1544,7 @@ class Project:
             excluded_bodyparts=self.exclude_bodyparts,
             frame_rate=self.frame_rate,
             exp_conditions=self.exp_conditions,
+            animal_conditions=self.animal_conditions,
             start_markers = self.start_markers,
             animal_presence_threshold = self.animal_presence_threshold,
             path=self.project_path,
@@ -1693,6 +1725,7 @@ class Coordinates:
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
         exp_conditions: dict = None,
+        animal_conditions: dict = None,
         start_markers: dict = None,
         animal_presence_threshold: float = 0.5,
         number_of_rois: int = 0,
@@ -1745,6 +1778,7 @@ class Coordinates:
         self._bodypart_graph = bodypart_graph
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
+        self._animal_conditions = animal_conditions
         self._start_markers = start_markers
         self._animal_presence_threshold = animal_presence_threshold
         self._frame_rate = frame_rate
@@ -2572,6 +2606,12 @@ class Coordinates:
         return self._exp_conditions
     
     @property
+    def get_animal_conditions(self):
+        """Return the animal-level experimental conditions ({experiment_id: DataFrame indexed by animal id}), or None."""
+        # getattr: projects saved before animal-level conditions existed lack the attribute
+        return getattr(self, "_animal_conditions", None)
+
+    @property
     def get_exp_condition_names(self):
         """Return a list with the names of all experiment conditions."""
         if self._exp_conditions is None:
@@ -2618,7 +2658,9 @@ class Coordinates:
             filepath (str): Path to the file containing the experimental conditions.
 
         """
-        self._exp_conditions = deepof.utils.load_exp_conditions(filepath)
+        self._exp_conditions, self._animal_conditions = deepof.utils.load_exp_conditions(
+            filepath, animal_ids=self._animal_ids, return_animal_conditions=True
+        )
 
         # Save loaded conditions within project
         self.save(timestamp=False)
@@ -2890,6 +2932,7 @@ class Coordinates:
         target._video_resolution = _filter_dict(getattr(target, "_video_resolution", None))
 
         target._exp_conditions = _filter_dict(getattr(target, "_exp_conditions", None))
+        target._animal_conditions = _filter_dict(getattr(target, "_animal_conditions", None))
         # _start_markers can be None
         target._start_markers = _filter_dict(getattr(target, "_start_markers", None))
 

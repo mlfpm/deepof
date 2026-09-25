@@ -46,6 +46,7 @@ from scipy.stats import chi2_contingency, mode
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, CONTINUOUS_BEHAVIORS, BitPrecision
+import deepof.conditions
 import deepof.data
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.legacy_smote_handling
@@ -778,14 +779,36 @@ def _load_conditions_csv(filepath):
     return exp_conditions
 
 
-def load_exp_conditions(filepath: str):
-    
-    exp_conditions = _load_conditions_csv(filepath)
-    # some validity checks
-    for key in exp_conditions.keys():
-        for condition in exp_conditions[key].columns:
-            condition_instance=exp_conditions[key][condition].iloc[0]
-            assert isinstance(condition_instance, str), "Condition values need to be strings!"  
+def load_exp_conditions(filepath: str, animal_ids: list = None, return_animal_conditions: bool = False):
+    """Load experimental conditions from a csv file.
+
+    The first column holds the experiment ids and every further column one condition. If the file also has an
+    "animal_id" column, conditions are given per animal (one row per animal and experiment) and the video-level
+    conditions are derived from them (see deepof.conditions).
+
+    Args:
+        filepath (str): Path to the csv file.
+        animal_ids (list): Animal ids of the project, used to validate animal-level conditions.
+        return_animal_conditions (bool): If True, also return the animal-level conditions (None for video-level files).
+
+    Returns:
+        exp_conditions (dict), or (exp_conditions, animal_conditions) if return_animal_conditions is True.
+    """
+    animal_conditions = None
+    table = pd.read_csv(filepath, index_col=0)
+    if deepof.conditions.find_animal_id_column(table) is not None:
+        animal_conditions = deepof.conditions.animal_conditions_from_table(table, animal_ids)
+        exp_conditions = deepof.conditions.derive_video_conditions(animal_conditions)
+    else:
+        exp_conditions = _load_conditions_csv(filepath)
+        # some validity checks
+        for key in exp_conditions.keys():
+            for condition in exp_conditions[key].columns:
+                condition_instance=exp_conditions[key][condition].iloc[0]
+                assert isinstance(condition_instance, str), "Condition values need to be strings!"
+
+    if return_animal_conditions:
+        return exp_conditions, animal_conditions
     return exp_conditions
 
 

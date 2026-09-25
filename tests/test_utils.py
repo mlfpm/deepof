@@ -12,6 +12,8 @@ import os
 from itertools import combinations
 from shutil import rmtree
 
+import pytest
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -707,6 +709,39 @@ def test_exp_cond_and_start_marker_loading():
         rmtree(tmp_dir)
     if os.path.exists(project_dir):
         rmtree(project_dir)
+
+
+def test_animal_level_exp_conditions(tmp_path):
+    path = os.path.join(tmp_path, "animal_conditions.csv")
+    pd.DataFrame({
+        "experiment_id": ["vid1", "vid1", "vid2", "vid2"],
+        "animal_id": ["B", "W", "B", "W"],
+        "treatment": ["stressed", "control", "control", "control"],
+        "genotype": ["WT", "WT", "KO", "KO"],
+    }).to_csv(path)
+
+    exp_conditions, animal_conditions = deepof.utils.load_exp_conditions(
+        path, animal_ids=["B", "W"], return_animal_conditions=True
+    )
+    assert animal_conditions["vid1"].loc["B", "treatment"] == "stressed"
+    # Video-level conditions: shared value, or the sorted composition for mixed videos
+    assert exp_conditions["vid1"]["treatment"].iloc[0] == "control+stressed"
+    assert exp_conditions["vid2"]["treatment"].iloc[0] == "control"
+    assert exp_conditions["vid1"]["genotype"].iloc[0] == "WT"
+    # Default return stays video-level only
+    assert deepof.utils.load_exp_conditions(path).keys() == exp_conditions.keys()
+
+    # Missing animals and the reserved separator are rejected
+    with pytest.raises(ValueError, match="do not match the project animals"):
+        deepof.utils.load_exp_conditions(path, animal_ids=["B", "W", "R"])
+    pd.DataFrame({"experiment_id": ["vid1"], "animal_id": ["B"], "treatment": ["a+b"]}).to_csv(path)
+    with pytest.raises(ValueError, match="cannot contain"):
+        deepof.utils.load_exp_conditions(path)
+
+    # Video-level files have no animal-level conditions
+    pd.DataFrame({"experiment_id": ["vid1"], "treatment": ["control"]}).to_csv(path)
+    _, animal_conditions = deepof.utils.load_exp_conditions(path, return_animal_conditions=True)
+    assert animal_conditions is None
 
 
 @settings(deadline=None, max_examples=10)
