@@ -37,6 +37,7 @@ from statsmodels.stats.multitest import multipletests
 
 
 
+import deepof.conditions
 import deepof.post_hoc
 import deepof.utils
 from deepof.data_loading import get_dt
@@ -1762,7 +1763,8 @@ def _check_enum_inputs(
         all_conditions = [cond.columns.values for cond in coordinates.get_exp_conditions.values()]
         exp_cond_opts = np.unique(np.concatenate(all_conditions)).tolist()
         if exp_condition in exp_cond_opts:
-            cond_val_opts = [str(v) for v in coordinates.get_condition_values(exp_condition)]
+            # Animal-level values are valid too (e.g. for exp_condition_order in animal-level plots)
+            cond_val_opts = [str(v) for v in coordinates.get_condition_values(exp_condition, level="any")]
     start_marker_opts = []
     if coordinates.get_start_markers:
         all_markers = [start_marker.columns.values for start_marker in coordinates.get_start_markers.values()]
@@ -3827,3 +3829,53 @@ def _return_supervised_summary(
             na_rep="",
         )
     return df
+
+
+def _animal_level_condition_tests(
+    enrichment: pd.DataFrame,
+    test: str,
+    behaviors: list,
+    key_col: str = "exp_id",
+    condition_col: str = "exp condition",
+    value_col: str = "time on cluster",
+):
+    """Pairs and raw p-values for enrichment data with animal-level conditions.
+
+    Animals of one video are not independent, so the test depends on how two condition groups relate: a paired
+    Wilcoxon signed-rank test (paired by video) if both groups come from the same videos, the given test if they come
+    from different videos. Partly shared groups fit neither test and are skipped with a warning.
+
+    Returns:
+        pairs (list): [((behavior, condition_a), (behavior, condition_b)), ...] as used by statannotations.
+        pvalues (list): raw p-values, one per pair.
+    """
+    from statannotations.stats.test import apply_test
+
+    pairs, pvalues, skipped = [], [], []
+    for behavior in behaviors:
+        sub = enrichment[enrichment["cluster"] == behavior].dropna(subset=[condition_col])
+        conditions = sorted(sub[condition_col].astype(str).unique())
+        for cond_a, cond_b in itertools.combinations(conditions, 2):
+            group_a = sub[sub[condition_col].astype(str) == cond_a].set_index(key_col)[value_col]
+            group_b = sub[sub[condition_col].astype(str) == cond_b].set_index(key_col)[value_col]
+            design = deepof.conditions.comparison_design(sub.astype({condition_col: str}), cond_a, cond_b, key_col, condition_col)
+            if design == "paired":
+                group_b = group_b.reindex(group_a.index)
+                if np.allclose(group_a.values, group_b.values):
+                    pvalue = 1.0  # identical by construction (e.g. pair_policy="both"), nothing to test
+                else:
+                    pvalue = apply_test(group_a.values, group_b.values, "Wilcoxon").pvalue
+            elif design == "independent":
+                pvalue = apply_test(group_a.values, group_b.values, test).pvalue
+            else:
+                skipped.append(f"{behavior}: {cond_a} vs {cond_b}")
+                continue
+            pairs.append(((behavior, cond_a), (behavior, cond_b)))
+            pvalues.append(pvalue)
+
+    if skipped:
+        warnings.warn(
+            "No statistics for comparisons in which some but not all videos contain both conditions (neither a paired "
+            "nor an independent test applies): " + "; ".join(skipped)
+        )
+    return pairs, pvalues

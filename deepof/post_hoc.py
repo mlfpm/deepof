@@ -53,6 +53,7 @@ import torch
 from deepof.legacy_smote_handling import SimpleSMOTE, ResampledClassifier
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, CONTINUOUS_BEHAVIORS
+import deepof.conditions
 import deepof.data
 import deepof.utils
 from deepof.data_loading import get_dt, save_dt
@@ -2580,7 +2581,10 @@ def enrichment_across_conditions(
     normalize: bool = False,
     custom_continuous_behavior_names: list = [],
     behaviors: list = None,
-
+    animal_conditions: dict = None,
+    exp_condition: str = None,
+    animal_ids: list = None,
+    pair_policy: str = "composition",
 ):
     """Compute the population of each cluster across conditions.
 
@@ -2595,6 +2599,11 @@ def enrichment_across_conditions(
         roi_mode (str): Determines how the rois should be applied to different behaviors. Options are "mousewise" (default, selected mice needs to be inside the ROI) and "behaviorwise" (only mice involved in a behavior need to be inside of the ROI, only for supervised behaviors)                
         normalize (bool): Whether to normalize the population of each cluster across conditions.
         custom_continuous_behavior_names (list): list of potentially added names of custom continuous behaviors (should get sorted out)
+        animal_conditions (dict): Animal-level conditions. If given together with supervised annotations, every behavior is
+            attributed to the condition of the animal(s) involved (see deepof.conditions) instead of the video's condition.
+        exp_condition (str): Name of the condition to use with animal_conditions.
+        animal_ids (list): Animal ids of the project, needed with animal_conditions.
+        pair_policy (str): Handling of undirected pair behaviors with animal_conditions: "composition", "both" or "exclude_mixed".
 
     Returns:
         A long format dataframe with the population of each cluster across conditions.
@@ -2666,6 +2675,10 @@ def enrichment_across_conditions(
         enrichment["cluster"] = enrichment["cluster"].astype(float)
     else:    
         enrichment["cluster"] = enrichment["cluster"].astype(str)
+    if supervised_annotations is not None and animal_conditions is not None:
+        enrichment = deepof.conditions.attach_animal_conditions(
+            enrichment, animal_conditions, exp_condition, animal_ids, pair_policy=pair_policy
+        )
 
     return enrichment
 

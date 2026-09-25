@@ -2625,11 +2625,23 @@ class Coordinates:
         """Return the stored dictionary with start markers per subject."""
         return self._start_markers
 
-    def get_condition_values(self, exp_cond):
+    def get_condition_values(self, exp_cond, level: str = "video"):
+        """Return the sorted unique values of an experimental condition.
+
+        Args:
+            exp_cond (str): Name of the condition.
+            level (str): "video" for video-level values (including compositions of mixed videos), "animal" for
+                animal-level values, "any" for both. Without animal-level conditions all levels are video-level.
+        """
         conditions=[]
-        for key in self._exp_conditions.keys():
-            if exp_cond in self._exp_conditions[key].columns:
-                conditions.append(self._exp_conditions[key][exp_cond].iloc[0]) 
+        if level in ("video", "any") or self.get_animal_conditions is None:
+            for key in self._exp_conditions.keys():
+                if exp_cond in self._exp_conditions[key].columns:
+                    conditions.append(self._exp_conditions[key][exp_cond].iloc[0])
+        if level in ("animal", "any") and self.get_animal_conditions is not None:
+            for df in self.get_animal_conditions.values():
+                if exp_cond in df.columns:
+                    conditions.extend(df[exp_cond].tolist())
         assert len(conditions) > 0, f"Given experiment condition {exp_cond} not in experiment conditions!"
         return list(np.unique(conditions))
     

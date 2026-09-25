@@ -744,6 +744,54 @@ def test_animal_level_exp_conditions(tmp_path):
     assert animal_conditions is None
 
 
+def test_animal_level_condition_resolution():
+    import deepof.conditions
+    import deepof.visuals_utils
+
+    # Two videos, the stressed mouse is B in vid1 and W in vid2
+    animal_conditions = {
+        "vid1": pd.DataFrame({"treatment": ["stressed", "control"]}, index=["B", "W"]),
+        "vid2": pd.DataFrame({"treatment": ["control", "stressed"]}, index=["B", "W"]),
+    }
+    columns = ["B_climb", "W_climb", "B_W_following", "W_B_following", "B_W_nose2nose"]
+    values = {"vid1": [1.0, 2.0, 3.0, 4.0, 5.0], "vid2": [6.0, 7.0, 8.0, 9.0, 10.0]}
+    long_df = pd.DataFrame(
+        [(k, c, v) for k in values for c, v in zip(columns, values[k])],
+        columns=["exp_id", "cluster", "time on cluster"],
+    )
+
+    def resolve(policy):
+        out = deepof.conditions.attach_animal_conditions(long_df, animal_conditions, "treatment", ["B", "W"], policy)
+        return {(r.exp_id, r.cluster, r._3): r._4 for r in out.itertuples()}
+
+    res = resolve("composition")
+    # Individual behaviors: the animal's own condition, pooled across identities
+    assert res[("vid1", "climb", "stressed")] == 1.0 and res[("vid2", "climb", "stressed")] == 7.0
+    # Directed behaviors: the actor's condition
+    assert res[("vid1", "following", "stressed")] == 3.0 and res[("vid1", "following", "control")] == 4.0
+    # Undirected behaviors: the pair's composition by default
+    assert res[("vid1", "nose2nose", "control+stressed")] == 5.0
+    both = resolve("both")
+    assert both[("vid1", "nose2nose", "stressed")] == both[("vid1", "nose2nose", "control")] == 5.0
+    assert not any(k[1] == "nose2nose" for k in resolve("exclude_mixed"))
+    assert deepof.conditions.split_behavior_column("B_W_nose2nose", ["B", "W"]) == (("B", "W"), "nose2nose")
+
+    # Both conditions come from the same videos -> paired design, tested with Wilcoxon
+    enrichment = deepof.conditions.attach_animal_conditions(long_df, animal_conditions, "treatment", ["B", "W"])
+    assert deepof.conditions.comparison_design(enrichment[enrichment.cluster == "climb"], "stressed", "control") == "paired"
+    pairs, pvalues = deepof.visuals_utils._animal_level_condition_tests(enrichment, "Mann-Whitney", ["climb", "nose2nose"])
+    assert pairs == [(("climb", "control"), ("climb", "stressed"))] and len(pvalues) == 1
+
+    # Groups sharing only some videos fit neither test and are skipped with a warning
+    mixed = pd.DataFrame({
+        "exp_id": ["v1", "v1", "v2", "v3"], "cluster": ["climb"] * 4,
+        "exp condition": ["a", "b", "a", "b"], "time on cluster": [1.0, 2.0, 3.0, 4.0],
+    })
+    with pytest.warns(UserWarning, match="No statistics"):
+        pairs, _ = deepof.visuals_utils._animal_level_condition_tests(mixed, "Mann-Whitney", ["climb"])
+    assert pairs == []
+
+
 @settings(deadline=None, max_examples=10)
 @given(
     detection_mode=st.one_of(

@@ -1001,6 +1001,7 @@ def plot_enrichment(
     add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
     exp_condition_order: list = None,
+    pair_policy: str = "composition",
     normalize: bool = False,
     verbose: bool = False,
     unit_time: str = "s",
@@ -1029,6 +1030,7 @@ def plot_enrichment(
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
         exp_condition_order (list): Order in which to plot experimental conditions. If None (default), the order is determined by the order of the keys in the table dict.
+        pair_policy (str): Only for supervised annotations with animal-level conditions, where every behavior is attributed to the condition of the animal(s) involved. Sets how undirected pair behaviors (e.g. nose2nose) are handled: "composition" (default, the pair's combination of conditions, e.g. "control+stressed"), "both" (counted for each animal; identical values, so no statistics) or "exclude_mixed" (only pairs sharing a condition). Directed pair behaviors always count for the actor.
         normalize (bool): whether to represent time fractions or actual time in seconds on the y axis.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         unit_time (str): Time unit (frames, seconds, minutes, hours) to display the result in the given unit
@@ -1082,8 +1084,11 @@ def plot_enrichment(
             for key, val in coordinates.get_exp_conditions.items()
         }
 
+    # With animal-level conditions, supervised behaviors are attributed to the condition of the animal(s) involved
+    animal_level = supervised_annotations is not None and coordinates.get_animal_conditions is not None
+
     # Set default exp_condition_order if none isprovided
-    if exp_condition_order is None:
+    if exp_condition_order is None and not animal_level:
         exp_condition_order = np.unique(list(exp_conditions.values())).astype(str)
 
 
@@ -1118,7 +1123,13 @@ def plot_enrichment(
         roi_mode=roi_mode,
         custom_continuous_behavior_names=coordinates._custom_continuous_behavior_names,
         behaviors=behaviors,
+        animal_conditions=coordinates.get_animal_conditions if animal_level else None,
+        exp_condition=exp_condition if exp_condition is not None else coordinates.get_exp_condition_names[0],
+        animal_ids=coordinates._animal_ids,
+        pair_policy=pair_policy,
     )
+    if exp_condition_order is None:
+        exp_condition_order = np.unique(enrichment["exp condition"]).astype(str)
     #extract unique behavior names
     indices=np.unique(enrichment["cluster"], return_index=True)[1]
     behavior_names = [enrichment["cluster"][idx] for idx in sorted(indices)]
@@ -1257,7 +1268,10 @@ def plot_enrichment(
         cond_to_color = {cond: palette[i % len(palette)] for i, cond in enumerate(all_exp_conditions)}
 
         # get smallest non-zero average
-        mu_min=np.min([np.min(plot_means[k][np.where(plot_means[k]>0)]) for k in plot_means.keys()])
+        # (conditions may lack positive values, e.g. compositions that only exist for a few behaviors)
+        positive_means = [plot_means[k][plot_means[k] > 0] for k in plot_means.keys()]
+        positive_means = [p for p in positive_means if p.size > 0]
+        mu_min = np.min([np.min(p) for p in positive_means]) if positive_means else 1.0
         lower_bound = np.min([mu_min/10,0.01]) # calculate lower bound for plot
         
         # Plot means, markers, error lines and shaded bands, split at NaNs/gaps
@@ -1325,7 +1339,35 @@ def plot_enrichment(
         handles[start_entry:], labels[start_entry:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
     )
 
-    if add_stats:
+    if add_stats and animal_level:
+        # Test per comparison: paired if both conditions come from the same videos, independent otherwise
+        pairs, pvalues = deepof.visuals_utils._animal_level_condition_tests(enrichment, add_stats, behavior_names)
+        test_dict = {}
+        if pairs:
+            annotator = Annotator(
+                ax,
+                pairs=pairs,
+                data=enrichment,
+                x="cluster",
+                y="time on cluster",
+                hue="exp condition",
+                hide_non_significant=True,
+            )
+            annotator.configure(
+                test=None,
+                text_format="star",
+                loc="inside",
+                comparisons_correction="fdr_bh",
+                verbose=verbose,
+            )
+            annotator.set_pvalues(pvalues)
+            if polar_depiction:
+                for annotation in annotator.annotations:
+                    test_dict[annotation.structs[0]["group"][0]] = annotation.text
+            else:
+                annotator.annotate()
+
+    elif add_stats:
         # creating pairs containing information about which data gets compared
         pairs = list(
             product(
@@ -1392,7 +1434,7 @@ def plot_enrichment(
         ax.set_rscale("log")  # Rescale to log for better visualization
 
         # Get overall max value in plot
-        max_value = np.max([np.max(arr) for arr in plot_means.values()])
+        max_value = np.nanmax([np.nanmax(arr) for arr in plot_means.values()])  # conditions may miss behaviors (NaN)
         # Customize y-axis ticks
         max_tick = np.ceil(np.max([np.log10(max_value),0])) + 0.5
         y_ticks = np.logspace(0, max_tick, num=int(max_tick * 2) + 1)
@@ -1423,7 +1465,7 @@ def plot_enrichment(
                 ax.text(
                     midangle,
                     np.sqrt(ax.get_yticks()[-1] * ax.get_yticks()[-2]),
-                    test_dict[label],
+                    test_dict.get(label, ""),  # behaviors without a comparison have no entry
                     ha="center",
                     va="center",
                     fontsize="x-small",
