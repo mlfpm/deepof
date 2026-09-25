@@ -1245,6 +1245,7 @@ def fit_VQVAE(
     model_name = "vqvae"
     rebuild_spec={                    
         "model_name": model_name,
+        "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "x_shape": train_loader.dataset.x_shape,
         "a_shape": train_loader.dataset.a_shape,
         "adjacency_matrix": adjacency_matrix.astype("float32"),
@@ -1446,6 +1447,7 @@ def fit_VQVAE(
         
 
     # Load states of best val and score models
+    unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size
     model_val, model_score = load_best_checkpoints(
         model, best_path_val, best_path_score, device, common_cfg.save_weights
     )
@@ -1509,6 +1511,7 @@ def fit_contrastive(
         )
     rebuild_spec={                    
         "model_name": model_name,
+        "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "window_len": window_len,
         "x_shape": train_loader.dataset.x_shape,
         "a_shape": train_loader.dataset.a_shape,
@@ -1753,6 +1756,7 @@ def fit_contrastive(
 
 
     # Load states of best val and score models
+    unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size
     model_val, model_score = load_best_checkpoints(
         model, best_path_val, best_path_score, device, common_cfg.save_weights
     )
@@ -1835,6 +1839,7 @@ def fit_VADE(
     model_name = "vade"
     rebuild_spec={                    
         "model_name": model_name,
+        "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "x_shape": train_loader.dataset.x_shape,
         "a_shape": train_loader.dataset.a_shape,
         "adjacency_matrix": adjacency_matrix.astype("float32"),
@@ -2159,6 +2164,7 @@ def fit_VADE(
 
 
     # Load states of best val and score models
+    unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size
     model_val, model_score = load_best_checkpoints(
         model, best_path_val, best_path_score, device, common_cfg.save_weights
     )

@@ -590,7 +590,7 @@ def embedding_per_video(
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         to_preprocess (table_dict): dictionary with (merged) features to process.
-        model (tf.keras.models.Model): trained deepof unsupervised model to run inference with.
+        model (nn.Module): trained deepof unsupervised model (VaDE, VQVAE or contrastive) to run inference with.
         metainfo (dict): meta_nfo dictionary containing information regarding dataset preprocessing.
         supervised_annotations (table_dict): table dict with supervised annotations per experiment.
         pretrained (bool): whether to use the specified pretrained model to recluster the data.
@@ -713,7 +713,8 @@ def embedding_per_video(
             x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
             a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
 
-            batch_size = 256  # adjust to fit your GPU
+            # Use the training batch size, which is known to fit into memory
+            batch_size = getattr(model, "train_batch_size", None) or 256
             emb_list, sc_list = [], []
             amp_ctx = nullcontext()
 
@@ -732,7 +733,7 @@ def embedding_per_video(
                     elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
                         emb_out = model(xb, ab)
                     else: # pragma: no cover
-                        raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
+                        raise RuntimeError(f"Unexpected model type {type(model).__name__}; expected VaDE, VQVAE or contrastive.")
 
                     emb_list.append(emb_out.detach().cpu())
 
@@ -1036,6 +1037,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False):
     _materialize_encoder(model, tuple(spec["x_shape"]), tuple(spec["a_shape"]), device)
     rep = model.load_state_dict(state, strict=strict)
     model.eval()
+    model.train_batch_size = spec.get("batch_size")  # None for checkpoints saved before this was stored
 
     load_report = {"missing": rep.missing_keys, "unexpected": rep.unexpected_keys}
     return model, log_summary, spec, load_report

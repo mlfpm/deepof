@@ -573,6 +573,7 @@ def test_save_and_load_model(model_name):
         "use_gnn": True,
         "kmeans_loss": 1.0,
         "interaction_regularization": 0.0,
+        "batch_size": 32,
     }
     if model_name=="contrastive":
         rebuild_spec["similarity_function"]="cosine"
@@ -708,6 +709,7 @@ def test_save_and_load_model(model_name):
             assert isinstance(loaded_model, deepof.clustering.models_new.ContrastivePT)
             assert loaded_model.window_size == 16
 
+        assert loaded_model.train_batch_size == 32
         loaded_params = dict(loaded_model.named_parameters())
 
         assert set(original_params.keys()) == set(loaded_params.keys()), \
