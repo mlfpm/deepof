@@ -31,6 +31,7 @@ from scipy.signal import savgol_filter
 from sklearn.metrics import confusion_matrix
 from statannotations.Annotator import Annotator
 
+import deepof.conditions
 import deepof.export_video
 import deepof.post_hoc
 import deepof.utils
@@ -117,7 +118,7 @@ def plot_heatmaps(
         center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch.
         align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
         exp_condition (str): Experimental condition to plot base filters on.
-        condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition.
+        condition_value (str): Experimental condition value to plot. If available, it filters the experiments to keep only those whose condition value matches the given string in the provided exp_condition. With animal-level conditions, only the animals with this value are kept, and body parts can be given without animal prefix ("Center") to pool them over these animals.
         experiment_id (str): Name of the experiment to display. When given as "average" positiosn of all animals are averaged.
         bin_size (Union[int,str]): bin size for time filtering.
         bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
@@ -159,8 +160,19 @@ def plot_heatmaps(
 
     coords = coordinates.get_coords(center=center, align=align, return_path=False, roi_number=roi_number, in_roi_criterion=in_roi_criterion, invert_roi=invert_roi, animals_in_roi=animals_in_roi)
 
+    # With animal-level conditions, keep the animals (not videos) with the requested condition value
+    matching_animals = None
+    if (
+        exp_condition is not None and condition_value is not None
+        and coordinates.get_animal_conditions is not None
+        and condition_value in coordinates.get_condition_values(exp_condition, level="animal")
+    ):
+        matching_animals = deepof.conditions.animals_with_condition(
+            coordinates.get_animal_conditions, exp_condition, condition_value
+        )
+        coords = coords.filter_videos([k for k in coords.keys() if k in matching_animals])
     #only keep requested experiment conditions
-    if exp_condition is not None and condition_value is not None:
+    elif exp_condition is not None and condition_value is not None:
         coords = coords.filter_videos(
             [
                 k
@@ -204,6 +216,9 @@ def plot_heatmaps(
         
         #cut slice from table
         tab=tab.iloc[bin_info_time[key]]
+        if matching_animals is not None:
+            # only the animals with the condition value; unprefixed body parts are pooled over them
+            tab = deepof.conditions.select_animal_rows(tab, bodyparts, matching_animals[key], coordinates._animal_ids)
 
         #append table
         sampled_tabs.append(tab)
@@ -4177,6 +4192,7 @@ def plot_behavior_trends(
     show_histogram: bool = True,
     exp_condition: str = None,
     condition_values: list = None,
+    pair_policy: str = "composition",
     behaviors_to_plot: str = None,
     normalize: bool = False,
     add_stats: str = "Mann-Whitney",
@@ -4204,6 +4220,7 @@ def plot_behavior_trends(
     show_histogram (bool): If True, displays histogram with rough effect size estimations. Defaults to True.
     exp_condition (str): Experimental condition to compare.
     condition_values (list): List of two strings containing the condition values to compare.
+    pair_policy (str): Only for supervised annotations with animal-level conditions, where behaviors are attributed to the condition of the animal(s) involved and can be given pooled over animals (e.g. "climb-arena"). Sets how undirected pair behaviors are handled: "composition" (default), "both" or "exclude_mixed". Directed pair behaviors always count for the actor.
     behavior_to_plot (str): Behavior to compare for selected condition.
     normalize (bool): If True, shows time on cluster relative to bin length instead of total time on cluster. Speed is always averaged. Defaults to False.
     add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
@@ -4256,8 +4273,10 @@ def plot_behavior_trends(
         ].columns[0]
 
     # Init condition_values if not given
+    # With animal-level conditions, supervised behaviors are attributed to the condition of the animal(s) involved
+    animal_level = supervised_annotations is not None and coordinates.get_animal_conditions is not None
     if not condition_values:
-        condition_values = coordinates.get_condition_values(exp_condition)
+        condition_values = coordinates.get_condition_values(exp_condition, level="animal" if animal_level else "video")
     if len(condition_values) > 2:
         condition_values = condition_values[0:2]
         warning_message = (
@@ -4317,6 +4336,12 @@ def plot_behavior_trends(
         multi_bin_info[j]=roi_bin_info
 
     keys=list(table_dicts.keys())
+    if animal_level:
+        supervised_columns = get_dt(table_dicts, keys[0], only_metainfo=True)["columns"]
+        behavior_columns = {
+            b: deepof.conditions.expand_behaviors([b], supervised_columns, coordinates._animal_ids)
+            for b in behaviors_to_plot
+        }
 
 
     #####
@@ -4356,7 +4381,7 @@ def plot_behavior_trends(
     for ax, behavior_to_plot in zip(axes.ravel(), behaviors_to_plot):
 
         # Initialize table
-        columns = ["time_bin", "exp_condition", behavior_to_plot]
+        columns = ["time_bin", "exp_condition", behavior_to_plot, "exp_id"]
         df = pd.DataFrame(columns=columns)
 
 
@@ -4366,9 +4391,22 @@ def plot_behavior_trends(
 
         for i, key in enumerate(keys):
 
-            cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
-            #skip excluded experiment condition values
-            if cond not in condition_values:
+            # (column, condition) pairs contributing to this behavior in this video. Without animal-level conditions
+            # that is the selected column with the video's condition; with them, every matching column with the
+            # condition of the animal(s) involved (e.g. "climb-arena" of B and W with their own conditions)
+            if animal_level:
+                sources = []
+                for column in behavior_columns[behavior_to_plot]:
+                    _, labels = deepof.conditions.column_condition_labels(
+                        column, supervised_columns, coordinates.get_animal_conditions[key][exp_condition],
+                        coordinates._animal_ids, pair_policy,
+                    )
+                    sources.extend((column, label) for label in labels if label in condition_values)
+            else:
+                cond = coordinates.get_exp_conditions[key][exp_condition].values[0]
+                #skip excluded experiment condition values
+                sources = [(behavior_to_plot, str(cond))] if cond in condition_values else []
+            if not sources:
                 continue
 
             # load entire dataset for current key once
@@ -4379,62 +4417,70 @@ def plot_behavior_trends(
 
                 local_bin_info = bin_info[key]
 
-                if len(local_bin_info["time"])==0:
-                    behavior_timebin = np.nan
-                else:
+                data_snippet = None
+                if len(local_bin_info["time"]) > 0:
                     data_snippet=data_set.iloc[local_bin_info["time"]]
-                    if plot_type == "unsupervised":
-                        if roi_number is not None:
-                            data_snippet=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi)
-                        vals = data_snippet[:, cluster_idx]  
+                    if plot_type == "unsupervised" and roi_number is not None:
+                        data_snippet=get_unsupervised_behaviors_in_roi(cur_unsupervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi)
+                    elif plot_type == "supervised" and roi_number is not None:
+                        data_snippet=get_supervised_behaviors_in_roi(cur_supervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi, roi_mode=roi_mode)
 
-                    elif plot_type == "supervised":
-                        if roi_number is not None:
-                            data_snippet=get_supervised_behaviors_in_roi(cur_supervised=data_snippet, local_bin_info=local_bin_info,animal_ids=animals_in_roi, roi_mode=roi_mode)    
-                        vals = data_snippet[behavior_to_plot]
+                for column, cond in sources:
+                    if data_snippet is None:
+                        behavior_timebin = np.nan
+                    else:
+                        if plot_type == "unsupervised":
+                            vals = data_snippet[:, cluster_idx]
+                        else:
+                            vals = data_snippet[column]
 
-                    vals = np.asarray(vals)
-                    val_mask = ~np.isnan(vals)
+                        vals = np.asarray(vals)
+                        val_mask = ~np.isnan(vals)
 
-                    # continuous behaviors get normalized based on the sum of all behavior
-                    if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names)):
-                        # time-weighted average speed
-                        behavior_timebin = (
-                            np.average(vals[val_mask])
-                            if np.any(val_mask)
-                            else np.nan
-                        )
-                        if z_run == 0 and i==0 and j==0:
-                            print(
-                            '\033[33mInfo! Continuous behaviors (such as speed, distance etc.) do not get normalized as they are already averaged per bin.\033[0m'
+                        # continuous behaviors get normalized based on the sum of all behavior
+                        if behavior_to_plot.endswith(tuple(CONTINUOUS_BEHAVIORS+coordinates._custom_continuous_behavior_names)):
+                            # time-weighted average speed
+                            behavior_timebin = (
+                                np.average(vals[val_mask])
+                                if np.any(val_mask)
+                                else np.nan
                             )
-                    
-                    # present-or-absent behaviors get normalized based on the length of their bin (i.e. percentage of bin that is behavior)        
-                    elif normalize:
-                        # fraction of time (or prob.) within bin
-                        behavior_timebin = (
-                            np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
-                            if np.any(val_mask)
-                            else np.nan
-                        )
-                    else: #don't normalize
-                        behavior_timebin = (
-                            np.nansum(vals[val_mask])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
-                            if np.any(val_mask)
-                            else np.nan
-                        )
+                            if z_run == 0 and i==0 and j==0:
+                                print(
+                                '\033[33mInfo! Continuous behaviors (such as speed, distance etc.) do not get normalized as they are already averaged per bin.\033[0m'
+                                )
 
+                        # present-or-absent behaviors get normalized based on the length of their bin (i.e. percentage of bin that is behavior)
+                        elif normalize:
+                            # fraction of time (or prob.) within bin
+                            behavior_timebin = (
+                                np.nansum(vals[val_mask]) / np.max([data_snippet.shape[0],1])
+                                if np.any(val_mask)
+                                else np.nan
+                            )
+                        else: #don't normalize
+                            behavior_timebin = (
+                                np.nansum(vals[val_mask])*TimeUnit.parse(unit_time).factor(coordinates._frame_rate)
+                                if np.any(val_mask)
+                                else np.nan
+                            )
 
-                new_row = pd.DataFrame(
-                    [
-                        {
-                            "time_bin": j,
-                            "exp_condition": str(cond),
-                            behavior_to_plot: behavior_timebin,
-                        }
-                    ]
-                )
-                df = pd.concat([df, new_row], ignore_index=True)
+                    new_row = pd.DataFrame(
+                        [
+                            {
+                                "time_bin": j,
+                                "exp_condition": cond,
+                                behavior_to_plot: behavior_timebin,
+                                "exp_id": key,
+                            }
+                        ]
+                    )
+                    df = pd.concat([df, new_row], ignore_index=True)
+
+        if animal_level and len(df) > 0:
+            # One value per video, time bin and condition (animals of one video are not independent)
+            df = df.groupby(["time_bin", "exp_condition", "exp_id"], as_index=False, sort=False)[behavior_to_plot].mean()
+            df = df[["time_bin", "exp_condition", behavior_to_plot, "exp_id"]]
         
 
         get_unsupervised_behaviors_in_roi._warning_issued = False
@@ -4442,6 +4488,17 @@ def plot_behavior_trends(
         df, hide_time_bins = deepof.visuals_utils.postprocess_df_bins(df, bin_lengths, hide_time_bins)  
 
         mean_values, error_values, binned_effect_sizes_df = deepof.visuals_utils.process_df(df, error_bars=error_bars) 
+
+        # Conditions without data for this behavior are left out (e.g. with animal-level conditions, undirected pair
+        # behaviors only have compositions such as "control+stressed")
+        plotted_conditions = [c for c in condition_values if str(c) in mean_values]
+        if len(plotted_conditions) < len(condition_values):
+            warnings.warn(
+                f"No data for {behavior_to_plot} in condition(s) "
+                f"{[c for c in condition_values if str(c) not in mean_values]}; they are not shown."
+            )
+        # Effect sizes need two conditions
+        show_effect_histogram = show_histogram and len(plotted_conditions) >= 2
 
         #####
         # Handle present or absent axes of different types
@@ -4455,7 +4512,23 @@ def plot_behavior_trends(
 
         # --- stats (your existing logic; unchanged) ---
         test_dict = {}
-        if add_stats:
+        if add_stats and animal_level:
+            # Paired test per time bin if both conditions come from the same videos, independent test otherwise
+            shown_bins = [tb for tb in sorted(df["time_bin"].unique()) if not hide_time_bins[int(tb)]]
+            pairs, pvalues = deepof.visuals_utils._animal_level_condition_tests(
+                df, add_stats, shown_bins, x_col="time_bin", condition_col="exp_condition", value_col=behavior_to_plot,
+            )
+            if pairs:
+                annotator = Annotator(
+                    ax, pairs=pairs, data=df, x="time_bin", y=behavior_to_plot, hue="exp_condition",
+                )
+                annotator.configure(
+                    test=None, text_format="star", loc="inside", comparisons_correction="fdr_bh", verbose=False,
+                )
+                annotator.set_pvalues(pvalues)
+                for annotation in annotator.annotations:
+                    test_dict[annotation.structs[0]["group"][0]] = annotation.text
+        elif add_stats:
             pairs = df.groupby("time_bin").apply(
                 lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
             )
@@ -4492,7 +4565,7 @@ def plot_behavior_trends(
             x_radians=geom["centers"],
             mean_values=mean_values,
             error_values=error_values,
-            condition_values=condition_values,
+            condition_values=plotted_conditions,
             hide_time_bins=hide_time_bins,
             colors=colors,
             plot_binned_line_func=deepof.visuals_utils.plot_binned_line,
@@ -4526,7 +4599,7 @@ def plot_behavior_trends(
             hide_time_bins=hide_time_bins,
             max_value=max_value,
             bottom=hist_bottom,
-            show_histogram=show_histogram,
+            show_histogram=show_effect_histogram,
         )
 
         if polar_depiction:
@@ -4546,10 +4619,10 @@ def plot_behavior_trends(
         deepof.visuals_utils.add_binned_legends(
             ax=ax,
             condition_handles=marker_handles,
-            condition_labels=condition_values,
+            condition_labels=plotted_conditions,
             effect_handles=effect_handles,
             polar_depiction=polar_depiction,
-            show_histogram=show_histogram,
+            show_histogram=show_effect_histogram,
             first_plot=(z_run == 0),
         )
 
@@ -4719,7 +4792,7 @@ def plot_mouse_roi_interaction(
         hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
         experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
         exp_condition (str): Experimental condition to compare.
-        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list. With animal-level conditions, the animals with these values are measured: body parts without animal prefix (e.g. "Nose") and "fov" mode without animal_id measure every such animal, prefixed body parts or an animal_id only count where these animals have the value.
         mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
@@ -4768,7 +4841,29 @@ def plot_mouse_roi_interaction(
 
     # --- stats (unchanged; only computes test_dict, no auto-drawing) ---
     test_dict = {}
-    if add_stats and len(condition_values) == 2:
+    # With animal-level conditions one video can contribute to several conditions: test paired or independent
+    # depending on the design instead of assuming independent groups
+    shared_videos = (
+        "exp_id" in binned_group_df.columns
+        and binned_group_df.groupby("exp_id")["exp_condition"].nunique().max() > 1
+    )
+    if add_stats and len(condition_values) == 2 and shared_videos:
+        shown_bins = [tb for tb in sorted(binned_group_df["time_bin"].unique()) if not hide_time_bins[int(tb)]]
+        pairs, pvalues = deepof.visuals_utils._animal_level_condition_tests(
+            binned_group_df, add_stats, shown_bins, x_col="time_bin", condition_col="exp_condition", value_col=mode,
+        )
+        if pairs:
+            annotator = Annotator(
+                ax, pairs=pairs, data=binned_group_df, x="time_bin", y=mode, hue="exp_condition",
+            )
+            annotator.configure(
+                test=None, text_format="star", loc="inside", comparisons_correction="fdr_bh", verbose=False,
+            )
+            annotator.set_pvalues(pvalues)
+            for annotation in annotator.annotations:
+                test_dict[annotation.structs[0]["group"][0]] = annotation.text
+
+    elif add_stats and len(condition_values) == 2:
         pairs = binned_group_df.groupby("time_bin").apply(
             lambda x: list(dict.fromkeys(zip(x["time_bin"], x["exp_condition"])))
         )

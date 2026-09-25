@@ -2617,6 +2617,10 @@ def enrichment_across_conditions(
 
 
     counter_df = pd.DataFrame()
+    if supervised_annotations is not None and animal_conditions is not None and behaviors is not None:
+        # Behaviors may be given pooled over animals ("climb-arena"); select the matching annotation columns
+        columns = get_dt(supervised_annotations, list(supervised_annotations.keys())[0], only_metainfo=True)["columns"]
+        behaviors = deepof.conditions.expand_behaviors(behaviors, columns, animal_ids)
 
 
     if supervised_annotations is None:

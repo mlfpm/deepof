@@ -775,6 +775,14 @@ def test_animal_level_condition_resolution():
     assert both[("vid1", "nose2nose", "stressed")] == both[("vid1", "nose2nose", "control")] == 5.0
     assert not any(k[1] == "nose2nose" for k in resolve("exclude_mixed"))
     assert deepof.conditions.split_behavior_column("B_W_nose2nose", ["B", "W"]) == (("B", "W"), "nose2nose")
+    # Pooled behavior names select the matching columns of all animals
+    assert deepof.conditions.expand_behaviors(["climb", "B_W_following"], columns, ["B", "W"]) == ["B_climb", "W_climb", "B_W_following"]
+    assert deepof.conditions.animals_with_condition(animal_conditions, "treatment", "stressed") == {"vid1": ["B"], "vid2": ["W"]}
+    # Pooled columns stack the selected animals' data, prefixed ones keep only their own animal's rows
+    table = pd.DataFrame({"B_Center": [1.0, 2.0], "W_Center": [3.0, 4.0]})
+    stacked = deepof.conditions.select_animal_rows(table, ["Center", "B_Center"], ["B", "W"], ["B", "W"])
+    assert stacked["Center"].tolist() == [1.0, 2.0, 3.0, 4.0]
+    assert stacked["B_Center"].tolist()[:2] == [1.0, 2.0] and stacked["B_Center"].isna().tolist()[2:] == [True, True]
 
     # Both conditions come from the same videos -> paired design, tested with Wilcoxon
     enrichment = deepof.conditions.attach_animal_conditions(long_df, animal_conditions, "treatment", ["B", "W"])
@@ -790,6 +798,47 @@ def test_animal_level_condition_resolution():
     with pytest.warns(UserWarning, match="No statistics"):
         pairs, _ = deepof.visuals_utils._animal_level_condition_tests(mixed, "Mann-Whitney", ["climb"])
     assert pairs == []
+
+
+def test_animal_level_kovarova_rows_and_stats():
+    import deepof.conditions
+    import deepof.visuals_utils
+
+    # Summary with one row per video: animals B and W, one individual, one directed and one undirected behavior
+    summary = pd.DataFrame({
+        "bin_number": [0, 0], "experiment_id": ["vid1", "vid2"], "treatment": ["control+stressed"] * 2,
+        "B_W_nose2nose": [0.1, 0.2], "B_W_following": [0.3, 0.4], "W_B_following": [0.5, 0.6],
+        "B_climb": [0.7, 0.8], "W_climb": [0.9, 1.0],
+    })
+    animal_conditions = {
+        "vid1": pd.DataFrame({"treatment": ["stressed", "control"]}, index=["B", "W"]),
+        "vid2": pd.DataFrame({"treatment": ["control", "stressed"]}, index=["B", "W"]),
+    }
+    rows = deepof.conditions.summary_to_animal_rows(summary, animal_conditions, "treatment", ["B", "W"]).set_index("experiment_id")
+    assert list(rows.index) == ["vid1_B", "vid2_B", "vid1_W", "vid2_W"]
+    assert rows.loc["vid1_W", "treatment"] == "control" and rows.loc["vid1_W", "video_id"] == "vid1"
+    # own individual behavior, directed behavior as actor, undirected behavior shared
+    assert rows.loc["vid1_W", "climb"] == 0.9 and rows.loc["vid1_W", "following"] == 0.5 and rows.loc["vid1_W", "nose2nose"] == 0.1
+
+    # Cluster assignments per animal row: stressed animals mostly in cluster 0
+    def rows_for(design_conditions):
+        records = []
+        for v, conds in enumerate(design_conditions):
+            for a, cond in enumerate(conds):
+                clusters = [0, 0, 0, 1] if cond == "stressed" else [1, 1, 1, 0]
+                records += [{"experiment_id": f"v{v}_{a}", "video_id": f"v{v}", "treatment": cond, "Cluster": c} for c in clusters]
+        return pd.DataFrame(records)
+
+    paired = rows_for([["stressed", "control"]] * 6)
+    p_paired = deepof.visuals_utils.cluster_enrichment_stats_animal_level(paired, "treatment")
+    assert set(p_paired) == {0, 1} and all(0 < p <= 1 for p in p_paired.values())
+    three = rows_for([["stressed", "control", "sham"]] * 6)  # paired, three conditions -> Friedman
+    assert set(deepof.visuals_utils.cluster_enrichment_stats_animal_level(three, "treatment")) == {0, 1}
+    independent = rows_for([["stressed", "stressed"]] * 3 + [["control", "control"]] * 3)  # Kruskal-Wallis
+    assert set(deepof.visuals_utils.cluster_enrichment_stats_animal_level(independent, "treatment")) == {0, 1}
+    mixed = rows_for([["stressed", "control"], ["stressed", "stressed"], ["control", "control"]])
+    with pytest.warns(UserWarning, match="No cluster statistics"):
+        assert deepof.visuals_utils.cluster_enrichment_stats_animal_level(mixed, "treatment") == {}
 
 
 @settings(deadline=None, max_examples=10)

@@ -29,7 +29,7 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_har
 import umap
 import hdbscan
 from hdbscan.validity import validity_index
-from scipy.stats import kruskal, chi2_contingency, entropy, mannwhitneyu
+from scipy.stats import kruskal, chi2_contingency, entropy, mannwhitneyu, wilcoxon, friedmanchisquare
 from scipy.spatial.distance import pdist, squareform
 from statsmodels.stats.multitest import multipletests
 #from skbio.stats.distance import permanova, DistanceMatrix
@@ -1751,8 +1751,12 @@ def _check_enum_inputs(
     behavior_opts = []
     if supervised_annotations:
         first_key = list(supervised_annotations.keys())[0]
-        behavior_opts.extend(get_dt(supervised_annotations, first_key, only_metainfo=True)['columns'])
+        supervised_columns = get_dt(supervised_annotations, first_key, only_metainfo=True)['columns']
+        behavior_opts.extend(supervised_columns)
         behavior_opts.extend(coordinates._animal_ids)
+        if coordinates.get_animal_conditions is not None:
+            # With animal-level conditions, behaviors can also be given pooled over animals ("climb-arena")
+            behavior_opts.extend(deepof.conditions.pooled_behavior_names(supervised_columns, coordinates._animal_ids))
     if soft_counts:
         first_key = list(soft_counts.keys())[0]
         n_clusters = get_dt(soft_counts, first_key, only_metainfo=True)['num_cols']
@@ -1775,6 +1779,9 @@ def _check_enum_inputs(
         cols = get_dt(coordinates._tables, key, only_metainfo=True)['columns']
         all_bps.extend([c[0] for c in cols])
     bodypart_opts = [bp for bp in np.unique(all_bps) if bp not in coordinates._excluded]
+    if coordinates.get_animal_conditions is not None:
+        # With animal-level conditions, body parts can also be given pooled over animals ("Center")
+        bodypart_opts += deepof.conditions.pooled_behavior_names(bodypart_opts, coordinates._animal_ids)
     # remove ids for in roi version
     if(len(coordinates._animal_ids)>1):
         in_roi_bodypart_opts=[bp.partition("_")[2] for bp in bodypart_opts]
@@ -2206,6 +2213,45 @@ def _preprocess_transitions(
         "All-NaN slice encountered",
     ]
 )
+def _animal_level_roi_units(coordinates, exp_condition, condition_values, mode, bodyparts, animal_id):
+    """Measured units for ROI interactions with animal-level conditions: {condition: {exp_id: [(animal, bodyparts)]}}.
+
+    Pooled body parts (no animal prefix) and fov without animal_id measure every animal with the condition value.
+    Prefixed body parts and an explicit animal_id measure those animals, in videos where all of them have the value.
+    """
+    animal_ids = coordinates._animal_ids
+    head = ["Left_ear", "Nose", "Right_ear"]
+    if mode == "distance":
+        prefixes = {deepof.conditions.split_behavior_column(bp, animal_ids)[0] for bp in bodyparts}
+        if len(prefixes) > 1 and () in prefixes:
+            raise ValueError(
+                "With animal-level conditions, bodyparts need to be given either all with animal prefix "
+                "(e.g. 'B_Nose', only these animals) or all without (e.g. 'Nose', every animal with the condition)."
+            )
+        pooled = prefixes == {()}
+        owners = {p[0] for p in prefixes if p}
+    else:
+        pooled = animal_id is None
+        owners = {animal_id} if animal_id is not None else set()
+
+    units = {}
+    for condition_value in condition_values:
+        units[condition_value] = {}
+        matching = deepof.conditions.animals_with_condition(coordinates.get_animal_conditions, exp_condition, condition_value)
+        for exp_id, animals in matching.items():
+            if pooled:
+                exp_units = [
+                    (a, [f"{a}_{bp}" for bp in (head if mode == "fov" else bodyparts)]) for a in animals
+                ]
+            elif owners <= set(animals):
+                exp_units = [("_".join(sorted(owners)), bodyparts)]
+            else:
+                exp_units = []
+            if exp_units:
+                units[condition_value][exp_id] = exp_units
+    return units
+
+
 def _preprocess_mouse_roi_interaction(
     coordinates: coordinates,
     bodyparts: list,  
@@ -2278,28 +2324,40 @@ def _preprocess_mouse_roi_interaction(
         animal_id=animal_id,
     )
     # Check if correct inputs for modes are present
+    if isinstance(condition_values, str):
+        condition_values=[condition_values]
+    named_animals = any(str(a) != "" for a in coordinates._animal_ids)
+    if exp_condition is not None and condition_values is None:
+        level = "animal" if coordinates.get_animal_conditions is not None and named_animals else "video"
+        condition_values=coordinates.get_condition_values(exp_condition, level=level)
+
+    # With animal-level conditions (and named animals), the animals with a condition value are measured instead of
+    # whole videos: pooled body parts / fov without animal_id measure every such animal, prefixed body parts / an
+    # explicit animal_id only count where these animals have the value
+    animal_level = (
+        exp_condition is not None and condition_values is not None
+        and coordinates.get_animal_conditions is not None
+        and named_animals
+        and all(str(v) in coordinates.get_condition_values(exp_condition, level="animal") for v in condition_values)
+    )
+
     if mode == "fov" and animal_id is not None:
         bodyparts = ["Left_ear", "Nose", "Right_ear"]
         if animal_id != "":
             bodyparts = [animal_id + "_" + bp for bp in bodyparts]
     elif mode == "distance" and bodyparts is not None:
         if isinstance(bodyparts, str):
-            bodyparts=[bodyparts]  
-    else: # pragma: no cover
+            bodyparts=[bodyparts]
+    elif not (mode == "fov" and animal_level): # pragma: no cover
         raise ValueError("Error! This function requires either bodyparts for distance mode or an animal_id for foc mode!")  # pragma: no cover
-   
+
     exp_ids_given=True
     if experiment_ids is None:
         exp_ids_given=False
         experiment_ids={'all':list(coordinates._tables.keys())}
     elif isinstance(experiment_ids, str):
         experiment_ids={'selection':[experiment_ids]}
-    if isinstance(condition_values, str):
-        condition_values=[condition_values]
-    if exp_condition is not None and condition_values is None:
-        condition_values=coordinates.get_condition_values(exp_condition)
 
-    # Select experiment ids by conditions
     if exp_condition is not None and condition_values is not None:
         experiment_ids={}
         for condition_value in condition_values:
@@ -2308,6 +2366,7 @@ def _preprocess_mouse_roi_interaction(
                     for k, v in coordinates.get_exp_conditions.items()
                     if v[exp_condition].values.astype(str) == condition_value
                 ]
+
         if exp_ids_given:
             warning_message = (
                 "\033[38;5;208m\n"  # Set text color to orange
@@ -2315,6 +2374,13 @@ def _preprocess_mouse_roi_interaction(
                 "\033[0m"  # Reset text color
             )
             warnings.warn(warning_message)
+
+    # Measured units per condition and video: [(unit name, bodyparts)], one per video without animal-level conditions
+    if animal_level:
+        units = _animal_level_roi_units(coordinates, exp_condition, condition_values, mode, bodyparts, animal_id)
+        experiment_ids = {cond: list(units[cond]) for cond in units}
+    else:
+        units = {cond: {exp_id: [("", bodyparts)] for exp_id in exp_ids} for cond, exp_ids in experiment_ids.items()}
 
     latest_start=0
     if start_marker is not None:
@@ -2374,66 +2440,55 @@ def _preprocess_mouse_roi_interaction(
     for exp_cond, exp_polys in roi_dict.items():
         for exp_id, polygon in exp_polys.items():
 
-            bps = coordinates.get_coords_at_key(
+            exp_coords = coordinates.get_coords_at_key(
                 key=exp_id, scale=coordinates._scales[exp_id]
-            )[bodyparts]
-
-            # ---------------------------------------------------------------------
-            # Compute per-frame interaction signal ONCE for the whole experiment
-            # ---------------------------------------------------------------------
+            )
             polygon = np.asarray(polygon, dtype=np.float64)
-            # Remove possible double points at beginning / end
             if polygon.shape[0] >= 2 and np.allclose(polygon[0], polygon[-1]):
                 polygon = polygon[:-1]
-            if mode == "fov":
-                # bps: (T, 3*2) -> (T, 3, 2)
-                pts = bps.to_numpy().reshape(-1, 3, 2)
-                polygon = np.asarray(polygon, dtype=np.float64)
-                interaction_full = deepof.utils.in_field_of_view_numba(
-                    np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon, data_type=coordinates._bit_precision.dtype,
-                )  # shape (T,)
 
-            elif mode == "distance":
-                T = bps.shape[0]
-                B = len(bodyparts)
+            for unit_name, unit_bodyparts in units[exp_cond][exp_id]:
+                bps = exp_coords[unit_bodyparts]
 
-                inside = np.empty((T, B), dtype=bool)
-                dists = np.empty((T, B), dtype=float)
+                if mode == "fov":
+                    pts = bps.to_numpy().reshape(-1, 3, 2)
+                    interaction_full = deepof.utils.in_field_of_view_numba(
+                        np.asarray(pts, dtype=np.float64), float(fov_angle_deg), polygon, data_type=coordinates._bit_precision.dtype,
+                    )  # shape (T,)
 
-                for k, bp in enumerate(bodyparts):
-                    pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
-                    inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
-                    dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon, data_type=coordinates._bit_precision.dtype)
+                elif mode == "distance":
+                    T = bps.shape[0]
+                    B = len(unit_bodyparts)
+                    inside = np.empty((T, B), dtype=bool)
+                    dists = np.empty((T, B), dtype=float)
+                    for k, bp in enumerate(unit_bodyparts):
+                        pts = bps[bp].to_numpy().astype(np.float64)  # shape (T, 2) as in your current code
+                        inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
+                        dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon, data_type=coordinates._bit_precision.dtype)
+                    valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)
+                    min_dist = np.nanmin(dists, axis=1)
+                    min_dist[~valid] = np.nan
+                    interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
 
-                # - arena (roi_number is None): invalidate frames where ANY bp is outside arena
-                # - ROI (roi_number not None): invalidate frames where ANY bp is inside ROI
-                valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)
+                else:
+                    raise NotImplementedError(
+                        'The only currently available modes are "distance" and "fov" (field of view)'
+                    )  # pragma: no cover
 
-                min_dist = np.nanmin(dists, axis=1)
-                min_dist[~valid] = np.nan
-
-                interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
-
-            else:
-                raise NotImplementedError(
-                    'The only currently available modes are "distance" and "fov" (field of view)'
-                )  # pragma: no cover
-
-            # ---------------------------------------------------------------------
-            # Bin by slicing precomputed per-frame result
-            # ---------------------------------------------------------------------
-            if not get_raw_data:
-                for bin_id, bin_info in multi_bin_info.items():
-                    frames = bin_info[exp_id]              # frame indices for this exp_id and bin
-                    value = np.nanmean(interaction_full[frames])
-                    rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value})
-            else:
-                raw_cols[exp_id] = pd.Series(interaction_full)
-
-
+                if not get_raw_data:
+                    for bin_id, bin_info in multi_bin_info.items():
+                        frames = bin_info[exp_id]              # frame indices for this exp_id and bin
+                        value = np.nanmean(interaction_full[frames])
+                        rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value, "exp_id": exp_id})
+                else:
+                    raw_cols[f"{exp_id}_{unit_name}" if unit_name else exp_id] = pd.Series(interaction_full)
 
     if not get_raw_data:
-        df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode])
+        df = pd.DataFrame.from_records(rows, columns=["time_bin", "exp_condition", mode, "exp_id"])
+        if animal_level and len(df) > 0:
+            # One value per video, time bin and condition (animals of one video are not independent)
+            df = df.groupby(["time_bin", "exp_condition", "exp_id"], as_index=False, sort=False)[mode].mean()
+            df = df[["time_bin", "exp_condition", mode, "exp_id"]]
 
   
         df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
@@ -3031,6 +3086,15 @@ def _preprocess_kovarova(
             exp_condition = coordinates.get_exp_condition_names[0]
         if exclude_experiment_ids is None:
             exclude_experiment_ids = []
+
+        # With animal-level conditions, every animal is a unit of analysis (one row per animal and time bin)
+        animal_level = coordinates.get_animal_conditions is not None and any(str(a) != "" for a in coordinates._animal_ids)
+        if animal_level:
+            df_supervised_summary = df_supervised_summary[~df_supervised_summary["experiment_id"].isin(exclude_experiment_ids)]
+            exclude_experiment_ids = []
+            df_supervised_summary = deepof.conditions.summary_to_animal_rows(
+                df_supervised_summary, coordinates.get_animal_conditions, exp_condition, coordinates._animal_ids,
+            )
         pbar.update()
         pbar.set_postfix(step="Imputing data")
         umap_params = dict(
@@ -3065,7 +3129,10 @@ def _preprocess_kovarova(
         cluster_ids = sorted(df_no_out['Cluster'].unique())
         cmap = plt.get_cmap('tab10')
         cmap = {c: cmap(i % 10) for i, c in enumerate(cluster_ids)}
-        p_dict=deepof.visuals_utils.cluster_enrichment_stats(df_no_out, exp_condition)
+        if animal_level:
+            p_dict=deepof.visuals_utils.cluster_enrichment_stats_animal_level(df_no_out, exp_condition)
+        else:
+            p_dict=deepof.visuals_utils.cluster_enrichment_stats(df_no_out, exp_condition)
 
     return df_no_out, validation_metrics, p_dict, embedding, df_imp, impute_cols, cmap
 
@@ -3109,7 +3176,7 @@ def preprocess_kovarova(
 
     # Columns used for imputation (exclude metadata)
     impute_cols = [c for c in filtered.columns
-                   if c not in ['experiment_id', 'bin_number', exp_condition]]
+                   if c not in ['experiment_id', 'bin_number', 'video_id', exp_condition]]
 
     imputer = IterativeImputer(random_state=random_state)
     df_imputed = filtered.copy()
@@ -3544,6 +3611,62 @@ def cluster_enrichment_stats(
     return {cl: p_corr for cl, p_corr in zip(tested_clusters, p_corrected)}
 
 
+def cluster_enrichment_stats_animal_level(
+    df: pd.DataFrame,
+    exp_condition: str,
+    video_col: str = "video_id",
+    correction: str = "holm",
+    alpha: float = 0.05,
+) -> dict:
+    """
+    Like cluster_enrichment_stats, for animal rows (see deepof.conditions.summary_to_animal_rows).
+
+    Animals of one video are not independent, so cluster proportions are averaged per video and condition and the
+    test follows the design: Wilcoxon signed-rank (two conditions) or Friedman (more) if every video contains every
+    condition, Kruskal-Wallis if no video contains more than one. Mixed designs are not tested (warning, empty dict).
+
+    Returns
+    -------
+    p_dict : dict
+        {cluster_id: corrected_p_value}
+    """
+    animal_props = _compute_animal_proportions(df, exp_condition)
+    clusters = [c for c in animal_props.columns if c != exp_condition]
+    animal_props[video_col] = df[["experiment_id", video_col]].drop_duplicates().set_index("experiment_id")[video_col]
+    per_video = animal_props.groupby([video_col, exp_condition], as_index=False)[clusters].mean()
+    conditions = sorted(per_video[exp_condition].astype(str).unique())
+    if len(conditions) < 2:
+        return {}
+
+    design = deepof.conditions.condition_design(per_video, conditions, key_col=video_col, condition_col=exp_condition)
+    if design == "mixed":
+        warnings.warn(
+            "No cluster statistics: some but not all videos contain several of the compared conditions, "
+            "so neither a paired nor an independent test applies."
+        )
+        return {}
+
+    p_raw = {}
+    for cl in clusters:
+        if design == "paired":
+            wide = per_video.pivot(index=video_col, columns=exp_condition, values=cl)[conditions].dropna()
+            samples = [wide[c].to_numpy() for c in conditions]
+            if all(np.allclose(samples[0], x) for x in samples[1:]):
+                p = 1.0  # identical proportions, nothing to test
+            elif len(conditions) == 2:
+                p = wilcoxon(samples[0], samples[1]).pvalue
+            else:
+                p = friedmanchisquare(*samples).pvalue
+        else:
+            groups = [per_video.loc[per_video[exp_condition].astype(str) == c, cl].to_numpy() for c in conditions]
+            p = kruskal(*groups).pvalue
+        p_raw[cl] = 1.0 if not np.isfinite(p) else p
+
+    tested_clusters = list(p_raw.keys())
+    _, p_corrected, _, _ = multipletests([p_raw[cl] for cl in tested_clusters], alpha=alpha, method=correction)
+    return {cl: p_corr for cl, p_corr in zip(tested_clusters, p_corrected)}
+
+
 def chi_square_cluster_composition(df_no_outliers: pd.DataFrame, factor: str) -> None:
     """
     Chi-square test + Cramér's V for overall cluster × factor association,
@@ -3835,6 +3958,7 @@ def _animal_level_condition_tests(
     enrichment: pd.DataFrame,
     test: str,
     behaviors: list,
+    x_col: str = "cluster",
     key_col: str = "exp_id",
     condition_col: str = "exp condition",
     value_col: str = "time on cluster",
@@ -3845,6 +3969,11 @@ def _animal_level_condition_tests(
     Wilcoxon signed-rank test (paired by video) if both groups come from the same videos, the given test if they come
     from different videos. Partly shared groups fit neither test and are skipped with a warning.
 
+    Args:
+        enrichment (pd.DataFrame): Long table with x_col, key_col, condition_col and value_col.
+        test (str): statannotations test for independent groups.
+        behaviors (list): Values of x_col to test (behaviors, or time bins).
+
     Returns:
         pairs (list): [((behavior, condition_a), (behavior, condition_b)), ...] as used by statannotations.
         pvalues (list): raw p-values, one per pair.
@@ -3853,7 +3982,7 @@ def _animal_level_condition_tests(
 
     pairs, pvalues, skipped = [], [], []
     for behavior in behaviors:
-        sub = enrichment[enrichment["cluster"] == behavior].dropna(subset=[condition_col])
+        sub = enrichment[enrichment[x_col] == behavior].dropna(subset=[condition_col, value_col])
         conditions = sorted(sub[condition_col].astype(str).unique())
         for cond_a, cond_b in itertools.combinations(conditions, 2):
             group_a = sub[sub[condition_col].astype(str) == cond_a].set_index(key_col)[value_col]

@@ -125,6 +125,92 @@ def split_behavior_column(column: str, animal_ids: Sequence[str]) -> Tuple[Tuple
     return tuple(animals), rest
 
 
+def column_condition_labels(
+    column: str,
+    all_columns,
+    conditions: pd.Series,
+    animal_ids: Sequence[str],
+    pair_policy: str = "composition",
+) -> Tuple[str, List[str]]:
+    """Behavior name and condition label(s) of one supervised annotation column in one video.
+
+    Args:
+        column (str): Annotation column, e.g. "B_W_nose2nose".
+        all_columns: All annotation columns (a pair behavior is directed if the reversed column exists too).
+        conditions (pd.Series): Condition value per animal id for this video.
+        animal_ids (list): Animal ids of the project.
+        pair_policy (str): Handling of undirected pair behaviors, see module docstring.
+
+    Returns:
+        (behavior name without animal prefixes, list of condition labels; empty if excluded)
+    """
+    if pair_policy not in PAIR_POLICIES:
+        raise ValueError(f"pair_policy needs to be one of {PAIR_POLICIES}, got {pair_policy!r}")
+    animals, behavior = split_behavior_column(column, animal_ids)
+
+    if len(animals) == 0:
+        labels = [compose_condition(conditions)]
+    elif len(animals) == 1:
+        labels = [conditions[animals[0]]]
+    elif f"{animals[1]}_{animals[0]}_{behavior}" in all_columns:  # directed: the actor comes first
+        labels = [conditions[animals[0]]]
+    else:
+        pair = [conditions[animals[0]], conditions[animals[1]]]
+        if pair_policy == "composition":
+            labels = [compose_condition(pair)]
+        elif pair_policy == "both":
+            labels = pair
+        else:
+            labels = [pair[0]] if pair[0] == pair[1] else []
+
+    return behavior, [str(label) for label in labels]
+
+
+def animals_with_condition(animal_conditions: Dict[str, pd.DataFrame], exp_condition: str, value: str) -> Dict[str, List[str]]:
+    """{experiment_id: animal ids with the given condition value}, only experiments with at least one such animal."""
+    matching = {
+        exp_id: [str(a) for a, v in df[exp_condition].items() if str(v) == str(value)]
+        for exp_id, df in animal_conditions.items()
+    }
+    return {exp_id: animals for exp_id, animals in matching.items() if animals}
+
+
+def select_animal_rows(table: pd.DataFrame, names: Sequence[str], animals: Sequence[str], animal_ids: Sequence[str]) -> pd.DataFrame:
+    """Stack the data of selected animals below each other, one block of rows per animal.
+
+    Names without an animal prefix ("Center") are pooled over the selected animals (column "Center" holds "A_Center"
+    in A's rows, "B_Center" in B's rows); prefixed names ("A_Center") only hold data in the rows of that animal and
+    NaN elsewhere. Works for any table whose (first level) columns are "<animal>_<name>".
+    """
+    blocks = []
+    for animal in animals:
+        pieces = {}
+        for name in names:
+            prefix, base = split_behavior_column(name, animal_ids)
+            source = f"{animal}_{base}" if not prefix else name
+            piece = table[source].copy()
+            if prefix and prefix[0] != animal:
+                piece.loc[:] = float("nan")
+            pieces[name] = piece
+        blocks.append(pd.concat(pieces, axis=1))
+    return pd.concat(blocks, axis=0, ignore_index=True)
+
+
+def expand_behaviors(behaviors: Sequence[str], columns: Sequence[str], animal_ids: Sequence[str]) -> List[str]:
+    """Annotation columns selected by behavior names, which can be column names ("B_climb-arena") or
+    behavior names pooled over animals ("climb-arena")."""
+    wanted = set(behaviors)
+    return [
+        col for col in columns
+        if col in wanted or split_behavior_column(col, animal_ids)[1] in wanted
+    ]
+
+
+def pooled_behavior_names(columns: Sequence[str], animal_ids: Sequence[str]) -> List[str]:
+    """Behavior names of annotation columns with the animal prefixes removed, in order of appearance."""
+    return list(dict.fromkeys(split_behavior_column(col, animal_ids)[1] for col in columns))
+
+
 def attach_animal_conditions(
     long_df: pd.DataFrame,
     animal_conditions: Dict[str, pd.DataFrame],
@@ -150,34 +236,80 @@ def attach_animal_conditions(
         averaged per experiment, behavior and condition so that every experiment contributes at most one value per
         condition (animals of one video are not independent).
     """
-    if pair_policy not in PAIR_POLICIES:
-        raise ValueError(f"pair_policy needs to be one of {PAIR_POLICIES}, got {pair_policy!r}")
-
     columns = set(long_df[column_col].astype(str))
     rows = []
     for exp_id, column, value in zip(long_df[key_col], long_df[column_col].astype(str), long_df[value_col]):
-        conds = animal_conditions[exp_id][exp_condition]
-        animals, behavior = split_behavior_column(column, animal_ids)
-
-        if len(animals) == 0:
-            labels = [compose_condition(conds)]
-        elif len(animals) == 1:
-            labels = [conds[animals[0]]]
-        elif f"{animals[1]}_{animals[0]}_{behavior}" in columns:  # directed: the actor comes first
-            labels = [conds[animals[0]]]
-        else:
-            pair = [conds[animals[0]], conds[animals[1]]]
-            if pair_policy == "composition":
-                labels = [compose_condition(pair)]
-            elif pair_policy == "both":
-                labels = pair
-            else:
-                labels = [pair[0]] if pair[0] == pair[1] else []
-
-        rows.extend((exp_id, behavior, str(label), value) for label in labels)
+        behavior, labels = column_condition_labels(
+            column, columns, animal_conditions[exp_id][exp_condition], animal_ids, pair_policy
+        )
+        rows.extend((exp_id, behavior, label, value) for label in labels)
 
     out = pd.DataFrame(rows, columns=[key_col, column_col, condition_col, value_col])
     return out.groupby([key_col, column_col, condition_col], as_index=False, sort=False)[value_col].mean()
+
+
+def summary_to_animal_rows(
+    summary: pd.DataFrame,
+    animal_conditions: Dict[str, pd.DataFrame],
+    exp_condition: str,
+    animal_ids: Sequence[str],
+    key_col: str = "experiment_id",
+    video_col: str = "video_id",
+    meta_cols: Sequence[str] = ("bin_number",),
+) -> pd.DataFrame:
+    """Turn a supervised summary with one row per video (and time bin) into one row per animal.
+
+    Each animal gets its individual behaviors, the directed pair behaviors in which it is the actor and the undirected
+    pair behaviors it takes part in (averaged over partners), all under pooled names ("climb-arena", "following"), and
+    its own condition value. key_col becomes "<video>_<animal>" (the unit of analysis), video_col keeps the video.
+    Columns that are neither meta columns, key_col nor behaviors (e.g. other conditions) are dropped.
+    """
+    condition_names = set(next(iter(animal_conditions.values())).columns)
+    behavior_cols = [
+        c for c in summary.columns
+        if c not in set(meta_cols) | {key_col, video_col} | condition_names
+    ]
+    all_columns = set(behavior_cols)
+    named = [str(a) for a in animal_ids if str(a) != ""]
+
+    # columns contributing to each pooled behavior, per animal
+    sources = {a: {} for a in named}
+    for col in behavior_cols:
+        animals, behavior = split_behavior_column(col, animal_ids)
+        if len(animals) == 0:
+            owners = named  # video-level columns belong to every animal
+        elif len(animals) == 1:
+            owners = [animals[0]]
+        elif f"{animals[1]}_{animals[0]}_{behavior}" in all_columns:  # directed: only the actor
+            owners = [animals[0]]
+        else:  # undirected: both participants
+            owners = list(animals)
+        for a in owners:
+            sources[a].setdefault(behavior, []).append(col)
+
+    kept_meta = [c for c in meta_cols if c in summary.columns]
+    blocks = []
+    for a in named:
+        block = summary[kept_meta].copy()
+        block[video_col] = summary[key_col].values
+        block[key_col] = [f"{v}_{a}" for v in summary[key_col]]
+        block[exp_condition] = [str(animal_conditions[v].loc[a, exp_condition]) for v in summary[key_col]]
+        for behavior, cols in sources[a].items():
+            block[behavior] = summary[cols].mean(axis=1).values
+        blocks.append(block)
+    out = pd.concat(blocks, axis=0, ignore_index=True)
+    return out[kept_meta + [key_col, video_col, exp_condition] + [c for c in out.columns if c not in set(kept_meta) | {key_col, video_col, exp_condition}]]
+
+
+def condition_design(df: pd.DataFrame, conditions: Sequence[str], key_col: str = "exp_id", condition_col: str = "exp condition") -> str:
+    """How several condition groups relate: "paired" (every experiment contributes to every condition),
+    "independent" (no experiment contributes to more than one) or "mixed" (neither)."""
+    key_sets = [set(df.loc[df[condition_col].astype(str) == str(c), key_col]) for c in conditions]
+    if all(ks == key_sets[0] for ks in key_sets):
+        return "paired"
+    if sum(len(ks) for ks in key_sets) == len(set().union(*key_sets)):
+        return "independent"
+    return "mixed"
 
 
 def comparison_design(df: pd.DataFrame, condition_a: str, condition_b: str, key_col: str = "exp_id", condition_col: str = "exp condition") -> str:
