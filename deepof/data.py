@@ -2798,6 +2798,7 @@ class Coordinates:
         keys: Optional[Sequence[str]] = None,
         conditions: Optional[Mapping[str, Sequence[Any]]] = None,
         match_all_conditions = False,
+        level: str = "video",
     ):
         """
         Return a (shallow) subset of the Coordinates object containing only selected experiments.
@@ -2806,6 +2807,10 @@ class Coordinates:
             keys: list/tuple of experiment keys to keep (e.g., ["F_Test 1", "F_Test 2"]).
             conditions: dict mapping column name -> allowed values (e.g., {"sex": ["Female"]}).
                        OR semantics: an experiment is kept if it matches ANY provided condition constraint.
+            match_all_conditions: if True, an experiment needs to match ALL provided condition constraints.
+            level: "video" (default) matches the video-level condition values (for mixed videos with animal-level
+                   conditions a composition such as "control+stressed"); "animal" keeps a video if ANY of its animals
+                   has an allowed value (with match_all_conditions, each constraint needs to be met by some animal).
 
         Returns:
             Coordinates: subset view/copy of the object.
@@ -2891,10 +2896,16 @@ class Coordinates:
                                     v = df[col].iloc[0]
                                 except Exception:
                                     continue
-                                if not match_all_conditions and v in allowed_values:
+                                animal_conds = self.get_animal_conditions
+                                if level == "animal" and animal_conds is not None and k in animal_conds:
+                                    # any animal of the video has an allowed value
+                                    hit = bool(set(animal_conds[k][col].astype(str)) & {str(a) for a in allowed_values})
+                                else:
+                                    hit = v in allowed_values
+                                if not match_all_conditions and hit:
                                     matched = True
                                     break
-                                elif v in allowed_values:
+                                elif hit:
                                     cond_counter+=1
                                     if cond_counter == len(valid_conditions):
                                         matched = True

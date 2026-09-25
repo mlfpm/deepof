@@ -379,12 +379,21 @@ def calculate_average_arena(
     return avg_points
 
 
+def _keep_videos(table, keys):
+    """Subset of a TableDict or dict with only the given (existing) video keys."""
+    keys = [k for k in table.keys() if k in set(keys)]
+    if hasattr(table, "filter_videos"):
+        return table.filter_videos(keys)
+    return {k: table[k] for k in keys}
+
+
 def _filter_embeddings(
     coordinates,
     embeddings,
     soft_counts,
     supervised_annotations,
     exp_condition,
+    condition_source: str = "composition",
 ):
     """Auxiliary function to plot_embeddings. Filters all available data based on the provided keys and experimental condition."""
     # Get experimental conditions per video
@@ -393,44 +402,32 @@ def _filter_embeddings(
             "Either embeddings and soft_counts or supervised_annotations must be provided."
         )  # pragma: no cover
 
-    try:
-        if exp_condition is None:
-            exp_condition = list(coordinates.get_exp_conditions.values())[0].columns[0]
-
-        concat_hue = [
-            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
-            for i in list(embeddings.keys())
-        ]
+    if embeddings is not None:
         soft_counts = soft_counts.filter_videos(embeddings.keys())
-
-    except AttributeError:
-        if exp_condition is None:
-            exp_condition = list(supervised_annotations._exp_conditions.values())[
-                0
-            ].columns[0]
-
-        concat_hue = [
-            str(coordinates.get_exp_conditions[i][exp_condition].values[0])
-            for i in list(supervised_annotations.keys())
-        ]
+    keys = list((embeddings if embeddings is not None else supervised_annotations).keys())
+    # One condition per video; videos left out by condition_source (e.g. "exclude_mixed") are dropped below
+    video_conds = deepof.conditions.video_conditions(
+        coordinates.get_exp_conditions, exp_condition, coordinates.get_animal_conditions, condition_source, keys=keys
+    )
+    concat_hue = [video_conds[k] for k in keys if k in video_conds]
 
     # Keep only those experiments for which we have an experimental condition assigned
     if embeddings is not None:
         embeddings = {
             key: val
             for key, val in embeddings.items()
-            if key in coordinates.get_exp_conditions.keys()
+            if key in video_conds
         }
         soft_counts = {
             key: val
             for key, val in soft_counts.items()
-            if key in coordinates.get_exp_conditions.keys()
+            if key in video_conds
         }
     if supervised_annotations is not None:
         supervised_annotations = {
             key: val
             for key, val in supervised_annotations.items()
-            if key in coordinates.get_exp_conditions.keys()
+            if key in video_conds
         }
 
     return embeddings, soft_counts, supervised_annotations, concat_hue
@@ -2104,6 +2101,7 @@ def _preprocess_transitions(
     invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
+    condition_source: str = "composition",
     delta_T: float = 0.5,
     silence_diagonal: bool = False,
     diagonal_behavior_counting: str = "Events",
@@ -2124,6 +2122,7 @@ def _preprocess_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        condition_source (str): Only relevant with animal-level conditions: which condition a video gets. "composition" (default; the shared value, or e.g. "control+stressed" for mixed videos), "exclude_mixed" (leave out videos whose animals have different values) or an animal id (e.g. "B"; the condition of that animal).
         delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
         diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
@@ -2177,10 +2176,11 @@ def _preprocess_transitions(
 
     exp_conditions=None
     if exp_condition is not None:
-        exp_conditions = {
-            key: str(val.loc[:, exp_condition].values[0])
-            for key, val in coordinates.get_exp_conditions.items()
-        }
+        exp_conditions = deepof.conditions.video_conditions(coordinates.get_exp_conditions, exp_condition, coordinates.get_animal_conditions, condition_source)
+        # videos left out by condition_source (e.g. "exclude_mixed") are removed from the data as well
+        tab_dict = _keep_videos(tab_dict, exp_conditions.keys())
+        if soft_counts is not None:
+            soft_counts = _keep_videos(soft_counts, exp_conditions.keys())
 
     # preprocess information given for time binning
     bin_info_time = _preprocess_time_bins(

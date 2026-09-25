@@ -312,6 +312,60 @@ def condition_design(df: pd.DataFrame, conditions: Sequence[str], key_col: str =
     return "mixed"
 
 
+def video_conditions(
+    exp_conditions: Dict[str, pd.DataFrame],
+    exp_condition: Optional[str] = None,
+    animal_conditions: Optional[Dict[str, pd.DataFrame]] = None,
+    condition_source: str = "composition",
+    keys=None,
+) -> Dict[str, str]:
+    """One condition value per video, for analyses of data that belongs to whole videos (e.g. soft counts).
+
+    Args:
+        exp_conditions (dict): Video-level conditions ({experiment_id: 1-row DataFrame}).
+        exp_condition (str): Condition to use. Defaults to the first one.
+        animal_conditions (dict): Animal-level conditions, needed for condition_source other than "composition".
+        condition_source (str): "composition" (default): the video-level value, i.e. the shared value or the
+            composition of mixed videos (e.g. "control+stressed"); "exclude_mixed": like "composition", but videos
+            whose animals have different values are left out; an animal id (e.g. "B"): that animal's value.
+        keys: Videos to include (default: all).
+
+    Returns:
+        dict: {experiment_id: condition value}; videos left out by condition_source are missing.
+    """
+    if exp_condition is None:
+        exp_condition = next(iter(exp_conditions.values())).columns[0]
+    keys = list(exp_conditions.keys()) if keys is None else list(keys)
+
+    if condition_source == "composition" or (condition_source == "exclude_mixed" and animal_conditions is None):
+        return {k: str(exp_conditions[k][exp_condition].values[0]) for k in keys if k in exp_conditions}
+
+    if animal_conditions is None:
+        raise ValueError(
+            f'condition_source="{condition_source}" needs animal-level conditions (load them with an "{ANIMAL_ID_COLUMN}" column).'
+        )
+    if condition_source == "exclude_mixed":
+        uniform = {
+            k: str(animal_conditions[k][exp_condition].iloc[0])
+            for k in keys
+            if k in animal_conditions and animal_conditions[k][exp_condition].astype(str).nunique() == 1
+        }
+        if keys and not uniform:
+            raise ValueError(
+                f'condition_source="exclude_mixed" leaves no videos: all animals within each video differ in "{exp_condition}".'
+            )
+        return uniform
+
+    animal = str(condition_source)
+    missing = [k for k in keys if k in animal_conditions and animal not in animal_conditions[k].index]
+    if missing:
+        raise ValueError(
+            f'condition_source="{animal}" needs to be "composition", "exclude_mixed" or an animal id; '
+            f"{animal!r} is not an animal of {missing[:3]}."
+        )
+    return {k: str(animal_conditions[k].loc[animal, exp_condition]) for k in keys if k in animal_conditions}
+
+
 def comparison_design(df: pd.DataFrame, condition_a: str, condition_b: str, key_col: str = "exp_id", condition_col: str = "exp condition") -> str:
     """How two condition groups relate: "paired" (the same experiments contribute to both), "independent"
     (no shared experiments) or "mixed" (partly shared; neither paired nor independent tests apply)."""

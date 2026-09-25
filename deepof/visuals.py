@@ -1559,6 +1559,7 @@ def return_transitions(
     invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
+    condition_source: str = "composition",
     delta_T: float = 0.0,
     silence_diagonal: bool = False,
     diagonal_behavior_counting: str = "Transitions",
@@ -1583,6 +1584,7 @@ def return_transitions(
         in_roi_criterion=in_roi_criterion,
         invert_roi=invert_roi,   
         exp_condition=exp_condition,
+        condition_source=condition_source,
         delta_T=delta_T,        
         silence_diagonal=silence_diagonal,
         diagonal_behavior_counting=diagonal_behavior_counting,
@@ -1616,6 +1618,7 @@ def plot_transitions(
     invert_roi: bool = False,
     # Selection parameters
     exp_condition: str = None,
+    condition_source: str = "composition",
     delta_T: float = 0.0,
     silence_diagonal: bool = False,
     diagonal_behavior_counting: str = "Transitions",
@@ -1639,6 +1642,7 @@ def plot_transitions(
         roi_number (int): Number of the ROI that should be used for the plot (all behavior that occurs outside of the ROI gets excluded) 
         animals_in_roi (list): List of ids of the animals that need to be inside of the active ROI. All frames in which any of the given animals are not inside of the ROI get excluded                      
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.
+        condition_source (str): Only relevant with animal-level conditions: which condition a video gets. "composition" (default; the shared value, or e.g. "control+stressed" for mixed videos), "exclude_mixed" (leave out videos whose animals have different values) or an animal id (e.g. "B"; the condition of that animal).
         delta_T: Time after the offset of one behavior during which the onset of the next behavior counts as a transition      
         silence_diagonal (bool): If True, diagonals are set to zero.
         diagonal_behavior_counting (str): How to count diagonals (self-transitions). Options: 
@@ -1667,6 +1671,7 @@ def plot_transitions(
         in_roi_criterion=in_roi_criterion,
         invert_roi=invert_roi,    
         exp_condition=exp_condition,
+        condition_source=condition_source,
         delta_T=delta_T,        
         silence_diagonal=silence_diagonal,
         diagonal_behavior_counting=diagonal_behavior_counting,
@@ -2207,6 +2212,7 @@ def plot_stationary_entropy(
     # Visualization parameters
     add_stats: str = "Mann-Whitney",
     exp_condition: str = None,
+    condition_source: str = "composition",
     verbose: bool = False,
     ax: Any = None,
     save: bool = False,
@@ -2226,6 +2232,7 @@ def plot_stationary_entropy(
         in_roi_criterion (str): Criterion for in roi check, can be a single bodypart, a list of bodyparts or "all" bodyparts of a mouse          
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.        
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.        
+        condition_source (str): Only relevant with animal-level conditions: which condition a video gets. "composition" (default; the shared value, or e.g. "control+stressed" for mixed videos), "exclude_mixed" (leave out videos whose animals have different values) or an animal id (e.g. "B"; the condition of that animal).
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         ax (plt.AxesSubplot): axes where to plot the current figure. If not provided, new figure will be created.
         save (bool): Saves a time-stamped vectorized version of the figure if True.
@@ -2249,16 +2256,9 @@ def plot_stationary_entropy(
 
 
     # Get requested experimental condition. If none is provided, default to the first one available.
-    if exp_condition is None:
-        exp_conditions = {
-            key: str(val.iloc[:, 0].values[0])
-            for key, val in coordinates.get_exp_conditions.items()
-        }
-    else:
-        exp_conditions = {
-            key: str(val.loc[:, exp_condition].values[0])
-            for key, val in coordinates.get_exp_conditions.items()
-        }
+    exp_conditions = deepof.conditions.video_conditions(coordinates.get_exp_conditions, exp_condition, coordinates.get_animal_conditions, condition_source)
+    # videos left out by condition_source (e.g. "exclude_mixed") are removed from the data as well
+    embeddings = deepof.visuals_utils._keep_videos(embeddings, exp_conditions.keys())
 
     soft_counts = soft_counts.filter_videos(embeddings.keys())
 
@@ -2443,16 +2443,8 @@ def plot_normative_log_likelihood(
     ax2.set_ylabel("centered normative log likelihood")
 
     # Add statistics
-    if exp_condition is None:
-        exp_conditions = {
-            key: str(val.iloc[:, 0].values[0])
-            for key, val in embeddings._exp_conditions.items()
-        }
-    else:
-        exp_conditions = {
-            key: str(val.loc[:, exp_condition].values[0])
-            for key, val in embeddings._exp_conditions.items()
-        }
+    # conditions as resolved by the caller (e.g. with condition_source in plot_embeddings)
+    condition_values = set(embedding_dataset["experimental condition"].astype(str))
 
     #embedding_dataset.index = embeddings._exp_conditions.keys()
     embedding_dataset.sort_values(
@@ -2464,7 +2456,7 @@ def plot_normative_log_likelihood(
 
     pairs = [
         pair
-        for pair in list(combinations(set(exp_conditions.values()), 2))
+        for pair in list(combinations(condition_values, 2))
         if normative_model in pair
     ]
 
@@ -2509,6 +2501,7 @@ def plot_embeddings(
     verbose: bool = False,
     # Visualization design and data parameters
     exp_condition: str = None,
+    condition_source: str = "composition",
     aggregate_experiments: str = None,
     samples: int = 500,
     show_aggregated_density: bool = True,
@@ -2537,6 +2530,7 @@ def plot_embeddings(
         add_stats (str): test to use. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         verbose (bool): if True, prints test results and p-value cutoffs. False by default.
         exp_condition (str): Name of the experimental condition to use when plotting. If None (default) the first one available is used.    
+        condition_source (str): Only relevant with animal-level conditions: which condition a video gets. "composition" (default; the shared value, or e.g. "control+stressed" for mixed videos), "exclude_mixed" (leave out videos whose animals have different values) or an animal id (e.g. "B"; the condition of that animal).
         aggregate_experiments (str): Whether to aggregate embeddings by experiment (by time on cluster, mean, or median) or not (default).
         samples (int): Number of samples to take from the time embeddings. None leads to plotting all time-points, which may hurt performance.
         show_aggregated_density (bool): if True, a density plot is added to the aggregated embeddings.
@@ -2625,6 +2619,7 @@ def plot_embeddings(
         copy.deepcopy(soft_counts),
         copy.deepcopy(supervised_annotations),
         exp_condition,
+        condition_source,
     )
     show = True
 
@@ -4015,6 +4010,7 @@ def plot_distance_between_conditions(
     embedding: dict,
     soft_counts: dict,
     exp_condition: str,
+    condition_source: str = "composition",
     embedding_aggregation_method: str = "median",
     distance_metric: str = "wasserstein",
     n_jobs: int = -1,
@@ -4031,6 +4027,7 @@ def plot_distance_between_conditions(
         embedding (dict): embedding object for the current project. Used to get video paths.
         soft_counts (dict): dictionary with soft_counts per experiment.
         exp_condition (str): experimental condition to use for the distance calculation.
+        condition_source (str): Only relevant with animal-level conditions: which condition a video gets. "composition" (default; the shared value, or e.g. "control+stressed" for mixed videos), "exclude_mixed" (leave out videos whose animals have different values) or an animal id (e.g. "B"; the condition of that animal).
         embedding_aggregation_method (str): method to use for aggregating the embedding. Options are 'time_on_cluster' and 'mean'.
         distance_metric (str): distance metric to use for the distance calculation. Options are 'wasserstein' and 'euclidean'.
         n_jobs (int): number of jobs to use for the distance calculation.
@@ -4044,16 +4041,18 @@ def plot_distance_between_conditions(
         exp_condition=exp_condition,
     )
 
+    # One condition per video; videos left out by condition_source (e.g. "exclude_mixed") are removed from the data
+    exp_conditions = deepof.conditions.video_conditions(coordinates.get_exp_conditions, exp_condition, coordinates.get_animal_conditions, condition_source)
+    embedding = deepof.visuals_utils._keep_videos(embedding, exp_conditions.keys())
+    soft_counts = deepof.visuals_utils._keep_videos(soft_counts, exp_conditions.keys())
+
     min_len=np.min([get_dt(soft_counts, key, only_metainfo=True)['num_rows'] for key in soft_counts.keys()])
 
     # Get distance between distributions across the growing window
     distance_array = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        {
-            key: val[exp_condition].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
-        },
+        exp_conditions,
         int(np.round(10 * coordinates._frame_rate)),
         min_len,
         int(np.round(coordinates._frame_rate)),
@@ -4068,10 +4067,7 @@ def plot_distance_between_conditions(
     distance_per_bin = deepof.post_hoc.condition_distance_binning(
         embedding,
         soft_counts,
-        {
-            key: val[exp_condition].values[0]
-            for key, val in coordinates.get_exp_conditions.items()
-        },
+        exp_conditions,
         int(np.round(10 * coordinates._frame_rate)),
         min_len,
         int(np.round(optimal_bin * coordinates._frame_rate)),

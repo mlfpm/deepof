@@ -800,6 +800,33 @@ def test_animal_level_condition_resolution():
     assert pairs == []
 
 
+def test_video_conditions_from_animal_conditions():
+    import deepof.conditions
+
+    animal_conditions = {
+        "vid1": pd.DataFrame({"treatment": ["stressed", "control"]}, index=["B", "W"]),
+        "vid2": pd.DataFrame({"treatment": ["control", "control"]}, index=["B", "W"]),
+    }
+    exp_conditions = deepof.conditions.derive_video_conditions(animal_conditions)
+
+    def resolve(source, animal_level=True):
+        return deepof.conditions.video_conditions(
+            exp_conditions, "treatment", animal_conditions if animal_level else None, source
+        )
+
+    assert resolve("composition") == {"vid1": "control+stressed", "vid2": "control"}
+    assert resolve("exclude_mixed") == {"vid2": "control"}
+    assert resolve("B") == {"vid1": "stressed", "vid2": "control"}
+    # Without animal-level conditions, "exclude_mixed" changes nothing and animal ids are an error
+    assert resolve("exclude_mixed", animal_level=False) == resolve("composition")
+    with pytest.raises(ValueError, match="needs animal-level conditions"):
+        resolve("B", animal_level=False)
+    with pytest.raises(ValueError, match="is not an animal"):
+        resolve("R")
+    with pytest.raises(ValueError, match="leaves no videos"):
+        deepof.conditions.video_conditions(exp_conditions, "treatment", animal_conditions, "exclude_mixed", keys=["vid1"])
+
+
 def test_animal_level_kovarova_rows_and_stats():
     import deepof.conditions
     import deepof.visuals_utils
