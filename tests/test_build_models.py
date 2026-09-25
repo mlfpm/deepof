@@ -580,6 +580,7 @@ def test_save_and_load_model(model_name):
         rebuild_spec["temperature"]=0.1
         rebuild_spec["beta"]=0.1
         rebuild_spec["tau"]=0.1
+        rebuild_spec["window_len"]=16
 
     # Build the appropriate model
     if model_name == "vade":
@@ -623,6 +624,7 @@ def test_save_and_load_model(model_name):
             temperature=0.1,
             beta=0.1,
             tau=0.1,
+            window_len=16,
         ).to(device)
         rebuild_spec = rebuild_spec
 
@@ -704,6 +706,7 @@ def test_save_and_load_model(model_name):
             assert isinstance(loaded_model, deepof.clustering.models_new.VQVAEPT)
         elif model_name == "contrastive":
             assert isinstance(loaded_model, deepof.clustering.models_new.ContrastivePT)
+            assert loaded_model.window_size == 16
 
         loaded_params = dict(loaded_model.named_parameters())
 
@@ -1271,8 +1274,12 @@ def test_vqvae_backward_step_with_distillation(
 
 
 @settings(deadline=None)
-@given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
-def test_fit_contrastive_smoke(use_teacher, encoder_type):
+@given(
+    use_teacher=st.booleans(),
+    encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]),
+    contrastive_window=st.sampled_from([12, 20]),
+)
+def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
     out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
 
     if os.path.exists(out_path):
@@ -1293,6 +1300,7 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
     common_cfg.n_components = 4
     common_cfg.diag_max_batches = 1
     common_cfg.encoder_type = encoder_type
+    contrastive_cfg.contrastive_window = contrastive_window
 
     seen_apply_distill = []
     diag_calls = {"n": 0}
@@ -1334,6 +1342,7 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type):
 
     assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
     assert isinstance(model_score, deepof.clustering.models_new.ContrastivePT)
+    assert model_val.window_size == contrastive_window
     assert writer.flushed and writer.closed
     assert seen_apply_distill
     assert False in seen_apply_distill

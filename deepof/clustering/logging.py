@@ -97,16 +97,17 @@ def get_q_contrastive(
 
     a_full = deepof.clustering.model_utils_new.recompute_edges(x_full, edge_index)
 
-    half_len = x_full.shape[1] // 2
+    # Central window of the model's length, as used in training
+    window_len = deepof.clustering.model_utils_new.unwrap_dp(model).window_size
     starts = torch.full(
         (x_full.shape[0],),
-        fill_value=half_len // 2,
+        fill_value=(x_full.shape[1] - window_len) // 2,
         device=x_full.device,
         dtype=torch.long,
     )
 
-    x = deepof.clustering.model_utils_new.slice_time_per_sample(x_full, starts, half_len)
-    a = deepof.clustering.model_utils_new.slice_time_per_sample(a_full, starts, half_len)
+    x = deepof.clustering.model_utils_new.slice_time_per_sample(x_full, starts, window_len)
+    a = deepof.clustering.model_utils_new.slice_time_per_sample(a_full, starts, window_len)
 
     z = model(x, a)
     z = F.normalize(z, dim=1)
