@@ -997,7 +997,9 @@ def _preprocess_gates(
     if not isinstance(embedding_gates, str):
         M_gates_eff = 2 ** len(set(embedding_gates))
 
-    if len(animal_ids) == 1 or len(animal_ids) > 4:
+    # Distance gates need animal pairs (a single gate for one animal, as in compute_gate_edges);
+    # behavior gates work per animal and keep their gates
+    if supervised_annotations is None and (len(animal_ids) == 1 or len(animal_ids) > 4):
         M_gates_eff = 1
 
     # gating series + masks
@@ -1079,6 +1081,8 @@ def get_contrastive_soft_counts_gmm(
         embedding_gates=embedding_gates,
         gate_edges=gate_edges,
     )
+    # Only the effective gates get clusters (e.g. a single distance gate for one animal)
+    N_clusters_per_gate = N_clusters_per_gate[:M_gates_eff]
 
     # ---- fit GMM per (gate, bin) ----
     models: Dict[Any, List] = {}
