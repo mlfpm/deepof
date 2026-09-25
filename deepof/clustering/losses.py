@@ -35,7 +35,7 @@ table_dict = NewType("deepof_table_dict", Any)
 def select_contrastive_loss_pt(
     history: torch.Tensor,
     future: torch.Tensor,
-    shift: torch.Tensor,
+    shift: Optional[torch.Tensor],  # time-shifted view, only used by nce
     similarity: str,
     loss_fn: str = "nce",
     temperature: float = 0.1,
@@ -50,7 +50,8 @@ def select_contrastive_loss_pt(
     top_m_pos: int = 0,
     sim_threshold: float = 0.9,
     weighting_level: float = 0.0,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, Any, Any, Any]:
+    """Returns (loss, term1, term2, term3); vicreg: (invariance, variance, covariance), others: (pos, neg, debug or None)."""
     sim_fn = _SIMILARITIES[similarity]
 
     if loss_fn == "nce":
@@ -110,7 +111,7 @@ def _edit_similarity_pt(x: torch.Tensor, y: torch.Tensor, create_matrix: bool = 
     return _euclidean_similarity_pt(x, y, create_matrix=create_matrix)
 
 
-_SIMILARITIES: Dict[str, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
+_SIMILARITIES: Dict[str, Callable[..., torch.Tensor]] = {
     "cosine": _cosine_similarity_pt,
     "dot": _dot_similarity_pt,
     "euclidean": _euclidean_similarity_pt,
@@ -139,10 +140,10 @@ def vicreg_loss_pt(
     lambda_cov: float = 0.1,
     gamma: float = 1.0,
     eps: float = 1e-4,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     VICReg loss: invariance, variance, covariance between two views.
-    Returns (total_loss, invariance_loss, variance_loss).
+    Returns (total_loss, invariance_loss, variance_loss, covariance_loss).
     """
     B, D = z.shape
 
@@ -440,7 +441,7 @@ def dcl_loss_pt(
     temperature: float = 0.1,
     debiased: bool = True,
     tau_plus: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, None]:
     """Compute the DCL loss function, as described in the paper "Debiased Contrastive Learning" (https://github.com/chingyaoc/DCL/)."""
     N = history.shape[0]
     sim = similarity(history, future)  # (N, N)
@@ -470,7 +471,7 @@ def fc_loss_pt(
     similarity: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     temperature: float = 0.1,
     elimination_topk: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, None]:
     """Compute the FC loss function, as described in the paper "Fully-Contrastive Learning of Visual Representations" (https://arxiv.org/abs/2004.11362)."""
     N = history.shape[0]
     elim = min(elimination_topk, 0.5)
@@ -508,7 +509,7 @@ def hard_loss_pt(
     beta: float = 0.0,
     debiased: bool = True,
     tau_plus: float = 0.1,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, None]:
     """Compute the Hard loss function, as described in the paper "Contrastive Learning with Hard Negative Samples" (https://arxiv.org/abs/2011.03343)."""
     N = history.shape[0]
     sim = similarity(history, future)  # (N, N)

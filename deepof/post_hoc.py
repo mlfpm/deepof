@@ -1829,7 +1829,7 @@ def get_contrastive_soft_counts_msm_pcca(
     animal_ids: list,
     window_size: int = 12,
     supervised_annotations=None,
-    N_clusters_per_gate: list = [16,4,4],
+    N_clusters_per_gate: list = [16, 4, 4],
     M_gates: int = 3,
     gate_edges: Optional[Dict[Any, np.ndarray]] = None,
     sample_size: int = 200000,
@@ -1843,10 +1843,12 @@ def get_contrastive_soft_counts_msm_pcca(
     decode_method: str = "viterbi_macro",
     decode_sticky: float = 0.4,
     decode_emit_tau: float = 1.0,
+    restrict_return_gates: Optional[Union[int, Sequence[int]]] = None,
+    drop_out_of_gate: bool = True,
 ):
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
-    
+
     decode_method:
         "viterbi_macro" (default) — MSM/PCCA Viterbi on macrostates.
         "lookup" — old per-frame k-means + χ (set temporal_smooth_win=3 to match before).
@@ -1859,16 +1861,31 @@ def get_contrastive_soft_counts_msm_pcca(
 
     decode_emit_tau:
         Temperature on ||z - centroid||² emissions. Smaller → peakier votes.
-    
+
+    restrict_return_gates:
+        If None, return all distance/behavior bins (current behavior).
+        If int or sequence of ints, keep only those bin indices (0-based).
+        Example: N_clusters_per_gate=[16, 4, 4] and restrict_return_gates=1
+        returns the 4 clusters of bin 1. Rows not in a kept bin are NaN,
+        unless drop_out_of_gate=True.
+
+    drop_out_of_gate:
+        Only used when restrict_return_gates is not None. If True, drop
+        out-of-bin rows from the soft counts and return a second object:
+        embeddings filtered to the same rows (dict[gate][key] -> ndarray).
+        If False, keep original length and set out-of-bin rows to NaN.
+
     Returns:
         Dict[Any, TableDict]: one soft-count TableDict per gate.
         For pairwise distance gating, keys are animal pairs like ("A", "B").
+        If drop_out_of_gate and restrict_return_gates is not None:
+            (soft_counts_by_gate, embeddings_by_gate).
     """
-    
+
     if isinstance(N_clusters_per_gate, int):
-        N_clusters_per_gate = [N_clusters_per_gate]*M_gates
-    elif isinstance(N_clusters_per_gate, List) and len(N_clusters_per_gate) != M_gates:
-        N_clusters_per_gate=[N_clusters_per_gate[0]]*M_gates
+        N_clusters_per_gate = [N_clusters_per_gate] * M_gates
+    elif isinstance(N_clusters_per_gate, list) and len(N_clusters_per_gate) != M_gates:
+        N_clusters_per_gate = [N_clusters_per_gate[0]] * M_gates
         warning_message = (
             "\033[38;5;208m\n"  # Set text color to orange
             "Warning! If numbers of clusters per gate are given as a list, the list must be as long as the number\n"
@@ -1876,6 +1893,7 @@ def get_contrastive_soft_counts_msm_pcca(
             "\033[0m"  # Reset text color
         )
         warnings.warn(warning_message)
+
     (
         keys,
         gates,
@@ -1892,6 +1910,30 @@ def get_contrastive_soft_counts_msm_pcca(
         embedding_gates=embedding_gates,
         gate_edges=gate_edges,
     )
+
+    n_clusters = np.asarray(N_clusters_per_gate, dtype=int)
+    if restrict_return_gates is None:
+        keep_bins = list(range(M_gates_eff))
+    else:
+        if isinstance(restrict_return_gates, (int, np.integer)):
+            keep_bins = [int(restrict_return_gates)]
+        else:
+            keep_bins = [int(b) for b in restrict_return_gates]
+        keep_bins = sorted(set(keep_bins))
+        for b in keep_bins:
+            if b < 0 or b >= M_gates_eff:
+                raise ValueError(
+                    f"restrict_return_gates contains {b}, "
+                    f"but valid bin indices are 0..{M_gates_eff - 1}"
+                )
+        if drop_out_of_gate is False:
+            pass
+        elif not isinstance(drop_out_of_gate, bool):
+            raise TypeError("drop_out_of_gate must be a bool")
+
+    col_sizes = [int(n_clusters[b]) for b in keep_bins]
+    K_keep = int(np.sum(col_sizes))
+    col_offsets = np.cumsum([0] + col_sizes)
 
     # ---- fit per (gate, bin) ----
     models = _fit_msmpcca_models(
@@ -1910,12 +1952,13 @@ def get_contrastive_soft_counts_msm_pcca(
     )
 
     # ---- decode per gate ----
-    K_total = np.sum(np.array(N_clusters_per_gate))
     soft_counts_out_by_gate = {gate: {} for gate in gates}
+    embeddings_out_by_gate = {gate: {} for gate in gates} if drop_out_of_gate else None
     table_path = os.path.join(
         coordinates._project_path, coordinates._project_name, "Tables"
     )
-    N_cumulative_clusters=np.cumsum([0]+N_clusters_per_gate)
+
+    do_drop = bool(drop_out_of_gate) and restrict_return_gates is not None
 
     for key in tqdm.tqdm(
         keys,
@@ -1925,24 +1968,19 @@ def get_contrastive_soft_counts_msm_pcca(
         Z0 = _get_Z(Z_by_key, embeddings, key)
 
         for gate_idx, gate in enumerate(gates):
-            P = np.full((Z0.shape[0], K_total), float(1e-4), dtype=np.float32)
+            P = np.full((Z0.shape[0], K_keep), np.float32(1e-4), dtype=np.float32)
+            in_keep = np.zeros(Z0.shape[0], dtype=bool)
 
-            for b in range(M_gates_eff):
+            for i, b in enumerate(keep_bins):
                 model = models[gate][b]
-                mask = gate_masks[gate][b][key]
-                block = slice(
-                    N_cumulative_clusters[b],
-                    N_cumulative_clusters[b+1],
-                )
+                mask = np.asarray(gate_masks[gate][b][key], dtype=bool)
+                in_keep |= mask
+                block = slice(int(col_offsets[i]), int(col_offsets[i + 1]))
 
-                if model is None: # pragma: no cover
+                if model is None:  # pragma: no cover
                     if np.any(mask):
-                        P[mask, block] = 1.0 / N_clusters_per_gate[b]
+                        P[mask, block] = 1.0 / n_clusters[b]
                     continue
-
-                scaler = model["scaler"]
-                kmeans = model["kmeans"]
-                m2m = model["micro2macro"]
 
                 for s, e in _mask_to_runs(mask, min_len=1):
                     seg = Z0[s:e, :]
@@ -1960,15 +1998,28 @@ def get_contrastive_soft_counts_msm_pcca(
             rs = P.sum(axis=1, keepdims=True)
             P = P / np.maximum(rs, 1e-12)
 
+            if restrict_return_gates is not None:
+                if do_drop:
+                    P = P[in_keep]
+                    embeddings_out_by_gate[gate][key] = np.asarray(Z0)[in_keep]
+                else:
+                    P = np.array(P, copy=True)
+                    P[~in_keep] = np.nan
+
             gate_tag = _gate_to_tag(gate)
+            suffix = ""
+            if restrict_return_gates is not None:
+                suffix = "_bins" + "-".join(str(b) for b in keep_bins)
+                if do_drop:
+                    suffix += "_dropped"
             table_path_key = os.path.join(
-                table_path, key, f"{key}_soft_counts_msmpcca_{gate_tag}"
+                table_path, key, f"{key}_soft_counts_msmpcca_{gate_tag}{suffix}"
             )
             soft_counts_out_by_gate[gate][key] = deepof.utils.save_dt(
                 P, table_path_key, coordinates._very_large_project
             )
 
-    return {
+    soft_counts_tables = {
         gate: deepof.data.TableDict(
             soft_counts_out_by_gate[gate],
             typ="unsupervised_counts",
@@ -1977,6 +2028,10 @@ def get_contrastive_soft_counts_msm_pcca(
         )
         for gate in gates
     }
+
+    if do_drop:
+        return soft_counts_tables, embeddings_out_by_gate
+    return soft_counts_tables
 
 
 def recluster(

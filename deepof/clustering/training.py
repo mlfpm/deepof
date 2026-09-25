@@ -499,6 +499,7 @@ def step_contrastive_distill(
     
     contrastive_cfg=getattr(ctx, "contrastive_cfg", None)
     window_len = getattr(ctx, "window_len", None) or contrastive_cfg.contrastive_window
+    neg_min_shift, neg_max_shift = _hard_negative_shift_range(contrastive_cfg, window_len)
     
     a_full = recompute_edges(x_full, edge_index)
     rot_precomp = getattr(ctx, "rot_precomp", None)
@@ -527,23 +528,27 @@ def step_contrastive_distill(
         p_node_drop = contrastive_cfg.aug_p_node_drop,          
     )
 
-    x_aug_shift, a_aug_shift = _make_augmented_view(
-        x_full, a_full, edge_index, window_len, rot_precomp,
-        min_shift = max(1, window_len // 3),  # hard-negative shift scales with the view (4-12 for 12 frames)
-        max_shift = window_len,
-        p_shift = 1.0,
-        noise_sigma = contrastive_cfg.aug_noise_sigma,  
-        p_noise = contrastive_cfg.aug_p_noise,           
-        max_interp = contrastive_cfg.aug_max_interp,
-        min_interp = contrastive_cfg.aug_min_interp,         
-        p_interp = contrastive_cfg.aug_p_interp, 
-        max_rot = contrastive_cfg.aug_max_rot, 
-        n_rot = contrastive_cfg.aug_n_rot,
-        p_rot = contrastive_cfg.aug_p_rot, 
-        node_drop_min = contrastive_cfg.aug_node_drop_min,
-        node_drop_max = contrastive_cfg.aug_node_drop_max,
-        p_node_drop = contrastive_cfg.aug_p_node_drop,          
-    )
+    # Only the NCE loss uses the time-shifted third view; skip its augmentation and encoder pass otherwise
+    use_shift_view = base.loss_function == "nce"
+    x_aug_shift, a_aug_shift = None, None
+    if use_shift_view:
+        x_aug_shift, a_aug_shift = _make_augmented_view(
+            x_full, a_full, edge_index, window_len, rot_precomp,
+            min_shift = neg_min_shift,
+            max_shift = neg_max_shift,
+            p_shift = 1.0,
+            noise_sigma = contrastive_cfg.aug_noise_sigma,  
+            p_noise = contrastive_cfg.aug_p_noise,           
+            max_interp = contrastive_cfg.aug_max_interp,
+            min_interp = contrastive_cfg.aug_min_interp,         
+            p_interp = contrastive_cfg.aug_p_interp, 
+            max_rot = contrastive_cfg.aug_max_rot, 
+            n_rot = contrastive_cfg.aug_n_rot,
+            p_rot = contrastive_cfg.aug_p_rot, 
+            node_drop_min = contrastive_cfg.aug_node_drop_min,
+            node_drop_max = contrastive_cfg.aug_node_drop_max,
+            p_node_drop = contrastive_cfg.aug_p_node_drop,          
+        )
 
     # Split back into two views
     x_aug1, x_aug2 = torch.chunk(x_aug_twice, chunks=2, dim=0)  
@@ -551,7 +556,7 @@ def step_contrastive_distill(
 
     z_view1 = model(x_aug1, a_aug1)
     z_view2 = model(x_aug2, a_aug2)
-    z_view3 = model(x_aug_shift, a_aug_shift)
+    z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
 
     labels = getattr(ctx, "labels", None) 
     seperability=torch.tensor(0)
@@ -562,7 +567,8 @@ def step_contrastive_distill(
     if base.loss_function != "vicreg":
         z_view1 = torch.nn.functional.normalize(z_view1, dim=1)
         z_view2 = torch.nn.functional.normalize(z_view2, dim=1)
-        z_view3 = torch.nn.functional.normalize(z_view3, dim=1)
+        if z_view3 is not None:
+            z_view3 = torch.nn.functional.normalize(z_view3, dim=1)
 
 
     n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/90))]))
@@ -617,7 +623,7 @@ def step_contrastive_distill(
         temperature=base.temperature, #float(base.temperature*1.01**ctx.epoch), #0.98  #0.95
         tau=base.tau,
         beta=base.beta,
-        elimination_topk=0.1,
+        elimination_topk=contrastive_cfg.elimination_topk,
         vicreg_lambda_inv = ctx.contrastive_cfg.vicreg_lambda_inv, #25.0,
         vicreg_lambda_var = ctx.contrastive_cfg.vicreg_lambda_var, #25.0,
         vicreg_lambda_cov = ctx.contrastive_cfg.vicreg_lambda_cov, #0.5,
@@ -700,6 +706,11 @@ def step_contrastive_distill(
     return StepResult(loss=total, logs=logs)
 
 
+def _make_cfg(cfg_cls, **kwargs):
+    """Build a config dataclass; arguments passed as None fall back to the dataclass defaults."""
+    return cfg_cls(**{k: v for k, v in kwargs.items() if v is not None})
+
+
 def train_deepof_model(
     preprocessed_object: Tuple[dict, dict] = None,
     adjacency_matrix: np.ndarray = None,
@@ -710,136 +721,139 @@ def train_deepof_model(
     epochs: int = None,
     output_path: str = None,
     # Logging/IO
-    n_clusters: int = 10,
-    learning_rate: float = 1e-3,
-    log_history: bool = True,
-    data_path: str = ".",
+    n_clusters: Optional[int] = None,
+    learning_rate: Optional[float] = None,
+    log_history: Optional[bool] = None,
+    data_path: Optional[str] = None,
     pretrained: Optional[str] = None,
-    save_weights: bool = True,
-    run: int = 0,
+    save_weights: Optional[bool] = None,
+    run: Optional[int] = None,
     # Encoder specific options
-    tcn_conv_filters: Optional[int] = 32,
-    tcn_kernel_size: Optional[int] = 4,
-    tcn_conv_stacks: Optional[int] = 2,
-    tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8),
+    tcn_conv_filters: Optional[int] = None,
+    tcn_kernel_size: Optional[int] = None,
+    tcn_conv_stacks: Optional[int] = None,
+    tcn_conv_dilations: Optional[tuple] = None,
     # LEarning rate adjust5ments:
-    lr_warmup_start_factor: float = 0.5,
-    lr_warmup_end_factor : float = 1.0,
-    lr_warmup_epochs: int = 2,
+    lr_warmup_start_factor: Optional[float] = None,
+    lr_warmup_end_factor: Optional[float] = None,
+    lr_warmup_epochs: Optional[int] = None,
     # VaDE-specific
-    reg_cat_clusters: float = 0.0,
-    recluster: bool = False,
-    freeze_gmm_epochs: int = 0,
-    freeze_decoder_epochs: int = 0,
-    prior_loss_weight: float = 0.0,
-    gmm_learning_rate: float = 1e-3,
-    learning_rate_pretrain: float = 1e-3,
+    reg_cat_clusters: Optional[float] = None,
+    recluster: Optional[bool] = None,
+    freeze_gmm_epochs: Optional[int] = None,
+    freeze_decoder_epochs: Optional[int] = None,
+    prior_loss_weight: Optional[float] = None,
+    gmm_learning_rate: Optional[float] = None,
+    learning_rate_pretrain: Optional[float] = None,
     # Regularization knobs
-    interaction_regularization: float = 0.0003,
-    kmeans_loss: float = 0.0,
+    interaction_regularization: Optional[float] = None,
+    kmeans_loss: Optional[float] = None,
     # System
-    num_workers: int = 0,
-    prefetch_factor: int = 0,
-    use_amp: bool = False,
+    num_workers: Optional[int] = None,
+    prefetch_factor: Optional[int] = None,
+    use_amp: Optional[bool] = None,
     # TURTLE teacher + distillation (VaDE)
-    use_turtle_teacher: bool = True,
-    teacher_gamma: float = 8.0,
-    teacher_outer_steps: int = 500,
-    teacher_inner_steps: int = 100,
-    teacher_normalize_feats: bool = True,
-    lambda_distill: float = 4.0,
-    lambda_decay_start: int = 10,
-    lambda_end_weight: float = 0.2,
-    lambda_cooldown: int = 10,
-    teacher_refresh_every: Optional[int] = False,
-    teacher_freeze_at: Optional[int] = 10,
-    teacher_head_temp: float = 0.5,
-    teacher_task_temp: float = 0.5,
-    teacher_alpha_sample_entropy: float = 2.0,
-    teacher_batch_size: int = 2048,
+    use_turtle_teacher: Optional[bool] = None,
+    teacher_gamma: Optional[float] = None,
+    teacher_outer_steps: Optional[int] = None,
+    teacher_inner_steps: Optional[int] = None,
+    teacher_normalize_feats: Optional[bool] = None,
+    lambda_distill: Optional[float] = None,
+    lambda_decay_start: Optional[int] = None,
+    lambda_end_weight: Optional[float] = None,
+    lambda_cooldown: Optional[int] = None,
+    teacher_refresh_every: Optional[int] = None,
+    teacher_freeze_at: Optional[int] = None,
+    teacher_head_temp: Optional[float] = None,
+    teacher_task_temp: Optional[float] = None,
+    teacher_alpha_sample_entropy: Optional[float] = None,
+    teacher_batch_size: Optional[int] = None,
     # Vade pretrain
-    pretrain_epochs: int = 10,
-    kmeans_loss_pretrain: float = 1.0,
-    repel_weight_pretrain: float = 0.5,
-    repel_length_scale_pretrain: float = 0.5,
-    nonempty_weight_pretrain: float = 2e-2,
-    nonempty_p_pretrain: float = 2.0,
-    nonempty_floor_percent_pretrain: float = 0.05,
+    pretrain_epochs: Optional[int] = None,
+    kmeans_loss_pretrain: Optional[float] = None,
+    repel_weight_pretrain: Optional[float] = None,
+    repel_length_scale_pretrain: Optional[float] = None,
+    nonempty_weight_pretrain: Optional[float] = None,
+    nonempty_p_pretrain: Optional[float] = None,
+    nonempty_floor_percent_pretrain: Optional[float] = None,
     # KL cap
-    kl_annealing_mode: str = "tf_sigmoid",
-    kl_max_weight: float = 1,
-    kl_warmup: int = 5,
-    kl_end_weight: float = 0.2,
-    kl_cooldown: int = 5,
-    kl_annealing_mode_pretrain: str = "tf_sigmoid",
-    kl_max_weight_pretrain: float = 0.2,
-    kl_warmup_pretrain: int = 15,
-    kl_end_weight_pretrain: float = 0.2,
-    kl_cooldown_pretrain: int = 10,
-    reg_scatter_weight: float = 0,
-    temporal_cohesion_weight: float = 0,
-    reg_scatter_beta: float = 1.0,
-    repel_weight: float = 0,
-    repel_length_scale: float = 1.0,
+    kl_annealing_mode: Optional[str] = None,
+    kl_max_weight: Optional[float] = None,
+    kl_warmup: Optional[int] = None,
+    kl_end_weight: Optional[float] = None,
+    kl_cooldown: Optional[int] = None,
+    kl_annealing_mode_pretrain: Optional[str] = None,
+    kl_max_weight_pretrain: Optional[float] = None,
+    kl_warmup_pretrain: Optional[int] = None,
+    kl_end_weight_pretrain: Optional[float] = None,
+    kl_cooldown_pretrain: Optional[int] = None,
+    reg_scatter_weight: Optional[float] = None,
+    temporal_cohesion_weight: Optional[float] = None,
+    reg_scatter_beta: Optional[float] = None,
+    repel_weight: Optional[float] = None,
+    repel_length_scale: Optional[float] = None,
     # TF-style cluster term
-    main_clustering_loss: float = 0.0,
-    nonempty_weight: float = 2e-2,
-    nonempty_floor_percent: float = 0.05,
-    nonempty_p: float = 2.0,
+    main_clustering_loss: Optional[float] = None,
+    nonempty_weight: Optional[float] = None,
+    nonempty_floor_percent: Optional[float] = None,
+    nonempty_p: Optional[float] = None,
     # Distillation weighting (VaDE)
-    distill_conf_weight: bool = False,
-    distill_conf_thresh: float = 0.3,
-    distill_sharpen_T: float = 0.5,
+    distill_conf_weight: Optional[bool] = None,
+    distill_conf_thresh: Optional[float] = None,
+    distill_sharpen_T: Optional[float] = None,
     # Views for teacher
-    include_edges_view: bool = False,
-    include_nodes_view: bool = True,
-    pca_nodes_dim: int = 32,
-    pca_edges_dim: int = 32,
-    include_angles_view: bool = False,
-    pca_angles_dim: int = 32,
-    reinit_gmm_on_refresh: bool = False,
+    include_edges_view: Optional[bool] = None,
+    include_nodes_view: Optional[bool] = None,
+    pca_nodes_dim: Optional[int] = None,
+    pca_edges_dim: Optional[int] = None,
+    include_angles_view: Optional[bool] = None,
+    pca_angles_dim: Optional[int] = None,
+    reinit_gmm_on_refresh: Optional[bool] = None,
     # Diagnostics
-    diag_max_batches: int = 4,
+    diag_max_batches: Optional[int] = None,
     # Model type
-    model_name: str = "VaDE",   # "VaDE" (default), "VQVAE", "Contrastive"
+    model_name: Optional[str] = None,  # "VaDE" (default), "VQVAE", "Contrastive"
     # Distill head (for VQVAE/Contrastive)
-    generic_lambda_distill: float = 2.0,
-    generic_distill_sharpen_T: float = 0.5,
-    generic_distill_conf_weight: bool = True,
-    generic_distill_conf_thresh: float = 0.6,
-    generic_distill_warmup_epochs: int = 1,
-    distill_class_reweight_beta: float = 1,
-    distill_class_reweight_cap: float = 3,
+    generic_lambda_distill: Optional[float] = None,
+    generic_distill_sharpen_T: Optional[float] = None,
+    generic_distill_conf_weight: Optional[bool] = None,
+    generic_distill_conf_thresh: Optional[float] = None,
+    generic_distill_warmup_epochs: Optional[int] = None,
+    distill_class_reweight_beta: Optional[float] = None,
+    distill_class_reweight_cap: Optional[float] = None,
     # Contrastive opts
-    temperature: float = 0.1,
-    contrastive_similarity_function: str = "cosine",
-    contrastive_loss_function: str = "nce",
-    beta: float = 0.1,
-    tau: float = 0.1,
+    elimination_topk: Optional[float] = None,
+    temperature: Optional[float] = None,
+    contrastive_similarity_function: Optional[str] = None,
+    contrastive_loss_function: Optional[str] = None,
+    beta: Optional[float] = None,
+    tau: Optional[float] = None,
     # info nce
-    sim_threshold: float = 0.95,
+    sim_threshold: Optional[float] = None,
     # vicereg
-    vicreg_lambda_inv: float = 25.0,
-    vicreg_lambda_var: float = 25.0,
-    vicreg_lambda_cov: float = 0.5,
-    vicreg_gamma: float = 1.0,
-    vicreg_eps: float = 1e-4,
+    vicreg_lambda_inv: Optional[float] = None,
+    vicreg_lambda_var: Optional[float] = None,
+    vicreg_lambda_cov: Optional[float] = None,
+    vicreg_gamma: Optional[float] = None,
+    vicreg_eps: Optional[float] = None,
     # Contrastive augmentations
-    contrastive_window: int = 12,
-    aug_min_shift: int = 1,
-    aug_max_shift: int = 3,
-    aug_p_shift: int = 0.4,
-    aug_max_rot: int = 30, 
-    aug_n_rot: int = 3, 
-    aug_p_rot: int = 0.8,
-    aug_max_interp: int = 8,
-    aug_min_interp: int = 3,         
-    aug_p_interp: float = 0.4, 
-    aug_noise_sigma: float = 0.03,  
-    aug_p_noise: float = 0.4, 
-    aug_node_drop_min: int = 1,
-    aug_node_drop_max: int = 2,
-    aug_p_node_drop: float = 0.4,  
+    contrastive_window: Optional[int] = None,
+    aug_min_shift: Optional[int] = None,
+    aug_max_shift: Optional[int] = None,
+    aug_p_shift: Optional[float] = None,
+    aug_neg_min_shift: Optional[int] = None,
+    aug_neg_max_shift: Optional[int] = None,
+    aug_max_rot: Optional[int] = None,
+    aug_n_rot: Optional[int] = None,
+    aug_p_rot: Optional[float] = None,
+    aug_max_interp: Optional[int] = None,
+    aug_min_interp: Optional[int] = None,
+    aug_p_interp: Optional[float] = None,
+    aug_noise_sigma: Optional[float] = None,
+    aug_p_noise: Optional[float] = None,
+    aug_node_drop_min: Optional[int] = None,
+    aug_node_drop_max: Optional[int] = None,
+    aug_p_node_drop: Optional[float] = None,
     # Dataset management 
     device: str = None,
     h5_dataset_folder: Optional[str] = None,
@@ -847,38 +861,27 @@ def train_deepof_model(
     bootstrap_block_len: int = 250,
     use_ddp: bool = False,
     # Random seed
-    random_seed: int = 0,
+    random_seed: Optional[int] = None,
 
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
     
-    # force lower case
-    model_name=str(model_name).lower()
-    encoder_type=str(encoder_type).lower()
-    kl_annealing_mode=str(kl_annealing_mode).lower()
-    contrastive_similarity_function=str(contrastive_similarity_function).lower()
-    contrastive_loss_function=str(contrastive_loss_function).lower()
+    # Arguments left as None take the defaults of the config dataclasses (CommonFitCfg, TurtleTeacherCfg,
+    # VaDECfg, ContrastiveCfg), so defaults are defined in one place only.
+    def _lower(v):
+        return None if v is None else str(v).lower()
 
-    # Verify if various model inputs have valid values (TO DO)
-    deepof.clustering.model_utils_new.check_model_inputs(
-        preprocessed_object=preprocessed_object,
-        adjacency_matrix=adjacency_matrix,
-        meta_info=meta_info,
-        encoder_type=encoder_type,
-        batch_size=batch_size,
-        latent_dim=latent_dim,
-        epochs = epochs,
-        output_path = output_path,
-        model_name = model_name,
-        kl_annealing_mode = kl_annealing_mode,
-        contrastive_similarity_function = contrastive_similarity_function,
-        contrastive_loss_function = contrastive_loss_function, 
-        pretrained = pretrained,
-    )
+    model_name = _lower(model_name)
+    encoder_type = _lower(encoder_type)
+    kl_annealing_mode = _lower(kl_annealing_mode)
+    kl_annealing_mode_pretrain = _lower(kl_annealing_mode_pretrain)
+    contrastive_similarity_function = _lower(contrastive_similarity_function)
+    contrastive_loss_function = _lower(contrastive_loss_function)
 
     # Create configs for different models to avoid gigantic function signaturs
-    common_cfg = CommonFitCfg(
-        model_name=model_name.lower(),
-        encoder_type=encoder_type.lower(),
+    common_cfg = _make_cfg(
+        CommonFitCfg,
+        model_name=model_name,
+        encoder_type=encoder_type,
         batch_size=batch_size,
         latent_dim=latent_dim,
         epochs=epochs,
@@ -906,7 +909,8 @@ def train_deepof_model(
         tcn_conv_dilations = tcn_conv_dilations, 
     )
 
-    teacher_cfg = TurtleTeacherCfg(
+    teacher_cfg = _make_cfg(
+        TurtleTeacherCfg,
         use_turtle_teacher=use_turtle_teacher,
         teacher_gamma=teacher_gamma,
         teacher_outer_steps=teacher_outer_steps,
@@ -939,14 +943,17 @@ def train_deepof_model(
         pca_edges_dim=pca_edges_dim,
         pca_angles_dim=pca_angles_dim,
 
-        # normalize "False" -> None 
+        # False -> never refresh (same as the config default None)
         teacher_refresh_every=(None if teacher_refresh_every is False else teacher_refresh_every),
         teacher_freeze_at=teacher_freeze_at,
         reinit_gmm_on_refresh=reinit_gmm_on_refresh,
         teacher_batch_size=teacher_batch_size,
     )
+    if teacher_freeze_at is False:  # None means "use the default", so False disables freezing
+        teacher_cfg.teacher_freeze_at = None
 
-    vade_cfg = VaDECfg(
+    vade_cfg = _make_cfg(
+        VaDECfg,
         reg_cat_clusters=reg_cat_clusters,
         recluster=recluster,
         freeze_gmm_epochs=freeze_gmm_epochs,
@@ -987,16 +994,20 @@ def train_deepof_model(
         kl_cooldown_pretrain=kl_cooldown_pretrain,
     )
 
-    contrastive_cfg = ContrastiveCfg(
+    contrastive_cfg = _make_cfg(
+        ContrastiveCfg,
         temperature=temperature,
         contrastive_similarity_function=contrastive_similarity_function,
         contrastive_loss_function=contrastive_loss_function,
         beta=beta,
         tau=tau,
+        elimination_topk=elimination_topk,
         contrastive_window=contrastive_window,
         aug_min_shift=aug_min_shift,
         aug_max_shift=aug_max_shift,
         aug_p_shift=aug_p_shift,
+        aug_neg_min_shift=aug_neg_min_shift,
+        aug_neg_max_shift=aug_neg_max_shift,
         aug_noise_sigma=aug_noise_sigma,
         aug_p_noise=aug_p_noise,
         aug_min_interp=aug_min_interp,
@@ -1016,6 +1027,24 @@ def train_deepof_model(
         vicreg_lambda_cov = vicreg_lambda_cov,
         vicreg_gamma = vicreg_gamma,
         vicreg_eps = vicreg_eps,
+    )
+
+    # Verify inputs on the resolved configs
+    deepof.clustering.model_utils_new.check_model_inputs(
+        preprocessed_object=preprocessed_object,
+        adjacency_matrix=adjacency_matrix,
+        meta_info=meta_info,
+        common_cfg=common_cfg,
+        teacher_cfg=teacher_cfg,
+        vade_cfg=vade_cfg,
+        contrastive_cfg=contrastive_cfg,
+        required_inputs={
+            "encoder_type": encoder_type,
+            "batch_size": batch_size,
+            "latent_dim": latent_dim,
+            "epochs": epochs,
+            "output_path": output_path,
+        },
     )
 
     return train_deepof_model_base(
@@ -1461,10 +1490,22 @@ def fit_contrastive(
         raise ValueError(
             f"contrastive_window={window_len} must be between 1 and the preprocessed window size ({full_window})."
         )
-    if window_len + 2 * contrastive_cfg.aug_max_shift > full_window:
+    max_room = (full_window - window_len) // 2
+    neg_min_shift, neg_max_shift = _hard_negative_shift_range(contrastive_cfg, window_len)
+    if contrastive_cfg.aug_max_shift > max_room:
         warnings.warn(
-            f"contrastive_window + 2 * aug_max_shift = {window_len + 2 * contrastive_cfg.aug_max_shift} exceeds the "
-            f"preprocessed window size ({full_window}); time shifts will be clipped at the window edges."
+            f"aug_max_shift={contrastive_cfg.aug_max_shift} exceeds the room left by the preprocessed window "
+            f"(({full_window} - {window_len}) // 2 = {max_room}); positive shifts will be clipped at the window edges."
+        )
+    if neg_max_shift > max_room:
+        warnings.warn(
+            f"Hard-negative shift up to {neg_max_shift} exceeds the room left by the preprocessed window ({max_room}); "
+            f"larger shifts are clipped to {max_room}. Set aug_neg_max_shift <= {max_room} or increase window_size."
+        )
+    if min(neg_min_shift, max_room) <= contrastive_cfg.aug_max_shift:
+        warnings.warn(
+            f"Hard-negative shifts start at {min(neg_min_shift, max_room)}, within the positive shift range "
+            f"(up to aug_max_shift={contrastive_cfg.aug_max_shift}); the same offset can then be a positive and a negative."
         )
     rebuild_spec={                    
         "model_name": model_name,
@@ -2338,6 +2379,17 @@ def build_rotation_precomp(edge_index: torch.Tensor, n_nodes: int, device: torch
         branches_c=branches_c,
         prefer_side=prefer_side,
     )
+
+
+def _hard_negative_shift_range(contrastive_cfg, window_len: int) -> Tuple[int, int]:
+    """Shift range (in frames) of the hard-negative view. Defaults scale with the view: 4-12 for 12 frames."""
+    neg_min = contrastive_cfg.aug_neg_min_shift
+    neg_max = contrastive_cfg.aug_neg_max_shift
+    neg_min = max(1, window_len // 3) if neg_min is None else int(neg_min)
+    neg_max = window_len if neg_max is None else int(neg_max)
+    if not 1 <= neg_min <= neg_max:
+        raise ValueError(f"Need 1 <= aug_neg_min_shift <= aug_neg_max_shift, got {neg_min} and {neg_max}.")
+    return neg_min, neg_max
 
 
 def _augment_time_shift(

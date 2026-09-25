@@ -323,6 +323,7 @@ def test_vqvae_full_pipeline_regression(encoder_type):
     os.makedirs(output_path, exist_ok=True)
 
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg(
+        learning_rate=3e-4,  # former CommonFitCfg default, pinned to keep the stored reference results
         model_name="vqvae",
         encoder_type=encoder_type,
         batch_size=64,
@@ -455,6 +456,7 @@ def test_contrastive_full_pipeline_regression(encoder_type):
     os.makedirs(output_path, exist_ok=True)
 
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg(
+        learning_rate=3e-4,  # former CommonFitCfg default, pinned to keep the stored reference results
         model_name="contrastive",
         encoder_type=encoder_type,
         batch_size=64,

@@ -7,12 +7,12 @@
 """Utility functions for training autoencoder models for functionality within deepof.clustering."""
 
 import os
-from typing import Any, NewType, Tuple, Dict, Optional, Mapping
+from typing import Any, NewType, Tuple, Dict, Optional, Mapping, Union
 import copy
 from dataclasses import dataclass, asdict
 import tqdm
 import warnings
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 from IPython.display import clear_output
 import numpy as np
@@ -37,7 +37,7 @@ table_dict = NewType("deepof_table_dict", Any)
 @dataclass
 class CommonFitCfg:
 
-    learning_rate: float = 3e-4
+    learning_rate: float = 1e-3
     # Core identity
     model_name: str = "VaDE"
     encoder_type: str = "recurrent"
@@ -67,12 +67,12 @@ class CommonFitCfg:
     use_amp: bool = False
 
     # Shared regularization knobs
-    interaction_regularization: float = 0.0
+    interaction_regularization: float = 3e-4
     kmeans_loss: float = 0.0
 
     # Diagnostics
     diag_max_batches: int = 4
-    seed: int = None
+    seed: Optional[int] = 0
 
     # Tuning
     limit_train_batches: Optional[int] = 1000
@@ -94,8 +94,8 @@ class TurtleTeacherCfg:
     teacher_inner_steps: int = 100
     teacher_normalize_feats: bool = True
 
-    teacher_head_temp: float = 0.35
-    teacher_task_temp: float = 0.35
+    teacher_head_temp: float = 0.5
+    teacher_task_temp: float = 0.5
     teacher_alpha_sample_entropy: float = 2.0
 
     # Distillation (VaDE)
@@ -118,7 +118,7 @@ class TurtleTeacherCfg:
     distill_class_reweight_cap: float = 3.0
 
     # Views
-    include_latent_view: bool = True,
+    include_latent_view: bool = True
     include_edges_view: bool = False
     include_nodes_view: bool = True
     include_angles_view: bool = False
@@ -145,8 +145,8 @@ class VaDECfg:
 
     reg_cat_clusters: float = 0.0
     recluster: bool = False
-    freeze_gmm_epochs: int = 0.0
-    freeze_decoder_epochs: int = 0.0
+    freeze_gmm_epochs: int = 0
+    freeze_decoder_epochs: int = 0
     prior_loss_weight: float = 0.0
 
     reg_scatter_weight: float = 0.0
@@ -189,29 +189,34 @@ class ContrastiveCfg:
     tau: float = 0.1        
     contrastive_window: int = 12  # frames per contrastive view, cut from the preprocessed window
     aug_min_shift: int = 1
-    aug_max_shift: int = 6
-    aug_p_shift: float = 0.8
+    aug_max_shift: int = 3
+    aug_p_shift: float = 0.4
+    aug_neg_min_shift: Optional[int] = None  # hard-negative shift; None -> contrastive_window // 3
+    aug_neg_max_shift: Optional[int] = None  # None -> contrastive_window
     aug_max_rot: int = 30
-    aug_n_rot: int = 4
-    aug_p_rot: float = 0.0
+    aug_n_rot: int = 3
+    aug_p_rot: float = 0.8
     aug_max_interp: int = 8
     aug_min_interp: int = 3        
-    aug_p_interp: float = 0.3
+    aug_p_interp: float = 0.4
     aug_noise_sigma: float = 0.03
-    aug_p_noise: float = 0.0
+    aug_p_noise: float = 0.4
     aug_node_drop_min: int = 1
     aug_node_drop_max: int = 2
     aug_p_node_drop: float = 0.4  
 
+    # fc loss
+    elimination_topk: float = 0.1
+
     #info nce
-    sim_threshold: float = 0.95,
+    sim_threshold: float = 0.95
 
     # vicereg
-    vicreg_lambda_inv: float = 25.0,
-    vicreg_lambda_var: float = 25.0,
-    vicreg_lambda_cov: float = 0.5,
-    vicreg_gamma: float = 1.0,
-    vicreg_eps: float = 1e-4,
+    vicreg_lambda_inv: float = 25.0
+    vicreg_lambda_var: float = 25.0
+    vicreg_lambda_cov: float = 0.5
+    vicreg_gamma: float = 1.0
+    vicreg_eps: float = 1e-4
 
 
 
@@ -401,84 +406,164 @@ def ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
 
 
 def check_model_inputs(
-    preprocessed_object: Optional[dict] = None,
+    preprocessed_object: Optional[tuple] = None,
     adjacency_matrix: Optional[np.ndarray] = None,
-    meta_info: Optional[np.ndarray] = None,
-    encoder_type: Optional[str] = None,
-    batch_size: Optional[int] = None,
-    latent_dim: Optional[int] = None,
-    epochs: Optional[int] = None,
-    output_path: Optional[str] = None,
-    model_name: Optional[str] = None,
-    kl_annealing_mode: Optional[str] = None,
-    contrastive_similarity_function: Optional[str] = None,
-    contrastive_loss_function: Optional[str] = None, 
-    pretrained: Optional[str] = None,
+    meta_info: Optional[dict] = None,
+    common_cfg: Optional[CommonFitCfg] = None,
+    teacher_cfg: Optional[TurtleTeacherCfg] = None,
+    vade_cfg: Optional[VaDECfg] = None,
+    contrastive_cfg: Optional[ContrastiveCfg] = None,
+    required_inputs: Optional[Dict[str, Any]] = None,
 ):
     """
-    Checks and validates main input parameters for model training.
+    Checks and validates the main inputs and the resolved configs for model training.
+
+    All problems are collected and raised together as a single ValueError.
 
     Args:
-        model_name (str): Name of the model
-        encoder_type (str): Type of encode-decoder pair being used
-        kl_annealing_mode (str): Which function should be used to increase and decrease KL
-        contrastive_similarity_function (str): Which function should be used to calculate similarity between sampels for the contrastive model
-        contrastive_loss_function (str): Which function should be used to calculate the loss for the contrastive model
-    """    
-
-    # =========================================================================
-    # 1. Model loading shortcut, allows to skip everything else
-    # =========================================================================
-    if pretrained is not None and os.path.exists(pretrained):
+        preprocessed_object (tuple): (train, validation) data from the preprocessing.
+        adjacency_matrix (np.ndarray): Square adjacency matrix of the body part graph.
+        meta_info (dict): Meta info from the preprocessing.
+        common_cfg (CommonFitCfg): Settings shared by all models.
+        teacher_cfg (TurtleTeacherCfg): TURTLE teacher settings.
+        vade_cfg (VaDECfg): VaDE settings.
+        contrastive_cfg (ContrastiveCfg): Contrastive model settings.
+        required_inputs (dict): Inputs without a default (name -> value); None counts as missing.
+    """
+    # Loading a pretrained model ignores all other inputs
+    if common_cfg is not None and common_cfg.pretrained is not None and os.path.exists(common_cfg.pretrained):
         return
 
-    # =========================================================================
-    # 2. For specific inputs:
-    # =========================================================================
+    errors = []
 
-    #preprocessed_object
+    def check(condition, message):
+        if not condition:
+            errors.append(message)
 
-    #adjacency_matrix
+    def is_int(v, minimum):
+        return isinstance(v, (int, np.integer)) and not isinstance(v, bool) and v >= minimum
 
-    #meta_info
-    #output_path
+    def is_number(v, minimum=None, maximum=None, strict_min=False):
+        if not isinstance(v, (int, float, np.integer, np.floating)) or isinstance(v, bool):
+            return False
+        if minimum is not None and (v <= minimum if strict_min else v < minimum):
+            return False
+        return maximum is None or v <= maximum
 
-    assert isinstance(batch_size,int) and batch_size >1, "batch_size \"batch_size\" need to be an integer grater than 1"
-    assert isinstance(latent_dim,int) and latent_dim >0, "The number of latent / hidden dimensions of the model \"latent_dim\" need to be an integer grater than 0"
-    assert isinstance(epochs,int) and epochs >0, "The number of training epochs \"epochs\" need to be an integer grater than 0"
+    def one_of(name, value, options):
+        check(value in options, f"\"{name}\" needs to be one of {options}, got {value!r}")
 
-    # For enum-likes:
-    # =========================================================================
-    # 3. Generate lists of valid options
-    # =========================================================================
-    
-    # --- Statically defined options ---
-    model_opts = ["vade", "vqvae", "contrastive"]
-    encoder_opts = ["recurrent", "tcn", "transformer"]
-    kl_annealing_mode_opts = ["linear","sigmoid","tf_sigmoid"]
-    contrastive_similarity_function_opts = ["cosine","dot","euclidean","edit"]
-    contrastive_loss_function_ops=["nce","fc", "dcl", "hard_dcl", "vicreg"]
+    # --- Required inputs and data
+    for name, value in (required_inputs or {}).items():
+        check(value is not None, f"\"{name}\" is required")
+    check(
+        isinstance(preprocessed_object, (tuple, list)) and len(preprocessed_object) == 2,
+        "\"preprocessed_object\" needs to be the (train, validation) pair returned by the preprocessing",
+    )
+    adj = np.asarray(adjacency_matrix) if adjacency_matrix is not None else None
+    check(
+        adj is not None and adj.ndim == 2 and adj.shape[0] == adj.shape[1],
+        "\"adjacency_matrix\" needs to be a square 2D array",
+    )
+    check(meta_info is not None, "\"meta_info\" is required")
 
-    # =========================================================================
-    # 4. Configure and run valid checks
-    # Format: (param_name, param_value, valid_options, is_list, custom_error)
-    # =========================================================================
-    validation_checks = [
-        ("model_name", model_name, model_opts, False, None, True, False),
-        ("encoder_type", encoder_type, encoder_opts, False, None, True, False),
-        ("kl_annealing_mode", kl_annealing_mode, kl_annealing_mode_opts, False, None, True, False),
-        ("contrastive_similarity_function", contrastive_similarity_function, contrastive_similarity_function_opts, False, None, True, False),
-        ("contrastive_loss_function", contrastive_loss_function, contrastive_loss_function_ops, False, None, True, False),
-    ]
+    # --- Shared settings
+    if common_cfg is not None:
+        model_name = str(common_cfg.model_name).lower()
+        encoder_type = str(common_cfg.encoder_type).lower()
+        one_of("model_name", model_name, ["vade", "vqvae", "contrastive"])
+        one_of("encoder_type", encoder_type, ["recurrent", "tcn", "transformer"])
+        check(is_int(common_cfg.batch_size, 2), "\"batch_size\" needs to be an integer greater than 1")
+        check(is_int(common_cfg.latent_dim, 1), "\"latent_dim\" needs to be an integer greater than 0")
+        check(is_int(common_cfg.epochs, 1), "\"epochs\" needs to be an integer greater than 0")
+        check(is_number(common_cfg.learning_rate, 0, strict_min=True), "\"learning_rate\" needs to be greater than 0")
+        check(is_int(common_cfg.lr_warmup_epochs, 0), "\"lr_warmup_epochs\" needs to be an integer >= 0")
+        if model_name in ("vade", "vqvae"):
+            check(is_int(common_cfg.n_components, 1), "\"n_clusters\" needs to be an integer greater than 0")
+        if encoder_type == "tcn":
+            check(is_int(common_cfg.tcn_conv_filters, 1), "\"tcn_conv_filters\" needs to be an integer greater than 0")
+            check(is_int(common_cfg.tcn_kernel_size, 1), "\"tcn_kernel_size\" needs to be an integer greater than 0")
+            check(is_int(common_cfg.tcn_conv_stacks, 1), "\"tcn_conv_stacks\" needs to be an integer greater than 0")
+            dil = common_cfg.tcn_conv_dilations
+            check(
+                isinstance(dil, (tuple, list)) and len(dil) > 0 and all(is_int(d, 1) for d in dil),
+                "\"tcn_conv_dilations\" needs to be a non-empty tuple of positive integers",
+            )
+    else:
+        model_name = None
 
-    for name, value, options, is_list, error_msg, only_one_of_many, can_be_dict in validation_checks:
-        deepof.utils.validate_parameter(name, value, options, is_list, error_msg, only_one_of_many, can_be_dict)
+    # --- VaDE
+    if vade_cfg is not None and model_name == "vade":
+        kl_modes = ["linear", "sigmoid", "tf_sigmoid"]
+        one_of("kl_annealing_mode", str(vade_cfg.kl_annealing_mode).lower(), kl_modes)
+        one_of("kl_annealing_mode_pretrain", str(vade_cfg.kl_annealing_mode_pretrain).lower(), kl_modes)
+
+    # --- Contrastive
+    if contrastive_cfg is not None and model_name == "contrastive":
+        c = contrastive_cfg
+        one_of("contrastive_similarity_function", str(c.contrastive_similarity_function).lower(),
+               ["cosine", "dot", "euclidean", "edit"])
+        one_of("contrastive_loss_function", str(c.contrastive_loss_function).lower(),
+               ["nce", "fc", "dcl", "hard_dcl", "vicreg"])
+        check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
+        check(is_number(c.elimination_topk, 0, 1), "\"elimination_topk\" needs to be between 0 and 1")
+        check(is_int(c.contrastive_window, 1), "\"contrastive_window\" needs to be an integer greater than 0")
+        for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop"):
+            check(is_number(getattr(c, name), 0, 1), f"\"{name}\" is a probability and needs to be between 0 and 1")
+        check(is_number(c.aug_noise_sigma, 0), "\"aug_noise_sigma\" needs to be >= 0")
+        for lo, hi, minimum in (
+            ("aug_min_shift", "aug_max_shift", 0),
+            ("aug_min_interp", "aug_max_interp", 0),
+            ("aug_node_drop_min", "aug_node_drop_max", 0),
+        ):
+            vlo, vhi = getattr(c, lo), getattr(c, hi)
+            check(is_int(vlo, minimum) and is_int(vhi, minimum) and vlo <= vhi,
+                  f"\"{lo}\" and \"{hi}\" need to be integers >= {minimum} with {lo} <= {hi}")
+        neg_lo, neg_hi = c.aug_neg_min_shift, c.aug_neg_max_shift
+        for name, v in (("aug_neg_min_shift", neg_lo), ("aug_neg_max_shift", neg_hi)):
+            check(v is None or is_int(v, 1), f"\"{name}\" needs to be None or an integer greater than 0")
+        if is_int(neg_lo, 1) and is_int(neg_hi, 1):
+            check(neg_lo <= neg_hi, "\"aug_neg_min_shift\" needs to be <= \"aug_neg_max_shift\"")
+
+    # --- Teacher
+    if teacher_cfg is not None and teacher_cfg.use_turtle_teacher:
+        views = [teacher_cfg.include_latent_view, teacher_cfg.include_nodes_view,
+                 teacher_cfg.include_edges_view, teacher_cfg.include_angles_view]
+        check(any(bool(v) for v in views), "The TURTLE teacher needs at least one included view")
+        check(is_int(teacher_cfg.teacher_batch_size, 1), "\"teacher_batch_size\" needs to be an integer greater than 0")
+
+    if errors:
+        raise ValueError("Invalid model inputs:\n  - " + "\n  - ".join(errors))
+
+
+@contextmanager
+def _inference_state(model: nn.Module, device: torch.device, cluster_mode: Optional[bool] = None):
+    """Temporarily put a model on `device` in eval mode (and cluster mode, if given); restore its state afterwards."""
+    was_training = model.training
+    try:
+        original_device = next(model.parameters()).device
+    except StopIteration:  # pragma: no cover
+        original_device = None
+    has_cluster_mode = cluster_mode is not None and hasattr(model, "cluster_mode")
+    original_cluster_mode = model.cluster_mode if has_cluster_mode else None
+
+    model.to(device).eval()
+    if has_cluster_mode:
+        model.cluster_mode = cluster_mode
+    try:
+        yield model
+    finally:
+        model.train(was_training)
+        if original_device is not None:
+            model.to(original_device)
+        if has_cluster_mode:
+            model.cluster_mode = original_cluster_mode
 
 
 def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
-    model: str,
+    model: nn.Module,
     meta_info: dict,
     supervised_annotations: table_dict = None,
     scale: str = "standard",
@@ -487,7 +572,7 @@ def embedding_per_video(
     global_scaler: Any = None,
     softcounts_extraction_method = None,
     embedding_gates: str = "Center",
-    states_per_gate: list = [16,4,4],
+    states_per_gate: Union[int, list] = [16,4,4],
     quality_threshold: float = 0.75,
     frac_bps_below: float = 0.5,
     samples_max: int = 227272,
@@ -578,98 +663,97 @@ def embedding_per_video(
     
     keys_to_drop=[]
     window_size = model.window_size
-    for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # The caller's model keeps its device, train/eval mode and cluster_mode
+    with _inference_state(model, device, cluster_mode=cluster_mode if contrastive else None):
+        for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
 
-        dict_to_preprocess = to_preprocess.filter_videos([key])
-        #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
-        dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
-        if dict_to_preprocess[key].isna().all().all():
-            keys_to_drop.append(key)
-            continue
+            dict_to_preprocess = to_preprocess.filter_videos([key])
+            #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
+            dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
+            if dict_to_preprocess[key].isna().all().all():
+                keys_to_drop.append(key)
+                continue
 
-        #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
-        print("")
+            #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
+            print("")
 
-        if graph:
-            processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
-                animal_id=animal_id,
-                precomputed_tab_dict=dict_to_preprocess,
-                preprocess=True,
-                scale=scale,
-                window_size=window_size,
-                window_step=1,
-                pretrained_scaler=global_scaler,
-                samples_max=samples_max,
-                dist_standardize=meta_info['dist_standardize'],
-                speed_standardize=meta_info['speed_standardize'] ,
-                coord_standardize=meta_info['coord_standardize'],
-            )    
+            if graph:
+                processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
+                    animal_id=animal_id,
+                    precomputed_tab_dict=dict_to_preprocess,
+                    preprocess=True,
+                    scale=scale,
+                    window_size=window_size,
+                    window_step=1,
+                    pretrained_scaler=global_scaler,
+                    samples_max=samples_max,
+                    dist_standardize=meta_info['dist_standardize'],
+                    speed_standardize=meta_info['speed_standardize'] ,
+                    coord_standardize=meta_info['coord_standardize'],
+                )    
 
-        else:
+            else:
 
-            processed_exp, _, _ = dict_to_preprocess.preprocess(
-                coordinates=coordinates,
-                scale=scale,
-                window_size=window_size,
-                window_step=1,
-                shuffle=False,
-                pretrained_scaler=global_scaler,
-                dist_standardize=meta_info['dist_standardize'],
-                speed_standardize=meta_info['speed_standardize'] ,
-                coord_standardize=meta_info['coord_standardize'],
-            )
+                processed_exp, _, _ = dict_to_preprocess.preprocess(
+                    coordinates=coordinates,
+                    scale=scale,
+                    window_size=window_size,
+                    window_step=1,
+                    shuffle=False,
+                    pretrained_scaler=global_scaler,
+                    dist_standardize=meta_info['dist_standardize'],
+                    speed_standardize=meta_info['speed_standardize'] ,
+                    coord_standardize=meta_info['coord_standardize'],
+                )
 
-        tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
-        tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
+            tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
+            tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
         
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = model.to(device).eval()
+            x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
+            a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
 
-        x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
-        a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
+            batch_size = 256  # adjust to fit your GPU
+            emb_list, sc_list = [], []
+            amp_ctx = nullcontext()
 
-        batch_size = 256  # adjust to fit your GPU
-        emb_list, sc_list = [], []
-        amp_ctx = nullcontext()
+            with torch.inference_mode(), amp_ctx:
+                for s in range(0, x_all.size(0), batch_size):
+                    xb = x_all[s:s + batch_size].to(device, non_blocking=True)
+                    ab = a_all[s:s + batch_size].to(device, non_blocking=True)
 
-        with torch.inference_mode(), amp_ctx:
-            for s in range(0, x_all.size(0), batch_size):
-                xb = x_all[s:s + batch_size].to(device, non_blocking=True)
-                ab = a_all[s:s + batch_size].to(device, non_blocking=True)
+                    # Disable attention collection if supported
+                    if isinstance(model, deepof.clustering.models_new.VaDEPT):
+                        _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
+                        sc_list.append(sc_out.detach().cpu())
+                    elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
+                        _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
+                        sc_list.append(sc_out.detach().cpu())
+                    elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
+                        emb_out = model(xb, ab)
+                    else: # pragma: no cover
+                        raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
 
-                # Disable attention collection if supported
-                if isinstance(model, deepof.clustering.models_new.VaDEPT):
-                    _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
-                    sc_list.append(sc_out.detach().cpu())
-                elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
-                    _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
-                    sc_list.append(sc_out.detach().cpu())
-                elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
-                    model.cluster_mode=cluster_mode
-                    emb_out = model(xb, ab)
-                else: # pragma: no cover
-                    raise RuntimeError("Unexpected model; expected either VADE or VQVAE.")
+                    emb_list.append(emb_out.detach().cpu())
 
-                emb_list.append(emb_out.detach().cpu())
+            # Stitch full outputs
+            emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
+            print('completed')
+            emb = emb_raw.cpu().numpy()
 
-        # Stitch full outputs
-        emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
-        print('completed')
-        emb = emb_raw.cpu().numpy()
+            if not contrastive:
+                sc_raw = torch.cat(sc_list, dim=0) if sc_list else None
+                sc = sc_raw.cpu().numpy()
+                # save paths for modified tables
+                table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
+                soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
-        if not contrastive:
-            sc_raw = torch.cat(sc_list, dim=0) if sc_list else None
-            sc = sc_raw.cpu().numpy()
             # save paths for modified tables
-            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
-            soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
+            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
+            embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
 
-        # save paths for modified tables
-        table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
-        embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
-
-        #to not flood the output with loading bars
-        clear_output()
+            #to not flood the output with loading bars
+            clear_output()
 
     # Notify user about key removal, if applicable 
     exp_conds=copy.copy(coordinates.get_exp_conditions)
@@ -715,7 +799,7 @@ def embedding_per_video(
             animal_ids=animal_id,
             supervised_annotations=supervised_annotations,
             embedding_gates=embedding_gates,
-            temporal_smooth_win=3,
+            temporal_smooth_win=temporal_smooth_win,
             N_clusters_per_gate=states_per_gate,
             M_gates=M_gates,
             gate_edges=gate_edges,
