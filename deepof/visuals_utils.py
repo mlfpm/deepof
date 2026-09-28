@@ -403,11 +403,12 @@ def _filter_embeddings(
         )  # pragma: no cover
 
     if embeddings is not None:
-        soft_counts = soft_counts.filter_videos(embeddings.keys())
+        soft_counts = _keep_videos(soft_counts, embeddings.keys())
     keys = list((embeddings if embeddings is not None else supervised_annotations).keys())
     # One condition per video; videos left out by condition_source (e.g. "exclude_mixed") are dropped below
     video_conds = deepof.conditions.video_conditions(
-        coordinates.get_exp_conditions, exp_condition, coordinates.get_animal_conditions, condition_source, keys=keys
+        coordinates.get_exp_conditions, exp_condition, getattr(coordinates, "get_animal_conditions", None),
+        condition_source, keys=keys,
     )
     concat_hue = [video_conds[k] for k in keys if k in video_conds]
 
@@ -2489,6 +2490,9 @@ def _preprocess_mouse_roi_interaction(
             # One value per video, time bin and condition (animals of one video are not independent)
             df = df.groupby(["time_bin", "exp_condition", "exp_id"], as_index=False, sort=False)[mode].mean()
             df = df[["time_bin", "exp_condition", mode, "exp_id"]]
+        elif not animal_level:
+            # the video id is only needed for animal-level statistics; keep the established output otherwise
+            df = df.drop(columns="exp_id")
 
   
         df, hide_time_bins = postprocess_df_bins(df, bin_lengths, hide_time_bins)  
