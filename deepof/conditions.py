@@ -196,6 +196,23 @@ def select_animal_rows(table: pd.DataFrame, names: Sequence[str], animals: Seque
     return pd.concat(blocks, axis=0, ignore_index=True)
 
 
+def condition_labels_of_columns(
+    columns: Sequence[str],
+    all_columns,
+    animal_conditions: Dict[str, pd.DataFrame],
+    exp_condition: str,
+    animal_ids: Sequence[str],
+    pair_policy: str = "composition",
+) -> List[str]:
+    """Sorted condition labels that the given annotation columns get across all videos (e.g. only the actor's
+    conditions for a directed column such as "B_W_nose2body")."""
+    labels = set()
+    for conds in animal_conditions.values():
+        for column in columns:
+            labels.update(column_condition_labels(column, all_columns, conds[exp_condition], animal_ids, pair_policy)[1])
+    return sorted(labels)
+
+
 def expand_behaviors(behaviors: Sequence[str], columns: Sequence[str], animal_ids: Sequence[str]) -> List[str]:
     """Annotation columns selected by behavior names, which can be column names ("B_climb-arena") or
     behavior names pooled over animals ("climb-arena")."""

@@ -15,6 +15,7 @@ from itertools import chain, combinations, product
 from typing import Any, List, NewType, Union, Optional
 from tqdm import tqdm
 
+import matplotlib.lines
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -1213,6 +1214,9 @@ def plot_enrichment(
         ax.__class__ = new_ax.__class__
         # Replace the new_ax with ax in the figure's axes list
         fig.axes[fig.axes.index(new_ax)] = ax
+        # fig.axes returns a copy, so the figure keeps drawing new_ax; ax shares its internals, but attributes that are
+        # reassigned later (such as the legend) have to be set on the drawn axis
+        polar_ax = new_ax
         del new_ax
 
         # Get x labels from cluster names
@@ -1348,11 +1352,12 @@ def plot_enrichment(
         np.random.seed(None)
 
         ax.set_ylabel(y_axis_label)
-    handles, labels = ax.get_legend_handles_labels()
-    start_entry=int(len(handles)/2)
-    ax.legend(
-        handles[start_entry:], labels[start_entry:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
-    )
+    if not polar_depiction:
+        handles, labels = ax.get_legend_handles_labels()
+        start_entry=int(len(handles)/2)
+        ax.legend(
+            handles[start_entry:], labels[start_entry:], bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0
+        )
 
     if add_stats and animal_level:
         # Test per comparison: paired if both conditions come from the same videos, independent otherwise
@@ -1491,6 +1496,15 @@ def plot_enrichment(
         title = ""
         lower_lim = ax.get_ylim()[0]
         ax.set_rlim(lower_lim, ax.get_yticks()[-1])
+
+        # legend on the axis the figure actually draws
+        # one entry per condition, placed outside the circle so it does not cover the plot
+        legend_handles = [
+            matplotlib.lines.Line2D([0], [0], color=cond_to_color[c], lw=3, marker="o") for c in all_exp_conditions
+        ]
+        polar_ax.legend(
+            legend_handles, [str(c) for c in all_exp_conditions], bbox_to_anchor=(1.12, 1), loc="upper left", borderaxespad=0.0
+        )
 
     else:
         # set x-ticks
@@ -2380,6 +2394,14 @@ def plot_normative_log_likelihood(
         embedding_dataset (pd.DataFrame): embedding data frame with added normative scores per sample
 
     """
+    available = sorted(embedding_dataset["experimental condition"].astype(str).unique())
+    if str(normative_model) not in available:
+        raise ValueError(
+            f'normative_model "{normative_model}" is not a condition of the compared videos; available: {available}. '
+            "Each video has one condition here; with animal-level conditions, condition_source sets which one "
+            '(e.g. condition_source="B" for the condition of animal B).'
+        )
+
     # Fit normative model to animals belonging to the control cohort
     norm_density = deepof.post_hoc.fit_normative_global_model(
         embedding_dataset.loc[
@@ -2460,18 +2482,23 @@ def plot_normative_log_likelihood(
         if normative_model in pair
     ]
 
-    annotator = Annotator(
-        pairs=pairs,
-        data=embedding_dataset,
-        x="experimental condition",
-        y="norm_scores",
-        ax=ax2,
-    )
-    annotator.configure(
-        test=add_stats,
-        verbose=verbose,
-    )
-    annotator.apply_and_annotate()
+    if add_stats and not pairs:
+        warnings.warn(
+            f'No statistics: there is no other condition to compare with the normative model "{normative_model}".'
+        )
+    elif add_stats:
+        annotator = Annotator(
+            pairs=pairs,
+            data=embedding_dataset,
+            x="experimental condition",
+            y="norm_scores",
+            ax=ax2,
+        )
+        annotator.configure(
+            test=add_stats,
+            verbose=verbose,
+        )
+        annotator.apply_and_annotate()
 
     return embedding_dataset, False, ax
 
@@ -4271,8 +4298,21 @@ def plot_behavior_trends(
     # Init condition_values if not given
     # With animal-level conditions, supervised behaviors are attributed to the condition of the animal(s) involved
     animal_level = supervised_annotations is not None and coordinates.get_animal_conditions is not None
+    if animal_level:
+        supervised_columns = get_dt(supervised_annotations, list(supervised_annotations.keys())[0], only_metainfo=True)["columns"]
+        behavior_columns = {
+            b: deepof.conditions.expand_behaviors([b], supervised_columns, coordinates._animal_ids)
+            for b in behaviors_to_plot
+        }
     if not condition_values:
-        condition_values = coordinates.get_condition_values(exp_condition, level="animal" if animal_level else "video")
+        if animal_level:
+            # conditions that actually occur for the selected behaviors, e.g. only the actor's for "B_W_nose2body"
+            condition_values = deepof.conditions.condition_labels_of_columns(
+                [c for cols in behavior_columns.values() for c in cols], supervised_columns,
+                coordinates.get_animal_conditions, exp_condition, coordinates._animal_ids, pair_policy,
+            )
+        else:
+            condition_values = coordinates.get_condition_values(exp_condition, level="video")
     if len(condition_values) > 2:
         condition_values = condition_values[0:2]
         warning_message = (
@@ -4332,12 +4372,6 @@ def plot_behavior_trends(
         multi_bin_info[j]=roi_bin_info
 
     keys=list(table_dicts.keys())
-    if animal_level:
-        supervised_columns = get_dt(table_dicts, keys[0], only_metainfo=True)["columns"]
-        behavior_columns = {
-            b: deepof.conditions.expand_behaviors([b], supervised_columns, coordinates._animal_ids)
-            for b in behaviors_to_plot
-        }
 
 
     #####
@@ -4582,7 +4616,11 @@ def plot_behavior_trends(
             geom=geom,
             polar_depiction=polar_depiction,
             max_value=max_value,
-            title=f"DeepOF - {behavior_to_plot}",
+            title=(
+                # with animal-level conditions, say which conditions the (actor) animals of this behavior have
+                f"DeepOF - {behavior_to_plot} ({exp_condition}: {' vs '.join(map(str, plotted_conditions))})"
+                if animal_level else f"DeepOF - {behavior_to_plot}"
+            ),
             xlabel=None if polar_depiction else "Time Bins",
             ylabel=None if polar_depiction else ylabel,
         )
@@ -4788,7 +4826,7 @@ def plot_mouse_roi_interaction(
         hide_time_bins (list[bool]): List of booleans denoting which bins should be visible (False) or hidden (True). Defaults to displaying all time bins.
         experiment_ids (list): List of experiment IDs to include. If None, all experiments are used. Ignored when a valid exp_condition/condition_values combination is provided.
         exp_condition (str): Experimental condition to compare.
-        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list. With animal-level conditions, the animals with these values are measured: body parts without animal prefix (e.g. "Nose") and "fov" mode without animal_id measure every such animal, prefixed body parts or an animal_id only count where these animals have the value.
+        condition_values (str): Condition values to compare. If a string is provided it is wrapped in a list. With animal-level conditions, the animals with these values are measured: body parts without animal prefix (e.g. "Nose") and "fov" mode without animal_id measure every such animal; prefixed body parts are measured per animal under its own condition (e.g. ["B_Nose", "W_Nose"]: B's nose for B's condition, W's nose for W's); an animal_id measures that animal.
         mode (str): Interaction measure to compute. Must be one of "distance" (bodypart-ROI distance) or "fov" (field-of-view overlap). Defaults to "distance".
         add_stats (str): Statistical test to use for pairwise comparisons. Mann-Whitney (non-parametric) by default. See statsannotations documentation for details.
         error_bars (str): Type of error bars to display (either standard deviation ("std") or standard error ("sem")). Defaults to standard error.
@@ -5174,6 +5212,7 @@ def plot_kovarova(
     exclude_experiment_ids: list = None,  
     exp_condition: str = None, 
     random_state: int = 0,
+    save: bool = False,
 ):
     
     df_no_out, validation_metrics, p_dict, embedding, df_imp, impute_cols, cmap = deepof.visuals_utils._preprocess_kovarova(
@@ -5204,10 +5243,26 @@ def plot_kovarova(
     ax3 = fig.add_subplot(2, 2, 3)
     ax4 = fig.add_subplot(2, 2, 4)
     
-    deepof.visuals_utils.plot_umap_embedding(ax=ax1, embedding=embedding, df_imputed=df_imp, cluster_colour_map=cmap, exp_condition=exp_condition, save_path="Figures/UMAP_embedding.pdf")
-    deepof.visuals_utils.plot_polar_behavioural_profile(ax=ax2, df_no_outliers=df_no_out, behaviour_cols_renamed=impute_cols, cluster_colour_map=cmap, save_path="Figures/polar_profile.pdf")
-    deepof.visuals_utils.plot_cluster_heatmap(ax=ax3, df_no_outliers=df_no_out, behaviour_cols_renamed=impute_cols, save_path="Figures/cluster_heatmap.pdf")
-    deepof.visuals_utils.plot_cluster_statistics(ax=ax4, df_no_outliers=df_no_out, cluster_colour_map=cmap, behaviour_cols_renamed=impute_cols, exp_condition=exp_condition, p_values=p_dict, save_path="Figures/cluster_heatmap.pdf", random_state=random_state)
+    deepof.visuals_utils.plot_umap_embedding(ax=ax1, embedding=embedding, df_imputed=df_imp, cluster_colour_map=cmap, exp_condition=exp_condition)
+    deepof.visuals_utils.plot_polar_behavioural_profile(ax=ax2, df_no_outliers=df_no_out, behaviour_cols_renamed=impute_cols, cluster_colour_map=cmap)
+    deepof.visuals_utils.plot_cluster_heatmap(ax=ax3, df_no_outliers=df_no_out, behaviour_cols_renamed=impute_cols)
+    deepof.visuals_utils.plot_cluster_statistics(ax=ax4, df_no_outliers=df_no_out, cluster_colour_map=cmap, behaviour_cols_renamed=impute_cols, exp_condition=exp_condition, p_values=p_dict, random_state=random_state)
+
+    if save:
+        # the complete figure once, in the project's Figures folder (like the other plots)
+        fig.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_kovarova{}_{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""),
+                    exp_condition,
+                    calendar.timegm(time.gmtime()),
+                ),
+            ),
+            bbox_inches="tight",
+        )
 
 
 

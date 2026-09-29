@@ -46,8 +46,14 @@ class DataManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, create: bool = True):
+        """Open a DuckDB database. With create=False, a missing file raises FileNotFoundError instead of silently
+        creating an empty database (e.g. when loading with a stale or wrongly resolved relative path)."""
         self.db_path = str(Path(db_path).resolve())
+        if not create and not os.path.exists(self.db_path):
+            raise FileNotFoundError(
+                f"Database {self.db_path} does not exist (path given: {db_path}, working directory: {os.getcwd()})."
+            )
         self.conn = db.connect(self.db_path)
 
     def close(self):
@@ -103,6 +109,16 @@ class DataManager:
             raise TypeError("Unsupported data type")
         self._get_table_columns.cache_clear()
         return table_name
+
+    def drop(self, table_name: str):
+        """Delete a table (and its time metadata) if it exists."""
+        table_name = sanitize_table_name(table_name)
+        self.conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+        if self.conn.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '_dm_time_meta'"
+        ).fetchone()[0]:
+            self.conn.execute('DELETE FROM "_dm_time_meta" WHERE table_name = ?', [table_name])
+        self._get_table_columns.cache_clear()
 
 
     def load(self,
@@ -289,8 +305,9 @@ class DataManager:
 
         if len(df_copy.columns) != len(set(df_copy.columns)):
             cols = pd.Series(df_copy.columns)
-            for i, dup in enumerate(cols[cols.duplicated()]):
-                cols[i] = f"{dup}_duplicate{i}"
+            # rename the duplicates themselves (not the first columns of the table)
+            for i, pos in enumerate(np.flatnonzero(cols.duplicated().to_numpy())):
+                cols[pos] = f"{cols[pos]}_duplicate{i}"
             df_copy.columns = cols
 
         # insert dummy NaN column to make saving possible

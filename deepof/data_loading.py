@@ -134,7 +134,7 @@ def get_dt(
             elif table_name.endswith("npz"):
                 return ((np.empty(shape=[0,0]),np.empty(shape=[0,0])), path) if return_path else (np.empty(shape=[0,0]),np.empty(shape=[0,0]))
             else:
-                with DataManager(db_path) as manager:
+                with DataManager(db_path, create=False) as manager:
                     result = manager.load(
                         table_name,
                         return_path=return_path,
@@ -145,7 +145,7 @@ def get_dt(
                 return (pd.DataFrame(columns=result['columns']), path) if return_path else pd.DataFrame(columns=result['columns'])
 
 
-        with DataManager(db_path) as manager:
+        with DataManager(db_path, create=False) as manager:
             result = manager.load(
                 table_name,
                 return_path=return_path,

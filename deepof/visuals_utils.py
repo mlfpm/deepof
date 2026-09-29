@@ -2218,7 +2218,8 @@ def _animal_level_roi_units(coordinates, exp_condition, condition_values, mode, 
     """Measured units for ROI interactions with animal-level conditions: {condition: {exp_id: [(animal, bodyparts)]}}.
 
     Pooled body parts (no animal prefix) and fov without animal_id measure every animal with the condition value.
-    Prefixed body parts and an explicit animal_id measure those animals, in videos where all of them have the value.
+    Prefixed body parts are measured per animal (e.g. B_Nose for B, W_Nose for W), each under its own condition;
+    an explicit animal_id measures that animal where it has the value.
     """
     animal_ids = coordinates._animal_ids
     head = ["Left_ear", "Nose", "Right_ear"]
@@ -2230,10 +2231,15 @@ def _animal_level_roi_units(coordinates, exp_condition, condition_values, mode, 
                 "(e.g. 'B_Nose', only these animals) or all without (e.g. 'Nose', every animal with the condition)."
             )
         pooled = prefixes == {()}
-        owners = {p[0] for p in prefixes if p}
+        # prefixed body parts grouped by their animal
+        owned = {}
+        for bp in bodyparts:
+            prefix = deepof.conditions.split_behavior_column(bp, animal_ids)[0]
+            if prefix:
+                owned.setdefault(prefix[0], []).append(bp)
     else:
         pooled = animal_id is None
-        owners = {animal_id} if animal_id is not None else set()
+        owned = {animal_id: [f"{animal_id}_{bp}" for bp in head]} if animal_id is not None else {}
 
     units = {}
     for condition_value in condition_values:
@@ -2244,10 +2250,8 @@ def _animal_level_roi_units(coordinates, exp_condition, condition_values, mode, 
                 exp_units = [
                     (a, [f"{a}_{bp}" for bp in (head if mode == "fov" else bodyparts)]) for a in animals
                 ]
-            elif owners <= set(animals):
-                exp_units = [("_".join(sorted(owners)), bodyparts)]
             else:
-                exp_units = []
+                exp_units = [(a, bps) for a, bps in owned.items() if a in animals]
             if exp_units:
                 units[condition_value][exp_id] = exp_units
     return units
@@ -2467,7 +2471,9 @@ def _preprocess_mouse_roi_interaction(
                         inside[:, k] = deepof.utils.point_in_polygon_numba(pts, polygon)
                         dists[:, k] = deepof.utils.get_point_polygon_distance_numba(pts, polygon, data_type=coordinates._bit_precision.dtype)
                     valid = inside.all(axis=1) if roi_number is None else ~inside.any(axis=1)
-                    min_dist = np.nanmin(dists, axis=1)
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=RuntimeWarning)  # all-NaN rows are expected
+                        min_dist = np.nanmin(dists, axis=1)
                     min_dist[~valid] = np.nan
                     interaction_full = min_dist * DistanceUnit.parse(unit_distance).factor(coordinates._scales[exp_id][2]/coordinates._scales[exp_id][3])  # shape (T,)
 
@@ -2479,7 +2485,9 @@ def _preprocess_mouse_roi_interaction(
                 if not get_raw_data:
                     for bin_id, bin_info in multi_bin_info.items():
                         frames = bin_info[exp_id]              # frame indices for this exp_id and bin
-                        value = np.nanmean(interaction_full[frames])
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", category=RuntimeWarning)  # empty / all-NaN bins give NaN
+                            value = np.nanmean(interaction_full[frames])
                         rows.append({"time_bin": bin_id, "exp_condition": str(exp_cond), mode: value, "exp_id": exp_id})
                 else:
                     raw_cols[f"{exp_id}_{unit_name}" if unit_name else exp_id] = pd.Series(interaction_full)

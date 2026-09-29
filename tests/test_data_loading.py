@@ -108,3 +108,31 @@ def test_get_dt_and_subfunctions(table_type, return_path, only_metainfo, load_in
         else:   
             assert isinstance(data[0], np.ndarray) and data[0].shape==(0,0)
             assert isinstance(data[1], np.ndarray) and data[1].shape==(0,0)
+
+
+def test_duckdb_table_handling(tmp_path):
+    import pytest
+    from deepof.data import _save_replacing_table
+    from deepof.data_manager import DataManager
+
+    key = "20191203_Test_5"
+    os.makedirs(os.path.join(tmp_path, key))
+    # Replacing a window table with the reshaped tuple does not accumulate type suffixes or keep the old table
+    entry = save_dt(np.zeros((10, 4, 3)), os.path.join(tmp_path, key, key + "_preprocessed"), True)
+    tab, path = get_dt({key: entry}, key, return_path=True)
+    entry = _save_replacing_table((tab[:, :2], tab[:, 2:]), path, True)
+    assert entry["table"] == f"t_{key}_preprocessed__npz"
+    with DataManager(entry["duckdb_file"]) as manager:
+        assert [r[0] for r in manager.conn.execute("SHOW TABLES").fetchall()] == [entry["table"]]
+    assert [a.shape for a in get_dt({key: entry}, key)] == [(10, 2, 3), (10, 2, 3)]
+
+    # Loading from a missing database raises instead of creating an empty one
+    missing = os.path.join(tmp_path, "missing", "database.duckdb")
+    with pytest.raises(FileNotFoundError):
+        get_dt({key: {"duckdb_file": missing, "table": "x"}}, key)
+    assert not os.path.exists(missing)
+
+    # Duplicate columns are renamed in place
+    df = pd.DataFrame([[1, 2, 3, 4]], columns=["a", "b", "a", "a"])
+    with DataManager(entry["duckdb_file"]) as manager:
+        assert list(manager._prepare_dataframe(df).columns) == ["a", "b", "a_duplicate0", "a_duplicate1"]

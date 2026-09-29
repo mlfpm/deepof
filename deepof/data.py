@@ -97,6 +97,7 @@ import deepof.visuals
 from deepof.utils import time_to_seconds, seconds_to_time
 from deepof.visuals_utils import _preprocess_time_bins
 from deepof.data_loading import get_dt, save_dt
+import deepof.data_manager
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -250,6 +251,24 @@ def load_project(
         coordinates=redone_project.create(force=True)
 
     return coordinates
+
+
+def _save_replacing_table(data, table_path, return_path: bool):
+    """Save data as a replacement for a table loaded with get_dt(..., return_path=True).
+
+    The new table reuses the old name without DataManager's type suffix ("__npy"/"__npz"), which save_dt adds again
+    for the new data (e.g. "<key>_preprocessed__npy" -> "<key>_preprocessed__npz" instead of "..__npy__npz"). The
+    replaced table is dropped afterwards, so the data is not stored twice.
+    """
+    if not isinstance(table_path, dict):
+        return save_dt(data, table_path, return_path)
+    db_file, old_table = table_path.get("duckdb_file"), table_path.get("table")
+    base_name = re.sub(r"(__np[yz])+$", "", old_table)
+    entry = save_dt(data, os.path.join(os.path.dirname(db_file), base_name), return_path)
+    if return_path and entry["table"] != old_table:
+        with deepof.data_manager.DataManager(db_file, create=False) as manager:
+            manager.drop(old_table)
+    return entry
 
 
 def _merge_animal_conditions(old: dict, new: dict, exp_conditions: dict):
@@ -3236,10 +3255,8 @@ class Coordinates:
                         num_rows=num_rows+tab.shape[0]
                     
 
-                        # save paths for modified tables
-                        if type(table_path) == dict:
-                            table_path = os.path.join(os.path.dirname(table_path.get("duckdb_file")) , table_path.get("table"))                    
-                        to_preprocess[k][key] = save_dt(dataset,table_path,return_as_paths) 
+                        # save paths for modified tables (replaces the window table by the reshaped one)
+                        to_preprocess[k][key] = _save_replacing_table(dataset, table_path, return_as_paths)
                     #collect shapes
                     if len(to_preprocess[k].keys())>0 and k==0:
                         metainfo['shape_train']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
@@ -3291,8 +3308,8 @@ class Coordinates:
                     num_rows=num_rows+tab.shape[0]
 
 
-                    # save paths for modified tables
-                    to_preprocess[key] = save_dt(dataset,table_path,return_as_paths)
+                    # save paths for modified tables (replaces the original table by the reshaped one)
+                    to_preprocess[key] = _save_replacing_table(dataset, table_path, return_as_paths)
                     pbar.update()
 
 
