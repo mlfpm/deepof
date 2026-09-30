@@ -1598,3 +1598,28 @@ def test_contrastive_backward_step_with_distillation(
             assert 0.0 <= result.logs["neg_similarity"] <= 1.0001
         else:
             assert (1.0 / 3.0) - 1e-4 <= result.logs["neg_similarity"] <= 1.0001
+
+
+def test_global_shuffle_matches_permutation(tmp_path, monkeypatch):
+    import h5py
+
+    # small memory budget, so the two-pass shuffle uses many buckets
+    monkeypatch.setattr(deepof.clustering.dataset, "_SHUFFLE_COPY_RAM", 20 * 1024)
+    rng = np.random.default_rng(0)
+    lengths = [30, 1, 75, 12]
+    pre = {f"v{i}": (rng.normal(size=(n, 5, 6)).astype(np.float32), rng.normal(size=(n, 5, 4)).astype(np.float32),
+                     rng.normal(size=(n, 5, 2)).astype(np.float32)) for i, n in enumerate(lengths)}
+    d = deepof.clustering.dataset.BatchDictDataset(
+        pre, str(tmp_path), "train_", h5_chunk_len=8, global_shuffle=True, shuffle_seed=5, return_angles=True
+    )
+
+    # final[s] = concatenated_videos[perm[s]], with the permutation of the shuffle seed
+    perm = np.random.default_rng(5).permutation(sum(lengths))
+    X = np.concatenate([deepof.clustering.dataset.reorder_and_reshape(v[0]) for v in pre.values()])[perm]
+    ang = np.concatenate([v[2] for v in pre.values()])[perm][..., None]
+    with h5py.File(d.X_path, "r") as fx, h5py.File(d.ang_path, "r") as fang:
+        assert np.array_equal(fx["X"][:], X) and np.array_equal(fang["ang"][:], ang)
+        assert fx.attrs["global_shuffle"] and fx.attrs["build_complete"]
+    assert np.array_equal(np.load(d.idx_path), np.repeat(np.arange(len(lengths)), lengths)[perm])
+    assert not [f for f in os.listdir(tmp_path) if f.endswith((".tmp", ".bucket.npy"))]
+

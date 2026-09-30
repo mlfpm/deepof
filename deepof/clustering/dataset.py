@@ -224,14 +224,17 @@ class BatchDictDataset:
     def _tmp_path(self, path: str) -> str:
         return path + '.tmp'
 
+    def _bucket_path(self, path: str) -> str:
+        return path + '.bucket.npy'
+
     def _cleanup_tmp_files(self):
         for p in (self.X_path, self.a_path, self.ang_path, self.y_path):
-            tmp = self._tmp_path(p)
-            if os.path.exists(tmp):
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
+            for tmp in (self._tmp_path(p), self._bucket_path(p)):
+                if os.path.exists(tmp):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
 
     def _mark_build_incomplete(self):
         """Ensure a crashed rebuild cannot be mistaken for a complete cached dataset."""
@@ -249,6 +252,23 @@ class BatchDictDataset:
         f_X.attrs['global_shuffle'] = bool(shuffled)
         f_X.attrs['shuffle_seed'] = int(shuffle_seed) if shuffled else -1
         f_X.attrs['build_complete'] = True
+
+    def _video_arrays(self, preprocessed_dict: Dict, key) -> Dict[str, np.ndarray]:
+        """Arrays of one video as stored in the HDF5 files: "X", "a", and "ang" / "y" if present."""
+        X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
+        n = int(X_batch.shape[0])
+        arrays = {
+            "X": reorder_and_reshape(X_batch).astype(np.float32, copy=False),
+            "a": np.expand_dims(a_batch, -1).astype(np.float32, copy=False),
+        }
+        if self.has_angles and ang_batch.size > 0:
+            arrays["ang"] = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
+        if self.supervised_dict is not None:
+            y_batch = self.supervised_dict[key]
+            assert y_batch.shape[0] == n, \
+                f"Shape mismatch for key {key}: X has {n} rows, Y has {y_batch.shape[0]}. Check windowing."
+            arrays["y"] = y_batch.astype(np.float32, copy=False)
+        return arrays
 
     def _sequential_write(
         self,
@@ -304,24 +324,15 @@ class BatchDictDataset:
 
             idx = 0
             for key in tqdm(keys, desc="BatchDictDataset: writing HDF5", unit="video"):
-                X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
-                n = int(X_batch.shape[0])
-                X_re = reorder_and_reshape(X_batch).astype(np.float32, copy=False)
-                A_re = np.expand_dims(a_batch, -1).astype(np.float32, copy=False)
-                Ang_re = np.expand_dims(ang_batch, -1).astype(np.float32, copy=False)
+                arrays = self._video_arrays(preprocessed_dict, key)
+                n = int(arrays["X"].shape[0])
 
-                X_dset[idx:idx+n] = X_re
-                A_dset[idx:idx+n] = A_re
-                if self.has_angles and ang_batch.size > 0:
-                    Ang_dset[idx:idx+n] = Ang_re
-
+                X_dset[idx:idx+n] = arrays["X"]
+                A_dset[idx:idx+n] = arrays["a"]
+                if "ang" in arrays:
+                    Ang_dset[idx:idx+n] = arrays["ang"]
                 if Y_dset is not None:
-                    y_batch = self.supervised_dict[key]
-                    assert y_batch.shape[0] == n, \
-                        f"Shape mismatch for key {key}: X has {n} rows, Y has {y_batch.shape[0]}. Check windowing."
-
-                    Y_re = y_batch.astype(np.float32, copy=False)
-                    Y_dset[idx:idx+n] = Y_re
+                    Y_dset[idx:idx+n] = arrays["y"]
 
                 idx += n
 
@@ -341,12 +352,10 @@ class BatchDictDataset:
             if f_Y is not None:
                 f_Y.close()
 
-    def _write_shuffled_from_sequential(
+    def _bucket_shuffled_write(
         self,
-        src_x: str,
-        src_a: str,
-        src_ang: Optional[str],
-        src_y: Optional[str],
+        preprocessed_dict: Dict,
+        keys,
         perm: np.ndarray,
         total_samples: int,
         shapes_X,
@@ -355,110 +364,102 @@ class BatchDictDataset:
         shapes_Y,
         h5_chunk_len: int,
         keys_hash: str,
-        n_videos: int,
         shuffle_seed: int,
     ):
-        bytes_per = int(np.prod(shapes_X)) * 4 + int(np.prod(shapes_A)) * 4
-        if self.has_angles and shapes_Ang is not None:
-            bytes_per += int(np.prod(shapes_Ang)) * 4
-        if src_y is not None and shapes_Y is not None:
-            bytes_per += int(np.prod(shapes_Y)) * 4
-        copy_chunk = max(1, min(total_samples, _SHUFFLE_COPY_RAM // max(int(bytes_per), 1)))
+        """Write all videos globally shuffled: final[s] = concatenated_videos[perm[s]].
 
-        rdcc_nbytes = _SHUFFLE_COPY_RAM
-        rdcc_nslots = 1_000_000
+        Two sequential passes instead of random access into a sequential file (which reads whole HDF5 chunks for single
+        windows, i.e. many times the dataset size): the output is split into buckets of about _SHUFFLE_COPY_RAM bytes.
+        Pass 1 reads the videos in order and appends every window to the bucket of its destination (contiguous writes
+        to a temporary file); pass 2 loads one bucket at a time, puts its windows into their final order and writes it
+        as one contiguous slice. Temporary disk: about one copy of the dataset.
+        """
+        targets = {
+            "X": (self.X_path, "X", shapes_X),
+            "a": (self.a_path, "a", shapes_A),
+            "ang": (self.ang_path, "ang", shapes_Ang),
+            "y": (self.y_path, "y", shapes_Y),
+        }
+        names = ["X", "a"] + (["ang"] if self.has_angles else []) + (["y"] if self.supervised_dict is not None else [])
 
-        fx_s = h5py.File(src_x, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
-        fa_s = h5py.File(src_a, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
-        fang_s = (
-            h5py.File(src_ang, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
-            if (src_ang is not None and self.has_angles) else None
-        )
-        fy_s = (
-            h5py.File(src_y, 'r', rdcc_nbytes=rdcc_nbytes, rdcc_nslots=rdcc_nslots)
-            if src_y is not None else None
-        )
+        bytes_per = sum(int(np.prod(targets[n][2])) * 4 for n in names)
+        bucket_rows = max(1, min(total_samples, _SHUFFLE_COPY_RAM // max(bytes_per, 1)))
+        n_buckets = (total_samples + bucket_rows - 1) // bucket_rows
 
-        fx_d = h5py.File(self.X_path, 'w')
-        fa_d = h5py.File(self.a_path, 'w')
-        fang_d = h5py.File(self.ang_path, 'w') if self.has_angles else None
-        fy_d = h5py.File(self.y_path, 'w') if src_y is not None else None
+        dest_of_source = np.empty(total_samples, dtype=np.int64)
+        dest_of_source[perm] = np.arange(total_samples, dtype=np.int64)
+        slot_dest = np.empty(total_samples, dtype=np.int64)  # destination of the window in each temporary slot
+        fill = np.arange(n_buckets, dtype=np.int64) * bucket_rows  # next free temporary slot per bucket
 
+        tmp = {
+            n: np.lib.format.open_memmap(
+                self._bucket_path(targets[n][0]), mode="w+", dtype=np.float32, shape=(total_samples, *targets[n][2])
+            )
+            for n in names
+        }
         try:
-            fx_d.attrs['build_complete'] = False
+            # Pass 1: scatter the windows of each video into the buckets of their destinations
+            src = 0
+            for key in tqdm(keys, desc="BatchDictDataset: shuffle 1/2", unit="video"):
+                arrays = self._video_arrays(preprocessed_dict, key)
+                n = int(arrays["X"].shape[0])
+                dests = dest_of_source[src:src + n]
+                src += n
+                buckets = dests // bucket_rows
+                order = np.argsort(buckets, kind="stable")
+                sorted_buckets = buckets[order]
+                starts = np.flatnonzero(np.r_[True, sorted_buckets[1:] != sorted_buckets[:-1]])
+                ends = np.r_[starts[1:], n]
+                for s0, e0 in zip(starts, ends):
+                    b = int(sorted_buckets[s0])
+                    rows = order[s0:e0]
+                    t0, t1 = int(fill[b]), int(fill[b]) + int(e0 - s0)
+                    for name in names:
+                        if name in arrays:  # videos without angles keep zeros, as in the sequential write
+                            tmp[name][t0:t1] = arrays[name][rows]
+                    slot_dest[t0:t1] = dests[rows]
+                    fill[b] = t1
+            expected_fill = np.minimum((np.arange(n_buckets, dtype=np.int64) + 1) * bucket_rows, total_samples)
+            assert src == total_samples and np.array_equal(fill, expected_fill), "Shuffle buckets are incomplete."
+            for m in tmp.values():
+                m.flush()
 
-            Xd = fx_d.create_dataset(
-                'X', shape=(total_samples, *shapes_X), dtype='float32',
-                chunks=(h5_chunk_len, *shapes_X), compression=None, shuffle=False, fletcher32=False,
-                maxshape=(total_samples, *shapes_X),
-            )
-            Ad = fa_d.create_dataset(
-                'a', shape=(total_samples, *shapes_A), dtype='float32',
-                chunks=(h5_chunk_len, *shapes_A), compression=None, shuffle=False, fletcher32=False,
-                maxshape=(total_samples, *shapes_A),
-            )
-            Angd = None
-            if fang_d is not None:
-                Angd = fang_d.create_dataset(
-                    'ang', shape=(total_samples, *shapes_Ang), dtype='float32',
-                    chunks=(h5_chunk_len, *shapes_Ang), compression=None, shuffle=False, fletcher32=False,
-                    maxshape=(total_samples, *shapes_Ang),
+            # Pass 2: order each bucket in memory and write it as one contiguous slice
+            files = {n: h5py.File(targets[n][0], "w") for n in names}
+            try:
+                files["X"].attrs["build_complete"] = False
+                dsets = {
+                    n: files[n].create_dataset(
+                        targets[n][1], shape=(total_samples, *targets[n][2]), dtype="float32",
+                        chunks=(h5_chunk_len, *targets[n][2]), compression=None, shuffle=False, fletcher32=False,
+                        maxshape=(total_samples, *targets[n][2]),
+                    )
+                    for n in names
+                }
+                for b in tqdm(range(n_buckets), desc="BatchDictDataset: shuffle 2/2", unit="bucket"):
+                    lo, hi = b * bucket_rows, min((b + 1) * bucket_rows, total_samples)
+                    local = slot_dest[lo:hi] - lo
+                    for name in names:
+                        block = np.empty((hi - lo, *targets[name][2]), dtype=np.float32)
+                        block[local] = tmp[name][lo:hi]
+                        dsets[name][lo:hi] = block
+
+                self._write_h5_attrs(
+                    files["X"],
+                    keys_hash=keys_hash,
+                    n_videos=len(keys),
+                    total_samples=total_samples,
+                    shuffled=True,
+                    shuffle_seed=shuffle_seed,
                 )
-            Yd = None
-            if fy_d is not None:
-                Yd = fy_d.create_dataset(
-                    'y', shape=(total_samples, *shapes_Y), dtype='float32',
-                    chunks=(h5_chunk_len, *shapes_Y), compression=None, shuffle=False, fletcher32=False,
-                    maxshape=(total_samples, *shapes_Y),
-                )
-
-            Xs, As = fx_s['X'], fa_s['a']
-            Angs = fang_s['ang'] if fang_s is not None else None
-            Ys = fy_s['y'] if fy_s is not None else None
-
-            n_chunks = (total_samples + copy_chunk - 1) // copy_chunk
-            for s in tqdm(
-                range(0, total_samples, copy_chunk),
-                desc="BatchDictDataset: global shuffle",
-                unit="chunk",
-                total=n_chunks,
-            ):
-                e = min(s + copy_chunk, total_samples)
-                src_idx = perm[s:e]
-                # h5py integer fancy indexing requires monotonically increasing indices
-                order = np.argsort(src_idx, kind='mergesort')
-                sorted_idx = np.ascontiguousarray(src_idx[order], dtype=np.int64)
-                inv = np.empty_like(order)
-                inv[order] = np.arange(order.shape[0])
-
-                Xd[s:e] = np.asarray(Xs[sorted_idx])[inv]
-                Ad[s:e] = np.asarray(As[sorted_idx])[inv]
-                if Angs is not None:
-                    Angd[s:e] = np.asarray(Angs[sorted_idx])[inv]
-                if Ys is not None:
-                    Yd[s:e] = np.asarray(Ys[sorted_idx])[inv]
-
-            self._write_h5_attrs(
-                fx_d,
-                keys_hash=keys_hash,
-                n_videos=n_videos,
-                total_samples=total_samples,
-                shuffled=True,
-                shuffle_seed=shuffle_seed,
-            )
+            finally:
+                for f in files.values():
+                    f.close()
         finally:
-            fx_s.close()
-            fa_s.close()
-            fx_d.close()
-            fa_d.close()
-            if fang_s is not None:
-                fang_s.close()
-            if fang_d is not None:
-                fang_d.close()
-            if fy_s is not None:
-                fy_s.close()
-            if fy_d is not None:
-                fy_d.close()
+            # release the memory maps before their files are removed (required on Windows)
+            for name in list(tmp):
+                tmp[name]._mmap.close()
+            tmp.clear()
 
     def _build_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int]):
         keys = list(preprocessed_dict.keys())
@@ -501,45 +502,17 @@ class BatchDictDataset:
         y_final = self.y_path if self.supervised_dict is not None else None
         do_shuffle = bool(self.global_shuffle) and total_samples > 1
 
-        if do_shuffle:
-            x_seq = self._tmp_path(self.X_path)
-            a_seq = self._tmp_path(self.a_path)
-            ang_seq = self._tmp_path(self.ang_path)
-            y_seq = self._tmp_path(self.y_path) if y_final is not None else None
-        else:
-            x_seq, a_seq, ang_seq, y_seq = self.X_path, self.a_path, self.ang_path, y_final
-
         try:
-            self._sequential_write(
-                preprocessed_dict=preprocessed_dict,
-                keys=keys,
-                x_path=x_seq,
-                a_path=a_seq,
-                ang_path=ang_seq,
-                y_path=y_seq,
-                total_samples=total_samples,
-                shapes_X=shapes_X,
-                shapes_A=shapes_A,
-                shapes_Ang=shapes_Ang,
-                shapes_Y=shapes_Y,
-                h5_chunk_len=h5_chunk_len,
-                keys_hash=keys_hash,
-                write_final_attrs=not do_shuffle,
-                shuffle_seed=shuffle_seed,
-            )
-
             if do_shuffle:
                 rng = np.random.default_rng(shuffle_seed)
                 perm = rng.permutation(total_samples).astype(np.int64, copy=False)
                 print(
-                    f"BatchDictDataset: permuting {total_samples} windows globally "
-                    f"(temporary extra disk ≈ one full copy of the dataset)."
+                    f"BatchDictDataset: shuffling {total_samples} windows globally in two sequential passes "
+                    f"(temporary extra disk: about one copy of the dataset)."
                 )
-                self._write_shuffled_from_sequential(
-                    src_x=x_seq,
-                    src_a=a_seq,
-                    src_ang=ang_seq if self.has_angles else None,
-                    src_y=y_seq,
+                self._bucket_shuffled_write(
+                    preprocessed_dict=preprocessed_dict,
+                    keys=keys,
                     perm=perm,
                     total_samples=total_samples,
                     shapes_X=shapes_X,
@@ -548,10 +521,27 @@ class BatchDictDataset:
                     shapes_Y=shapes_Y,
                     h5_chunk_len=h5_chunk_len,
                     keys_hash=keys_hash,
-                    n_videos=len(keys),
                     shuffle_seed=shuffle_seed,
                 )
                 video_indices = video_indices[perm]
+            else:
+                self._sequential_write(
+                    preprocessed_dict=preprocessed_dict,
+                    keys=keys,
+                    x_path=self.X_path,
+                    a_path=self.a_path,
+                    ang_path=self.ang_path,
+                    y_path=y_final,
+                    total_samples=total_samples,
+                    shapes_X=shapes_X,
+                    shapes_A=shapes_A,
+                    shapes_Ang=shapes_Ang,
+                    shapes_Y=shapes_Y,
+                    h5_chunk_len=h5_chunk_len,
+                    keys_hash=keys_hash,
+                    write_final_attrs=True,
+                    shuffle_seed=shuffle_seed,
+                )
         finally:
             if do_shuffle:
                 self._cleanup_tmp_files()
