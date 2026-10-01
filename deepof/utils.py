@@ -2359,11 +2359,19 @@ def rename_track_bps(
             )
         )
     for bp in rename_bodyparts_dict.keys():
-        if not bp in current_bparts:
+        if not bp in current_bparts and not bp in bp_row.unique():
             raise ValueError(f"\"{bp}\" does not correspond to any bodypart in the given table!\n Table bodyparts are {np.unique(current_bparts)}!")
     
-    # Actual replacement of old table bp names with new ones
-    bp_row.replace(rename_bodyparts_dict, inplace=True, regex=True)
+    # Actual replacement of old table bp names with new ones (exact names, with or without animal id prefix)
+    def _renamed(bp):
+        if bp in rename_bodyparts_dict:
+            return rename_bodyparts_dict[bp]
+        for aid in animal_ids:
+            if aid and bp.startswith(f"{aid}_") and bp[len(aid) + 1:] in rename_bodyparts_dict:
+                return f"{aid}_{rename_bodyparts_dict[bp[len(aid) + 1:]]}"
+        return bp
+
+    bp_row = bp_row.map(_renamed)
     
     # Should have been changed in place, this is just to be sure 
     loaded_tab.loc["bodyparts", :] = bp_row

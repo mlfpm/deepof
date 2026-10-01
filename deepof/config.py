@@ -194,3 +194,25 @@ class BitPrecision(Enum):
         except (ValueError, TypeError) as e:
             opts = ", ".join(str(m.value) for m in cls)
             raise ValueError(f'Unsupported bit precision "{unit}". Valid options are: {opts}') from e
+
+# Positions (x, y in pixels) of the deepof_14 body parts in deepof/assets/mouse_schema.png, used to match the body
+# parts of custom labelling schemes to deepOF body parts
+SCHEMA_IMAGE = "mouse_schema.png"
+SCHEMA_POSITIONS = {
+    "Nose": (425, 79),
+    "Left_ear": (373, 190),
+    "Right_ear": (466, 192),
+    "Spine_1": (420, 234),
+    "Left_fhip": (361, 239),
+    "Right_fhip": (483, 236),
+    "Center": (420, 306),
+    "Right_bhip": (493, 339),
+    "Left_bhip": (348, 379),
+    "Spine_2": (420, 382),
+    "Tail_base": (425, 462),
+    "Tail_1": (428, 572),
+    "Tail_2": (387, 660),
+    "Tail_tip": (399, 750),
+}
+# A clicked position counts as a deepOF body part if it lies within this radius (in pixels) of its schema position
+SCHEMA_MATCH_RADIUS = 14

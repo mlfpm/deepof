@@ -93,6 +93,8 @@ from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warning
 import deepof.clustering.training
 import deepof.utils
 import deepof.arena_utils
+import deepof.custom_gui
+import deepof.skeleton
 import deepof.visuals
 from deepof.utils import time_to_seconds, seconds_to_time
 from deepof.visuals_utils import _preprocess_time_bins
@@ -331,7 +333,7 @@ class Project:
         Args:
             animal_ids (list): list of animal ids.
             arena (str): arena type. Can be one of "circular-autodetect", "circular-manual", "polygonal-autodetect", or "polygonal-manual".
-            bodypart_graph (str): body part scheme to use for the analysis. Defaults to None, in which case the program will attempt to select it automatically based on the available body parts.
+            bodypart_graph (Union[str, dict]): body part scheme to use for the analysis. Either a preset ("deepof_14" (default), "deepof_11" or "deepof_8"), a connectivity graph as dictionary ({body part: [neighbors]}), or a custom skeleton (dictionary or path to a JSON file, see deepof.skeleton) for labelling schemes that differ from the deepOF presets. "custom" opens a window to define the skeleton by clicking on a mouse schema. Custom skeletons are only supported by the unsupervised pipeline.
             iterative_imputation (str): whether to use iterative imputation for occluded body parts, options are "full" and "partial". if set to None, no imputation takes place.
             exclude_bodyparts (list): list of bodyparts to exclude from analysis.
             exp_conditions Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and experimental conditions as values.
@@ -346,7 +348,7 @@ class Project:
             project_path (str): path to the folder containing the motion tracking output data.
             video_path (str): path where to find the videos to use. If not specified, deepof, assumes they are in your project path.
             table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
-            rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
+            rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files. With a custom skeleton, this is only used to name the body parts of .npy files (the renaming is part of the skeleton).
             sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
             smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
@@ -438,7 +440,7 @@ class Project:
         continue_init=True
         if max_diff>=0.01:
             if DISPLAY_AVAILABLE: # pragma: no cover
-                continue_init=deepof.arena_utils.confirm_action(
+                continue_init=deepof.custom_gui.confirm_action(
                     f"The sampling rates of your videos deviate significantly!\n" 
                     f"The maximum deviation is {np.round(max_val-min_val,3)} fps!\n"
                     f"If this is unexpected, we recommend to investigate this issue!\n"
@@ -508,8 +510,26 @@ class Project:
             self.bit_precision = BitPrecision.parse(bit_precision)
 
 
-        # If the bodypart names in his table deviate from the ones deepOF expects, the user can rename them 
-        rename_bodyparts_dict = self.rename_bodyparts(rename_bodyparts, table_format)
+        # Custom skeletons define renaming, derived points and graph. Otherwise, the user can rename the bodyparts
+        # in his table if they deviate from the ones deepOF expects
+        if isinstance(bodypart_graph, str) and bodypart_graph == "custom":
+            bodypart_graph = self._define_custom_skeleton(rename_bodyparts, animal_ids)
+        self.skeleton_input = deepof.skeleton.load_skeleton(bodypart_graph)
+        self.skeleton = self.skeleton_input
+        if self.skeleton is not None:
+            if "npy" in self.table_format:
+                if not isinstance(rename_bodyparts, list):
+                    raise ValueError("Please provide the body part names of your .npy files with rename_bodyparts.")
+                self.skeleton = deepof.skeleton.resolve_skeleton(self.skeleton, rename_bodyparts)
+                rename_bodyparts_dict = {bp: self.skeleton["rename"][bp] for bp in rename_bodyparts}
+            else:
+                if rename_bodyparts is not None:
+                    raise ValueError("With a custom skeleton, please rename body parts with its \"rename\" entry.")
+                self.skeleton = deepof.skeleton.resolve_skeleton(self.skeleton)
+                rename_bodyparts_dict = dict(self.skeleton["rename"])
+            bodypart_graph = self.skeleton["graph"]
+        else:
+            rename_bodyparts_dict = self.rename_bodyparts(rename_bodyparts, self.table_format)
         
 
         # Init the rest of the parameters
@@ -591,6 +611,9 @@ class Project:
                 os.path.join(self.project_path, self.project_name, "Coordinates")
             )
             os.makedirs(os.path.join(self.project_path, self.project_name, "Figures"))
+            if self.skeleton_input is not None:
+                # the skeleton as given by the user, so it can be reused for other projects
+                deepof.skeleton.save_skeleton(self.skeleton_input, os.path.join(project_path, "skeleton.json"))
             if debug and "auto" in self.arena:
                 os.makedirs(
                     os.path.join(
@@ -604,6 +627,32 @@ class Project:
                 "Project already exists. Delete it or specify a different name."
             )  # pragma: no cover
 
+
+    def _define_custom_skeleton(self, rename_bodyparts: list, animal_ids: list) -> dict:  # pragma: no cover
+        """Open the skeleton definition window for the body parts of the project's tables."""
+        if not DISPLAY_AVAILABLE:
+            raise RuntimeError(
+                'bodypart_graph="custom" opens a window, but no display is available. Please provide the skeleton as '
+                "dictionary or JSON file instead (see deepof.skeleton)."
+            )
+        if "npy" in self.table_format:
+            if not isinstance(rename_bodyparts, list):
+                raise ValueError("Please provide the body part names of your .npy files with rename_bodyparts.")
+            names = rename_bodyparts
+        else:
+            ids = [animal_ids] if isinstance(animal_ids, str) else list(animal_ids or [""])
+            table = deepof.utils.load_table(
+                list(self.tables.values())[0], self.source_table_path, self.table_format, None, ids
+            )
+            names = list(dict.fromkeys(table.loc["bodyparts"]))
+            if "individuals" not in table.index:  # remove animal id prefixes
+                names = list(dict.fromkeys(
+                    next((n[len(a) + 1:] for a in ids if a and n.startswith(a + "_")), n) for n in names
+                ))
+        skeleton = deepof.skeleton.define_skeleton(names)
+        if skeleton is None:
+            raise ValueError("The skeleton definition was cancelled.")
+        return skeleton
 
     def rename_bodyparts(self, rename_bodyparts, table_format):
         rename_bodyparts_dict = None
@@ -849,7 +898,7 @@ class Project:
         if arena_path is not None:
            
             if not self.number_of_rois==0 and DISPLAY_AVAILABLE:
-                load_also_rois=deepof.arena_utils.confirm_action(
+                load_also_rois=deepof.custom_gui.confirm_action(
                     f"Do you want to additionally load the saved ROIs?\n" 
                     f"If you cancel, only the arenas get loaded." 
                         ) 
@@ -1078,7 +1127,9 @@ class Project:
                 # 2. Format Header
                 self._update_progress(pbar, "Adjusting headers", key)
                 table = self._format_table_header(table)
-                
+                if self.skeleton is not None:
+                    table = deepof.skeleton.add_derived_points(table, self.skeleton["derive"], self.animal_ids)
+
                 # 3. Update Connectivity Graph
                 self._update_progress(pbar, "Updating graphs", key)
                 self._update_connectivity_graph()
@@ -1461,7 +1512,7 @@ class Project:
 
         # Overwrite warning
         if os.path.exists(os.path.join(self.project_path, self.project_name)) and not test and DISPLAY_AVAILABLE: # pragma: no cover
-            overwrite_project=deepof.arena_utils.confirm_action(
+            overwrite_project=deepof.custom_gui.confirm_action(
                 f"A project already exists at the given path and name!\n"
                 f"Do you want to overwrite this old project with a new one?" 
             )
@@ -1558,6 +1609,7 @@ class Project:
             arena=self.arena,
             arena_dims=self.arena_dims,
             bodypart_graph=self.bodypart_graph,
+            skeleton=self.skeleton,
             distances=distances,
             connectivity=self.connectivity,
             excluded_bodyparts=self.exclude_bodyparts,
@@ -1743,6 +1795,7 @@ class Coordinates:
         distances: dict = None,
         connectivity: nx.Graph = None,
         excluded_bodyparts: list = None,
+        skeleton: dict = None,
         exp_conditions: dict = None,
         animal_conditions: dict = None,
         start_markers: dict = None,
@@ -1795,6 +1848,7 @@ class Coordinates:
         self._roi_dicts = roi_dicts
         self._arena_dims = arena_dims
         self._bodypart_graph = bodypart_graph
+        self._skeleton = skeleton
         self._excluded = excluded_bodyparts
         self._exp_conditions = exp_conditions
         self._animal_conditions = animal_conditions
@@ -1937,11 +1991,12 @@ class Coordinates:
     
     def _validate_inputs(self, tab: pd.DataFrame, key: str, align: str, center: str, roi_numbers: List[int]):
         """Performs initial validation of function arguments."""
-        if align:
-            #if not any(center in bp for bp in tab.columns.levels[0]):
-            #    raise ValueError("For alignment, 'center' must be the name of a body part.")  # pragma: no cover
-            if not any(align in bp for bp in tab.columns.levels[0]):
-                raise ValueError("'align' must be the name of a body part.")  # pragma: no cover
+        bodyparts = tab.columns.get_level_values(0).unique()
+        for name, bp in (("align", align), ("center", center)):
+            if isinstance(bp, str) and bp != "arena" and not any(b == bp or b.endswith("_" + bp) for b in bodyparts):
+                available = sorted({b[len(a) + 1:] if a and b.startswith(a + "_") else b
+                                    for b in bodyparts for a in self._animal_ids if not a or b.startswith(a + "_")})
+                raise ValueError(f"'{name}' must be the name of a body part. \"{bp}\" was not found, available body parts are {available}.")
         
         if roi_numbers is not None:
             if self._roi_dicts is None:
@@ -2778,7 +2833,7 @@ class Coordinates:
         for key in video_keys:
             scale_ratio = self._scales[key][2]/edited_scales[key][2]
             if (scale_ratio >1.05 or scale_ratio < 0.95) and first_detection and DISPLAY_AVAILABLE:
-                overwrite_old=deepof.arena_utils.confirm_action(
+                overwrite_old=deepof.custom_gui.confirm_action(
                     f"Some new scales deviate from old scales by a factor of {np.round(scale_ratio, decimals=3)}\n" 
                     f"This can indicate that the wrong \"arena_type\" was used.\n"
                     f"Do you still want to overwrite the old data with the edited arenas?",
@@ -3428,6 +3483,7 @@ class Coordinates:
             table_dict: A table_dict object with all supervised annotations per experiment as values.
 
         """
+        deepof.skeleton.check_supervised_support(getattr(self, "_skeleton", None), self._bodypart_graph)
         # Additional old version error for better user feedback, can get removed in a few versions
         if not (hasattr(self, "_run_numba")):
             raise ValueError(

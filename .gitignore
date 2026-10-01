@@ -31,6 +31,9 @@
 /Very_Large/
 /repo_info_data/
 /repo_info_plots/
+/MABe22/
+/MABe22_deepof_tables/
+/CalMS21/
 info_scraper.py
 info_plotter.py
 

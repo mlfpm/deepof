@@ -10,7 +10,6 @@ from copy import deepcopy
 from math import atan2, dist
 from enum import Enum
 from typing import Any, List, NewType, Tuple, Union
-from dataclasses import dataclass
 import warnings
 
 
@@ -22,6 +21,7 @@ from shapely.geometry import Point, Polygon
 from tqdm import tqdm
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, ARENA_COLOR, IMG_H_MAX, IMG_W_MAX
+from deepof.custom_gui import display_message, DropdownUI
 from deepof.data_loading import get_dt, save_dt, _suppress_warning
 import deepof.data
 import deepof.utils
@@ -834,62 +834,6 @@ def save_arena_image(numpy_im, roi, image_export_path, name, arena_reference=Non
 
 
 
-def display_message(message: List[str]): # pragma: no cover
-    """
-    Opens a window that displays a message for the user
-
-    Args:
-        message: List of strings containing the message
-    """
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7
-    font_color = (255, 255, 255)  # White color
-    line_type = 2
-    
-    # Calculate dimensions based on message content
-    max_line_length = max(len(line) for line in message)
-    line_height = 30  # Height per line of text
-    image_height = line_height * len(message) + 20  # Add some padding
-    image_width = max(600, max_line_length * 12)  # Minimum width or based on longest line
-
-    # Create a blank image with calculated dimensions
-    image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
-
-    # Initial position for the first line of text
-    x, y = 10, line_height
-    
-    # Loop through each line and put it on the image
-    for line in message:
-        cv2.putText(image, line, (x, y), font, font_scale, font_color, line_type)
-        y += line_height  # Move down for the next line
-
-    window_name = "Arena scaling"
-    
-    # Display the image in a window
-    cv2.imshow(window_name, image)
-    try:
-        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
-    except cv2.error:
-        pass  # Silently ignore if not supported
-    
-    try:
-        # Wait for a key press or until the window is closed
-        while True:
-            key = cv2.waitKey(1) & 0xFF
-            
-            if key == ord('q'):  # Exit on 'q' key press
-                break
-            
-            # Check if window is still open
-            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
-                break
-    except Exception as e:
-        print(f"An error occurred: {e}")   # Handle window close exception gracefully
-
-    if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) >= 1:
-        cv2.destroyWindow(window_name)
-
 
 def get_random_frame(video_path: str):
     # read random frame from video capture object
@@ -1330,175 +1274,6 @@ def extract_corners_from_arena(
 ##################################################
 
 
-def confirm_action(message: str, window_name: str = "Confirm"):
-    """
-    Displays a confirmation dialog using OpenCV with multi-line support.
-    
-    Args:
-        message: The message to display (use '\\n' for line breaks).
-        window_name: Name of the OpenCV window.
-    
-    Returns:
-        bool: True if 'y' pressed, False if 'n' pressed.
-    """
-    lines = message.split('\n')
-    
-    # Calculate image height based on number of lines
-    line_height = 40
-    padding = 100
-    img_height = len(lines) * line_height + padding
-    img_width = 800
-    
-    # Create black image
-    img = np.zeros((img_height, img_width, 3), dtype=np.uint8)
-    
-    # Add message lines
-    y_pos = 50
-    for line in lines:
-        cv2.putText(img, line, (30, y_pos),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        y_pos += line_height
-    
-    # Add instruction text at bottom
-    cv2.putText(img, "Press 'y' to confirm, 'n' to cancel", (30, y_pos + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-    
-    
-    cv2.imshow(window_name, img)
-    try:
-        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
-    except cv2.error:
-        pass  # Silently ignore if not supported
-    
-    while True:
-        key = cv2.waitKey(0) & 0xFF
-        if key == ord('y'):
-            cv2.destroyWindow(window_name)
-            return True
-        elif key == ord('n'):
-            cv2.destroyWindow(window_name)
-            return False
-        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
-            return False
-        
-
-@dataclass
-class DropdownConfig:
-    # Position from right edge (will be calculated in init)
-    margin_right: int = 10
-    margin_top: int = 10
-    width: int = 60  # Smaller width
-    height: int = 25  # Smaller height
-    option_height: int = 25  # Matching height
-    font_scale: float = 0.5  # Smaller font
-    font_thickness: int = 1
-    border_color: Tuple[int, int, int] = (100, 100, 100)
-    fill_color: Tuple[int, int, int] = (200, 200, 200)
-    text_color: Tuple[int, int, int] = (0, 0, 0)
-    main_box_color: Tuple[int, int, int] = (220, 220, 220)  # Light gray background
-
-class DropdownUI:
-    def __init__(self, window_name: str, options: List[str], window_width: int, hidden: bool = False, config: DropdownConfig = None):
-        self.window_name = window_name
-        self.options = options
-        self.config = config or DropdownConfig()
-        
-        # Calculate x position from right edge
-        self.x = window_width - self.config.width - self.config.margin_right
-        self.y = self.config.margin_top
-        
-        self.selected_option = options[0]
-        self.is_open = False
-        self.slider_value = 70
-        self.slider_active = False
-        self.hidden = hidden
-
-    def _is_point_in_rect(self, point: Tuple[int, int], 
-                         rect: Tuple[int, int, int, int]) -> bool:
-        x, y = point
-        rx, ry, rw, rh = rect
-        return rx <= x <= rx + rw and ry <= y <= ry + rh
-
-    def draw(self, img: np.ndarray) -> None:
-        if not self.hidden:
-            cfg = self.config
-            
-            # Draw main box with background
-            cv2.rectangle(img, 
-                        (self.x, self.y),
-                        (self.x + cfg.width, self.y + cfg.height),
-                        cfg.main_box_color, -1)  # Filled rectangle
-            cv2.rectangle(img, 
-                        (self.x, self.y),
-                        (self.x + cfg.width, self.y + cfg.height),
-                        cfg.border_color, 1)  # Border
-            
-            # Calculate text size to center it
-            text_size = cv2.getTextSize(self.selected_option, 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 
-                                    cfg.font_scale, 
-                                    cfg.font_thickness)[0]
-            text_x = self.x + (cfg.width - text_size[0]) // 2
-            text_y = self.y + (cfg.height + text_size[1]) // 2
-            
-            cv2.putText(img, self.selected_option,
-                        (text_x, text_y),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        cfg.font_scale, cfg.text_color, cfg.font_thickness)
-            
-            if self.is_open:
-                for i, option in enumerate(self.options):
-                    y = self.y + cfg.height * (i + 1)
-                    # Background
-                    cv2.rectangle(img,
-                                (self.x, y),
-                                (self.x + cfg.width, y + cfg.option_height),
-                                cfg.fill_color, -1)
-                    # Border
-                    cv2.rectangle(img,
-                                (self.x, y),
-                                (self.x + cfg.width, y + cfg.option_height),
-                                cfg.border_color, 1)
-                    # Centered text
-                    text_size = cv2.getTextSize(option, 
-                                            cv2.FONT_HERSHEY_SIMPLEX, 
-                                            cfg.font_scale, 
-                                            cfg.font_thickness)[0]
-                    text_x = self.x + (cfg.width - text_size[0]) // 2
-                    text_y = y + (cfg.option_height + text_size[1]) // 2
-                    
-                    cv2.putText(img, option,
-                            (text_x, text_y),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            cfg.font_scale, cfg.text_color, cfg.font_thickness)
-
-    def handle_mouse(self, event: int, x: int, y: int):
-        """Returns the newly selected option if changed, None otherwise"""        
-        if event != cv2.EVENT_LBUTTONDOWN or self.hidden:
-            return None
-            
-        # Check main dropdown box click
-        if self._is_point_in_rect((x, y), 
-                                 (self.x, self.y, self.config.width, self.config.height)):
-            self.is_open = not self.is_open
-            return "Disable"
-            
-        if not self.is_open:
-            return None
-            
-        # Check option clicks
-        for i, option in enumerate(self.options):
-            opt_y = self.y + self.config.height * (i + 1)
-            if self._is_point_in_rect((x, y),
-                                    (self.x, opt_y, self.config.width, self.config.option_height)):
-                old_option = self.selected_option
-                self.selected_option = option
-                self.is_open = False
-                return option if option != old_option else None
-                
-        self.is_open = False
-        return None
-    
 
 def retrieve_corners_from_image(
     frame: np.ndarray, arena_type: str, cur_vid: int, videos: list, current_roi: int = 0, arena_dims: float = 1.0, norm_dist: float = None, arena_corners: np.ndarray = None, corners: list=[], test: bool = False, roi_dict = None,
