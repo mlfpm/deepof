@@ -470,7 +470,7 @@ def _preprocess_embedding_evaluation(
     continuous_behaviors=[]
     if coordinates._custom_behaviors is not None:
         for custom_behavior in coordinates._custom_behaviors:
-            if custom_behavior.output_kind==Behavior_output.CONTINUOUS:
+            if custom_behavior.output_type==Behavior_output.CONTINUOUS:
                 continuous_behaviors.append(custom_behavior.name)
     continuous_behaviors = continuous_behaviors+CONTINUOUS_BEHAVIORS
 
@@ -3893,14 +3893,14 @@ def _return_supervised_summary(
                         # re-collect custom continous names to ensure nothing got misaligned
                         custom_behavior.name
                         for custom_behavior in coordinates._custom_behaviors
-                        if custom_behavior.output_kind
+                        if custom_behavior.output_type
                         == deepof.annotation_utils.Behavior_output.CONTINUOUS
                     ]
                     all_cont_units = CONTINUOUS_UNITS + [
                         # collect custom continous units
                         custom_behavior.unit
                         for custom_behavior in coordinates._custom_behaviors
-                        if custom_behavior.output_kind
+                        if custom_behavior.output_type
                         == deepof.annotation_utils.Behavior_output.CONTINUOUS
                     ]
                 else:
@@ -3959,7 +3959,8 @@ def _return_supervised_summary(
         if not os.path.exists(out_path):
             os.mkdir(out_path)
         df.to_csv(
-            path_or_buf=os.path.join(out_path, "supervised_summary.csv"),
+            # time-stamped, so that previous summaries are kept
+            path_or_buf=os.path.join(out_path, f"supervised_summary_{calendar.timegm(time.gmtime())}.csv"),
             sep=",",
             na_rep="",
         )

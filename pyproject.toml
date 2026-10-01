@@ -27,7 +27,7 @@ openpyxl = "^3.0.10"
 av = "12.3.0"
 lxml = "^4.9.1"
 imageio-ffmpeg = "^0.4.7"
-statannotations = "^0.5.0"
+statannotations = "^0.6.0"
 joblib = "^1.2.0"
 h5py = "^3.7.0"
 tables = {version = "3.8.0", markers="platform_machine != 'arm64' or (platform_system != 'darwin' and platform_system != 'Darwin')"}
