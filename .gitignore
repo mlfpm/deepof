@@ -4,7 +4,6 @@
 /tests/.pytest_cache/
 /.coverage
 /.hypothesis
-/.dockerignore
 /dof086/
 /dof/
 /dof2/

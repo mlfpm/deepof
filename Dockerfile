@@ -58,8 +58,15 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
  && rm -rf /var/lib/apt/lists/*
 
+# torch without dependencies, plus exactly the CUDA libraries (and triton) that this torch build pins. Its other
+# dependencies (sympy, typing-extensions, ...) come from the lock file below.
 COPY --from=wheels /src/torch_requirements.txt /opt/deepof/torch_requirements.txt
-RUN pip install --no-cache-dir --index-url ${TORCH_INDEX} -r /opt/deepof/torch_requirements.txt
+RUN pip install --no-cache-dir --no-deps --index-url ${TORCH_INDEX} -r /opt/deepof/torch_requirements.txt \
+ && python -c "import importlib.metadata as m; print(*[r.split(';')[0].strip() for r in m.requires('torch') if r.startswith(('nvidia-', 'triton'))], sep=chr(10))" \
+    > /opt/deepof/torch_cuda_requirements.txt \
+ && cat /opt/deepof/torch_cuda_requirements.txt \
+ && test -s /opt/deepof/torch_cuda_requirements.txt \
+ && pip install --no-cache-dir --no-deps -r /opt/deepof/torch_cuda_requirements.txt
 
 COPY --from=models /models/ ${SITE_PACKAGES}/
 
