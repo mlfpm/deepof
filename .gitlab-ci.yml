@@ -192,6 +192,7 @@ build-image:
     BUILDAH_ISOLATION: chroot
 
   script:
+    - echo "DEEPOF_REF='$DEEPOF_REF' BUILD_IMAGE='$BUILD_IMAGE' CI_PIPELINE_SOURCE='$CI_PIPELINE_SOURCE'"
     - REF_SHA="$CI_COMMIT_SHA"
     - |
       if [ -n "$DEEPOF_REF" ]; then
