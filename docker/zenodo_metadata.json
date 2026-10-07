@@ -1,0 +1,14 @@
+{
+    "upload_type": "software",
+    "title": "DeepOF {version} - container image",
+    "creators": [
+        {"name": "Miranda, Lucas", "affiliation": "Max Planck Institute of Psychiatry"},
+        {"name": "Schlegel, Patrick", "affiliation": "Max Planck Institute of Psychiatry"}
+    ],
+    "license": "mit",
+    "keywords": ["DeepOF", "behavior analysis", "pose estimation", "container image", "docker", "apptainer"],
+    "related_identifiers": [
+        {"identifier": "https://gitlab.mpcdf.mpg.de/lucasmir/deepof", "relation": "isDerivedFrom", "resource_type": "software"},
+        {"identifier": "https://pypi.org/project/deepof/{version}/", "relation": "isVariantFormOf", "resource_type": "software"}
+    ]
+}
