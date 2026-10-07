@@ -2,6 +2,7 @@ stages:
   - install
   - test
   - tutorials
+  - image
 
 install-pypi:
   stage: install
@@ -118,7 +119,7 @@ test:
     - python -m pip install dist/*.whl
     - python -m pip install coverage pytest hypothesis pytest-timeout
     - coverage run --source deepof -m pytest --ignore=tests/regression
-    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/annotation_utils.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,deepof/clustering/losses.py,deepof/clustering/logging.py,deepof/clustering/training.py,deepof/clustering/teacher_model.py,
+    - coverage report -m --include deepof/post_hoc.py,deepof/data.py,deepof/utils.py,deepof/annotation_utils.py,deepof/visuals_utils.py,deepof/data_loading.py,deepof/clustering/models_new.py,deepof/clustering/model_utils_new.py,deepof/clustering/losses.py,deepof/clustering/logging.py,deepof/clustering/training.py,deepof/clustering/teacher_model.py,deepof/custom_gui.py,deepof/skeleton.py
     - coverage xml -o deepof_cov.xml  
 
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
@@ -164,3 +165,119 @@ tutorials:
     - papermill docs/source/tutorial_notebooks/deepof_roi_tutorial.ipynb roi_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_custom_behaviors_tutorial.ipynb custom_behaviors_output.ipynb
     - papermill docs/source/tutorial_notebooks/deepof_model_types_tutorial.ipynb model_types_output.ipynb
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Container image for long-term reproducibility (Dockerfile, docker/). Built automatically for release tags and
+# manually otherwise. To build an older release with the current Dockerfile, run a pipeline with the variable
+# DEEPOF_REF=<tag> (e.g. DEEPOF_REF=0.9.0). The image is pushed to the container registry; archive-image uploads
+# it to Zenodo as a draft that has to be published by hand.
+# ---------------------------------------------------------------------------------------------------------------
+
+build-image:
+  stage: image
+  needs: []
+  tags:
+    - image-builder
+  image: quay.io/buildah/stable:v1.43.4
+  variables:
+    BUILDAH_FORMAT: docker
+    BUILDAH_ISOLATION: chroot
+    GIT_DEPTH: 0
+  rules:
+    - if: $CI_COMMIT_TAG || $DEEPOF_REF
+    - when: manual
+      allow_failure: true
+
+  script:
+    - REF_SHA="$CI_COMMIT_SHA"
+    - |
+      if [ -n "$DEEPOF_REF" ]; then
+        command -v git || dnf install -y -q git-core
+        git config --global --add safe.directory "$CI_PROJECT_DIR"
+        rm -rf deepof
+        git checkout "$DEEPOF_REF" -- deepof pyproject.toml poetry.lock README.md
+        REF_SHA=$(git rev-parse "$DEEPOF_REF^{commit}")
+      fi
+    - VERSION=$(sed -nE 's/^version = "(.*)"/\1/p' pyproject.toml | head -n 1)
+    - if [ -n "$CI_COMMIT_TAG$DEEPOF_REF" ]; then TAG="$VERSION"; else TAG="$VERSION-$CI_COMMIT_REF_SLUG"; fi
+    - buildah login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - buildah build --layers --cache-from "$CI_REGISTRY_IMAGE/cache" --cache-to "$CI_REGISTRY_IMAGE/cache"
+        --build-arg DEEPOF_VERSION="$VERSION" --build-arg VCS_REF="$REF_SHA" -t "$CI_REGISTRY_IMAGE:$TAG" .
+    - buildah push --digestfile digest.txt "$CI_REGISTRY_IMAGE:$TAG"
+    - buildah push "$CI_REGISTRY_IMAGE:$TAG" "docker://$CI_REGISTRY_IMAGE:ci-$CI_PIPELINE_ID"
+    - if [ -n "$CI_COMMIT_TAG" ]; then buildah push "$CI_REGISTRY_IMAGE:$TAG" "docker://$CI_REGISTRY_IMAGE:latest"; fi
+    - echo "IMAGE=$CI_REGISTRY_IMAGE@$(cat digest.txt)" > image.env
+    - echo "VERSION=$VERSION" >> image.env
+    - cat image.env
+
+  artifacts:
+    reports:
+      dotenv: image.env
+
+
+test-image:
+  stage: image
+  needs:
+    - build-image
+  image:
+    name: $CI_REGISTRY_IMAGE:ci-$CI_PIPELINE_ID
+    entrypoint: [""]
+
+  script:
+    - |
+      if [ -n "$DEEPOF_REF" ]; then
+        apt-get update && apt-get install -y --no-install-recommends git git-lfs ca-certificates
+        git lfs install
+        git clone --depth 1 --branch "$DEEPOF_REF" "$CI_REPOSITORY_URL" /tmp/ref
+        rm -rf tests && cp -r /tmp/ref/tests tests
+      fi
+    # Test the package installed in the image, not the checked out sources
+    - rm -rf deepof
+    - pytest -q tests --ignore=tests/regression
+
+
+test-image-gpu:
+  stage: image
+  needs:
+    - build-image
+  tags:
+    - cloud-gpu
+    - nvidia-cc80
+  image:
+    name: $CI_REGISTRY_IMAGE:ci-$CI_PIPELINE_ID
+    entrypoint: [""]
+
+  script:
+    - nvidia-smi || true
+    - |
+      python - <<'EOF'
+      import torch
+      import deepof.data
+      assert torch.cuda.is_available(), "CUDA is not available in the image"
+      print(torch.__version__, "CUDA", torch.version.cuda, torch.cuda.get_device_name(0))
+      model = torch.nn.Sequential(torch.nn.Conv1d(8, 16, 3), torch.nn.GRU(14, 32, batch_first=True)).cuda()
+      out, _ = model(torch.randn(4, 8, 16, device="cuda"))
+      out.sum().backward()
+      torch.cuda.synchronize()
+      print("GPU forward/backward OK")
+      EOF
+
+
+archive-image:
+  stage: image
+  needs:
+    - build-image
+    - test-image
+    - test-image-gpu
+  image: python:3.12-slim-bookworm
+  rules:
+    - if: $CI_COMMIT_TAG || $DEEPOF_REF
+      when: manual
+
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends skopeo
+    - skopeo copy --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD"
+        "docker://$IMAGE" "docker-archive:deepof-$VERSION.tar:deepof:$VERSION"
+    - gzip "deepof-$VERSION.tar"
+    - python docker/zenodo_upload.py "deepof-$VERSION.tar.gz" "$VERSION" "$IMAGE"

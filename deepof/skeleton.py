@@ -25,7 +25,7 @@ import os
 import re
 import warnings
 from itertools import combinations
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import networkx as nx
 import numpy as np
@@ -212,7 +212,11 @@ def resolve_skeleton(skeleton: dict, bodypart_names: List[str] = None) -> dict:
     for new, parts in (skeleton.get("derive") or {}).items():
         parts = [rename.get(p, p) for p in parts]
         if new in finals:
-            raise ValueError(f"Derived point \"{new}\" already exists as body part.")
+            sources = [n for n, f in rename.items() if f == new]
+            if any(n in raw_positions or n in explicit for n in sources):
+                raise ValueError(f"Derived point \"{new}\" already exists as body part.")
+            # an unused table body part of the same name is replaced by the derived point (see add_derived_points)
+            finals = [f for f in finals if f != new]
         absent = [p for p in parts if p not in finals]
         if absent:
             raise ValueError(f"Derived point \"{new}\" uses unknown body parts {absent}.")
@@ -248,17 +252,20 @@ def resolve_skeleton(skeleton: dict, bodypart_names: List[str] = None) -> dict:
     return {"rename": rename, "derive": derive, "graph": graph, "positions": positions}
 
 
-def add_derived_points(table: pd.DataFrame, derive: Dict[str, list], animal_ids: List[str]) -> pd.DataFrame:
+def add_derived_points(table: pd.DataFrame, derive: Dict[str, list], animal_ids: List[str]) -> Tuple[pd.DataFrame, List[str]]:
     """Add derived points to a table with (bodyparts, coords) columns, as the mean of their body parts.
 
-    Coordinates are NaN if any of the body parts is missing, the likelihood is the minimum of the body parts.
+    Coordinates are NaN if any of the body parts is missing, the likelihood is the minimum of the body parts. Body
+    parts of the table with the name of a derived point are replaced.
+
+    Returns:
+        table (pd.DataFrame): table with derived points.
+        replaced (list): names of the derived points that replaced body parts of the table.
     """
     if not derive:
-        return table
+        return table, []
     existing = set(table.columns.get_level_values("bodyparts"))
     clashes = sorted({f"{aid}_{new}" if aid else new for aid in animal_ids for new in derive} & existing)
-    if clashes:
-        raise ValueError(f"Derived points {clashes} already exist in the tables. Please rename them in the skeleton.")
     new_columns = {}
     for aid in animal_ids:
         prefix = f"{aid}_" if aid else ""
@@ -269,7 +276,10 @@ def add_derived_points(table: pd.DataFrame, derive: Dict[str, list], animal_ids:
                 new_columns[(prefix + new, "likelihood")] = table[[(prefix + p, "likelihood") for p in parts]].min(axis=1)
     added = pd.DataFrame(new_columns, index=table.index)
     added.columns = pd.MultiIndex.from_tuples(added.columns, names=table.columns.names)
-    return pd.concat([table, added], axis=1)
+    # only the project's tables are affected, the source tables are never written to
+    table = table.drop(columns=clashes, level="bodyparts") if clashes else table
+    replaced = sorted(n for n in derive if any(c == n or c.endswith("_" + n) for c in clashes))
+    return pd.concat([table, added], axis=1), replaced
 
 
 def check_supervised_support(skeleton: dict, graph: Union[str, dict]):

@@ -414,6 +414,18 @@ class SkeletonEditor:
             cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thickness + 3, cv2.LINE_AA)
         cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
 
+    def _wrap(self, items: List[str], scale: float) -> List[str]:
+        """Join items with commas into indented lines that fit into the panel."""
+        lines, line = [], ""
+        for i, item in enumerate(items):
+            candidate = f"{line} {item}" if line else f"  {item}"
+            candidate += "," if i < len(items) - 1 else ""
+            if line and cv2.getTextSize(candidate, cv2.FONT_HERSHEY_SIMPLEX, scale, 1)[0][0] > self.PANEL_WIDTH - 24:
+                lines.append(line)
+                candidate = f"  {item}" + ("," if i < len(items) - 1 else "")
+            line = candidate
+        return lines + ([line] if line else [])
+
     def render(self) -> np.ndarray:
         """Return the current window content as BGR image."""
         img = self.schema.copy()
@@ -453,7 +465,7 @@ class SkeletonEditor:
                     "body part, kept with its own name."]
         elif self.mode == "center":
             title = ["No \"Center\" body part found."]
-            info = ["Derive it as the mean of:", "  " + ", ".join(self._center_suggestion()), "y: yes   n: no"]
+            info = ["Derive it as the mean of:"] + self._wrap(self._center_suggestion(), 0.45) + ["y: yes   n: no"]
         else:
             title = ["Check the graph."]
             info = ["Click two body parts to add or remove", "their connection.",

@@ -1034,6 +1034,17 @@ class Project:
         # Reset excluded bodyparts to base list without ids
         self.exclude_bodyparts = raw_excluded_bodyparts
 
+    def _check_graph_bodyparts(self, table: pd.DataFrame, key: str):
+        """Raises an error if body parts of the connectivity graph are missing in a table."""
+        table_bodyparts = set(table.columns.get_level_values("bodyparts"))
+        graph_bodyparts = set().union(*(self.connectivity[aid].nodes for aid in self.animal_ids))
+        missing = sorted(graph_bodyparts - table_bodyparts)
+        if missing:
+            raise ValueError(
+                f"The body parts {missing} of your bodypart_graph are not part of the table {key}. "
+                f"Body parts in the table: {os_sorted(table_bodyparts)}."
+            )
+
     def _filter_irrelevant_bodyparts(self, table: pd.DataFrame) -> pd.DataFrame:
         """Removes bodyparts not present in the connectivity graph or explicitly excluded."""
         all_bodyparts = table.columns.get_level_values('bodyparts').unique()
@@ -1117,6 +1128,7 @@ class Project:
         final_tab_dict, final_lik_dict = {}, {}
         total_warnings = 0
         found_individuals = False
+        replaced_bodyparts = set()
 
         with tqdm(total=len(self.tables), desc=f"{'Preprocessing tables':<{PROGRESS_BAR_FIXED_WIDTH}}") as pbar:
             for key in self.tables.keys():
@@ -1128,11 +1140,13 @@ class Project:
                 self._update_progress(pbar, "Adjusting headers", key)
                 table = self._format_table_header(table)
                 if self.skeleton is not None:
-                    table = deepof.skeleton.add_derived_points(table, self.skeleton["derive"], self.animal_ids)
+                    table, replaced = deepof.skeleton.add_derived_points(table, self.skeleton["derive"], self.animal_ids)
+                    replaced_bodyparts.update(replaced)
 
                 # 3. Update Connectivity Graph
                 self._update_progress(pbar, "Updating graphs", key)
                 self._update_connectivity_graph()
+                self._check_graph_bodyparts(table, key)
 
                 # 4. Add Time Index
                 if self.frame_rate:
@@ -1173,6 +1187,11 @@ class Project:
                 
                 pbar.update(1)
 
+        if replaced_bodyparts:
+            warnings.warn(
+                f"[38;5;208mThe body parts {sorted(replaced_bodyparts)} of your tables are replaced by the derived "
+                "points of the same name in the deepOF project tables (your source tables are not changed).[0m"
+            )
         if total_warnings > 0:
             warnings.warn(
                 f"\033[38;5;208m"
