@@ -190,7 +190,6 @@ build-image:
   variables:
     BUILDAH_FORMAT: docker
     BUILDAH_ISOLATION: chroot
-    GIT_DEPTH: 0
 
   script:
     - REF_SHA="$CI_COMMIT_SHA"
@@ -198,6 +197,8 @@ build-image:
       if [ -n "$DEEPOF_REF" ]; then
         command -v git || dnf install -y -q git-core
         git config --global --add safe.directory "$CI_PROJECT_DIR"
+        # Tags are only fetched with the branch if they are part of its history
+        git fetch --depth=1 origin "+refs/tags/$DEEPOF_REF:refs/tags/$DEEPOF_REF"
         rm -rf deepof
         git checkout "$DEEPOF_REF" -- deepof pyproject.toml poetry.lock README.md
         REF_SHA=$(git rev-parse "$DEEPOF_REF^{commit}")
