@@ -253,8 +253,7 @@ test-image-gpu:
   needs:
     - build-image
   tags:
-    - cloud-gpu
-    - nvidia-cc80
+    - gpu-nvidia-cc80   # MPCDF A30 runners (the MPCDF docs list outdated tag names)
   image:
     name: $CI_REGISTRY_IMAGE:ci-$CI_PIPELINE_ID
     entrypoint: [""]
