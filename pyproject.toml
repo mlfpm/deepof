@@ -6,7 +6,7 @@ authors = ["lucas_miranda <lucas_miranda@psych.mpg.de>", "patrick_schlegel <patr
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.9,<3.12"
 scikit-learn = ">=1.2.0"
 scipy = ">=1.9.3"
 numpy = "^1.25.2"

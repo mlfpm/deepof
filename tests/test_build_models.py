@@ -1623,3 +1623,16 @@ def test_global_shuffle_matches_permutation(tmp_path, monkeypatch):
     assert np.array_equal(np.load(d.idx_path), np.repeat(np.arange(len(lengths)), lengths)[perm])
     assert not [f for f in os.listdir(tmp_path) if f.endswith((".tmp", ".bucket.npy"))]
 
+
+def test_dataset_cache_rebuilds_on_changed_input(tmp_path, capsys):
+    # The cached HDF5 must be rebuilt if the windows change without changing their shape (window_step, scaling)
+    rng = np.random.default_rng(0)
+    def pre(lengths, factor=1.0):
+        return {f"v{i}": (rng.normal(size=(n, 5, 6)).astype(np.float32) * factor, np.ones((n, 5, 4), np.float32),
+                          np.empty((0,))) for i, n in enumerate(lengths)}
+    build = lambda p: deepof.clustering.dataset.BatchDictDataset(p, str(tmp_path), "train_")
+    build(pre([40, 50]))
+    build(pre([40, 50]))  # same counts, but different values (as after changed scaling)
+    d = build(pre([4, 5]))  # fewer windows (as after a larger window_step)
+    assert d.length == 9
+    assert capsys.readouterr().out.count("Input data changed") == 2

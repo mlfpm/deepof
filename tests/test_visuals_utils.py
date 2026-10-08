@@ -482,6 +482,18 @@ class Pseudo_Coordinates:
         return self._table_lengths
 
 
+def test_preprocess_time_bins_align_lengths():
+    # By default all experiments are cut to the shortest one; with align_lengths=False they keep their full range
+    coords = Pseudo_Coordinates([0, 0, 0], frame_rate=10)
+    coords.add_table_lengths([96, 21364, 500])
+    lengths = lambda bin_info: [len(bins) for bins in bin_info.values()]
+    assert lengths(_preprocess_time_bins(coordinates=coords, samples_max=None)) == [96, 96, 96]
+    assert lengths(_preprocess_time_bins(coordinates=coords, samples_max=None, align_lengths=False)) == [96, 21364, 500]
+    # Cutting instead of downsampling keeps the frames consecutive
+    cut = _preprocess_time_bins(coordinates=coords, samples_max=200, down_sample=False, align_lengths=False)
+    assert np.array_equal(cut["key2"], np.arange(200))
+
+
 @settings(deadline=None, max_examples=200)    
 @given(
     start_times_raw=st.lists(

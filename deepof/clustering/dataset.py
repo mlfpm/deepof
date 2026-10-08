@@ -31,6 +31,22 @@ def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
     return out
 
 
+def _input_fingerprint(preprocessed_dict: Dict, keys) -> str:
+    """Fingerprint of the windowed input data: video keys, number of windows per video, values of the first window.
+
+    Detects changed preprocessing settings (window_step, scaling, ...) that do not change the window shape.
+    """
+    md5 = hashlib.md5()
+    keys = sorted(keys, key=str)
+    for key in keys:
+        n_rows = int(get_dt(preprocessed_dict, key, only_metainfo=True)["num_rows"])
+        md5.update(f"{key}:{n_rows};".encode())
+    X_first, a_first, _ = get_dt(preprocessed_dict, keys[0])
+    md5.update(np.ascontiguousarray(X_first[:1], dtype=np.float32).tobytes())
+    md5.update(np.ascontiguousarray(a_first[:1], dtype=np.float32).tobytes())
+    return md5.hexdigest()
+
+
 class BatchDictDataset:
     def __init__(
         self,
@@ -84,7 +100,7 @@ class BatchDictDataset:
 
         # Compute expected metadata from preprocessed_dict
         keys = list(preprocessed_dict.keys())
-        keys_hash = hashlib.md5(','.join(sorted(str(k) for k in keys)).encode()).hexdigest()
+        keys_hash = _input_fingerprint(preprocessed_dict, keys)
 
         X_first, a_first, ang_first = get_dt(preprocessed_dict, keys[0])
         expected_shapes = {
@@ -104,13 +120,11 @@ class BatchDictDataset:
                 if not f.attrs.get('build_complete', False):
                     return True, "Previous build incomplete"
 
-                stored_hash = f.attrs.get('keys_hash', None)
-                if stored_hash is not None and stored_hash != keys_hash:
-                    return True, "Video keys changed"
+                if f.attrs.get('keys_hash', None) != keys_hash:
+                    return True, "Input data changed (videos, window_step, scaling, ...)"
 
                 if tuple(f['X'].shape[1:]) != expected_shapes['x']:
                     return True, "X shape mismatch"
-                n_samples = f['X'].shape[0]
 
                 stored_shuffle = bool(f.attrs.get('global_shuffle', False))
                 if stored_shuffle != bool(self.global_shuffle):
@@ -139,12 +153,6 @@ class BatchDictDataset:
             video_idx = np.load(self.idx_path)
             if len(np.unique(video_idx)) != len(keys):
                 return True, "Video count mismatch"
-
-            # Verify sample count if hash was missing (backward compat)
-            if stored_hash is None:
-                expected_n = sum(get_dt(preprocessed_dict, k)[0].shape[0] for k in keys)
-                if n_samples != expected_n:
-                    return True, "Sample count mismatch"
 
             return False, "Dataset up-to-date"
 
@@ -463,7 +471,7 @@ class BatchDictDataset:
 
     def _build_hdf5(self, preprocessed_dict: Dict, h5_chunk_len: Optional[int]):
         keys = list(preprocessed_dict.keys())
-        keys_hash = hashlib.md5(','.join(sorted(str(k) for k in keys)).encode()).hexdigest()
+        keys_hash = _input_fingerprint(preprocessed_dict, keys)
         shuffle_seed = self._effective_shuffle_seed()
 
         total_samples = 0

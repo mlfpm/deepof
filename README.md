@@ -36,7 +36,7 @@ If you do not need this most thorough tutorial, just keep reading the following 
 
 ##### Installation:
 
-The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.11, for example using conda:
+The easiest way to install DeepOF is to use [pip](https://pypi.org/project/deepof). Create and activate a virtual environment with Python >=3.9 and <3.12, for example using conda:
 
 ```bash
 conda create -n deepof python=3.9

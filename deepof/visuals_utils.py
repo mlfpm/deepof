@@ -1321,6 +1321,7 @@ def _preprocess_time_bins(
     warned: Optional[set] = None,
     start_times: dict = None,
     table_lengths: dict = None,
+    align_lengths: bool = True,
 ):
     """
     Preprocesses various time-bin formats into a consistent dictionary of indices.
@@ -1353,6 +1354,8 @@ def _preprocess_time_bins(
             Tracked keys: "precomputed_ignores_args", "invalid_format_default",
             and all keys from _validate_and_warn and _downsample_bins
             ("pre_start", "truncated_bin", "downsampled").
+        align_lengths: If True (default), all experiments are cut to the length of the shortest one, so that each
+                       experiment has the same weight. If False, every experiment keeps its full selected range.
 
     Returns:
         A dictionary mapping each experiment ID to a numpy array of frame indices.
@@ -1426,11 +1429,12 @@ def _preprocess_time_bins(
             coordinates=coordinates, bin_size=60, bin_index=0,
             tab_dict_for_binning=tab_dict_for_binning, experiment_id=experiment_id,
             samples_max=samples_max, down_sample=down_sample,
-            warned=warned,
+            warned=warned, align_lengths=align_lengths,
         )
     
     # --- 3. Post-processing (a): ensuring bin length alignment ---
-    result = _align_bin_lengths(result)
+    if align_lengths:
+        result = _align_bin_lengths(result)
 
     # --- 4. Post-processing (b): Validation and Downsampling ---
     _validate_and_warn(result, table_lengths, coordinates._frame_rate, bin_size, warned)

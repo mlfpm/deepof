@@ -3097,6 +3097,7 @@ class Coordinates:
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
+        align_video_lengths: bool = True,
         #other info
         precomputed_tab_dict: table_dict = None,
         center: str = False,
@@ -3117,7 +3118,8 @@ class Coordinates:
             bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
             bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
             precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-            samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+            samples_max (int): Maximum number of frames used per video. Longer videos are cut at this number of frames.
+            align_video_lengths (bool): If True (default), all videos are cut to the length of the shortest one, so that every video has the same weight in training. If False, all frames of all videos are used.
             precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
             center (str): Name of the body part to which the positions will be centered. If false, raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
             polar (bool) States whether the coordinates should be converted to polar values.
@@ -3297,6 +3299,7 @@ class Coordinates:
                 bin_index=bin_index,
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
+                align_video_lengths=align_video_lengths,
                 save_as_paths=return_as_paths,
                 quality_to_load=None, #quality_to_load,
                 dist_standardize=dist_standardize,
@@ -4226,6 +4229,7 @@ class TableDict(dict):
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,
+        align_video_lengths: bool = True,
         scale: str = "standard",
         pretrained_scaler=None,
         test_videos: int = 0,
@@ -4264,15 +4268,31 @@ class TableDict(dict):
         keys_list = sorted(self.keys())
         animal_ids = coordinates._animal_ids
 
-        # Time bins
-        bin_info = _preprocess_time_bins(
+        # Time bins. Videos longer than samples_max are cut (not downsampled), so that windows stay consecutive
+        bin_kwargs = dict(
             coordinates=coordinates,
             bin_size=bin_size,
             bin_index=bin_index,
             precomputed_bins=precomputed_bins,
             tab_dict_for_binning=self,
             samples_max=samples_max,
+            down_sample=False,
+            table_lengths=coordinates.get_table_lengths(tab_dict_for_binning=self),
+            warned=set(),
         )
+        bin_info = _preprocess_time_bins(align_lengths=align_video_lengths, **bin_kwargs)
+        no_bins = bin_size is None and bin_index is None and precomputed_bins is None
+        if align_video_lengths and no_bins and bin_info:
+            full_info = _preprocess_time_bins(align_lengths=False, **bin_kwargs)
+            used, longest = min(len(b) for b in bin_info.values()), max(len(b) for b in full_info.values())
+            if used < longest:
+                print(
+                    "\033[33m\n"
+                    f"Info! All videos are cut to the length of the shortest one ({used} frames, longest video: "
+                    f"{longest} frames), so that every video has the same weight in training. "
+                    "Set align_video_lengths=False to use all frames."
+                    "\033[0m"
+                )
 
         # ========== Step 1: Collect samples for global scaler fitting ==========
 

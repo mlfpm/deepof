@@ -9,7 +9,7 @@ install-pypi:
   retry: 1
 
   image:
-    name: python:3.9
+    name: python:3.9-trixie
 
   script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
@@ -28,7 +28,7 @@ install-pypi-local:
   retry: 1
 
   image:
-    name: python:3.9
+    name: python:3.9-trixie
 
   before_script:
     - apt-get update && apt-get install -y ffmpeg libsm6 libxext6 curl
@@ -53,7 +53,7 @@ install-poetry:
   retry: 1
 
   image:
-    name: python:3.9
+    name: python:3.9-trixie
 
   script:
     - apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
@@ -73,7 +73,7 @@ regression_test:
   retry: 1
 
   image:
-    name: python:3.9
+    name: python:3.9-trixie
 
   needs:
     - job: install-pypi-local
@@ -104,7 +104,7 @@ test:
   retry: 1
 
   image:
-    name: python:3.9
+    name: python:3.9-trixie
 
   needs:
     - job: install-pypi-local
@@ -129,6 +129,27 @@ test:
       coverage_report:
         coverage_format: cobertura
         path: deepof_cov.xml
+
+# Same tests on the newest supported Python version. Allowed to fail for now, so that the pipeline status of the
+# released version is not affected while support is being established.
+test-py311:
+  stage: test
+  retry: 1
+  allow_failure: true
+
+  image:
+    name: python:3.11-trixie
+
+  needs:
+    - job: install-pypi-local
+      artifacts: true
+
+  script:
+    - apt-get update && apt-get install -y ffmpeg libsm6 libxext6
+    - python -m pip install --upgrade pip
+    - python -m pip install dist/*.whl
+    - python -m pip install pytest hypothesis pytest-timeout
+    - python -m pytest --ignore=tests/regression
 
 tutorials:
   stage: tutorials
