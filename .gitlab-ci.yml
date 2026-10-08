@@ -260,10 +260,13 @@ test-image-gpu:
 
   script:
     - nvidia-smi || true
+    # Run outside the checkout, so that the deepof installed in the image is imported
+    - cd /tmp
     - |
       python - <<'EOF'
       import torch
       import deepof.data
+      print("deepof", deepof.__file__)
       assert torch.cuda.is_available(), "CUDA is not available in the image"
       print(torch.__version__, "CUDA", torch.version.cuda, torch.cuda.get_device_name(0))
       model = torch.nn.Sequential(torch.nn.Conv1d(8, 16, 3), torch.nn.GRU(14, 32, batch_first=True)).cuda()
