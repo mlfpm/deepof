@@ -224,6 +224,9 @@ build-image:
 test-image:
   extends: .image-rules
   stage: image
+  variables:
+    DEEPOF_HEADLESS: "1"
+    MPLBACKEND: Agg
   needs:
     - build-image
   image:
@@ -240,7 +243,8 @@ test-image:
       fi
     # Test the package installed in the image, not the checked out sources
     - rm -rf deepof
-    - pytest -q tests --ignore=tests/regression
+    # python -m puts the checkout root on sys.path (tests import tests.test_objects)
+    - python -m pytest -q tests --ignore=tests/regression
 
 
 test-image-gpu:
