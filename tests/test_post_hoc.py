@@ -12,6 +12,7 @@ from shutil import rmtree
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
+import pytest
 import pandas as pd
 import torch
 from hypothesis import HealthCheck, given, settings
@@ -857,3 +858,11 @@ def test_chunk_cv_splitter(folds):
     # Compute folds
     cv_splitter = deepof.post_hoc.chunk_cv_splitter(chunk_stats, breaks, folds)
     assert len(cv_splitter) == folds
+
+def test_get_gate_entry_ignores_pair_order():
+    gates = {("res", "int"): 1, "": 2}
+    assert deepof.post_hoc.get_gate_entry(gates, ("int", "res")) == 1
+    assert deepof.post_hoc.get_gate_entry(gates, ("res", "int")) == 1
+    assert deepof.post_hoc.get_gate_entry(gates, "") == 2
+    with pytest.raises(KeyError):
+        deepof.post_hoc.get_gate_entry(gates, ("res", "other"))

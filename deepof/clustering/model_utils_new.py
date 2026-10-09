@@ -193,6 +193,12 @@ class ContrastiveCfg:
     aug_p_shift: float = 0.4
     aug_neg_min_shift: Optional[int] = None  # hard-negative shift; None -> contrastive_window // 3
     aug_neg_max_shift: Optional[int] = None  # None -> contrastive_window
+    # Role of the time-shifted third view (nce loss only), its shift range is aug_neg_min_shift..aug_neg_max_shift:
+    # "schedule" (hard negative, then off, then similarity-gated positive over the course of training), "off" (no
+    # shifted view), or "soft_positive" (positive weighted 2 * sigmoid(-soft_temporal_tau * |dt|) throughout, with dt
+    # the frame distance to the anchor view, as the temporal soft assignments of SoftCLT, Lee et al. 2024)
+    shift_view_mode: str = "schedule"
+    soft_temporal_tau: float = 0.1
     aug_max_rot: int = 30
     aug_n_rot: int = 3
     aug_p_rot: float = 0.8
@@ -506,6 +512,8 @@ def check_model_inputs(
         one_of("contrastive_loss_function", str(c.contrastive_loss_function).lower(),
                ["nce", "fc", "dcl", "hard_dcl", "vicreg"])
         check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
+        one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive"])
+        check(is_number(c.soft_temporal_tau, 0), "\"soft_temporal_tau\" needs to be >= 0")
         check(is_number(c.elimination_topk, 0, 1), "\"elimination_topk\" needs to be between 0 and 1")
         check(is_int(c.contrastive_window, 1), "\"contrastive_window\" needs to be an integer greater than 0")
         for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop"):
@@ -619,7 +627,7 @@ def embedding_per_video(
             if len(animal_ids) == 1:
                 return ""
             elif len(animal_ids) >= 2:
-                return tuple(sorted([animal_ids[0], animal_ids[1]]))
+                return (animal_ids[0], animal_ids[1])
             else: # pragma: no cover
                 raise AssertionError("No animal IDs found in coordinates._animal_ids.")
 
@@ -637,7 +645,7 @@ def embedding_per_video(
                 f"Animal IDs {id1}, {id2} not found in coordinates._animal_ids: {animal_ids}"
             )
 
-        return tuple(sorted([id1, id2]))
+        return (id1, id2)
 
     extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
 
@@ -805,7 +813,7 @@ def embedding_per_video(
             M_gates=M_gates,
             gate_edges=gate_edges,
         )
-        soft_counts = soft_counts_dict[extract_pair]
+        soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
 
 
     elif softcounts_extraction_method == "msm" or softcounts_extraction_method == "combined":
@@ -851,7 +859,7 @@ def embedding_per_video(
                 supervised_chaos=supervised_chaos, 
                 window_size=window_size)
         
-        soft_counts = soft_counts_dict[extract_pair]
+        soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
 
     elif softcounts_extraction_method is not None: # pragma: no cover
         raise ValueError("For \"softcounts_extraction_method\" only \"gmm\", \"msm\" or \"combined\" are supported!")

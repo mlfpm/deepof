@@ -1366,8 +1366,9 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
     latent_dim=st.sampled_from([4,8]),
     similarity_function=st.sampled_from(["cosine","dot","euclidean","edit"]),
     loss_function=st.sampled_from(["nce","dcl","fc","hard_dcl"]),
+    shift_view_mode=st.sampled_from(["schedule", "off", "soft_positive"]),
 )
-def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_function,loss_function):
+def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_function,loss_function,shift_view_mode):
     device = torch.device("cpu")
 
     B, T, N, F_node = 2, 24, 11, 3
@@ -1395,6 +1396,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
     contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
         contrastive_similarity_function=similarity_function,
         contrastive_loss_function=loss_function,
+        shift_view_mode=shift_view_mode,
         aug_min_shift = 1,
         aug_max_shift = 6,
         aug_p_shift = 0.5,
@@ -1636,3 +1638,13 @@ def test_dataset_cache_rebuilds_on_changed_input(tmp_path, capsys):
     d = build(pre([4, 5]))  # fewer windows (as after a larger window_step)
     assert d.length == 9
     assert capsys.readouterr().out.count("Input data changed") == 2
+
+def test_nce_soft_shift_weights():
+    # Zero weights for the soft positive reduce the loss to the plain InfoNCE without shift term
+    torch.manual_seed(0)
+    h, f, s = (torch.nn.functional.normalize(torch.randn(8, 4), dim=1) for _ in range(3))
+    sim = deepof.clustering.losses._SIMILARITIES["cosine"]
+    off = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=0.0)[0]
+    zero = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.zeros(8))[0]
+    full = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.ones(8))[0]
+    assert torch.isclose(off, zero, atol=1e-6) and not torch.isclose(off, full)

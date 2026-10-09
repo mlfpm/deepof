@@ -50,12 +50,14 @@ def select_contrastive_loss_pt(
     top_m_pos: int = 0,
     sim_threshold: float = 0.9,
     weighting_level: float = 0.0,
+    shift_weights: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, Any, Any, Any]:
     """Returns (loss, term1, term2, term3); vicreg: (invariance, variance, covariance), others: (pos, neg, debug or None)."""
     sim_fn = _SIMILARITIES[similarity]
 
     if loss_fn == "nce":
-        return nce_loss_pt(history, future, shift, sim_fn, temperature, weighting_level=weighting_level)
+        return nce_loss_pt(history, future, shift, sim_fn, temperature, weighting_level=weighting_level,
+                           shift_weights=shift_weights)
     elif loss_fn == "dcl":
         return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
     elif loss_fn == "fc":
@@ -297,6 +299,7 @@ def nce_loss_pt(
     weighting_level: float = 1.0,   # +neg / -pos on shift only; 1.0 = old recipe
     sigmoid_start: float = 0.90, #0.6
     sigmoid_end: float = 1.0, #0.9
+    shift_weights: Optional[torch.Tensor] = None,  # (N,) fixed positive weights for the shift, replace the gate
 ):
     """
     InfoNCE (history vs. future). Diagonal = sole in-batch positive.
@@ -309,10 +312,13 @@ def nce_loss_pt(
            so dissimilar shifts are downweighted (high sim → ~1, low sim → ~0)
       = 0  drop the shift term
 
-    sigmoid_start / sigmoid_end only apply when weighting_level < 0.
+    sigmoid_start / sigmoid_end only apply when weighting_level < 0 and no shift_weights are given.
+    shift_weights (N,) replace the similarity gate by fixed per-sample weights (e.g. from the time distance).
     """
+    if shift is None:  # no shifted view: plain InfoNCE
+        weighting_level = 0.0
     sim = similarity(history, future)                            # (N, N)
-    sim2 = similarity(history, shift, create_matrix=False)       # (N,)
+    sim2 = similarity(history, shift, create_matrix=False) if shift is not None else sim.diag()  # (N,)
     logits = sim / float(temperature)
     logits2 = sim2 / float(temperature)
     N = logits.size(0)
@@ -330,7 +336,9 @@ def nce_loss_pt(
         low = min(float(sigmoid_start), float(sigmoid_end))
         high = max(float(sigmoid_start), float(sigmoid_end))
         rng = high - low
-        if rng > 1e-8:
+        if shift_weights is not None:
+            sig_w = shift_weights.to(sim2.dtype)
+        elif rng > 1e-8:
             frac = (sim2 - low) / rng                            # 0 at low, 1 at high
             x = 10.0 * frac - 5.0                                # ~[-5, +5]
             sig_w = torch.sigmoid(x)                             # dissimilar → ~0
@@ -350,7 +358,7 @@ def nce_loss_pt(
     diag_mask = torch.eye(N, dtype=torch.bool, device=device)
     mean_pos = sim[diag_mask].mean() if N > 0 else torch.tensor(0.0, device=device)
     mean_neg = sim[~diag_mask].mean() if N > 1 else torch.tensor(0.0, device=device)
-    mean_shift = sim2.mean() if N > 0 else torch.tensor(0.0, device=device)
+    mean_shift = sim2.mean() if N > 0 and shift is not None else torch.tensor(float("nan"), device=device)
 
     debug = {
         "weighting_level": float(weighting_level),

@@ -739,7 +739,7 @@ def _build_gate_masks(
                     "Use compute_gate_edges() first."
                 )
 
-            edges = np.asarray(gate_edges[gate], dtype=np.float64)
+            edges = np.asarray(get_gate_entry(gate_edges, gate), dtype=np.float64)
             if len(edges) != M_gates + 1: # pragma: no cover
                 raise ValueError(
                     f"gate_edges[{gate!r}] must have length {M_gates + 1}, got {len(edges)}"
@@ -963,7 +963,15 @@ def get_pairwise_distances(
 
     return out
 
-def _gate_to_tag(gate: Any) -> str:  
+def get_gate_entry(gate_dict: dict, gate: Any) -> Any:
+    """Return gate_dict[gate], treating animal pairs as unordered: ("a", "b") and ("b", "a") are the same gate."""
+    if gate in gate_dict:
+        return gate_dict[gate]
+    if isinstance(gate, tuple) and gate[::-1] in gate_dict:
+        return gate_dict[gate[::-1]]
+    raise KeyError(f"Gate {gate!r} not found. Available gates: {list(gate_dict.keys())}")
+
+def _gate_to_tag(gate: Any) -> str:
     """Convert a gate key to a filesystem-safe tag."""
     if isinstance(gate, tuple):
         return "_".join(map(str, gate))

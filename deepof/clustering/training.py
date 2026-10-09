@@ -510,8 +510,8 @@ def step_contrastive_distill(
     x_full_twice = torch.cat((x_full, x_full), dim=0)
     a_full_twice = torch.cat((a_full, a_full), dim=0)
 
-    x_aug_twice, a_aug_twice = _make_augmented_view(
-        x_full_twice, a_full_twice, edge_index, window_len, rot_precomp,
+    x_aug_twice, a_aug_twice, shift_twice = _make_augmented_view(
+        x_full_twice, a_full_twice, edge_index, window_len, rot_precomp, return_shift=True,
         min_shift = contrastive_cfg.aug_min_shift,
         max_shift = contrastive_cfg.aug_max_shift,
         p_shift = contrastive_cfg.aug_p_shift,
@@ -529,11 +529,12 @@ def step_contrastive_distill(
     )
 
     # Only the NCE loss uses the time-shifted third view; skip its augmentation and encoder pass otherwise
-    use_shift_view = base.loss_function == "nce"
-    x_aug_shift, a_aug_shift = None, None
+    shift_view_mode = getattr(contrastive_cfg, "shift_view_mode", "schedule")
+    use_shift_view = base.loss_function == "nce" and shift_view_mode != "off"
+    x_aug_shift, a_aug_shift, shift_third = None, None, None
     if use_shift_view:
-        x_aug_shift, a_aug_shift = _make_augmented_view(
-            x_full, a_full, edge_index, window_len, rot_precomp,
+        x_aug_shift, a_aug_shift, shift_third = _make_augmented_view(
+            x_full, a_full, edge_index, window_len, rot_precomp, return_shift=True,
             min_shift = neg_min_shift,
             max_shift = neg_max_shift,
             p_shift = 1.0,
@@ -614,7 +615,16 @@ def step_contrastive_distill(
         return neg_hold
 
 
-    weighting_level = shift_weighting_level(ctx.epoch, ctx.num_epochs)
+    shift_weights = None
+    if shift_view_mode == "off" or shift_third is None:
+        weighting_level = 0.0
+    elif shift_view_mode == "soft_positive":
+        # Soft positive, weight decays with the frame distance between the anchor (view 1) and the shifted view
+        weighting_level = -1.0
+        dt = (shift_third - torch.chunk(shift_twice, chunks=2, dim=0)[0]).abs().float()
+        shift_weights = 2.0 * torch.sigmoid(-float(contrastive_cfg.soft_temporal_tau) * dt)
+    else:
+        weighting_level = shift_weighting_level(ctx.epoch, ctx.num_epochs)
     # Base contrastive loss
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
         z_view1, z_view2, z_view3,
@@ -632,6 +642,7 @@ def step_contrastive_distill(
         top_m_pos=n_pos_samples,#,int(ctx.epoch/35)
         sim_threshold=ctx.contrastive_cfg.sim_threshold, #0.95,
         weighting_level=weighting_level,
+        shift_weights=shift_weights,
     )
     pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
     if base.loss_function != "vicreg":
@@ -843,6 +854,8 @@ def train_deepof_model(
     aug_p_shift: Optional[float] = None,
     aug_neg_min_shift: Optional[int] = None,
     aug_neg_max_shift: Optional[int] = None,
+    shift_view_mode: Optional[str] = None,
+    soft_temporal_tau: Optional[float] = None,
     aug_max_rot: Optional[int] = None,
     aug_n_rot: Optional[int] = None,
     aug_p_rot: Optional[float] = None,
@@ -1008,6 +1021,8 @@ def train_deepof_model(
         aug_p_shift=aug_p_shift,
         aug_neg_min_shift=aug_neg_min_shift,
         aug_neg_max_shift=aug_neg_max_shift,
+        shift_view_mode=_lower(shift_view_mode),
+        soft_temporal_tau=soft_temporal_tau,
         aug_noise_sigma=aug_noise_sigma,
         aug_p_noise=aug_p_noise,
         aug_min_interp=aug_min_interp,
@@ -2406,11 +2421,13 @@ def _augment_time_shift(
     max_shift: int = 3,
     p: float = 0.8,
     plot: bool = False,
+    return_shift: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Returns a window slice of length `window_len` (default T_full//2) from the middle of the full window.
     If triggered, shifts the slice start by +/- U[min_shift, max_shift] (per sample).
     Shift is consistent across the whole window (no frame-to-frame jitter).
+    With return_shift, also returns the applied shift per sample (after clipping at the window edges).
     """
     B, T = x.shape[0], x.shape[1]
     if window_len is None:
@@ -2437,6 +2454,8 @@ def _augment_time_shift(
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(slice_time_per_sample(x, (torch.ones([B],device=x.device)*(T - window_len) // 2).int(), window_len), x_cut)
 
+    if return_shift:
+        return x_cut, start - base
     return x_cut
 
 
@@ -2766,13 +2785,17 @@ def _make_augmented_view(
     node_drop_min: float = 1,
     node_drop_max: float = 2,
     p_node_drop: float = 0.4,
+    return_shift: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
+    With return_shift, also returns the time shift per sample (frames, relative to the window center).
     """
     x_aug_raw = x
 
-    x_aug = _augment_time_shift(x_aug_raw, edge_index, window_len, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False)
+    x_aug, shift = _augment_time_shift(
+        x_aug_raw, edge_index, window_len, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False, return_shift=True
+    )
     #x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
     x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
@@ -2781,6 +2804,8 @@ def _make_augmented_view(
 
     a_aug = recompute_edges(x_aug, edge_index) 
 
+    if return_shift:
+        return x_aug, a_aug, shift
     return x_aug, a_aug
 
 
