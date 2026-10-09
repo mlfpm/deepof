@@ -142,6 +142,13 @@ def test_get_behavior_colors(experiment_type,named_single_mouse):
     assert colors_a == colors_b
 
 
+def test_get_behavior_colors_fallback():
+    # Behaviors unknown to deepOF (e.g. labels of other datasets) get distinct fallback colors, known ones keep theirs
+    colors = deepof.visuals_utils.get_behavior_colors(["attack", "B_moving", "mount"], ["B", "W"])
+    known = deepof.visuals_utils.get_behavior_colors(["B_moving"], ["B", "W"])
+    assert colors[1] == known[0] and len({colors[0], colors[2], colors[1]}) == 3
+
+
 
 @settings(deadline=None)
 @given(

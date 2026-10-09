@@ -2803,7 +2803,9 @@ def plot_embeddings(
         if sup_annots_to_plot is not None and colour_by[0] not in ["cluster","exp_condition","exp_id"]:
             # Concatenate experiments and align experimental conditions
             behavior_names = colour_by
-            behavior_colors=deepof.visuals_utils.get_behavior_colors(behavior_names, animal_ids=coordinates._animal_ids)
+            behavior_colors=deepof.visuals_utils.get_behavior_colors(
+                behavior_names, animal_ids=coordinates._animal_ids, custom_behaviors=coordinates._custom_behaviors
+            )
             for name, color in zip(behavior_names,behavior_colors):
                 assert color is not None, f"Error! For behavior {name} no corresponding color could be found! Check spelling!"
             for k in range(len(behavior_names)):

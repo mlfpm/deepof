@@ -101,7 +101,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         animal_ids Union[list,pd.DataFrame]: Either list of strings representing animal ids or supervised dataframe from which said list can be automatically extracted.
 
     Returns:
-        list: A list of strings that contain hex color codes for each behavior. Will return None and display a warning for unknown behaviors.
+        list: A list of strings that contain hex color codes for each behavior. Behaviors unknown to deepOF get colors from a fallback palette.
     """    
 
 
@@ -183,7 +183,9 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
     else:
         supervised, supervised_colors = generate_behavior_combinations(animal_ids,True,True,True, include_continuous, custom_behaviors)
 
-    # Select appropriate color for all given behaviors
+    # Select appropriate color for all given behaviors. Behaviors unknown to deepOF (e.g. labels from other
+    # sources) get colors from a fallback palette, in order of appearance
+    fallback_colors = iter(np.tile(list(sns.color_palette("Set1").as_hex()), len(behaviors)))
     colors=[]
     for behavior in behaviors:
         if behavior in clusters:
@@ -191,7 +193,7 @@ def get_behavior_colors(behaviors: list, animal_ids: Union[list, pd.DataFrame]=N
         elif behavior in supervised:
             colors.append(supervised_colors[behavior])
         else:
-            colors.append(None)
+            colors.append(next(fallback_colors))
 
     return colors
 
@@ -406,10 +408,13 @@ def _filter_embeddings(
         soft_counts = _keep_videos(soft_counts, embeddings.keys())
     keys = list((embeddings if embeddings is not None else supervised_annotations).keys())
     # One condition per video; videos left out by condition_source (e.g. "exclude_mixed") are dropped below
-    video_conds = deepof.conditions.video_conditions(
-        coordinates.get_exp_conditions, exp_condition, getattr(coordinates, "get_animal_conditions", None),
-        condition_source, keys=keys,
-    )
+    if coordinates.get_exp_conditions:
+        video_conds = deepof.conditions.video_conditions(
+            coordinates.get_exp_conditions, exp_condition, getattr(coordinates, "get_animal_conditions", None),
+            condition_source, keys=keys,
+        )
+    else:  # project without experimental conditions: keep all videos
+        video_conds = {k: "None" for k in keys}
     concat_hue = [video_conds[k] for k in keys if k in video_conds]
 
     # Keep only those experiments for which we have an experimental condition assigned
