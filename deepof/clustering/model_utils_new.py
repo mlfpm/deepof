@@ -204,14 +204,28 @@ class ContrastiveCfg:
     # Role of the time-shifted third view (nce loss only), its shift range is aug_neg_min_shift..aug_neg_max_shift:
     # "schedule" (hard negative, then off, then similarity-gated positive over the course of training), "off" (no
     # shifted view), or "soft_positive" (positive weighted 2 * sigmoid(-soft_temporal_tau * |dt|) throughout, with dt
-    # the frame distance to the anchor view, as the temporal soft assignments of SoftCLT, Lee et al. 2024)
+    # the frame distance to the anchor view, as the temporal soft assignments of SoftCLT, Lee et al. 2024), or
+    # "neg_aug" (no time shift: the third view is a negative augmentation of the same window, a hard negative with the
+    # constant weight neg_aug_weight; 1.0 weighs it like all batch negatives together)
     shift_view_mode: str = "schedule"
     soft_temporal_tau: float = 0.1
+    # Negative augmentations ("neg_aug"), one type drawn per sample: "offset" (one animal shifted in time against the
+    # others by neg_aug_offset frames), "rotation" (the animal that is not the coordinate reference rotated about its
+    # centre by neg_aug_rotation degrees, either direction), "shuffle" (blocks of neg_aug_block_len frames in random
+    # order). They keep the poses and animals but break the dynamics or the interaction, so the static pose alone
+    # cannot tell them from the positive; offset and rotation need two or more animals
+    neg_aug_weight: float = 1.0
+    neg_aug_types: Tuple[str, ...] = ("offset", "rotation", "shuffle")
+    neg_aug_offset: Tuple[int, int] = (5, 15)
+    neg_aug_rotation: Tuple[float, float] = (90.0, 180.0)
+    neg_aug_block_len: Tuple[int, int] = (3, 8)
     # Prototype loss (ProtoNCE of PCL, Li et al. 2021), added to the contrastive loss with weight proto_weight (0: off).
     # From epoch proto_warmup_epochs on, the unaugmented training windows are clustered with spherical k-means at the
     # start of every epoch, once per entry of proto_clusters; both augmented views are pulled towards the prototype of
-    # their window, with a temperature per prototype that grows with the spread of its cluster
+    # their window, with a temperature per prototype that grows with the spread of its cluster. proto_space: "backbone"
+    # (the embedding used for clustering, cluster_mode=True) or "projection" (output of the projection head, as in PCL)
     proto_weight: float = 0.0
+    proto_space: str = "backbone"
     proto_clusters: Tuple[int, ...] = (25, 50, 100)
     proto_warmup_epochs: int = 5
     aug_max_rot: int = 30
@@ -527,9 +541,29 @@ def check_model_inputs(
         one_of("contrastive_loss_function", str(c.contrastive_loss_function).lower(),
                ["nce", "fc", "dcl", "hard_dcl", "vicreg"])
         check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
-        one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive"])
+        one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive", "neg_aug"])
+        check(is_number(c.neg_aug_weight, 0, strict_min=True), "\"neg_aug_weight\" needs to be greater than 0")
+        check(
+            isinstance(c.neg_aug_types, (tuple, list)) and len(c.neg_aug_types) > 0
+            and all(t in ("offset", "rotation", "shuffle") for t in c.neg_aug_types),
+            "\"neg_aug_types\" needs to be a non-empty tuple of \"offset\", \"rotation\" and \"shuffle\"",
+        )
+        for name, minimum, maximum, integer in (
+            ("neg_aug_offset", 1, None, True),
+            ("neg_aug_rotation", 0, 180, False),
+            ("neg_aug_block_len", 1, None, True),
+        ):
+            r = getattr(c, name)
+            check(
+                isinstance(r, (tuple, list)) and len(r) == 2
+                and all((is_int(v, minimum) if integer else is_number(v, minimum, maximum, strict_min=True)) for v in r)
+                and r[0] <= r[1],
+                f"\"{name}\" needs to be a (min, max) pair with {minimum} {'<=' if integer else '<'} min <= max"
+                + (f" <= {maximum}" if maximum is not None else ""),
+            )
         check(is_number(c.soft_temporal_tau, 0), "\"soft_temporal_tau\" needs to be >= 0")
         check(is_number(c.proto_weight, 0), "\"proto_weight\" needs to be >= 0")
+        one_of("proto_space", str(c.proto_space).lower(), ["backbone", "projection"])
         check(
             isinstance(c.proto_clusters, (tuple, list)) and len(c.proto_clusters) > 0
             and all(is_int(k, 2) for k in c.proto_clusters),
@@ -760,6 +794,8 @@ def embedding_per_video(
         
             x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
             a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)
+            if contrastive:  # trained on edges recomputed from the (augmented) nodes, see contrastive_edges
+                a_all = contrastive_edges(x_all, meta_info)
 
             # Use the training batch size, which is known to fit into memory
             batch_size = getattr(model, "train_batch_size", None) or 256
@@ -915,6 +951,24 @@ def embedding_per_video(
         embeddings,
         soft_counts,
     )
+
+
+def contrastive_edges(x: torch.Tensor, meta_info: dict) -> torch.Tensor:
+    """
+    Edge input of the contrastive model: distances recomputed from the node coordinates, as in training (augmentations
+    move the nodes, so training always recomputes the edges instead of using the preprocessed edge table).
+
+    Args:
+        x (torch.Tensor): Node features of shape (B, T, N, 3).
+        meta_info (dict): Meta info from the preprocessing (node and edge columns).
+
+    Returns:
+        torch.Tensor: Edge features of shape (B, T, E, 1).
+    """
+    from deepof.clustering.training import _build_edge_from_metainfo  # training imports this module
+
+    edge_index, _, _ = _build_edge_from_metainfo(meta_info, device=x.device, n_nodes=x.shape[2], return_local=False)
+    return recompute_edges(x, edge_index)
 
 
 def slice_time_per_sample(

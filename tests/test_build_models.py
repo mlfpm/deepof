@@ -1718,26 +1718,99 @@ def _contrastive_test_setup(T=24, N=11, window_len=12):
     return model, edge_index_global, edge_index_local
 
 
-def test_contrastive_step_with_prototypes():
-    # The prototype loss is added to the contrastive loss and reaches the encoder
+@pytest.mark.parametrize("space", ["backbone", "projection"])
+def test_contrastive_step_with_prototypes(space):
+    # The prototype loss is added to the contrastive loss and reaches the encoder, in both spaces
     torch.manual_seed(0)
     T, N, window_len = 24, 11, 12
     model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
-    prototypes = [(torch.nn.functional.normalize(torch.randn(k, 4), dim=1), torch.randint(k, (10,)), torch.full((k,), 0.1))
+    batch = (torch.randn(4, T, N, 3), torch.randn(4, T, N, 1), torch.tensor([0, 3, 5, 9]))
+    dim = model(batch[0][:, :window_len], batch[1][:, :window_len], return_backbone=True)[space == "backbone"].shape[1]
+    prototypes = [(torch.nn.functional.normalize(torch.randn(k, dim), dim=1), torch.randint(k, (10,)), torch.full((k,), 0.1))
                   for k in (2, 3)]
     ctx = SimpleNamespace(
         edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
-        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len),
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len, proto_space=space),
         rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
         apply_distill=False, epoch=0, num_epochs=1, prototypes=prototypes, proto_weight=1.0,
     )
-    batch = (torch.randn(4, T, N, 3), torch.randn(4, T, N, 1), torch.tensor([0, 3, 5, 9]))
     result = deepof.clustering.training.step_contrastive_distill(model, batch, ctx)
     result.loss.backward()
     assert result.logs["proto_loss"] > 0 and torch.isfinite(result.loss)
     assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
     ctx.prototypes = None
     assert deepof.clustering.training.step_contrastive_distill(model, batch, ctx).logs["proto_loss"] is None
+
+
+def test_contrastive_step_with_negative_augmentations():
+    # The negative view replaces the time-shifted one and enters the loss
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(
+            contrastive_window=window_len, shift_view_mode="neg_aug", neg_aug_offset=(2, 4)),
+        rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1, animal_nodes=[torch.arange(0, 5), torch.arange(5, N)],
+    )
+    result = deepof.clustering.training.step_contrastive_distill(
+        model, (torch.randn(4, T, N, 3), torch.randn(4, T, N, 1), torch.arange(4)), ctx)
+    result.loss.backward()
+    assert torch.isfinite(result.loss)
+    assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
+
+
+def test_negative_augmentation():
+    torch.manual_seed(0)
+    B, T, W = 16, 20, 10
+    base = (T - W) // 2
+    neg = deepof.clustering.training._negative_augmentation
+    animals = [torch.tensor([0, 1, 2]), torch.tensor([3, 4, 5])]
+    x = torch.randn(B, T, 6, 3)
+    x[:, :, :3, :2] *= 0.01  # animal 0 is the coordinate reference, animal 1 moves around
+
+    # offset: one animal unchanged, the other taken from 2-4 frames earlier or later
+    out = neg(x, W, animals, types=("offset",), offset=(2, 4))
+    crop, orig = out[:, base:base + W], x[:, base:base + W]
+    for b in range(B):
+        moved = [a for a in animals if not torch.equal(crop[b][:, a], orig[b][:, a])]
+        assert len(moved) == 1
+        assert any(torch.equal(crop[b][:, moved[0]], x[b, base + d:base + d + W][:, moved[0]])
+                   for d in (-4, -3, -2, 2, 3, 4))
+
+    # rotation: the moving animal is rotated rigidly about its centre by 90-180 degrees, the reference stays
+    out = neg(x, W, animals, types=("rotation",), rotation=(90.0, 180.0))
+    assert torch.equal(out[:, :, :3], x[:, :, :3]) and torch.equal(out[..., 2], x[..., 2])
+    rel_in = x[:, :, 3:, :2] - x[:, :, 3:, :2].mean(dim=2, keepdim=True)
+    rel_out = out[:, :, 3:, :2] - out[:, :, 3:, :2].mean(dim=2, keepdim=True)
+    assert torch.allclose(rel_in.norm(dim=-1), rel_out.norm(dim=-1), atol=1e-5)
+    cos = (rel_in * rel_out).sum(-1) / (rel_in.norm(dim=-1) * rel_out.norm(dim=-1))
+    assert (cos <= 1e-4).all()
+
+    # shuffle: the crop is a block permutation of its own frames (never the original order), the rest stays
+    x = torch.arange(T, dtype=torch.float32)[None, :, None, None].expand(B, T, 6, 3).clone()
+    out = neg(x, W, [torch.arange(6)], types=("shuffle",), block_len=(3, 4))
+    assert torch.equal(out[:, :base], x[:, :base]) and torch.equal(out[:, base + W:], x[:, base + W:])
+    frames = out[:, base:base + W, 0, 0].long()
+    for b in range(B):
+        assert sorted(frames[b].tolist()) == list(range(base, base + W))
+        assert frames[b].tolist() != list(range(base, base + W))
+        runs = [len(r) for r in np.split(frames[b].numpy(), np.where(np.diff(frames[b].numpy()) != 1)[0] + 1)]
+        assert len(runs) > 1
+
+    with pytest.raises(ValueError, match="two or more animals"):
+        neg(x, W, [torch.arange(6)], types=("offset", "rotation"))
+
+
+def test_contrastive_edges():
+    # Inference edges are recomputed from the nodes with the training edge index
+    _, edge_index_global, _ = _contrastive_test_setup()
+    meta_info = {"node_columns": [(chr(65 + i), "x") for i in range(11)],
+                 "edge_columns": [(chr(65 + i), chr(66 + i)) for i in range(10)] + [("A", "C")]}
+    x = torch.randn(3, 12, 11, 3)
+    assert torch.equal(deepof.clustering.model_utils_new.contrastive_edges(x, meta_info),
+                       deepof.clustering.model_utils_new.recompute_edges(x, edge_index_global))
 
 
 def test_spherical_kmeans_and_concentration():
@@ -1783,5 +1856,6 @@ def test_build_prototypes(tmp_path):
     cfg = deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len, proto_clusters=(2, 4))
     prototypes = deepof.clustering.training.build_prototypes(
         model, ds, edge_index_global, window_len, cfg, torch.device("cpu"))
-    assert [p[0].shape for p in prototypes] == [(2, 4), (4, 4)]
+    backbone_dim = model(x[:, 6:18], a[:, 6:18], return_backbone=True)[1].shape[1]  # default proto_space
+    assert [tuple(p[0].shape) for p in prototypes] == [(2, backbone_dim), (4, backbone_dim)]
     assert all(p[1].shape == (12,) and p[1].max() < p[0].shape[0] and p[2].shape == (p[0].shape[0],) for p in prototypes)

@@ -532,12 +532,24 @@ def step_contrastive_distill(
     shift_view_mode = getattr(contrastive_cfg, "shift_view_mode", "schedule")
     use_shift_view = base.loss_function == "nce" and shift_view_mode != "off"
     x_aug_shift, a_aug_shift, shift_third = None, None, None
+    neg_aug = shift_view_mode == "neg_aug"
     if use_shift_view:
+        # "neg_aug": a negative augmentation of the same (unshifted) window instead of a time-shifted one; it gets the
+        # same regular augmentations as the positives, so their artefacts cannot tell it apart
+        x_third = x_full
+        if neg_aug:
+            x_third = _negative_augmentation(
+                x_full, window_len, ctx.animal_nodes,
+                types=tuple(contrastive_cfg.neg_aug_types),
+                offset=tuple(contrastive_cfg.neg_aug_offset),
+                rotation=tuple(contrastive_cfg.neg_aug_rotation),
+                block_len=tuple(contrastive_cfg.neg_aug_block_len),
+            )
         x_aug_shift, a_aug_shift, shift_third = _make_augmented_view(
-            x_full, a_full, edge_index, window_len, rot_precomp, return_shift=True,
+            x_third, a_full, edge_index, window_len, rot_precomp, return_shift=True,
             min_shift = neg_min_shift,
             max_shift = neg_max_shift,
-            p_shift = 1.0,
+            p_shift = 0.0 if neg_aug else 1.0,
             noise_sigma = contrastive_cfg.aug_noise_sigma,  
             p_noise = contrastive_cfg.aug_p_noise,           
             max_interp = contrastive_cfg.aug_max_interp,
@@ -555,13 +567,19 @@ def step_contrastive_distill(
     x_aug1, x_aug2 = torch.chunk(x_aug_twice, chunks=2, dim=0)  
     a_aug1, a_aug2 = torch.chunk(a_aug_twice, chunks=2, dim=0)  
 
-    # The regression teacher (training only) also needs the backbone output of the first view
+    # The regression teacher and the prototype loss in backbone space (training only) also need the backbone output
     regression_targets = getattr(ctx, "regression_targets", None)
-    if regression_targets is not None:
+    prototypes = getattr(ctx, "prototypes", None)
+    proto_backbone = prototypes is not None and contrastive_cfg.proto_space == "backbone"
+    backbone1, backbone2 = None, None
+    if regression_targets is not None or proto_backbone:
         z_view1, backbone1 = model(x_aug1, a_aug1, return_backbone=True)
     else:
         z_view1 = model(x_aug1, a_aug1)
-    z_view2 = model(x_aug2, a_aug2)
+    if proto_backbone:
+        z_view2, backbone2 = model(x_aug2, a_aug2, return_backbone=True)
+    else:
+        z_view2 = model(x_aug2, a_aug2)
     z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
 
     labels = getattr(ctx, "labels", None) 
@@ -621,7 +639,9 @@ def step_contrastive_distill(
 
 
     shift_weights = None
-    if shift_view_mode == "off" or shift_third is None:
+    if neg_aug and z_view3 is not None:
+        weighting_level = float(contrastive_cfg.neg_aug_weight)  # constant hard negative
+    elif shift_view_mode == "off" or shift_third is None:
         weighting_level = 0.0
     elif shift_view_mode == "soft_positive":
         # Soft positive, weight decays with the frame distance between the anchor (view 1) and the shifted view
@@ -720,12 +740,11 @@ def step_contrastive_distill(
 
     # Prototype loss (ProtoNCE, training only): both views are pulled towards the prototype of their window and pushed
     # away from the other prototypes, each prototype with its own temperature (concentration), averaged over clusterings
-    prototypes = getattr(ctx, "prototypes", None)
     proto_loss = None
     if prototypes is not None:
         idx_long = idx.to(device).long()
         proto_loss = 0.0
-        for z in (z_view1, z_view2):
+        for z in ((backbone1, backbone2) if proto_backbone else (z_view1, z_view2)):
             z = F.normalize(z.float(), dim=1)
             for centroids, assignments, concentration in prototypes:
                 proto_loss = proto_loss + F.cross_entropy(z @ centroids.T / concentration, assignments[idx_long])
@@ -889,8 +908,15 @@ def train_deepof_model(
     aug_neg_max_shift: Optional[int] = None,
     shift_view_mode: Optional[str] = None,
     soft_temporal_tau: Optional[float] = None,
+    # Negative augmentations (shift_view_mode="neg_aug"), see ContrastiveCfg
+    neg_aug_weight: Optional[float] = None,
+    neg_aug_types: Optional[Tuple[str, ...]] = None,
+    neg_aug_offset: Optional[Tuple[int, int]] = None,
+    neg_aug_rotation: Optional[Tuple[float, float]] = None,
+    neg_aug_block_len: Optional[Tuple[int, int]] = None,
     # Prototype loss (PCL), see ContrastiveCfg
     proto_weight: Optional[float] = None,
+    proto_space: Optional[str] = None,
     proto_clusters: Optional[Tuple[int, ...]] = None,
     proto_warmup_epochs: Optional[int] = None,
     aug_max_rot: Optional[int] = None,
@@ -1065,7 +1091,14 @@ def train_deepof_model(
         aug_neg_max_shift=aug_neg_max_shift,
         shift_view_mode=_lower(shift_view_mode),
         soft_temporal_tau=soft_temporal_tau,
+        neg_aug_weight=neg_aug_weight,
+        neg_aug_types=(None if neg_aug_types is None else tuple(
+            str(t).lower() for t in ([neg_aug_types] if isinstance(neg_aug_types, str) else neg_aug_types))),
+        neg_aug_offset=neg_aug_offset,
+        neg_aug_rotation=neg_aug_rotation,
+        neg_aug_block_len=neg_aug_block_len,
         proto_weight=proto_weight,
+        proto_space=_lower(proto_space),
         proto_clusters=proto_clusters,
         proto_warmup_epochs=proto_warmup_epochs,
         aug_noise_sigma=aug_noise_sigma,
@@ -1531,8 +1564,10 @@ def _embed_centre_windows(
     device: torch.device,
     batch_size: int = 4096,
     use_amp: bool = True,
+    space: str = "projection",
 ) -> torch.Tensor:
-    """Normalized projections of the centre windows (the unaugmented contrastive views) of all samples, in dataset order."""
+    """Normalized embeddings (space "projection" or "backbone") of the centre windows (the unaugmented contrastive
+    views) of all samples, in dataset order."""
     dataset = getattr(dataset, "base_dataset", dataset)  # a loader's dataset is the iterable wrapper
     loader = dataset.make_loader(
         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
@@ -1548,7 +1583,8 @@ def _embed_centre_windows(
         a_full = recompute_edges(x_full, edge_index)  # as in training
         starts = torch.full((x_full.shape[0],), (x_full.shape[1] - window_len) // 2, device=device, dtype=torch.long)
         with autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp and device.type == "cuda"):
-            z = base(slice_time_per_sample(x_full, starts, window_len), slice_time_per_sample(a_full, starts, window_len))
+            z = base(slice_time_per_sample(x_full, starts, window_len), slice_time_per_sample(a_full, starts, window_len),
+                     return_backbone=True)[0 if space == "projection" else 1]
         z = F.normalize(z.float(), dim=1)
         if z_all is None:
             z_all = torch.empty((len(dataset), z.shape[1]), device=device)
@@ -1613,13 +1649,15 @@ def build_prototypes(
     use_amp: bool = True,
 ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
-    E-step of PCL: clusters the unaugmented training windows once per entry of contrastive_cfg.proto_clusters.
+    E-step of PCL: clusters the unaugmented training windows (in contrastive_cfg.proto_space) once per entry of
+    contrastive_cfg.proto_clusters.
 
     Returns:
         List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]: Per clustering the centroids [k, D], the cluster of every
         training sample [N] (dataset order) and the temperature per prototype [k].
     """
-    z = _embed_centre_windows(model, dataset, edge_index, window_len, device, use_amp=use_amp)
+    z = _embed_centre_windows(model, dataset, edge_index, window_len, device, use_amp=use_amp,
+                              space=contrastive_cfg.proto_space)
     generator = torch.Generator().manual_seed(int(seed))
     prototypes = []
     for k in contrastive_cfg.proto_clusters:
@@ -1670,12 +1708,13 @@ def fit_contrastive(
             f"aug_max_shift={contrastive_cfg.aug_max_shift} exceeds the room left by the preprocessed window "
             f"(({full_window} - {window_len}) // 2 = {max_room}); positive shifts will be clipped at the window edges."
         )
-    if neg_max_shift > max_room:
+    neg_aug = contrastive_cfg.shift_view_mode == "neg_aug"  # no time-shifted hard negative
+    if not neg_aug and neg_max_shift > max_room:
         warnings.warn(
             f"Hard-negative shift up to {neg_max_shift} exceeds the room left by the preprocessed window ({max_room}); "
             f"larger shifts are clipped to {max_room}. Set aug_neg_max_shift <= {max_room} or increase window_size."
         )
-    if min(neg_min_shift, max_room) <= contrastive_cfg.aug_max_shift:
+    if not neg_aug and min(neg_min_shift, max_room) <= contrastive_cfg.aug_max_shift:
         warnings.warn(
             f"Hard-negative shifts start at {min(neg_min_shift, max_room)}, within the positive shift range "
             f"(up to aug_max_shift={contrastive_cfg.aug_max_shift}); the same offset can then be a positive and a negative."
@@ -1746,6 +1785,27 @@ def fit_contrastive(
     return_local=True,
     )
     rot_precomp = build_rotation_precomp(edge_index=edge_index_local, n_nodes=n_nodes, device=device)
+
+    # Nodes per animal (name prefix before the first "_"), for the negative augmentations
+    _, _, node_names = _build_edge_from_metainfo(
+        meta_info=meta_info, device=device, n_nodes=n_nodes, return_local=False, return_node_names=True,
+    )
+    prefixes = [name.split("_", 1)[0] if "_" in name else "" for name in node_names]
+    animal_nodes = [torch.tensor([i for i, p in enumerate(prefixes) if p == key], device=device)
+                    for key in dict.fromkeys(prefixes)]
+    if neg_aug:
+        types = tuple(contrastive_cfg.neg_aug_types)
+        if len(animal_nodes) < 2 and set(types) & {"offset", "rotation"}:
+            if "shuffle" not in types:
+                raise ValueError("Negative augmentations \"offset\" and \"rotation\" need two or more animals; "
+                                 "add \"shuffle\" to neg_aug_types.")
+            warnings.warn("Single animal: the negative augmentations \"offset\" and \"rotation\" are skipped.")
+        if "shuffle" in types and contrastive_cfg.neg_aug_block_len[0] >= window_len:
+            raise ValueError(f"neg_aug_block_len={tuple(contrastive_cfg.neg_aug_block_len)} needs blocks shorter than "
+                             f"contrastive_window={window_len} to shuffle.")
+        if "offset" in types and contrastive_cfg.neg_aug_offset[1] > max_room:
+            warnings.warn(f"neg_aug_offset up to {contrastive_cfg.neg_aug_offset[1]} exceeds the room left by the "
+                          f"preprocessed window ({max_room}); larger offsets are clipped to {max(max_room, 1)}.")
 
     # Create teacher
     teacher_cfg.include_latent_view=False
@@ -1855,6 +1915,7 @@ def fit_contrastive(
             contrastive_cfg=contrastive_cfg,
             rot_precomp=rot_precomp,
             window_len=window_len,
+            animal_nodes=animal_nodes,
         )
 
         # Train and validate
@@ -1868,7 +1929,7 @@ def fit_contrastive(
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len,), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len, animal_nodes=animal_nodes,), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         score_value = float("nan")
@@ -2955,6 +3016,86 @@ def _augment_full_rotation(
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
     return x_aug
+
+
+def _negative_augmentation(
+    x: torch.Tensor,                 # (B,T_full,N,3)
+    window_len: int,
+    animal_nodes: List[torch.Tensor],
+    types: Tuple[str, ...] = ("offset", "rotation", "shuffle"),
+    offset: Tuple[int, int] = (5, 15),
+    rotation: Tuple[float, float] = (90.0, 180.0),
+    block_len: Tuple[int, int] = (3, 8),
+) -> torch.Tensor:
+    """
+    Negative view of the same windows: per sample one of the types, applied to the full window (its centre crop is the
+    negative). The poses and animals stay, the dynamics or the interaction break, so the static pose alone cannot tell
+    the negative from the positive.
+      "offset":   one random animal shifted in time against the others by +/- U[offset] frames (clipped to the room
+                  around the centre crop)
+      "rotation": the animal that is not the coordinate reference (largest variance of its mean position) rotated about
+                  its per-frame centre by +/- U[rotation] degrees
+      "shuffle":  the centre crop cut into blocks of U[block_len] frames, put together in random order
+    Offset and rotation are skipped with a single animal. Speeds stay with their frames and nodes.
+    """
+    B, T, N, _ = x.shape
+    device = x.device
+    base = (T - window_len) // 2
+    types = [t for t in types if t == "shuffle" or len(animal_nodes) > 1]
+    if not types:
+        raise ValueError("Negative augmentations \"offset\" and \"rotation\" need two or more animals; add \"shuffle\".")
+    out = x.clone()
+    choice = torch.randint(len(types), (B,), device=device)
+    rows = torch.arange(B, device=device)
+
+    for k, kind in enumerate(types):
+        sel = rows[choice == k]
+        n = sel.numel()
+        if n == 0:
+            continue
+        xs = x[sel]
+        sign = torch.randint(0, 2, (n,), device=device) * 2 - 1
+
+        if kind == "offset":
+            lo, hi = min(offset[0], max(base, 1)), min(offset[1], max(base, 1))
+            shift = torch.randint(lo, hi + 1, (n,), device=device) * sign
+            frames = (torch.arange(T, device=device)[None, :] + shift[:, None]).clamp(0, T - 1)  # (n,T)
+            shifted = xs[torch.arange(n, device=device)[:, None], frames]                         # (n,T,N,3)
+            animal = torch.randint(len(animal_nodes), (n,), device=device)
+            node_mask = torch.zeros(n, N, dtype=torch.bool, device=device)
+            for a_i, nodes in enumerate(animal_nodes):
+                node_mask[animal == a_i] |= torch.isin(torch.arange(N, device=device), nodes)
+            out[sel] = torch.where(node_mask[:, None, :, None], shifted, xs)
+
+        elif kind == "rotation":
+            spread = torch.stack([x[..., nodes, :2].mean(dim=2).var(dim=(0, 1)).sum() for nodes in animal_nodes])
+            nodes = animal_nodes[int(spread.argmax())]
+            angle = torch.empty(n, device=device).uniform_(*rotation) * sign * (math.pi / 180.0)
+            cos, sin = torch.cos(angle)[:, None, None], torch.sin(angle)[:, None, None]
+            pts = xs[:, :, nodes, :2]
+            centre = pts.mean(dim=2, keepdim=True)
+            rel = pts - centre
+            rotated = torch.stack([cos * rel[..., 0] - sin * rel[..., 1], sin * rel[..., 0] + cos * rel[..., 1]], dim=-1)
+            xs = xs.clone()
+            xs[:, :, nodes, :2] = rotated + centre
+            out[sel] = xs
+
+        else:  # shuffle: blocks of the centre crop in random order (never the original order)
+            W = window_len
+            lengths = torch.randint(block_len[0], block_len[1] + 1, (n, W), device=device)
+            ends = lengths.cumsum(dim=1)                                                        # (n,K) sorted
+            t = torch.arange(W, device=device).expand(n, W).contiguous()
+            block = torch.searchsorted(ends, t, right=True)                                     # (n,W) block of frame
+            rank = torch.rand(n, W, device=device).argsort(dim=1).argsort(dim=1)                # random block order
+            order = (rank.gather(1, block) * W + t).argsort(dim=1)
+            same = (order == t).all(dim=1)
+            if same.any():  # random order happened to be the original one: reverse the blocks instead
+                order[same] = ((W - rank[same].gather(1, block[same])) * W + t[same]).argsort(dim=1)
+            crop = xs[:, base:base + W]
+            xs = xs.clone()
+            xs[:, base:base + W] = crop[torch.arange(n, device=device)[:, None], order]
+            out[sel] = xs
+    return out
 
 
 def _make_augmented_view(
