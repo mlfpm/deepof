@@ -3109,6 +3109,7 @@ class Coordinates:
         speed_standardize: str = "per_column",
         coord_standardize: str = "per_column",
         return_as_paths: bool = None,
+        include_angles: bool = False,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -3128,6 +3129,7 @@ class Coordinates:
             dist_standardize (str): standardize distance columns individually (per_column) or as a group (groupwise)
             speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
+            include_angles (bool): If True, the windows additionally contain the (unsigned, unscaled) angles between three connected body parts as a third array next to nodes and edges. They are not used as model input, but as targets of the regression teacher (include_angles_view in train_deepof_model). Defaults to False.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -3188,9 +3190,10 @@ class Coordinates:
                 angle_feature_names = get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns']
 
                 # Merge and extract names
+                # Column order coords, speeds, (angles), distances is assumed by the sorting indices below
                 tab_dict = coords.merge(
                     speeds,
-                    #angles,
+                    *([angles] if include_angles else []),
                     dists,
                     save_as_paths=return_as_paths
                     )

@@ -555,7 +555,12 @@ def step_contrastive_distill(
     x_aug1, x_aug2 = torch.chunk(x_aug_twice, chunks=2, dim=0)  
     a_aug1, a_aug2 = torch.chunk(a_aug_twice, chunks=2, dim=0)  
 
-    z_view1 = model(x_aug1, a_aug1)
+    # The regression teacher (training only) also needs the backbone output of the first view
+    regression_targets = getattr(ctx, "regression_targets", None)
+    if regression_targets is not None:
+        z_view1, backbone1 = model(x_aug1, a_aug1, return_backbone=True)
+    else:
+        z_view1 = model(x_aug1, a_aug1)
     z_view2 = model(x_aug2, a_aug2)
     z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
 
@@ -704,6 +709,15 @@ def step_contrastive_distill(
     else:
         total = loss
 
+    # Regression teacher: predict the views of the unaugmented window from the backbone output of the augmented view.
+    # Every view has a mean squared norm of 1, so predicting zeros gives a loss of about lambda_regression.
+    # Logged as distill_loss.
+    if regression_targets is not None:
+        target = regression_targets[idx.to(device).long()]
+        pred = ctx.regression_head(backbone1.float())
+        distill_loss = ctx.lambda_regression * (pred - target).pow(2).sum(dim=1).mean() / ctx.n_regression_views
+        total = total + distill_loss
+
     logs = {
         "total_loss": float(total.detach().item()),
         "pos_similarity": float(pos_mean.detach().item()) if pos_mean is not None else None,
@@ -820,6 +834,10 @@ def train_deepof_model(
     include_angles_view: Optional[bool] = None,
     pca_angles_dim: Optional[int] = None,
     reinit_gmm_on_refresh: Optional[bool] = None,
+    # Teacher type ("turtle" or "regression", None: "regression" for the contrastive model) and regression settings
+    teacher_mode: Optional[str] = None,
+    lambda_regression: Optional[float] = None,
+    angle_segments: Optional[int] = None,
     # Diagnostics
     diag_max_batches: Optional[int] = None,
     # Model type
@@ -961,9 +979,14 @@ def train_deepof_model(
         teacher_freeze_at=teacher_freeze_at,
         reinit_gmm_on_refresh=reinit_gmm_on_refresh,
         teacher_batch_size=teacher_batch_size,
+        teacher_mode=_lower(teacher_mode),
+        lambda_regression=lambda_regression,
+        angle_segments=angle_segments,
     )
     if teacher_freeze_at is False:  # None means "use the default", so False disables freezing
         teacher_cfg.teacher_freeze_at = None
+    if teacher_cfg.teacher_mode is None:  # cluster assignments (TURTLE) conflict with the contrastive loss
+        teacher_cfg.teacher_mode = "regression" if common_cfg.model_name == "contrastive" else "turtle"
 
     vade_cfg = _make_cfg(
         VaDECfg,
@@ -1593,15 +1616,30 @@ def fit_contrastive(
 
     # Create teacher
     teacher_cfg.include_latent_view=False
-    teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
-        teacher_cfg=teacher_cfg,
-        common_cfg=common_cfg,
-        train_dataset=train_loader.dataset,
-        preprocessed_train=preprocessed_train,
-        data_path=data_path,
-        device=device,
-        latent_view=None,
-    )
+    tau_star, regression_targets, regression_head = None, None, None
+    if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
+        # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
+        regression_targets, n_regression_views = deepof.clustering.teacher_model.build_regression_targets(
+            teacher_cfg, train_loader.dataset, window_len
+        )
+        regression_targets = regression_targets.to(device)
+        with torch.no_grad():
+            x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
+            a0 = torch.zeros((2, window_len, *train_loader.dataset.a_shape[1:]), device=device)
+            backbone_dim = unwrap_dp(model)(x0, a0, return_backbone=True)[1].shape[1]
+        regression_head = nn.Linear(backbone_dim, regression_targets.shape[1]).to(device)
+        nn.init.zeros_(regression_head.weight)  # starts predicting zeros, so the loss starts at about lambda_regression
+        nn.init.zeros_(regression_head.bias)
+    else:
+        teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
+            teacher_cfg=teacher_cfg,
+            common_cfg=common_cfg,
+            train_dataset=train_loader.dataset,
+            preprocessed_train=preprocessed_train,
+            data_path=data_path,
+            device=device,
+            latent_view=None,
+        )
     if tau_star is not None:
         tau_star = tau_star.to(device)
 
@@ -1622,7 +1660,12 @@ def fit_contrastive(
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
     if is_ddp:
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
-    optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
+        if regression_head is not None:
+            regression_head = DDP(regression_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+    optimizer = build_optimizer_generic(
+        model, regression_head if regression_head is not None else distill_head,
+        base_lr=common_cfg.learning_rate, weight_decay=1e-4,
+    )
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
 
@@ -1660,6 +1703,10 @@ def fit_contrastive(
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
+            regression_targets=regression_targets,
+            regression_head=regression_head,
+            n_regression_views=(n_regression_views if regression_targets is not None else 1),
+            lambda_regression=teacher_cfg.lambda_regression,
             edge_index=edge_index_global,
             edge_index_local=edge_index_local,
             contrastive_cfg=contrastive_cfg,
@@ -1671,8 +1718,10 @@ def fit_contrastive(
         train_logs, _, lam = train_one_epoch_indexed(
             model=model, model_name=model_name, dataloader=train_loader, optimizer=optimizer, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs, scaler=scaler, use_amp=common_cfg.use_amp,
-            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False, 
+            grad_clip_value=0.75, ctx=ctx, show_progress=True, leave=False,
         )
+        if regression_targets is not None:
+            lam = teacher_cfg.lambda_regression  # shown as λ_distill
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,

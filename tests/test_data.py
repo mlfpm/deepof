@@ -949,6 +949,28 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
         assert isinstance(meta_info, dict) and len(meta_info['shape_train'])==3
 
 
+def test_get_graph_dataset_include_angles():
+    # Angles only add a third array; nodes and edges stay unchanged
+    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
+    prun = deepof.data.Project(
+        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
+        project_name="deepof_project_angles", arena="circular-autodetect", video_scale="380 mm",
+        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
+    ).create(force=True, test=True)
+    try:
+        kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0)
+        plain = prun.get_graph_dataset(**kwargs)[0][0]
+        with_angles, meta_info = prun.get_graph_dataset(include_angles=True, **kwargs)[:2]
+    finally:
+        rmtree(os.path.join(path, "deepof_project_angles"))
+    get_dt = deepof.data_loading.get_dt
+    for key in plain.keys():
+        nodes, edges, angles = get_dt(with_angles[0], key)
+        assert np.array_equal(nodes, get_dt(plain, key)[0]) and np.array_equal(edges, get_dt(plain, key)[1])
+        assert get_dt(plain, key)[2].size == 0
+        assert angles.shape[2] == len(meta_info["angle_columns"]) > 0 and 0 <= angles.min() and angles.max() <= np.pi
+
+
 @settings(deadline=None)
 @given(
     use_bin_info=st.booleans(),

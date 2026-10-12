@@ -117,6 +117,14 @@ class TurtleTeacherCfg:
     distill_class_reweight_beta: float = 1.0
     distill_class_reweight_cap: float = 3.0
 
+    # Teacher type: "turtle" (TURTLE cluster assignments of the views, distilled with cross-entropy) or "regression"
+    # (contrastive model only: the views themselves are targets of a linear head on the backbone output, i.e. the
+    # embedding used for clustering, weighted with the constant lambda_regression). None: "regression" for the
+    # contrastive model, "turtle" otherwise
+    teacher_mode: Optional[str] = None
+    lambda_regression: float = 1.0
+    angle_segments: int = 1  # regression angle view: mean angle per segment of the centre window (1: whole window)
+
     # Views
     include_latent_view: bool = True
     include_edges_view: bool = False
@@ -535,10 +543,24 @@ def check_model_inputs(
 
     # --- Teacher
     if teacher_cfg is not None and teacher_cfg.use_turtle_teacher:
-        views = [teacher_cfg.include_latent_view, teacher_cfg.include_nodes_view,
-                 teacher_cfg.include_edges_view, teacher_cfg.include_angles_view]
+        views = [teacher_cfg.include_nodes_view, teacher_cfg.include_edges_view, teacher_cfg.include_angles_view]
+        if model_name != "contrastive":  # the contrastive model has no latent view
+            views.append(teacher_cfg.include_latent_view)
         check(any(bool(v) for v in views), "The TURTLE teacher needs at least one included view")
         check(is_int(teacher_cfg.teacher_batch_size, 1), "\"teacher_batch_size\" needs to be an integer greater than 0")
+        one_of("teacher_mode", teacher_cfg.teacher_mode, ["turtle", "regression"])
+        if teacher_cfg.include_angles_view and isinstance(preprocessed_object, (tuple, list)) and preprocessed_object:
+            train = preprocessed_object[0]
+            first = get_dt(train, list(train.keys())[0])
+            check(len(first) > 2 and np.size(first[2]) > 0,
+                  "\"include_angles_view\" needs angles in the preprocessed data: get_graph_dataset(..., include_angles=True)")
+        if teacher_cfg.teacher_mode == "regression":
+            check(model_name == "contrastive", "teacher_mode=\"regression\" is only available for the contrastive model")
+            check(is_number(teacher_cfg.lambda_regression, 0), "\"lambda_regression\" needs to be >= 0")
+            check(is_int(teacher_cfg.angle_segments, 1), "\"angle_segments\" needs to be an integer greater than 0")
+            if contrastive_cfg is not None and is_int(teacher_cfg.angle_segments, 1):
+                check(teacher_cfg.angle_segments <= contrastive_cfg.contrastive_window,
+                      "\"angle_segments\" can not exceed \"contrastive_window\"")
 
     if errors:
         raise ValueError("Invalid model inputs:\n  - " + "\n  - ".join(errors))

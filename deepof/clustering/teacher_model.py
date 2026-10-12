@@ -19,7 +19,7 @@ import deepof.clustering.model_utils_new
 from deepof.clustering.model_utils_new import CommonFitCfg, TurtleTeacherCfg, VaDECfg, ContrastiveCfg 
 from deepof.clustering.dataset import BatchDictDataset
 from sklearn.decomposition import IncrementalPCA
-from copy import deepcopy
+from copy import copy, deepcopy
 from torch.utils.data import DataLoader, TensorDataset
 
 
@@ -902,4 +902,96 @@ def maybe_build_turtle_teacher(
     )
 
     return teacher, tau_star.detach(), views
+
+
+def _with_angles(dataset: BatchDictDataset) -> BatchDictDataset:
+    """The same HDF5 dataset (no rebuild), additionally returning the angles."""
+    dataset = getattr(dataset, "base_dataset", dataset)  # a loader's dataset is the iterable wrapper
+    if not dataset.has_angles:
+        raise ValueError("The angle view needs angles in the preprocessed data: get_graph_dataset(..., include_angles=True)")
+    out = copy(dataset)
+    out.return_angles = True
+    out._h5_X = None  # file handles of the original are not shared
+    return out
+
+
+@torch.no_grad()
+def extract_angle_segments_view(
+    dataset: BatchDictDataset,
+    window_len: int,
+    n_segments: int = 1,
+    batch_size: int = 8192,
+) -> torch.Tensor:
+    """
+    Mean angle per segment of the centre window (the unaugmented contrastive view) for all samples, in dataset order.
+
+    Args:
+        dataset (BatchDictDataset): Training dataset, built from data that contains angles.
+        window_len (int): Length of the centre window (contrastive_window).
+        n_segments (int): Number of equal segments of the window with one mean each. Defaults to 1 (whole window).
+        batch_size (int): Batch size used to read the data. Defaults to 8192.
+
+    Returns:
+        torch.Tensor: Tensor of shape [N_samples, n_segments * n_angles], segment-major.
+    """
+    loader = _with_angles(dataset).make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
+    )
+    feats = []
+    for batch in loader:
+        ang = batch[2][..., 0]  # (B, T, n_angles)
+        start = (ang.shape[1] - window_len) // 2
+        segments = torch.tensor_split(ang[:, start:start + window_len], n_segments, dim=1)
+        feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
+    return torch.cat(feats, dim=0)
+
+
+def build_regression_targets(
+    teacher_cfg: TurtleTeacherCfg,
+    train_dataset: BatchDictDataset,
+    window_len: int,
+) -> Tuple[torch.Tensor, int]:
+    """
+    Targets of the regression teacher: the included views per training sample (dataset order), concatenated.
+
+    Every view is scaled to a mean squared norm of 1, so each view weighs the same in the loss independent of its size:
+    angles are standardized per angle (each angle counts the same), PCA views are centred and divided by their overall
+    RMS (components keep their relative variance, so low-variance components do not get inflated).
+
+    Args:
+        teacher_cfg (TurtleTeacherCfg): Teacher settings (included views, PCA sizes, angle_segments).
+        train_dataset (BatchDictDataset): Training dataset.
+        window_len (int): Length of the contrastive view (for the angle view).
+
+    Returns:
+        Tuple[torch.Tensor, int]: Targets of shape [N_samples, D] and the number of views.
+    """
+    views = []
+    if teacher_cfg.include_nodes_view:
+        print("\n--- Building PCA views for the regression teacher (nodes) ---")
+        _, pca_pos, _, pca_spd = fit_nodes_pca(
+            train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
+            batch_size=teacher_cfg.batch_size_nodes, num_workers=0,
+        )
+        views += [pca_pos, pca_spd]
+    if teacher_cfg.include_edges_view:
+        print("\n--- Building PCA views for the regression teacher (edges) ---")
+        views.append(extract_pca_edges_view(
+            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0
+        ))
+    scaled = []
+    for view in views:
+        view = view - view.mean(dim=0)
+        scaled.append(view / view.pow(2).sum(dim=1).mean().sqrt().clamp_min(1e-8))
+    if teacher_cfg.include_angles_view:
+        print("\n--- Building the angle view for the regression teacher ---")
+        angles = extract_angle_segments_view(
+            train_dataset, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles
+        )
+        angles = (angles - angles.mean(dim=0)) / angles.std(dim=0).clamp_min(1e-8)
+        scaled.append(angles / angles.shape[1] ** 0.5)
+    if not scaled:
+        raise ValueError("The regression teacher needs at least one included view (nodes, edges or angles)")
+    return torch.cat(scaled, dim=1), len(scaled)
 

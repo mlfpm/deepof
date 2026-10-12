@@ -137,10 +137,11 @@ class RecurrentEncoderPT(nn.Module):
         out = tmp.permute(3, 2, 1, 0).contiguous()
         return out
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
         x: (B, T, N_nodes, F_per_node)
         a: (B, T, E_edges, F_per_edge)
+        return_backbone: return (projection, backbone output) instead of one of them
         """
         B, T, N_nodes, F_per_node = x.shape
         _, _, E_edges, F_per_edge = a.shape
@@ -178,6 +179,8 @@ class RecurrentEncoderPT(nn.Module):
             encoder = self.recurrent_block(x_grouped).squeeze(1)  # (B, 2*latent)
 
         # Final projection
+        if return_backbone:
+            return self.final_dense(encoder), encoder
         if not cluster_mode:
             out = self.final_dense(encoder)
         else:
@@ -656,9 +659,10 @@ class TCNEncoderPT(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
         x: (B, W, N, NF)  a: (B, W, E, EF)  -> returns (B, latent_dim)
+        return_backbone: return (projection, backbone output) instead of one of them
         """
         B, W, N, F_node = x.shape
         _, _, E, F_edge = a.shape
@@ -706,6 +710,8 @@ class TCNEncoderPT(nn.Module):
         # As a final guard: replace any NaN/Inf just in case
         head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
         head_out = self.head(head_in)
+        if return_backbone:
+            return head_out, head_in
         return head_out if not cluster_mode else head_in
 
 
@@ -1141,11 +1147,12 @@ class TFMEncoderPT(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
         Args:
             x: (B, W, N, NF) - node features over time
             a: (B, W, E, EF) - edge features over time
+            return_backbone: return (projection, backbone output) instead of one of them
         Returns:
             (B, latent_dim) - encoded representation
         """
@@ -1209,7 +1216,7 @@ class TFMEncoderPT(nn.Module):
         head_in = head_in.clamp(min=-1e4, max=1e4)
         head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
         
-        if not cluster_mode:
+        if not cluster_mode or return_backbone:
             out = self.head(head_in)
         else:
             out = head_in
@@ -1218,6 +1225,8 @@ class TFMEncoderPT(nn.Module):
         if self.training and out.size(0) > 1:
             out = (out - out.mean(dim=0, keepdim=True)) / (out.std(dim=0, keepdim=True).clamp(min=0.1))
 
+        if return_backbone:
+            return out, head_in
         return out
 
 
@@ -2165,10 +2174,11 @@ class ContrastivePT(nn.Module):
         # Debug cache
         self._last_debug: Dict[str, Any] = {}
 
-    def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, a: torch.Tensor, return_backbone: bool = False) -> torch.Tensor:
         """
         Encode a half-window:
           x: (B, T_half, N, F), a: (B, T_half, E, Fe) -> (B, D)
+        With return_backbone, returns (projection, backbone output) (used by the regression teacher).
         """
-        return self.encoder(x, a, self.cluster_mode)
+        return self.encoder(x, a, self.cluster_mode, return_backbone=return_backbone)
  

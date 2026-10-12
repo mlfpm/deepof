@@ -1648,3 +1648,58 @@ def test_nce_soft_shift_weights():
     zero = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.zeros(8))[0]
     full = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.ones(8))[0]
     assert torch.isclose(off, zero, atol=1e-6) and not torch.isclose(off, full)
+
+
+@pytest.mark.parametrize("encoder_type", ["recurrent", "TCN", "transformer"])
+def test_contrastive_step_with_regression_teacher(encoder_type):
+    # The regression loss reaches the backbone through return_backbone, for all encoders
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model = deepof.clustering.models_new.ContrastivePT(
+        input_shape=(T, N, 3), edge_feature_shape=(T, N, 1), adjacency_matrix=np.eye(N, dtype=np.float32),
+        window_len=window_len, latent_dim=4, encoder_type=encoder_type,
+    )
+    meta_info = {"node_columns": [(chr(65 + i), "x") for i in range(N)],
+                 "edge_columns": [(chr(65 + i), chr(66 + i)) for i in range(N - 1)] + [("A", "C")]}
+    edge_index_global, edge_index_local, _ = deepof.clustering.training._build_edge_from_metainfo(
+        meta_info=meta_info, device=torch.device("cpu"), n_nodes=N, return_local=True,
+    )
+    x, a = torch.randn(4, T, N, 3), torch.randn(4, T, N, 1)
+    backbone_dim = model(x[:, :window_len], a[:, :window_len], return_backbone=True)[1].shape[1]
+    head = torch.nn.Linear(backbone_dim, 5)
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len),
+        rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1,
+        regression_targets=torch.randn(10, 5), regression_head=head, n_regression_views=1, lambda_regression=1.0,
+    )
+    result = deepof.clustering.training.step_contrastive_distill(model, (x, a, torch.tensor([0, 3, 5, 9])), ctx)
+    result.loss.backward()
+    assert result.logs["distill_loss"] > 0 and torch.isfinite(result.loss)
+    assert head.weight.grad.abs().sum() > 0
+    assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
+
+
+def test_regression_teacher_angle_view(tmp_path):
+    # Segment means of the centre window, in dataset order, each view scaled to a mean squared norm of 1
+    rng = np.random.default_rng(0)
+    T, K, window_len = 10, 3, 6
+    pre = {f"v{i}": (rng.normal(size=(n, T, 6)).astype(np.float32), rng.normal(size=(n, T, 4)).astype(np.float32),
+                     rng.uniform(0, np.pi, size=(n, T, K)).astype(np.float32)) for i, n in enumerate([7, 5])}
+    ds = deepof.clustering.dataset.BatchDictDataset(pre, str(tmp_path), "train_", h5_chunk_len=4)
+    view = deepof.clustering.teacher_model.extract_angle_segments_view(ds, window_len, n_segments=2, batch_size=3)
+    ang = np.concatenate([v[2] for v in pre.values()])[:, 2:8]
+    assert np.allclose(view.numpy(), np.concatenate([ang[:, :3].mean(1), ang[:, 3:].mean(1)], axis=1), atol=1e-6)
+
+    cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
+        include_nodes_view=False, include_angles_view=True, angle_segments=2,
+    )
+    targets, n_views = deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
+    assert targets.shape == (12, 2 * K) and n_views == 1
+    assert np.isclose(targets.pow(2).sum(1).mean().item(), 1.0, atol=0.1)
+
+    no_angles = {k: (v[0], v[1], np.empty((0,))) for k, v in pre.items()}
+    ds = deepof.clustering.dataset.BatchDictDataset(no_angles, str(tmp_path), "other_", h5_chunk_len=4)
+    with pytest.raises(ValueError, match="include_angles=True"):
+        deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
