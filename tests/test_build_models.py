@@ -1703,3 +1703,85 @@ def test_regression_teacher_angle_view(tmp_path):
     ds = deepof.clustering.dataset.BatchDictDataset(no_angles, str(tmp_path), "other_", h5_chunk_len=4)
     with pytest.raises(ValueError, match="include_angles=True"):
         deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
+
+
+def _contrastive_test_setup(T=24, N=11, window_len=12):
+    model = deepof.clustering.models_new.ContrastivePT(
+        input_shape=(T, N, 3), edge_feature_shape=(T, N, 1), adjacency_matrix=np.eye(N, dtype=np.float32),
+        window_len=window_len, latent_dim=4, encoder_type="TCN",
+    )
+    meta_info = {"node_columns": [(chr(65 + i), "x") for i in range(N)],
+                 "edge_columns": [(chr(65 + i), chr(66 + i)) for i in range(N - 1)] + [("A", "C")]}
+    edge_index_global, edge_index_local, _ = deepof.clustering.training._build_edge_from_metainfo(
+        meta_info=meta_info, device=torch.device("cpu"), n_nodes=N, return_local=True,
+    )
+    return model, edge_index_global, edge_index_local
+
+
+def test_contrastive_step_with_prototypes():
+    # The prototype loss is added to the contrastive loss and reaches the encoder
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
+    prototypes = [(torch.nn.functional.normalize(torch.randn(k, 4), dim=1), torch.randint(k, (10,)), torch.full((k,), 0.1))
+                  for k in (2, 3)]
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len),
+        rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1, prototypes=prototypes, proto_weight=1.0,
+    )
+    batch = (torch.randn(4, T, N, 3), torch.randn(4, T, N, 1), torch.tensor([0, 3, 5, 9]))
+    result = deepof.clustering.training.step_contrastive_distill(model, batch, ctx)
+    result.loss.backward()
+    assert result.logs["proto_loss"] > 0 and torch.isfinite(result.loss)
+    assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
+    ctx.prototypes = None
+    assert deepof.clustering.training.step_contrastive_distill(model, batch, ctx).logs["proto_loss"] is None
+
+
+def test_spherical_kmeans_and_concentration():
+    # Three well separated directions are recovered; loose clusters get higher temperatures, with mean temperature
+    gen = torch.Generator().manual_seed(0)
+    centres = torch.eye(3)
+    spread = torch.tensor([0.02, 0.05, 0.1])
+    labels = torch.arange(3).repeat_interleave(50)
+    z = torch.nn.functional.normalize(centres[labels] + spread[labels, None] * torch.randn(150, 3, generator=gen), dim=1)
+    centroids, assignments = deepof.clustering.training._spherical_kmeans(z, 3, generator=gen)
+    assert all(len(torch.unique(assignments[labels == c])) == 1 for c in range(3))
+    assert len(torch.unique(assignments)) == 3
+    phi = deepof.clustering.training._prototype_concentration(z, centroids, assignments, temperature=0.1)
+    order = assignments[[0, 50, 100]]
+    assert phi[order[0]] < phi[order[2]] and np.isclose(phi.mean().item(), 0.1)
+    with pytest.raises(ValueError, match="proto_clusters"):
+        deepof.clustering.training._spherical_kmeans(z, 151)
+
+
+def test_build_prototypes(tmp_path):
+    # Clusters of the unaugmented centre windows of all training samples, in dataset order
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model, edge_index_global, _ = _contrastive_test_setup(T, N, window_len)
+    rng = np.random.default_rng(0)
+    pre = {f"v{i}": (rng.normal(size=(n, T, 3 * N)).astype(np.float32), rng.normal(size=(n, T, N)).astype(np.float32),
+                     np.empty((0,))) for i, n in enumerate([7, 5])}
+    ds = deepof.clustering.dataset.BatchDictDataset(pre, str(tmp_path), "train_", h5_chunk_len=4)
+    x = torch.stack([ds[i][0] for i in range(len(ds))])
+    a = deepof.clustering.model_utils_new.recompute_edges(x, edge_index_global)
+    with torch.no_grad():  # batch norm statistics, otherwise all eval outputs are nearly the same
+        for _ in range(20):
+            model(x[:, 6:18], a[:, 6:18])
+    model.eval()
+    with torch.no_grad():
+        expected = model(x[:, 6:18], a[:, 6:18])
+    model.train()
+    z = deepof.clustering.training._embed_centre_windows(model, ds, edge_index_global, window_len, torch.device("cpu"),
+                                                         batch_size=5)
+    assert model.training and z.std(dim=0).sum() > 0.1
+    assert torch.allclose(z, torch.nn.functional.normalize(expected, dim=1), atol=1e-5)
+
+    cfg = deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len, proto_clusters=(2, 4))
+    prototypes = deepof.clustering.training.build_prototypes(
+        model, ds, edge_index_global, window_len, cfg, torch.device("cpu"))
+    assert [p[0].shape for p in prototypes] == [(2, 4), (4, 4)]
+    assert all(p[1].shape == (12,) and p[1].max() < p[0].shape[0] and p[2].shape == (p[0].shape[0],) for p in prototypes)

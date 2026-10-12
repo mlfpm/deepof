@@ -718,6 +718,20 @@ def step_contrastive_distill(
         distill_loss = ctx.lambda_regression * (pred - target).pow(2).sum(dim=1).mean() / ctx.n_regression_views
         total = total + distill_loss
 
+    # Prototype loss (ProtoNCE, training only): both views are pulled towards the prototype of their window and pushed
+    # away from the other prototypes, each prototype with its own temperature (concentration), averaged over clusterings
+    prototypes = getattr(ctx, "prototypes", None)
+    proto_loss = None
+    if prototypes is not None:
+        idx_long = idx.to(device).long()
+        proto_loss = 0.0
+        for z in (z_view1, z_view2):
+            z = F.normalize(z.float(), dim=1)
+            for centroids, assignments, concentration in prototypes:
+                proto_loss = proto_loss + F.cross_entropy(z @ centroids.T / concentration, assignments[idx_long])
+        proto_loss = ctx.proto_weight * proto_loss / (2 * len(prototypes))
+        total = total + proto_loss
+
     logs = {
         "total_loss": float(total.detach().item()),
         "pos_similarity": float(pos_mean.detach().item()) if pos_mean is not None else None,
@@ -726,6 +740,7 @@ def step_contrastive_distill(
         "variance_loss" : float(var_loss.detach().item()) if var_loss is not None else None,
         "covariance_loss" : float(cov_loss.detach().item()) if cov_loss is not None else None,
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
+        "proto_loss": float(proto_loss.detach().item()) if proto_loss is not None else None,
         "seperability": float(seperability.detach().item())
     }
     return StepResult(loss=total, logs=logs)
@@ -874,6 +889,10 @@ def train_deepof_model(
     aug_neg_max_shift: Optional[int] = None,
     shift_view_mode: Optional[str] = None,
     soft_temporal_tau: Optional[float] = None,
+    # Prototype loss (PCL), see ContrastiveCfg
+    proto_weight: Optional[float] = None,
+    proto_clusters: Optional[Tuple[int, ...]] = None,
+    proto_warmup_epochs: Optional[int] = None,
     aug_max_rot: Optional[int] = None,
     aug_n_rot: Optional[int] = None,
     aug_p_rot: Optional[float] = None,
@@ -1046,6 +1065,9 @@ def train_deepof_model(
         aug_neg_max_shift=aug_neg_max_shift,
         shift_view_mode=_lower(shift_view_mode),
         soft_temporal_tau=soft_temporal_tau,
+        proto_weight=proto_weight,
+        proto_clusters=proto_clusters,
+        proto_warmup_epochs=proto_warmup_epochs,
         aug_noise_sigma=aug_noise_sigma,
         aug_p_noise=aug_p_noise,
         aug_min_interp=aug_min_interp,
@@ -1500,6 +1522,117 @@ def fit_VQVAE(
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
 
 
+@torch.no_grad()
+def _embed_centre_windows(
+    model: nn.Module,
+    dataset,
+    edge_index: torch.Tensor,
+    window_len: int,
+    device: torch.device,
+    batch_size: int = 4096,
+    use_amp: bool = True,
+) -> torch.Tensor:
+    """Normalized projections of the centre windows (the unaugmented contrastive views) of all samples, in dataset order."""
+    dataset = getattr(dataset, "base_dataset", dataset)  # a loader's dataset is the iterable wrapper
+    loader = dataset.make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
+    )
+    base = unwrap_dp(model)
+    was_training = base.training
+    base.eval()
+    z_all = None
+    for batch in loader:
+        x_full = batch[0].to(device)
+        idx = batch[-2].to(device).long()
+        a_full = recompute_edges(x_full, edge_index)  # as in training
+        starts = torch.full((x_full.shape[0],), (x_full.shape[1] - window_len) // 2, device=device, dtype=torch.long)
+        with autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp and device.type == "cuda"):
+            z = base(slice_time_per_sample(x_full, starts, window_len), slice_time_per_sample(a_full, starts, window_len))
+        z = F.normalize(z.float(), dim=1)
+        if z_all is None:
+            z_all = torch.empty((len(dataset), z.shape[1]), device=device)
+        z_all[idx] = z
+    base.train(was_training)
+    return z_all
+
+
+def _spherical_kmeans(
+    z: torch.Tensor, k: int, n_iter: int = 20, generator: Optional[torch.Generator] = None, chunk: int = 65536,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """k-means with cosine similarity on unit-norm rows; empty clusters are re-seeded with random samples.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Unit-norm centroids [k, D] and the cluster of every row [N].
+    """
+    n = z.shape[0]
+    if k > n:
+        raise ValueError(f"Cannot build {k} prototypes from {n} training samples, reduce proto_clusters.")
+    # k-means++ seeding: each new centroid is drawn with probability proportional to the squared distance to the closest one
+    centroids = z[torch.randint(n, (1,), generator=generator).to(z.device)]
+    d2 = (z - centroids[0]).pow(2).sum(dim=1)
+    for _ in range(1, k):
+        new = z[torch.multinomial(d2.cpu().double().clamp_min(0) + 1e-12, 1, generator=generator).to(z.device)]
+        centroids = torch.cat([centroids, new])
+        d2 = torch.minimum(d2, (z - new[0]).pow(2).sum(dim=1))
+    for it in range(n_iter + 1):
+        assignments = torch.cat([(z[i:i + chunk] @ centroids.T).argmax(dim=1) for i in range(0, n, chunk)])
+        if it == n_iter:
+            break
+        sums = torch.zeros_like(centroids).index_add_(0, assignments, z)
+        empty = torch.bincount(assignments, minlength=k) == 0
+        if empty.any():
+            sums[empty] = z[torch.randint(n, (int(empty.sum()),), generator=generator).to(z.device)]
+        centroids = F.normalize(sums, dim=1)
+    return centroids, assignments
+
+
+def _prototype_concentration(
+    z: torch.Tensor, centroids: torch.Tensor, assignments: torch.Tensor, temperature: float,
+) -> torch.Tensor:
+    """Temperature per prototype as in PCL: mean distance of the members / log(members + 10), clipped to the 10th-90th
+    percentile and scaled to a mean of temperature. Loose clusters get a higher temperature (weaker pull)."""
+    k = centroids.shape[0]
+    counts = torch.bincount(assignments, minlength=k).float()
+    dist = (z - centroids[assignments]).norm(dim=1)
+    phi = torch.zeros(k, device=z.device).index_add_(0, assignments, dist) / counts.clamp_min(1) / torch.log(counts + 10)
+    if (counts > 1).any():
+        phi[counts <= 1] = phi[counts > 1].max()  # no spread estimate for single-member clusters
+    phi = phi.clamp(torch.quantile(phi, 0.1), torch.quantile(phi, 0.9))
+    return temperature * phi / phi.mean().clamp_min(1e-8)
+
+
+def build_prototypes(
+    model: nn.Module,
+    dataset,
+    edge_index: torch.Tensor,
+    window_len: int,
+    contrastive_cfg: ContrastiveCfg,
+    device: torch.device,
+    seed: int = 0,
+    use_amp: bool = True,
+) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """
+    E-step of PCL: clusters the unaugmented training windows once per entry of contrastive_cfg.proto_clusters.
+
+    Returns:
+        List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]: Per clustering the centroids [k, D], the cluster of every
+        training sample [N] (dataset order) and the temperature per prototype [k].
+    """
+    z = _embed_centre_windows(model, dataset, edge_index, window_len, device, use_amp=use_amp)
+    generator = torch.Generator().manual_seed(int(seed))
+    prototypes = []
+    for k in contrastive_cfg.proto_clusters:
+        centroids, assignments = _spherical_kmeans(z, int(k), generator=generator)
+        concentration = _prototype_concentration(z, centroids, assignments, contrastive_cfg.temperature)
+        prototypes.append((centroids, assignments, concentration))
+    if dist.is_available() and dist.is_initialized():  # all ranks use the clustering of rank 0
+        for tensors in prototypes:
+            for t in tensors:
+                dist.broadcast(t, src=0)
+    return prototypes
+
+
 def fit_contrastive(
     train_loader: DataLoader,
     val_loader: DataLoader,
@@ -1693,8 +1826,18 @@ def fit_contrastive(
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
     for epoch in range(common_cfg.epochs):
 
+        # Prototype loss: recluster the training windows with the current model at the start of every epoch
+        prototypes = None
+        if contrastive_cfg.proto_weight > 0 and epoch >= contrastive_cfg.proto_warmup_epochs:
+            prototypes = build_prototypes(
+                model, train_loader.dataset, edge_index_global, window_len, contrastive_cfg, device,
+                seed=(common_cfg.seed or 0) + epoch, use_amp=common_cfg.use_amp,
+            )
+
         # Summarize some variables into namespace
         ctx = SimpleNamespace(
+            prototypes=prototypes,
+            proto_weight=contrastive_cfg.proto_weight,
             tau_star=tau_star,
             distill_head=distill_head,
             lambda_scheduler=lambda_scheduler,

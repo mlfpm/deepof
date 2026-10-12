@@ -207,6 +207,13 @@ class ContrastiveCfg:
     # the frame distance to the anchor view, as the temporal soft assignments of SoftCLT, Lee et al. 2024)
     shift_view_mode: str = "schedule"
     soft_temporal_tau: float = 0.1
+    # Prototype loss (ProtoNCE of PCL, Li et al. 2021), added to the contrastive loss with weight proto_weight (0: off).
+    # From epoch proto_warmup_epochs on, the unaugmented training windows are clustered with spherical k-means at the
+    # start of every epoch, once per entry of proto_clusters; both augmented views are pulled towards the prototype of
+    # their window, with a temperature per prototype that grows with the spread of its cluster
+    proto_weight: float = 0.0
+    proto_clusters: Tuple[int, ...] = (25, 50, 100)
+    proto_warmup_epochs: int = 5
     aug_max_rot: int = 30
     aug_n_rot: int = 3
     aug_p_rot: float = 0.8
@@ -522,6 +529,17 @@ def check_model_inputs(
         check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
         one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive"])
         check(is_number(c.soft_temporal_tau, 0), "\"soft_temporal_tau\" needs to be >= 0")
+        check(is_number(c.proto_weight, 0), "\"proto_weight\" needs to be >= 0")
+        check(
+            isinstance(c.proto_clusters, (tuple, list)) and len(c.proto_clusters) > 0
+            and all(is_int(k, 2) for k in c.proto_clusters),
+            "\"proto_clusters\" needs to be a non-empty tuple of integers >= 2",
+        )
+        check(is_int(c.proto_warmup_epochs, 0), "\"proto_warmup_epochs\" needs to be an integer >= 0")
+        if is_number(c.proto_weight, 0, strict_min=True) and is_int(c.proto_warmup_epochs, 0) and c.proto_warmup_epochs >= common_cfg.epochs:
+            warnings.warn(
+                f"proto_warmup_epochs={c.proto_warmup_epochs} >= epochs={common_cfg.epochs}: the prototype loss is never used."
+            )
         check(is_number(c.elimination_topk, 0, 1), "\"elimination_topk\" needs to be between 0 and 1")
         check(is_int(c.contrastive_window, 1), "\"contrastive_window\" needs to be an integer greater than 0")
         for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop"):

@@ -315,6 +315,7 @@ def init_log_summary(model_name: str):
         log_summary[data_type]['cat_cluster_loss']=[]
         log_summary[data_type]['kmeans_loss']=[]
         log_summary[data_type]['distill_loss']=[]
+        log_summary[data_type]['proto_loss']=[]
         log_summary[data_type]['temporal_loss']=[]
         log_summary[data_type]['scatter_loss']=[]
         log_summary[data_type]['nonempty_loss']=[]
@@ -382,7 +383,7 @@ def print_losses(model_name: str,
     loss_names = [
         "total_loss", "pos_similarity", "neg_similarity", "invariance_loss", 
         "variance_loss", "covariance_loss", "reconstruct_loss", "prior_loss", "kl_div",
-        "kmeans_loss", "cat_clust_loss", "distill_loss", "temporal_loss", 
+        "kmeans_loss", "cat_clust_loss", "distill_loss", "proto_loss", "temporal_loss", 
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
 
