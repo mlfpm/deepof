@@ -1761,6 +1761,22 @@ def test_contrastive_step_with_negative_augmentations():
     assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
 
 
+def test_frozen_batchnorm_stats():
+    # Batch statistics are used, running statistics and counters stay untouched, settings are restored
+    torch.manual_seed(0)
+    bn = torch.nn.BatchNorm1d(3).train()
+    x = torch.randn(32, 3) * 5 + 2
+    bn(x)
+    state = {k: v.clone() for k, v in bn.state_dict().items()}
+    with deepof.clustering.training._frozen_batchnorm_stats(bn):
+        out = bn(x)
+    assert all(torch.equal(v, bn.state_dict()[k]) for k, v in state.items())
+    assert bn.momentum == 0.1
+    assert torch.allclose(out.mean(dim=0), torch.zeros(3), atol=1e-5)  # normalized with the batch statistics
+    bn(x)
+    assert not torch.equal(state["running_mean"], bn.running_mean)  # updates again afterwards
+
+
 def test_negative_augmentation():
     torch.manual_seed(0)
     B, T, W = 16, 20, 10

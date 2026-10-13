@@ -5,6 +5,7 @@ Training functionality for all models
 # encoding: utf-8
 # module deepof
 
+from contextlib import contextmanager
 from typing import Any, NewType, Tuple, Dict, Optional, List, Callable
 from types import SimpleNamespace
 from dataclasses import dataclass
@@ -580,7 +581,13 @@ def step_contrastive_distill(
         z_view2, backbone2 = model(x_aug2, a_aug2, return_backbone=True)
     else:
         z_view2 = model(x_aug2, a_aug2)
-    z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
+    if use_shift_view and neg_aug:
+        # Unrealistic windows: normalize with their batch statistics, but keep them out of the running statistics
+        # used at inference
+        with _frozen_batchnorm_stats(model):
+            z_view3 = model(x_aug_shift, a_aug_shift)
+    else:
+        z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
 
     labels = getattr(ctx, "labels", None) 
     seperability=torch.tensor(0)
@@ -3016,6 +3023,22 @@ def _augment_full_rotation(
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
     return x_aug
+
+
+@contextmanager
+def _frozen_batchnorm_stats(model: nn.Module):
+    """Within the context, BatchNorm layers in training mode still normalize with the batch statistics, but do not
+    update their running statistics (momentum 0, batch counter restored)."""
+    layers = [m for m in model.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm) and m.track_running_stats]
+    saved = [(m.momentum, m.num_batches_tracked.clone()) for m in layers]
+    for m in layers:
+        m.momentum = 0.0
+    try:
+        yield
+    finally:
+        for m, (momentum, n_batches) in zip(layers, saved):
+            m.momentum = momentum
+            m.num_batches_tracked.copy_(n_batches)
 
 
 def _negative_augmentation(
