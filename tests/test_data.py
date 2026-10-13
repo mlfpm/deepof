@@ -13,9 +13,11 @@ import random
 import re
 import string
 from shutil import rmtree, copy
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -969,6 +971,27 @@ def test_get_graph_dataset_include_angles():
         assert np.array_equal(nodes, get_dt(plain, key)[0]) and np.array_equal(edges, get_dt(plain, key)[1])
         assert get_dt(plain, key)[2].size == 0
         assert angles.shape[2] == len(meta_info["angle_columns"]) > 0 and 0 <= angles.min() and angles.max() <= np.pi
+
+
+@pytest.mark.parametrize("align_group", [True, False])
+def test_align_trajectories_group(align_group):
+    # Group alignment rotates all animals by the same angle per frame, so all distances are preserved; without it, every
+    # animal is aligned to its own reference body part
+    rng = np.random.default_rng(0)
+    columns = pd.MultiIndex.from_tuples(
+        [(f"{aid}_{bp}", ax) for aid in ("B", "W") for bp in ("Nose", "Spine_1", "Tail_base") for ax in ("x", "y")]
+    )
+    tab = pd.DataFrame(rng.normal(0, 50, (100, len(columns))), columns=columns)
+    coords = SimpleNamespace(_run_numba=False, _bit_precision=deepof.data.BitPrecision.parse(64))
+    aligned = deepof.data.Coordinates._align_trajectories(coords, tab, "Spine_1", align_group, True, False, ["B", "W"])
+
+    def dist(t, bp1, bp2):
+        return np.hypot(t[(bp1, "x")] - t[(bp2, "x")], t[(bp1, "y")] - t[(bp2, "y")])
+
+    assert np.allclose(aligned[("B_Spine_1", "x")], 0)
+    assert np.allclose(aligned[("W_Spine_1", "x")], 0) != align_group
+    assert np.allclose(dist(aligned, "B_Nose", "B_Tail_base"), dist(tab, "B_Nose", "B_Tail_base"))
+    assert np.allclose(dist(aligned, "B_Nose", "W_Nose"), dist(tab, "B_Nose", "W_Nose")) == align_group
 
 
 @settings(deadline=None)

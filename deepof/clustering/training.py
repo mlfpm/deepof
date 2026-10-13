@@ -545,6 +545,8 @@ def step_contrastive_distill(
                 offset=tuple(contrastive_cfg.neg_aug_offset),
                 rotation=tuple(contrastive_cfg.neg_aug_rotation),
                 block_len=tuple(contrastive_cfg.neg_aug_block_len),
+                edge_index=edge_index,
+                plot=False,
             )
         x_aug_shift, a_aug_shift, shift_third = _make_augmented_view(
             x_third, a_full, edge_index, window_len, rot_precomp, return_shift=True,
@@ -582,9 +584,10 @@ def step_contrastive_distill(
     else:
         z_view2 = model(x_aug2, a_aug2)
     if use_shift_view and neg_aug:
-        # Unrealistic windows: normalize with their batch statistics, but keep them out of the running statistics
-        # used at inference
-        with _frozen_batchnorm_stats(model):
+        # A batch of only unrealistic windows: with its own batch statistics, the batch as a whole could be told apart
+        # from the positives without looking at single windows (and it would shift the running statistics used at
+        # inference), so it is normalized with the running statistics of the real windows instead
+        with _batchnorm_eval(model):
             z_view3 = model(x_aug_shift, a_aug_shift)
     else:
         z_view3 = model(x_aug_shift, a_aug_shift) if use_shift_view else None
@@ -600,6 +603,16 @@ def step_contrastive_distill(
         z_view2 = torch.nn.functional.normalize(z_view2, dim=1)
         if z_view3 is not None:
             z_view3 = torch.nn.functional.normalize(z_view3, dim=1)
+
+    # Diagnostics of the third view (cosine): to its anchor, and between the third views of different windows. The
+    # latter clearly above neg_similarity = the third views are collected in one region (e.g. "looks artificial")
+    v3_sim, v3v3_sim = None, None
+    if z_view3 is not None and base.loss_function != "vicreg":
+        with torch.no_grad():
+            z3 = z_view3.float()
+            v3_sim = (z_view1.float() * z3).sum(dim=1).mean()
+            n3 = z3.shape[0]
+            v3v3_sim = ((z3 @ z3.T).sum() - n3) / max(n3 * (n3 - 1), 1)
 
 
     n_pos_samples=int(np.max([0,(int((ctx.epoch-5)/90))]))
@@ -762,6 +775,8 @@ def step_contrastive_distill(
         "total_loss": float(total.detach().item()),
         "pos_similarity": float(pos_mean.detach().item()) if pos_mean is not None else None,
         "neg_similarity": float(neg_mean.detach().item()) if neg_mean is not None else None,
+        "v3_similarity": float(v3_sim.item()) if v3_sim is not None else None,
+        "v3v3_similarity": float(v3v3_sim.item()) if v3v3_sim is not None else None,
         "invariance_loss" : float(inv_loss.detach().item()) if inv_loss is not None else None,
         "variance_loss" : float(var_loss.detach().item()) if var_loss is not None else None,
         "covariance_loss" : float(cov_loss.detach().item()) if cov_loss is not None else None,
@@ -3026,19 +3041,18 @@ def _augment_full_rotation(
 
 
 @contextmanager
-def _frozen_batchnorm_stats(model: nn.Module):
-    """Within the context, BatchNorm layers in training mode still normalize with the batch statistics, but do not
-    update their running statistics (momentum 0, batch counter restored)."""
-    layers = [m for m in model.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm) and m.track_running_stats]
-    saved = [(m.momentum, m.num_batches_tracked.clone()) for m in layers]
+def _batchnorm_eval(model: nn.Module):
+    """Within the context, BatchNorm layers normalize with their running statistics (as at inference) and do not update
+    them; all other layers keep their mode. Gradients still flow."""
+    layers = [m for m in model.modules() if isinstance(m, nn.modules.batchnorm._BatchNorm)]
+    modes = [m.training for m in layers]
     for m in layers:
-        m.momentum = 0.0
+        m.eval()
     try:
         yield
     finally:
-        for m, (momentum, n_batches) in zip(layers, saved):
-            m.momentum = momentum
-            m.num_batches_tracked.copy_(n_batches)
+        for m, mode in zip(layers, modes):
+            m.train(mode)
 
 
 def _negative_augmentation(
@@ -3049,10 +3063,12 @@ def _negative_augmentation(
     offset: Tuple[int, int] = (5, 15),
     rotation: Tuple[float, float] = (90.0, 180.0),
     block_len: Tuple[int, int] = (3, 8),
+    edge_index: Optional[torch.Tensor] = None,  # only used for plotting
+    plot: bool = False,
 ) -> torch.Tensor:
     """
     Negative view of the same windows: per sample one of the types, applied to the full window (its centre crop is the
-    negative). The poses and animals stay, the dynamics or the interaction break, so the static pose alone cannot tell
+    negative). plot=True shows the centre crop of one random window before and after. The poses and animals stay, the dynamics or the interaction break, so the static pose alone cannot tell
     the negative from the positive.
       "offset":   one random animal shifted in time against the others by +/- U[offset] frames (clipped to the room
                   around the centre crop)
@@ -3118,6 +3134,11 @@ def _negative_augmentation(
             xs = xs.clone()
             xs[:, base:base + W] = crop[torch.arange(n, device=device)[:, None], order]
             out[sel] = xs
+
+    if plot: # pragma: no cover
+        # show what changed (note: this plots only the centre crops, i.e. the negative before further augmentations)
+        _plot_augmentation._edge_index = edge_index
+        _plot_augmentation(x[:, base:base + window_len], out[:, base:base + window_len])
     return out
 
 

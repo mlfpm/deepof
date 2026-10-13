@@ -3219,6 +3219,14 @@ def plot_training_metrics(log_summary: dict) -> dict:
                 ax.plot(np.arange(1, va_pos.size + 1), va_pos, label="Val +sim", color="#2ca02c", linewidth=2, linestyle="--")
             if va_neg.size:
                 ax.plot(np.arange(1, va_neg.size + 1), va_neg, label="Val -sim", color="#d62728", linewidth=2, linestyle="--")
+            # Third view (time-shifted or negative augmentation): to its anchor, and among each other
+            for phase, style in (("train", "-"), ("val", "--")):
+                for key, label, color in (("v3_similarity", "view3 sim", "#ff7f0e"),
+                                          ("v3v3_similarity", "view3-view3 sim", "#9467bd")):
+                    values = np.asarray(log_summary.get(phase, {}).get(key, []), dtype=float)
+                    if values.size and np.isfinite(values).any():
+                        ax.plot(np.arange(1, values.size + 1), values, label=f"{phase.capitalize()} {label}",
+                                color=color, linewidth=1.5, linestyle=style)
 
             # Mark best train separation (pos - neg)
             m = min(tr_pos.size, tr_neg.size)

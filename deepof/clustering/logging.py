@@ -325,6 +325,8 @@ def init_log_summary(model_name: str):
         log_summary[data_type]['activity_l1']=[]
         log_summary[data_type]['pos_similarity']=[]
         log_summary[data_type]['neg_similarity']=[]
+        log_summary[data_type]['v3_similarity']=[]  # contrastive: anchor vs third view
+        log_summary[data_type]['v3v3_similarity']=[]  # contrastive: third views of different windows
         log_summary[data_type]['invariance_loss']=[]
         log_summary[data_type]['variance_loss']=[]
         log_summary[data_type]['covariance_loss']=[]
@@ -343,7 +345,7 @@ def _update_log_summary(log_summary: dict, train_logs: dict, val_logs: dict):
         # Append scores directly
         if data_type=="train":
             for key in log_summary.keys():
-                if key=="train" or key=="val" or key=="test":
+                if key=="train" or key=="val" or key=="test" or key=="model_type":
                     continue
                 value = logs.get(key, np.nan)
                 log_summary[key]=value
@@ -381,7 +383,7 @@ def print_losses(model_name: str,
         return f"{val:<{width}.{precision}f}"
 
     loss_names = [
-        "total_loss", "pos_similarity", "neg_similarity", "invariance_loss", 
+        "total_loss", "pos_similarity", "neg_similarity", "v3_similarity", "v3v3_similarity", "invariance_loss",
         "variance_loss", "covariance_loss", "reconstruct_loss", "prior_loss", "kl_div",
         "kmeans_loss", "cat_clust_loss", "distill_loss", "proto_loss", "temporal_loss", 
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",

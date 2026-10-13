@@ -2473,6 +2473,7 @@ def scale_table(
     speed_standardize: str = "per_column",  # {"per_column","groupwise", None}
     coord_standardize: str = "per_column",
     log_distances: bool = True,
+    mouse_size_normalization: bool = False,  # coordinates: own body length per animal (True) or one shared (False)
 ) -> pd.DataFrame:
     if not scale:
         return df.copy()
@@ -2541,6 +2542,11 @@ def scale_table(
         # "global"
         return s_default
 
+    # Coordinates are positions in a common frame (e.g. the arena), so they are divided by one shared body length;
+    # dividing each animal by its own one would distort the distances between the animals
+    sizes = [s_by_aid[aid] for aid in animal_ids]
+    s_coords = None if mouse_size_normalization else (_comb(*sizes) if len(sizes) == 2 else float(np.mean(sizes)))
+
     # ----- stage 1: size-normalize -----
     for aid in animal_ids:
         if aid is None:
@@ -2555,7 +2561,7 @@ def scale_table(
 
         xy = [(bp, ax) for bp in bps for ax in ("x", "y") if (bp, ax) in out.columns]
         if xy:
-            out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / s
+            out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / (s if s_coords is None else s_coords)
 
         sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp
         if sp:
@@ -2715,6 +2721,7 @@ def _pp_pass1_collect_samples(
     speed_standardize: Optional[str],
     coord_standardize: Optional[str],
     log_distances: bool,
+    mouse_size_normalization: bool = False,
     quality_to_load=None,
 ):
     rng = np.random.RandomState(2)
@@ -2750,6 +2757,7 @@ def _pp_pass1_collect_samples(
                     speed_standardize=speed_standardize,
                     coord_standardize=None,
                     log_distances=log_distances,
+                    mouse_size_normalization=mouse_size_normalization,
                 )
 
                 col_types = deepof.utils.infer_column_types(tab_local)
@@ -2976,6 +2984,7 @@ def _pp_pass2_scale_and_save(
     speed_standardize: Optional[str],
     coord_standardize: Optional[str],
     log_distances: bool,
+    mouse_size_normalization: bool = False,
     file_name: str,
     save_as_paths: bool,
     quality_to_load=None,
@@ -3016,6 +3025,7 @@ def _pp_pass2_scale_and_save(
                     speed_standardize=speed_standardize,
                     coord_standardize=None,
                     log_distances=log_distances,
+                    mouse_size_normalization=mouse_size_normalization,
                 )
 
                 tab = tab_local

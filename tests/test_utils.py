@@ -207,6 +207,27 @@ def test_rotate(p):
     assert np.allclose(deepof.utils.rotate(p, 0), p)
 
 
+@pytest.mark.parametrize("mouse_size_normalization", [False, True])
+def test_scale_table_mouse_size_normalization(mouse_size_normalization):
+    # Two mice of body length 1 and 2: without per-mouse size normalization, all coordinates share one scale (the
+    # mean body length, 1.5), so distances between the mice are preserved up to that factor; speeds stay per mouse
+    rng = np.random.default_rng(0)
+    tab = {}
+    for aid, size in (("B", 1.0), ("W", 2.0)):
+        nose = rng.normal(0, 5, (50, 2))
+        for bp, pos in (("Nose", nose), ("Tail_base", nose + [0, size])):
+            tab[(f"{aid}_{bp}", "x")], tab[(f"{aid}_{bp}", "y")] = pos[:, 0], pos[:, 1]
+            tab[f"{aid}_{bp}"] = np.abs(pos[:, 0])  # speed
+    tab = pd.DataFrame(np.column_stack(list(tab.values())), columns=pd.Index(list(tab), tupleize_cols=False))
+    out = deepof.utils.scale_table(tab, animal_ids=["B", "W"], standardize=False,
+                                   mouse_size_normalization=mouse_size_normalization)
+    for aid, size in (("B", 1.0), ("W", 2.0)):
+        coords = [c for c in tab.columns if isinstance(c, tuple) and c[0].startswith(aid)]
+        speeds = [c for c in tab.columns if isinstance(c, str) and c.startswith(aid)]
+        assert np.allclose(out[coords], tab[coords] / (size if mouse_size_normalization else 1.5))
+        assert np.allclose(out[speeds], tab[speeds] / size)
+
+
 @settings(deadline=None)
 @given(
     data=arrays(

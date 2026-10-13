@@ -499,7 +499,7 @@ class TCN1DPT(nn.Module):
         use_skip_connections: bool = True,
         dropout_rate: float = 0.0,
         activation: str = "relu",
-        use_batch_norm: bool = True,
+        use_batch_norm: bool = False,
         return_sequences: bool = False,
         legacy_tcn: bool = False,
     ):
@@ -586,7 +586,7 @@ class TCNEncoderPT(nn.Module):
         dropout_rate: float = 0.0,
         activation: str = "relu",
         interaction_regularization: float = 0.0,  # not used explicitly in PT
-        use_batch_norm: bool = True,
+        use_batch_norm: bool = False,
         legacy_tcn: bool = False,
     ):
         super().__init__()
@@ -796,7 +796,7 @@ class TCNDecoderPT(nn.Module):
         use_skip_connections: bool = True,
         dropout_rate: float = 0.0,
         activation: str = "relu",
-        use_batch_norm: bool = True,
+        use_batch_norm: bool = False,
         legacy_tcn: bool = False,
     ):
         super().__init__()

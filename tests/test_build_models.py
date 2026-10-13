@@ -1759,22 +1759,23 @@ def test_contrastive_step_with_negative_augmentations():
     result.loss.backward()
     assert torch.isfinite(result.loss)
     assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
+    assert all(-1 <= result.logs[k] <= 1 for k in ("v3_similarity", "v3v3_similarity"))
+    assert all(m.training for m in model.modules())  # BatchNorm back in training mode
 
 
-def test_frozen_batchnorm_stats():
-    # Batch statistics are used, running statistics and counters stay untouched, settings are restored
+def test_batchnorm_eval():
+    # Running statistics are used and stay untouched, other layers keep their mode, the mode is restored
     torch.manual_seed(0)
-    bn = torch.nn.BatchNorm1d(3).train()
+    model = torch.nn.Sequential(torch.nn.BatchNorm1d(3), torch.nn.Dropout(0.5)).train()
     x = torch.randn(32, 3) * 5 + 2
-    bn(x)
-    state = {k: v.clone() for k, v in bn.state_dict().items()}
-    with deepof.clustering.training._frozen_batchnorm_stats(bn):
-        out = bn(x)
-    assert all(torch.equal(v, bn.state_dict()[k]) for k, v in state.items())
-    assert bn.momentum == 0.1
-    assert torch.allclose(out.mean(dim=0), torch.zeros(3), atol=1e-5)  # normalized with the batch statistics
-    bn(x)
-    assert not torch.equal(state["running_mean"], bn.running_mean)  # updates again afterwards
+    model(x)
+    state = {k: v.clone() for k, v in model.state_dict().items()}
+    with deepof.clustering.training._batchnorm_eval(model):
+        assert not model[0].training and model[1].training
+        out = model[0](x)
+    assert all(torch.equal(v, model.state_dict()[k]) for k, v in state.items())
+    assert torch.allclose(out, model.eval()[0](x))  # as at inference
+    assert model.train()[0].training
 
 
 def test_negative_augmentation():

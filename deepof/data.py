@@ -2123,25 +2123,20 @@ class Coordinates:
         if not isinstance(animal_ids, List) or len(animal_ids) == 1:
             align_group=False
 
-        first_aid = animal_ids[0]+'_'
-        for aid in animal_ids:
-            if aid:
-                aid=aid+'_'
-            if align_group:
-                align_bp_name = f"{first_aid}{align}"
-            else:
-                align_bp_name = f"{aid}{align}"
-            
-            # Define alignment columns and remaining columns for the animal
+        prefixes = [aid + '_' if aid else aid for aid in animal_ids]
+        # Group alignment treats all animals as one big animal: all of them are rotated by the same angle per frame
+        # (given by the reference body part of the first animal), so distances between the animals are preserved
+        groups = [tuple(prefixes)] if align_group else [(prefix,) for prefix in prefixes]
+        for group in groups:
+            align_bp_name = f"{group[0]}{align}"
+
+            # Define alignment columns and remaining columns for the animal(s)
             align_cols = [(align_bp_name, "phi" if polar else "x"),
                           (align_bp_name, "rho" if polar else "y")]
-            other_cols = [col for col in tab.columns if col[0].startswith(aid) and col[0] != align_bp_name]
-            
+            other_cols = [col for col in tab.columns if col[0].startswith(group) and col[0] != align_bp_name]
+
             # Reorder columns to have the alignment body part first
-            if aid == first_aid or not align_group:
-                ordered_cols = align_cols + other_cols
-            else:
-                ordered_cols = other_cols
+            ordered_cols = align_cols + other_cols
             partial_tab = tab[ordered_cols]
             
             # Perform alignment
@@ -3110,6 +3105,7 @@ class Coordinates:
         coord_standardize: str = "per_column",
         return_as_paths: bool = None,
         include_angles: bool = False,
+        mouse_size_normalization: bool = False,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -3130,6 +3126,7 @@ class Coordinates:
             speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
             include_angles (bool): If True, the windows additionally contain the (unsigned, unscaled) angles between three connected body parts as a third array next to nodes and edges. They are not used as model input, but as targets of the regression teacher (include_angles_view in train_deepof_model). Defaults to False.
+            mouse_size_normalization (bool): If True, the coordinates of each animal are divided by its own body length, which removes size differences between animals but distorts the positions of the animals relative to each other. If False (default), the coordinates of all animals are divided by one shared body length, so that distances between animals are preserved. Speeds and distances are normalized per animal in both cases.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -3310,6 +3307,7 @@ class Coordinates:
                 coord_standardize=coord_standardize,
                 window_size=window_size,
                 scale=scale,
+                mouse_size_normalization=mouse_size_normalization,
                 **kwargs,
                 )
             metainfo['node_columns']=feature_names[node_sorting_indices]
@@ -4246,6 +4244,7 @@ class TableDict(dict):
         speed_standardize: str = "groupwise",
         coord_standardize: str = "groupwise",
         log_distances: bool = True,
+        mouse_size_normalization: bool = False,
     ) -> tuple:
         """
         Preprocess pose tables for model training (refactor of preprocess).
@@ -4312,6 +4311,7 @@ class TableDict(dict):
             speed_standardize=speed_standardize,
             coord_standardize=coord_standardize,
             log_distances=log_distances,
+            mouse_size_normalization=mouse_size_normalization,
             quality_to_load=quality_to_load,
         )
 
@@ -4343,6 +4343,7 @@ class TableDict(dict):
             speed_standardize=speed_standardize,
             coord_standardize=coord_standardize,
             log_distances=log_distances,
+            mouse_size_normalization=mouse_size_normalization,
             file_name=file_name,
             save_as_paths=save_as_paths,
             quality_to_load=quality_to_load,
@@ -4381,6 +4382,7 @@ class TableDict(dict):
             "dist_standardize": dist_standardize,
             "speed_standardize": speed_standardize,
             "coord_standardize": coord_standardize,
+            "mouse_size_normalization": mouse_size_normalization,
         }
 
         return to_preprocess, metainfo, global_scaler
