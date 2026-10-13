@@ -56,9 +56,9 @@ def select_contrastive_loss_pt(
     sim_fn = _SIMILARITIES[similarity]
 
     if loss_fn == "nce":
-        #return nce_loss_pt(history, future, shift, sim_fn, temperature, weighting_level=weighting_level,
-        #                   shift_weights=shift_weights)
-        return nce_loss_pt_old(history, future, sim_fn, temperature)
+        return nce_loss_pt(history, future, shift, sim_fn, temperature, weighting_level=weighting_level,
+                           shift_weights=shift_weights)
+        #return nce_loss_pt_old(history, future, sim_fn, temperature)
     elif loss_fn == "dcl":
         return dcl_loss_pt(history, future, sim_fn, temperature, debiased=True, tau_plus=tau)
     elif loss_fn == "fc":
