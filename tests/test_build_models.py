@@ -1648,6 +1648,21 @@ def test_nce_soft_shift_weights():
     zero = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.zeros(8))[0]
     full = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=-1.0, shift_weights=torch.ones(8))[0]
     assert torch.isclose(off, zero, atol=1e-6) and not torch.isclose(off, full)
+    # As hard negative: weights 1 give the scalar weighting, weights 0 drop the shift term
+    neg = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=0.5)[0]
+    ones = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=0.5, shift_weights=torch.ones(8))[0]
+    zero = deepof.clustering.losses.nce_loss_pt(h, f, s, sim, weighting_level=0.5, shift_weights=torch.zeros(8))[0]
+    assert torch.isclose(neg, ones) and torch.isclose(off, zero, atol=1e-6)
+
+
+def test_shift_view_weights():
+    # Schedule: hard negative decaying to ~0, off, soft positive ramping to -1; neg_aug shift negatives stop at the floor
+    sched = [deepof.clustering.training._shift_schedule_weight(e, 40) for e in range(40)]
+    assert sched[0] == 1.0 and 0 < sched[17] < 0.01 and sched[18:22] == [0.0] * 4 and sched[-1] == -1.0
+    assert all(a >= b for a, b in zip(sched, sched[1:]))
+    neg = deepof.clustering.training._shift_negative_weight
+    assert [neg(e, 40) for e in range(18)] == sched[:18] and neg(30, 40) == 0.0
+    assert neg(0, 40, 0.2) == 1.0 and neg(30, 40, 0.2) == 0.2 and 0.2 < neg(10, 40, 0.2) < 1.0
 
 
 @pytest.mark.parametrize("encoder_type", ["recurrent", "TCN", "transformer"])
@@ -1742,15 +1757,17 @@ def test_contrastive_step_with_prototypes(space):
     assert deepof.clustering.training.step_contrastive_distill(model, batch, ctx).logs["proto_loss"] is None
 
 
-def test_contrastive_step_with_negative_augmentations():
-    # The negative view replaces the time-shifted one and enters the loss
+@pytest.mark.parametrize("shift_fraction", [0.0, 0.5, 1.0])
+def test_contrastive_step_with_negative_augmentations(shift_fraction):
+    # The third view, per sample a negative augmentation or a time-shifted window, enters the loss
     torch.manual_seed(0)
     T, N, window_len = 24, 11, 12
     model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
     ctx = SimpleNamespace(
         edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
         contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(
-            contrastive_window=window_len, shift_view_mode="neg_aug", neg_aug_offset=(2, 4)),
+            contrastive_window=window_len, shift_view_mode="neg_aug", neg_aug_offset=(2, 4),
+            neg_aug_shift_fraction=shift_fraction, neg_aug_shift_floor=0.1),
         rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
         apply_distill=False, epoch=0, num_epochs=1, animal_nodes=[torch.arange(0, 5), torch.arange(5, N)],
     )

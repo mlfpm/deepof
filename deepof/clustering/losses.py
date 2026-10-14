@@ -300,7 +300,7 @@ def nce_loss_pt(
     weighting_level: float = 1.0,   # +neg / -pos on shift only; 1.0 = old recipe
     sigmoid_start: float = 0.90, #0.6
     sigmoid_end: float = 1.0, #0.9
-    shift_weights: Optional[torch.Tensor] = None,  # (N,) fixed positive weights for the shift, replace the gate
+    shift_weights: Optional[torch.Tensor] = None,  # (N,) fixed per-sample weights for the shift (see below)
 ):
     """
     InfoNCE (history vs. future). Diagonal = sole in-batch positive.
@@ -314,7 +314,8 @@ def nce_loss_pt(
       = 0  drop the shift term
 
     sigmoid_start / sigmoid_end only apply when weighting_level < 0 and no shift_weights are given.
-    shift_weights (N,) replace the similarity gate by fixed per-sample weights (e.g. from the time distance).
+    shift_weights (N,) replace the similarity gate by fixed per-sample weights (e.g. from the time distance); with
+    weighting_level > 0 they scale the negative weight per sample.
     """
     if shift is None:  # no shifted view: plain InfoNCE
         weighting_level = 0.0
@@ -330,7 +331,11 @@ def nce_loss_pt(
 
     if weighting_level > 0.0:
         w = float(weighting_level) * max(N - 1, 1)
-        shift_logit = logits2 + math.log(w)
+        if shift_weights is not None:  # per-sample negative weights, 0 drops the shift of that sample
+            mean_shift_w = shift_weights.mean()
+            shift_logit = logits2 + torch.log((w * shift_weights.to(logits2.dtype)).clamp(min=1e-12))
+        else:
+            shift_logit = logits2 + math.log(w)
         full = torch.cat([logits, shift_logit.unsqueeze(1)], dim=1)
         log_den = torch.logsumexp(full, dim=1)
     elif weighting_level < 0.0:

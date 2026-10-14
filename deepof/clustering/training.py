@@ -6,7 +6,7 @@ Training functionality for all models
 # module deepof
 
 from contextlib import contextmanager
-from typing import Any, NewType, Tuple, Dict, Optional, List, Callable
+from typing import Any, NewType, Tuple, Dict, Optional, List, Callable, Union
 from types import SimpleNamespace
 from dataclasses import dataclass
 from functools import partial
@@ -534,25 +534,30 @@ def step_contrastive_distill(
     use_shift_view = base.loss_function == "nce" and shift_view_mode != "off"
     x_aug_shift, a_aug_shift, shift_third = None, None, None
     neg_aug = shift_view_mode == "neg_aug"
+    is_shift = None  # "neg_aug": per sample, True = time-shifted window, False = negative augmentation
     if use_shift_view:
-        # "neg_aug": a negative augmentation of the same (unshifted) window instead of a time-shifted one; it gets the
-        # same regular augmentations as the positives, so their artefacts cannot tell it apart
+        # "neg_aug": part of the samples get a negative augmentation of the same (unshifted) window instead of a
+        # time-shifted one; it gets the same regular augmentations as the positives, so their artefacts cannot tell it
+        # apart
         x_third = x_full
         if neg_aug:
-            x_third = _negative_augmentation(
-                x_full, window_len, ctx.animal_nodes,
-                types=tuple(contrastive_cfg.neg_aug_types),
-                offset=tuple(contrastive_cfg.neg_aug_offset),
-                rotation=tuple(contrastive_cfg.neg_aug_rotation),
-                block_len=tuple(contrastive_cfg.neg_aug_block_len),
-                edge_index=edge_index,
-                plot=False,
-            )
+            is_shift = torch.rand(x_full.shape[0], device=device) < float(contrastive_cfg.neg_aug_shift_fraction)
+            if not is_shift.all():
+                x_third = x_full.clone()
+                x_third[~is_shift] = _negative_augmentation(
+                    x_full[~is_shift], window_len, ctx.animal_nodes,
+                    types=tuple(contrastive_cfg.neg_aug_types),
+                    offset=tuple(contrastive_cfg.neg_aug_offset),
+                    rotation=tuple(contrastive_cfg.neg_aug_rotation),
+                    block_len=tuple(contrastive_cfg.neg_aug_block_len),
+                    edge_index=edge_index,
+                    plot=False,
+                )
         x_aug_shift, a_aug_shift, shift_third = _make_augmented_view(
             x_third, a_full, edge_index, window_len, rot_precomp, return_shift=True,
             min_shift = neg_min_shift,
             max_shift = neg_max_shift,
-            p_shift = 0.0 if neg_aug else 1.0,
+            p_shift = is_shift.float() if neg_aug else 1.0,  # per sample: shifted or not
             noise_sigma = contrastive_cfg.aug_noise_sigma,  
             p_noise = contrastive_cfg.aug_p_noise,           
             max_interp = contrastive_cfg.aug_max_interp,
@@ -620,47 +625,12 @@ def step_contrastive_distill(
     #weighting_level=-ctx.epoch*1.5/ctx.num_epochs+0.75 #weighting_step/ctx.num_epochs
 
 
-	# currently suboptimal, ugly insert, needs fixing
-    def _cosine01(u: float) -> float:
-        u = 0.0 if u < 0.0 else 1.0 if u > 1.0 else u
-        return 0.5 * (1.0 - math.cos(math.pi * u))
-
-
-    def shift_weighting_level(
-        epoch: int,
-        num_epochs: int,
-        pos_hold: float = 1.0,
-        neg_hold: float = -1.0,
-    ) -> float:
-        """
-        Fractions of num_epochs (40-epoch example in parentheses):
-        [0.00, 0.25)  hold +0.75              (epochs 0–9)   boosted hard neg
-        [0.25, 0.40)  log-cosine +0.75 → ~0   (10–15)        kill boost evenly in logit space
-        [0.40, 0.425) 0                       (16)           one epoch off
-        [0.425, 0.70) cosine 0 → -0.4         (17–27)        gated soft positive
-        [0.70, 1.00]  hold -0.4               (28–end)       fixed objective for MSM
-        """
-        t = epoch / max(float(num_epochs), 1.0)
-        t_a, t_b, t_off, t_c = 0.05, 0.45, 0.55, 0.95
-
-        if t < t_a:
-            return pos_hold
-        if t < t_b:
-            u = _cosine01((t - t_a) / (t_b - t_a))
-            floor = 1e-3
-            log_w = math.log(pos_hold) + u * (math.log(floor) - math.log(pos_hold))
-            return math.exp(log_w)
-        if t < t_off:
-            return 0.0
-        if t < t_c:
-            u = _cosine01((t - t_off) / (t_c - t_off))
-            return u * neg_hold
-        return neg_hold
-
-
     shift_weights = None
     if neg_aug and z_view3 is not None:
-        weighting_level = float(contrastive_cfg.neg_aug_weight)  # constant hard negative
+        # Mixed hard negatives: time-shifted windows with a decaying weight, negative augmentations with a constant one
+        shift_w = _shift_negative_weight(ctx.epoch, ctx.num_epochs, float(contrastive_cfg.neg_aug_shift_floor))
+        weighting_level = 1.0  # > 0: hard negative, weighted per sample with shift_weights
+        shift_weights = torch.where(is_shift, shift_w, float(contrastive_cfg.neg_aug_weight)).to(z_view3.dtype)
     elif shift_view_mode == "off" or shift_third is None:
         weighting_level = 0.0
     elif shift_view_mode == "soft_positive":
@@ -669,7 +639,7 @@ def step_contrastive_distill(
         dt = (shift_third - torch.chunk(shift_twice, chunks=2, dim=0)[0]).abs().float()
         shift_weights = 2.0 * torch.sigmoid(-float(contrastive_cfg.soft_temporal_tau) * dt)
     else:
-        weighting_level = shift_weighting_level(ctx.epoch, ctx.num_epochs)
+        weighting_level = _shift_schedule_weight(ctx.epoch, ctx.num_epochs)
     # Base contrastive loss
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
         z_view1, z_view2, z_view3,
@@ -932,6 +902,8 @@ def train_deepof_model(
     soft_temporal_tau: Optional[float] = None,
     # Negative augmentations (shift_view_mode="neg_aug"), see ContrastiveCfg
     neg_aug_weight: Optional[float] = None,
+    neg_aug_shift_fraction: Optional[float] = None,
+    neg_aug_shift_floor: Optional[float] = None,
     neg_aug_types: Optional[Tuple[str, ...]] = None,
     neg_aug_offset: Optional[Tuple[int, int]] = None,
     neg_aug_rotation: Optional[Tuple[float, float]] = None,
@@ -1114,6 +1086,8 @@ def train_deepof_model(
         shift_view_mode=_lower(shift_view_mode),
         soft_temporal_tau=soft_temporal_tau,
         neg_aug_weight=neg_aug_weight,
+        neg_aug_shift_fraction=neg_aug_shift_fraction,
+        neg_aug_shift_floor=neg_aug_shift_floor,
         neg_aug_types=(None if neg_aug_types is None else tuple(
             str(t).lower() for t in ([neg_aug_types] if isinstance(neg_aug_types, str) else neg_aug_types))),
         neg_aug_offset=neg_aug_offset,
@@ -1730,13 +1704,14 @@ def fit_contrastive(
             f"aug_max_shift={contrastive_cfg.aug_max_shift} exceeds the room left by the preprocessed window "
             f"(({full_window} - {window_len}) // 2 = {max_room}); positive shifts will be clipped at the window edges."
         )
-    neg_aug = contrastive_cfg.shift_view_mode == "neg_aug"  # no time-shifted hard negative
-    if not neg_aug and neg_max_shift > max_room:
+    neg_aug = contrastive_cfg.shift_view_mode == "neg_aug"
+    no_shift_neg = neg_aug and contrastive_cfg.neg_aug_shift_fraction == 0  # no time-shifted hard negative
+    if not no_shift_neg and neg_max_shift > max_room:
         warnings.warn(
             f"Hard-negative shift up to {neg_max_shift} exceeds the room left by the preprocessed window ({max_room}); "
             f"larger shifts are clipped to {max_room}. Set aug_neg_max_shift <= {max_room} or increase window_size."
         )
-    if not neg_aug and min(neg_min_shift, max_room) <= contrastive_cfg.aug_max_shift:
+    if not no_shift_neg and min(neg_min_shift, max_room) <= contrastive_cfg.aug_max_shift:
         warnings.warn(
             f"Hard-negative shifts start at {min(neg_min_shift, max_room)}, within the positive shift range "
             f"(up to aug_max_shift={contrastive_cfg.aug_max_shift}); the same offset can then be a positive and a negative."
@@ -2677,6 +2652,44 @@ def build_rotation_precomp(edge_index: torch.Tensor, n_nodes: int, device: torch
     )
 
 
+def _cosine01(u: float) -> float:
+    """Cosine ramp from 0 (u <= 0) to 1 (u >= 1)."""
+    u = 0.0 if u < 0.0 else 1.0 if u > 1.0 else u
+    return 0.5 * (1.0 - math.cos(math.pi * u))
+
+
+def _shift_negative_weight(epoch: int, num_epochs: int, floor: float = 0.0) -> float:
+    """
+    Weight of the time-shifted hard negative (first phase of the "schedule", decaying part of "neg_aug"), as fraction
+    t = epoch / num_epochs: 1.0 for t < 0.05, then log-cosine decay to floor (at least 1e-3) until t = 0.45, then floor.
+    """
+    t = epoch / max(float(num_epochs), 1.0)
+    t_a, t_b = 0.05, 0.45
+    if t < t_a:
+        return 1.0
+    if t < t_b:
+        return math.exp(_cosine01((t - t_a) / (t_b - t_a)) * math.log(max(floor, 1e-3)))
+    return floor
+
+
+def _shift_schedule_weight(epoch: int, num_epochs: int) -> float:
+    """
+    weighting_level of the time-shifted view for shift_view_mode="schedule", as fraction t = epoch / num_epochs (40
+    epochs in parentheses):
+      [0.00, 0.45)  hard negative, 1.0 decaying to ~0 (see _shift_negative_weight)   (0-17)
+      [0.45, 0.55)  off                                                            (18-21)
+      [0.55, 0.95)  cosine 0 -> -1, similarity-gated soft positive                 (22-37)
+      [0.95, 1.00]  hold -1                                                        (38-39)
+    """
+    t = epoch / max(float(num_epochs), 1.0)
+    t_off, t_c = 0.55, 0.95
+    if t < 0.45:
+        return _shift_negative_weight(epoch, num_epochs)
+    if t < t_off:
+        return 0.0
+    return -_cosine01((t - t_off) / (t_c - t_off))
+
+
 def _hard_negative_shift_range(contrastive_cfg, window_len: int) -> Tuple[int, int]:
     """Shift range (in frames) of the hard-negative view. Defaults scale with the view: 4-12 for 12 frames."""
     neg_min = contrastive_cfg.aug_neg_min_shift
@@ -2694,13 +2707,13 @@ def _augment_time_shift(
     window_len: Optional[int] = None,
     min_shift: int = 1,
     max_shift: int = 3,
-    p: float = 0.8,
+    p: Union[float, torch.Tensor] = 0.8,  # or (B,) per sample
     plot: bool = False,
     return_shift: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Returns a window slice of length `window_len` (default T_full//2) from the middle of the full window.
-    If triggered, shifts the slice start by +/- U[min_shift, max_shift] (per sample).
+    If triggered (probability p, per sample if p is a tensor), shifts the slice start by +/- U[min_shift, max_shift] (per sample).
     Shift is consistent across the whole window (no frame-to-frame jitter).
     With return_shift, also returns the applied shift per sample (after clipping at the window edges).
     """
@@ -3150,7 +3163,7 @@ def _make_augmented_view(
     rot_precomp: RotationPrecomp,
     min_shift: int = 1,
     max_shift: int = 6,
-    p_shift: float = 0.8,
+    p_shift: Union[float, torch.Tensor] = 0.8,  # or (B,) per sample
     n_rot: int =3,
     max_rot: int = 30, 
     p_rot: float = 0.7,

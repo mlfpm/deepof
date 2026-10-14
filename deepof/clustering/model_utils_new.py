@@ -205,8 +205,10 @@ class ContrastiveCfg:
     # "schedule" (hard negative, then off, then similarity-gated positive over the course of training), "off" (no
     # shifted view), or "soft_positive" (positive weighted 2 * sigmoid(-soft_temporal_tau * |dt|) throughout, with dt
     # the frame distance to the anchor view, as the temporal soft assignments of SoftCLT, Lee et al. 2024), or
-    # "neg_aug" (no time shift: the third view is a negative augmentation of the same window, a hard negative with the
-    # constant weight neg_aug_weight; 1.0 weighs it like all batch negatives together)
+    # "neg_aug" (mixed hard negatives: per sample, with probability neg_aug_shift_fraction the time-shifted window,
+    # whose weight decays from 1.0 to neg_aug_shift_floor over the first 45% of training (as the first phase of
+    # "schedule"), otherwise a negative augmentation of the same, unshifted window with the constant weight
+    # neg_aug_weight; a weight of 1.0 weighs the third view like all batch negatives together)
     shift_view_mode: str = "schedule"
     soft_temporal_tau: float = 0.1
     # Negative augmentations ("neg_aug"), one type drawn per sample: "offset" (one animal shifted in time against the
@@ -215,6 +217,8 @@ class ContrastiveCfg:
     # order). They keep the poses and animals but break the dynamics or the interaction, so the static pose alone
     # cannot tell them from the positive; offset and rotation need two or more animals
     neg_aug_weight: float = 1.0
+    neg_aug_shift_fraction: float = 0.5  # 0: negative augmentations only
+    neg_aug_shift_floor: float = 0.0  # 0: the time-shifted negatives are off after 45% of training
     neg_aug_types: Tuple[str, ...] = ("offset", "rotation", "shuffle")
     neg_aug_offset: Tuple[int, int] = (5, 15)
     neg_aug_rotation: Tuple[float, float] = (90.0, 180.0)
@@ -543,6 +547,8 @@ def check_model_inputs(
         check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
         one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive", "neg_aug"])
         check(is_number(c.neg_aug_weight, 0, strict_min=True), "\"neg_aug_weight\" needs to be greater than 0")
+        check(is_number(c.neg_aug_shift_fraction, 0, 1), "\"neg_aug_shift_fraction\" needs to be between 0 and 1")
+        check(is_number(c.neg_aug_shift_floor, 0, 1), "\"neg_aug_shift_floor\" needs to be between 0 and 1")
         check(
             isinstance(c.neg_aug_types, (tuple, list)) and len(c.neg_aug_types) > 0
             and all(t in ("offset", "rotation", "shuffle") for t in c.neg_aug_types),
