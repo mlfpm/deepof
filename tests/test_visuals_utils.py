@@ -1033,3 +1033,14 @@ def test_transitions():
     pd.testing.assert_frame_equal(result2, pd.read_csv(ref2, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
 
     rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
+
+
+def test_sample_bouts():
+    import deepof.export_video
+    # three bouts at the start, middle and end of a long recording
+    frames = np.concatenate([np.arange(0, 50), np.arange(10000, 10050), np.arange(90000, 90050)])
+    picked = deepof.export_video._sample_bouts(frames, 80, random_state=3)
+    assert len(picked) == 80 and np.all(np.diff(picked) > 0) and np.isin(picked, frames).all()
+    assert picked.max() >= 10000  # not only the beginning of the recording
+    assert np.array_equal(picked, deepof.export_video._sample_bouts(frames, 80, random_state=3))  # reproducible
+    assert np.array_equal(deepof.export_video._sample_bouts(frames, np.inf), frames)

@@ -126,9 +126,11 @@ def output_videos_per_cluster(
     video_export_config: VideoExportConfig = VideoExportConfig(),
     out_path: str = ".",
     roi_mode: str = "mousewise",
+    random_state: int = 0,
 ):
     """
-    Generates one consolidated video per behavior, compiled from multiple experiments.
+    Generates one consolidated video per behavior, compiled from multiple experiments. If an experiment has more
+    matching frames than frame_limit_per_video, whole bouts are drawn at random (seeded with random_state).
     """
     # Define the manual progress bar locally as it's a specific workaround
     def _loading_basic(current: int, total: int, bar_length: int = 68):
@@ -224,7 +226,7 @@ def output_videos_per_cluster(
                         behaviors=[behavior], video_export_config=video_export_config,
                         frames=selected_frames, cap=cap, out=out,
                         v_width=single_output_resolution[0], v_height=single_output_resolution[1],
-                        frame_limit=frame_limit_per_video, out_path=output_path,
+                        frame_limit=frame_limit_per_video, out_path=output_path, random_state=random_state,
                         behaviors_renamed=[behavior_renamed],
                     )
         finally:
@@ -413,6 +415,23 @@ def _draw_behavior_info(
             cv2.putText(frame, behavior_text, text_pos, params.font, params.font_scale, params.text_color, params.thickness)
 
 
+def _sample_bouts(frames: np.ndarray, frame_limit: float, random_state: int = 0) -> np.ndarray:
+    """Select up to frame_limit of the given (sorted) frames as whole bouts (runs of consecutive frames), drawn in random
+    order, so that long recordings are represented by snippets from the whole recording instead of only its beginning.
+    The last drawn bout is shortened to fit. Returns the selected frames in temporal order; reproducible via random_state.
+    """
+    if len(frames) <= frame_limit:
+        return frames
+    bouts = np.split(frames, np.where(np.diff(frames) != 1)[0] + 1)
+    chosen, n = [], 0
+    for i in np.random.default_rng(random_state).permutation(len(bouts)):
+        chosen.append(bouts[i][:int(frame_limit) - n])
+        n += len(chosen[-1])
+        if n >= frame_limit:
+            break
+    return np.sort(np.concatenate(chosen))
+
+
 def output_annotated_video(
     coordinates: coordinates,
     experiment_id: str,
@@ -427,6 +446,7 @@ def output_annotated_video(
     frame_limit: int = float('inf'),
     out_path: Path = Path("."),
     behaviors_renamed: List = None,
+    random_state: int = 0,
 ):
     """
     Generates a video with frames annotated with specified behaviors and other metadata.
@@ -442,9 +462,11 @@ def output_annotated_video(
         out: An existing cv2.VideoWriter object. If None, one will be created.
         v_width: Desired output video width. Defaults to source video width.
         v_height: Desired output video height. Defaults to source video height.
-        frame_limit: Maximum number of frames to process.
+        frame_limit: Maximum number of frames to process. If the given frames exceed it, whole bouts are drawn at
+            random over the whole recording (see _sample_bouts).
         out_path: The directory where the output video will be saved.
         behaviors_renamed: List of updated behavior names for display
+        random_state: Seed for the bout selection when frame_limit cuts the given frames.
     """
     video_path = Path(coordinates.get_videos(full_paths=True)[experiment_id])
     video_name_stem = video_path.stem
@@ -471,8 +493,7 @@ def output_annotated_video(
     # Filter frames to ensure they are within bounds and respect the frame limit
     if frames is not None:
         frames = frames[frames < len(behavior_df)]
-        if len(frames) > frame_limit:
-            frames = frames[:frame_limit]
+        frames = _sample_bouts(frames, frame_limit, random_state)
     else: # If no frames are given, process all frames up to the limit
         total_frames = min(len(behavior_df), frame_limit)
         frames = np.arange(total_frames)

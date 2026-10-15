@@ -3994,6 +3994,7 @@ def export_annotated_video(
     display_roi: int = None,
     exp_conditions: dict = {},
     cluster_names: str = None,
+    random_state: int = 0,
 ):
     """Export annotated videos from both supervised and unsupervised pipelines.
 
@@ -4023,6 +4024,7 @@ def export_annotated_video(
         display_roi (int): roi to display, default is None
         exp_conditions (dict): if provided, data coming from a particular condition is used. If not, all conditions are exported. If a dictionary with more than one entry is provided, the intersection of all conditions (i.e. male, stressed) is used.
         cluster_names (dict): dictionary with user-defined names for each cluster (useful to output interpretation).
+        random_state (int): Only for the video per cluster (experiment_id=None): if an experiment has more matching frames than frame_limit_per_video, whole bouts are drawn at random over the whole recording with this seed (reproducible). Default 0.
 
     """
     assert min_confidence <= 1 and min_confidence >= 0, "\"min_confidence\" needs to be within a range from 0 to 1"
@@ -4181,6 +4183,7 @@ def export_annotated_video(
             out_path=out_path,
             video_export_config=video_export_config,
             roi_mode=roi_mode,
+            random_state=random_state,
         )
 
         return None
