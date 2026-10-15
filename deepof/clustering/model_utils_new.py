@@ -191,6 +191,14 @@ class VaDECfg:
 @dataclass
 class ContrastiveCfg:
     temperature: float = 0.1
+    # Temperature schedule (nce loss): None keeps the temperature constant; otherwise it moves from temperature to
+    # temperature_end: "ramp" (cosine, in sync with the decay of the time-shifted hard negatives: 5% to 45% of
+    # training, then held), "linear" (over the whole training) or "cycle" (cosine oscillation between both values,
+    # starting at temperature, period temperature_cycle_epochs). The validation loss always uses temperature_end, so
+    # it stays comparable across epochs (best-model selection)
+    temperature_end: Optional[float] = None
+    temperature_schedule: str = "ramp"
+    temperature_cycle_epochs: int = 10
     contrastive_similarity_function: str = "cosine"
     contrastive_loss_function: str = "nce"
     beta: float = 0.1
@@ -545,6 +553,10 @@ def check_model_inputs(
         one_of("contrastive_loss_function", str(c.contrastive_loss_function).lower(),
                ["nce", "fc", "dcl", "hard_dcl", "vicreg"])
         check(is_number(c.temperature, 0, strict_min=True), "\"temperature\" needs to be greater than 0")
+        check(c.temperature_end is None or is_number(c.temperature_end, 0, strict_min=True),
+              "\"temperature_end\" needs to be None or greater than 0")
+        one_of("temperature_schedule", str(c.temperature_schedule).lower(), ["ramp", "linear", "cycle"])
+        check(is_int(c.temperature_cycle_epochs, 2), "\"temperature_cycle_epochs\" needs to be an integer >= 2")
         one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive", "neg_aug"])
         check(is_number(c.neg_aug_weight, 0, strict_min=True), "\"neg_aug_weight\" needs to be greater than 0")
         check(is_number(c.neg_aug_shift_fraction, 0, 1), "\"neg_aug_shift_fraction\" needs to be between 0 and 1")
@@ -787,7 +799,10 @@ def embedding_per_video(
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
                     coord_standardize=meta_info['coord_standardize'],
-                )    
+                    # windows of this single video are loaded completely below anyway; saving them (very large
+                    # projects) would only write them to disk and replace the training windows (table "preprocessed")
+                    return_as_paths=False,
+                )
 
             else:
 
@@ -801,6 +816,7 @@ def embedding_per_video(
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
                     coord_standardize=meta_info['coord_standardize'],
+                    save_as_paths=False,
                 )
 
             tab_tuple=deepof.utils.get_dt(processed_exp[0],key)

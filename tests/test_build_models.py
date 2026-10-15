@@ -1655,6 +1655,21 @@ def test_nce_soft_shift_weights():
     assert torch.isclose(neg, ones) and torch.isclose(off, zero, atol=1e-6)
 
 
+def test_temperature_schedule():
+    # Constant without temperature_end; ramp in sync with the shift negatives (up or down), linear, cycle;
+    # validation always at temperature_end
+    temp = deepof.clustering.training._temperature_at
+    cfg = lambda **kw: deepof.clustering.model_utils_new.ContrastiveCfg(**{"temperature": 0.1, **kw})
+    assert temp(cfg(), 0.1, 20, 40) == 0.1
+    up, down = cfg(temperature_end=1.0), cfg(temperature=0.5, temperature_end=0.1)
+    assert temp(up, 0.1, 0, 40) == 0.1 and temp(up, 0.1, 18, 40) == 1.0 and 0.1 < temp(up, 0.1, 10, 40) < 1.0
+    assert temp(down, 0.5, 0, 40) == 0.5 and temp(down, 0.5, 30, 40) == 0.1 and temp(up, 0.1, 0, 40, train=False) == 1.0
+    lin = cfg(temperature_end=1.0, temperature_schedule="linear")
+    assert temp(lin, 0.1, 0, 41) == 0.1 and np.isclose(temp(lin, 0.1, 20, 41), 0.55) and temp(lin, 0.1, 40, 41) == 1.0
+    cyc = cfg(temperature_end=1.0, temperature_schedule="cycle", temperature_cycle_epochs=10)
+    assert temp(cyc, 0.1, 0, 40) == 0.1 and np.isclose(temp(cyc, 0.1, 5, 40), 1.0) and np.isclose(temp(cyc, 0.1, 10, 40), 0.1)
+
+
 def test_shift_view_weights():
     # Schedule: hard negative decaying to ~0, off, soft positive ramping to -1; neg_aug shift negatives stop at the floor
     sched = [deepof.clustering.training._shift_schedule_weight(e, 40) for e in range(40)]

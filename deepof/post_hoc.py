@@ -790,6 +790,40 @@ def _reservoir_sample(segments: List[np.ndarray], n: int, seed: int = 0) -> np.n
     return buf[:filled]
 
 
+class _StreamingReservoir:
+    """_reservoir_sample with the segments added one at a time: gives the same rows for the same segments in the same
+    order, without keeping the segments (or the arrays they are views of) alive. total = number of rows that will be
+    added (known beforehand from the gate masks)."""
+
+    def __init__(self, n: int, total: int, seed: int = 0):
+        self.n = int(n)
+        self.keep_all = total <= self.n
+        self.rng = np.random.default_rng(seed)
+        self.parts: List[np.ndarray] = []
+        self.buf = None
+        self.filled = 0
+        self.seen = 0
+
+    def add(self, seg: np.ndarray):
+        if self.keep_all:
+            self.parts.append(np.array(seg, copy=True))
+            return
+        if self.buf is None:
+            self.buf = np.empty((self.n, seg.shape[1]), dtype=np.float32)
+        for row in seg:
+            if self.filled < self.n:
+                self.buf[self.filled] = row
+                self.filled += 1
+            else:
+                j = int(self.rng.integers(0, self.seen + 1))
+                if j < self.n:
+                    self.buf[j] = row
+            self.seen += 1
+
+    def sample(self) -> np.ndarray:
+        return np.concatenate(self.parts, axis=0) if self.keep_all else self.buf[:self.filled]
+
+
 def _gating_series_from_distances(
     *,
     coordinates,
@@ -1207,38 +1241,6 @@ def get_contrastive_soft_counts_gmm(
     }
 
 
-def _collect_segments_for_gate_bin(
-    *,
-    keys,
-    gate_masks,
-    gate,
-    b: int,
-    Z_by_key,
-    embeddings,
-    lagtime: int,
-):
-    """
-    Collect spatial segments (for microstate clustering) and temporal segments (for MSM)
-    for a given (gate, bin).
-    """
-    seg_spatial: List[np.ndarray] = []
-    seg_temporal: List[np.ndarray] = []
-    n_windows = 0
-
-    for key in keys:
-        Z = _get_Z(Z_by_key, embeddings, key)
-        mask = gate_masks[gate][b][key]
-        n_windows += int(mask.sum())
-
-        for s, e in _mask_to_runs(mask, min_len=2):
-            seg = Z[s:e, :]
-            seg_spatial.append(seg)
-            if seg.shape[0] >= lagtime + 2:
-                seg_temporal.append(seg)
-
-    return seg_spatial, seg_temporal, n_windows
-
-
 def _fit_microstates_kmeans(
     *,
     seg_spatial: List[np.ndarray],
@@ -1252,7 +1254,13 @@ def _fit_microstates_kmeans(
     Fit scaler + kmeans microstates on sampled frames from seg_spatial.
     """
     X_fit = _reservoir_sample(seg_spatial, int(sample_size), seed=seed)
+    return _fit_microstates_on_sample(X_fit, seed=seed, n_micro=n_micro, min_micro_per_macro=min_micro_per_macro,
+                                      N_clusters_per_gate=N_clusters_per_gate)
 
+
+def _fit_microstates_on_sample(X_fit: np.ndarray, *, seed: int, n_micro: int, min_micro_per_macro: int,
+                               N_clusters_per_gate: int):
+    """Fit scaler + kmeans microstates on already sampled frames."""
     scaler = StandardScaler()
     X_fit = scaler.fit_transform(X_fit)
 
@@ -1556,6 +1564,47 @@ def _fit_msmpcca_models(
     models: Dict[Any, List] = {}
     total_steps = len(gates) * M_gates_eff
 
+    # ---- 1) runs per (gate, bin), from the masks only ----
+    # The embeddings are then streamed video by video in two passes (microstate sample, then microstate trajectories),
+    # so that only the embeddings of one video are in memory at a time (very large projects). Same results as
+    # collecting all segments first: per (gate, bin) the segments are visited in the same order.
+    plan = {}
+    for gate_idx, gate in enumerate(gates):
+        for b in range(M_gates_eff):
+            runs = {key: _mask_to_runs(gate_masks[gate][b][key], min_len=2) for key in keys}
+            n_windows = sum(int(np.asarray(gate_masks[gate][b][key], dtype=bool).sum()) for key in keys)
+            n_rows = sum(e - s for key_runs in runs.values() for s, e in key_runs)
+            if n_rows == 0 or n_windows < max(50, 5 * N_clusters_per_gate[b]):
+                continue
+            seed_b = int(random_state + 1000 * gate_idx + 17 * b)
+            plan[(gate, b)] = {"runs": runs, "seed": seed_b, "reservoir": _StreamingReservoir(sample_size, n_rows, seed_b),
+                               "dtrajs": []}
+
+    # ---- 2) fit microstates on a sample of each (gate, bin) ----
+    for key in tqdm.tqdm(keys, desc=f"{'Sample microstates':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z = _get_Z(Z_by_key, embeddings, key)
+        for p in plan.values():
+            for s, e in p["runs"][key]:
+                p["reservoir"].add(Z[s:e, :])
+    for (gate, b), p in plan.items():
+        p["scaler"], p["kmeans"], p["n_micro_eff"] = _fit_microstates_on_sample(
+            p.pop("reservoir").sample(),
+            seed=p["seed"],
+            n_micro=n_micro,
+            min_micro_per_macro=min_micro_per_macro,
+            N_clusters_per_gate=N_clusters_per_gate[b],
+        )
+
+    # ---- 3) build dtrajs (runs long enough for the lag time) ----
+    for key in tqdm.tqdm(keys, desc=f"{'Microstate trajectories':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        Z = _get_Z(Z_by_key, embeddings, key)
+        for p in plan.values():
+            p["dtrajs"].extend(_segments_to_dtrajs(
+                seg_temporal=[Z[s:e, :] for s, e in p["runs"][key] if e - s >= lagtime + 2],
+                scaler=p["scaler"],
+                kmeans=p["kmeans"],
+            ))
+
     with tqdm.tqdm(
         total=total_steps,
         desc=f"{'Fit MSM/PCCA':<{PROGRESS_BAR_FIXED_WIDTH}}",
@@ -1565,49 +1614,12 @@ def _fit_msmpcca_models(
             models[gate] = []
 
             for b in range(M_gates_eff):
-                seed_b = int(random_state + 1000 * gate_idx + 17 * b)
-
-                # ---- 1) collect segments ----
-                seg_spatial, seg_temporal, n_windows = _collect_segments_for_gate_bin(
-                    keys=keys,
-                    gate_masks=gate_masks,
-                    gate=gate,
-                    b=b,
-                    Z_by_key=Z_by_key,
-                    embeddings=embeddings,
-                    lagtime=lagtime,
-                )
-
-                if not seg_spatial or n_windows < max(50, 5 * N_clusters_per_gate[b]):
+                p = plan.get((gate, b))
+                if p is None or not p["dtrajs"]:
                     models[gate].append(None)
                     pbar.update(1)
                     continue
-
-                # ---- 2) fit microstates ----
-                scaler, kmeans, n_micro_eff = _fit_microstates_kmeans(
-                    seg_spatial=seg_spatial,
-                    sample_size=sample_size,
-                    seed=seed_b,
-                    n_micro=n_micro,
-                    min_micro_per_macro=min_micro_per_macro,
-                    N_clusters_per_gate=N_clusters_per_gate[b],
-                )
-
-                if not seg_temporal:
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
-
-                # ---- 3) build dtrajs ----
-                dtrajs = _segments_to_dtrajs(
-                    seg_temporal=seg_temporal,
-                    scaler=scaler,
-                    kmeans=kmeans,
-                )
-                if not dtrajs:
-                    models[gate].append(None)
-                    pbar.update(1)
-                    continue
+                scaler, kmeans, n_micro_eff, dtrajs = p["scaler"], p["kmeans"], p["n_micro_eff"], p["dtrajs"]
 
                 # ---- 4) MSM + PCCA ----
                 try:

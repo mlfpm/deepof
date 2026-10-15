@@ -645,7 +645,8 @@ def step_contrastive_distill(
         z_view1, z_view2, z_view3,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
-        temperature=base.temperature, #float(base.temperature*1.01**ctx.epoch), #0.98  #0.95
+        temperature=_temperature_at(contrastive_cfg, base.temperature, ctx.epoch, ctx.num_epochs,
+                                    train=getattr(ctx, "train", True)),
         tau=base.tau,
         beta=base.beta,
         elimination_topk=contrastive_cfg.elimination_topk,
@@ -879,6 +880,9 @@ def train_deepof_model(
     # Contrastive opts
     elimination_topk: Optional[float] = None,
     temperature: Optional[float] = None,
+    temperature_end: Optional[float] = None,
+    temperature_schedule: Optional[str] = None,
+    temperature_cycle_epochs: Optional[int] = None,
     contrastive_similarity_function: Optional[str] = None,
     contrastive_loss_function: Optional[str] = None,
     beta: Optional[float] = None,
@@ -1072,6 +1076,9 @@ def train_deepof_model(
     contrastive_cfg = _make_cfg(
         ContrastiveCfg,
         temperature=temperature,
+        temperature_end=temperature_end,
+        temperature_schedule=_lower(temperature_schedule),
+        temperature_cycle_epochs=temperature_cycle_epochs,
         contrastive_similarity_function=contrastive_similarity_function,
         contrastive_loss_function=contrastive_loss_function,
         beta=beta,
@@ -2670,6 +2677,24 @@ def _shift_negative_weight(epoch: int, num_epochs: int, floor: float = 0.0) -> f
     if t < t_b:
         return math.exp(_cosine01((t - t_a) / (t_b - t_a)) * math.log(max(floor, 1e-3)))
     return floor
+
+
+def _temperature_at(contrastive_cfg, temperature: float, epoch: int, num_epochs: int, train: bool = True) -> float:
+    """Temperature of the contrastive loss in this epoch (see ContrastiveCfg.temperature_end); validation always uses
+    temperature_end, so its loss stays comparable across epochs."""
+    end = getattr(contrastive_cfg, "temperature_end", None) if contrastive_cfg is not None else None
+    if end is None:
+        return float(temperature)
+    if not train:
+        return float(end)
+    schedule = str(contrastive_cfg.temperature_schedule).lower()
+    if schedule == "linear":
+        u = epoch / max(num_epochs - 1, 1)
+    elif schedule == "cycle":
+        u = 0.5 * (1.0 - math.cos(2.0 * math.pi * epoch / contrastive_cfg.temperature_cycle_epochs))
+    else:  # "ramp": in sync with the decay of the time-shifted hard negatives
+        u = _cosine01((epoch / max(float(num_epochs), 1.0) - 0.05) / 0.4)
+    return float(temperature * (1.0 - u) + end * u)  # exact at both ends
 
 
 def _shift_schedule_weight(epoch: int, num_epochs: int) -> float:
