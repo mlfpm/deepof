@@ -62,6 +62,7 @@ else:
 
 import copy
 import pickle
+import posixpath
 import re
 import shutil
 import warnings
@@ -112,6 +113,48 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 # CLASSES FOR PREPROCESSING AND DATA WRANGLING
+
+
+def _rebase_duckdb_paths(obj: Any, old_root: str, project_name: str, new_root: str) -> Tuple[int, int]:
+    """Point the stored DuckDB paths ({"duckdb_file": ..., "table": ...}) in obj to the project folder new_root.
+
+    Stored paths are built from the working directory at creation time (e.g. ".\\project\\Tables\\A1\\database.duckdb"
+    on Windows), so a project moved to another folder, working directory or OS can not find its tables. The part after
+    old_root (former project folder), or else after the last path segment equal to project_name, is joined to new_root.
+    Walks dicts, lists and tuples recursively and edits the dicts in place. Returns (rebased, not matched) counts.
+    """
+    def segments(path):
+        return [s for s in posixpath.normpath(str(path).replace("\\", "/")).split("/") if s not in ("", ".")]
+
+    old_segments = segments(old_root)
+    counts = [0, 0]
+    seen = set()
+
+    def walk(item):
+        if id(item) in seen:
+            return
+        seen.add(id(item))
+        if isinstance(item, dict):
+            if isinstance(item.get("duckdb_file"), str):
+                parts = segments(item["duckdb_file"])
+                if old_segments and parts[:len(old_segments)] == old_segments:
+                    rest = parts[len(old_segments):]
+                elif project_name in parts:
+                    rest = parts[len(parts) - parts[::-1].index(project_name):]
+                else:
+                    counts[1] += 1
+                    return
+                item["duckdb_file"] = os.path.join(new_root, *rest)
+                counts[0] += 1
+                return
+            for value in item.values():
+                walk(value)
+        elif isinstance(item, (list, tuple)):
+            for value in item:
+                walk(value)
+
+    walk(obj)
+    return counts[0], counts[1]
 
 
 def load_project(
@@ -181,6 +224,18 @@ def load_project(
         os.path.join(project_path, "Coordinates", "deepof_coordinates.pkl"), "rb"
     ) as handle:
         coordinates = pickle.load(handle)
+
+    # Stored table paths are relative to the working directory at creation time (with that OS' separators)
+    project_dir = os.path.abspath(project_path)
+    rebased, unmatched = _rebase_duckdb_paths(
+        coordinates.__dict__,
+        os.path.join(getattr(coordinates, "_project_path", ""), getattr(coordinates, "_project_name", "")),
+        getattr(coordinates, "_project_name", os.path.basename(project_dir)),
+        project_dir,
+    )
+    if unmatched:
+        warnings.warn(f"{unmatched} of {rebased + unmatched} stored table paths could not be assigned to the project "
+                      f"folder {project_dir} and were left unchanged.")
 
     coordinates._project_path = os.path.split(project_path[0:-1])[0]
     # Small fix for compatibility of pre 0.9 versions

@@ -1115,3 +1115,13 @@ def test_deep_unsupervised_embedding(table_type):
 
     assert embeddings['test'].shape==(76,8)
     assert embeddings['test2'].shape==(76,8)
+
+
+def test_rebase_duckdb_paths():
+    # project created on Windows from its parent folder, then loaded elsewhere (e.g. on a Linux cluster)
+    tables = {"A1": {"duckdb_file": ".\proj\Tables\A1\database.duckdb", "table": "A1"},
+              "B": [{"duckdb_file": "D:/other/database.duckdb", "table": "B"}]}
+    rebased, unmatched = deepof.data._rebase_duckdb_paths(tables, ".\proj", "proj", "/ptmp/u/proj")
+    assert (rebased, unmatched) == (1, 1)
+    assert tables["A1"]["duckdb_file"] == os.path.join("/ptmp/u/proj", "Tables", "A1", "database.duckdb")
+    assert tables["B"][0]["duckdb_file"] == "D:/other/database.duckdb"
