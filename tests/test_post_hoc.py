@@ -210,8 +210,10 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     sample_size=st.one_of(st.just(100),st.just(200000)),
     exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
     use_supervised_gates=st.booleans(),
+    macro_method=st.sampled_from(["pcca", "kmeans"]),
+    split_factor=st.sampled_from([None, 1.0]),
     )
-def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates):
+def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates, macro_method, split_factor):
 
 
     animal_ids = [""]
@@ -285,6 +287,8 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         embedding_gates=distance_bp,
         gate_edges=gate_edges,
         sample_size=sample_size,
+        macro_method=macro_method,
+        split_factor=split_factor,
     )
 
     rmtree(
@@ -301,7 +305,47 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
     if exp_type=="test_single_topview" and not use_supervised_gates:
         # Distance gates need animal pairs, so a single animal has one gate; behavior gates keep M_gates
         total_clusters = N_clusters_per_gate[0]
-    assert all([np.shape(soft_counts_out[animal_pair][key])[1]==total_clusters for key in soft_counts_out[animal_pair].keys()])
+    widths = [np.shape(soft_counts_out[animal_pair][key])[1] for key in soft_counts_out[animal_pair].keys()]
+    if split_factor and macro_method == "pcca":  # split states can only add columns
+        assert len(set(widths)) == 1 and widths[0] >= total_clusters
+    else:
+        assert all(w == total_clusters for w in widths)
+
+
+@pytest.mark.parametrize("macro_method,split_factor", [("pcca", 1.0), ("pcca", 3.0), ("kmeans", None)])
+def test_regroup_macrostates(macro_method, split_factor):
+    # 12 microstates on a line: PCCA state 0 owns 10 of them (83%), state 1 the other two
+    from types import SimpleNamespace
+    rng = np.random.default_rng(0)
+    P = rng.random((12, 12)) + np.eye(12) * 5
+    chi = np.zeros((12, 2), dtype=np.float32)
+    chi[:10, 0], chi[10:, 1] = 1.0, 1.0
+    model = {"active_syms": np.arange(12), "kmeans": SimpleNamespace(cluster_centers_=np.arange(12.0)[:, None]),
+             "pi_micro": np.full(12, 1 / 12), "P_micro": P / P.sum(1, keepdims=True), "chi": chi, "n_micro_eff": 12}
+    out = deepof.post_hoc._regroup_macrostates(model, 2, macro_method=macro_method, split_factor=split_factor)
+    if split_factor == 3.0:  # 83% < 3 / 2: nothing to split, only crisp memberships
+        assert np.array_equal(out["chi"], chi) and np.allclose(out["P_macro"].sum(1), 1)
+        return
+    if macro_method == "pcca":  # share 0.83 * 2 states -> 2 sub-states, inserted in place of state 0
+        assert out["chi"].shape == (12, 3) and np.array_equal(out["chi"][:, 2], chi[:, 1])
+    else:  # geometric halves of the line instead of the PCCA states
+        assert out["chi"].shape == (12, 2) and sorted(out["chi"].sum(0)) == [6.0, 6.0]
+    assert np.allclose(out["chi"].sum(1), 1) and np.allclose(out["P_macro"].sum(1), 1)
+    assert np.isclose(out["pi_macro"].sum(), 1) and out["micro2macro"].shape == (12, out["chi"].shape[1])
+
+
+def test_regroup_macrostates_crisp_share():
+    # Fuzzy memberships: state 0 owns 10 of 12 microstates but lends 0.4 of each to state 2, which owns none.
+    # Its crisp share (83%) is split, state 2 is dropped (it would decode empty)
+    from types import SimpleNamespace
+    chi = np.zeros((12, 3), dtype=np.float32)
+    chi[:10, 0], chi[:10, 2], chi[10:, 1] = 0.6, 0.4, 1.0
+    model = {"active_syms": np.arange(12), "kmeans": SimpleNamespace(cluster_centers_=np.arange(12.0)[:, None]),
+             "pi_micro": np.full(12, 1 / 12), "P_micro": np.full((12, 12), 1 / 12), "chi": chi, "n_micro_eff": 12}
+    out = deepof.post_hoc._regroup_macrostates(model, 3, split_factor=1.0)  # threshold 1/3 < 0.83 (soft: 0.5)
+    assert out["chi"].shape == (12, 3)  # 0 -> round(0.83 * 3) = 2 sub-states, 1 kept, 2 dropped
+    assert np.array_equal(out["chi"][:, 2], chi[:, 1]) and set(np.unique(out["chi"])) == {0.0, 1.0}  # crisp
+    assert np.all(np.isin(np.arange(3), out["chi"].argmax(1)))  # no empty state
 
 
 @settings(deadline=None, max_examples=25)
@@ -866,3 +910,22 @@ def test_get_gate_entry_ignores_pair_order():
     assert deepof.post_hoc.get_gate_entry(gates, "") == 2
     with pytest.raises(KeyError):
         deepof.post_hoc.get_gate_entry(gates, ("res", "other"))
+
+
+@pytest.mark.parametrize("method", ["msm", "kmeans", "combined"])
+def test_cluster_number_selection(method):
+    # Three sticky, well separated states: every criterion is computed and the timescale gap finds them
+    rng = np.random.default_rng(0)
+    means = np.array([[0.0, 0.0], [8.0, 0.0], [0.0, 8.0]])
+    embeddings = {}
+    for v in range(2):
+        states = np.repeat(rng.integers(3, size=30), 60)
+        z = (means[states] + rng.normal(0, 0.5, (len(states), 2))).astype(np.float32)
+        z[100] = np.nan  # non-finite rows split the segments
+        embeddings[f"video{v}"] = z
+    df = deepof.post_hoc.cluster_number_selection(embeddings, method=method, k_range=[2, 3, 4, 5], n_micro=20, n_repeats=2)
+    assert list(df["K"]) == [2, 3, 4, 5] and df[["explained_dispersion", "metastability", "stability"]].notna().all().all()
+    assert set(df.attrs["suggested"]) == {"explained_dispersion", "metastability", "stability", "timescale_gap"}
+    assert df.attrs["suggested"]["timescale_gap"] == 3
+    with pytest.raises(ValueError):
+        deepof.post_hoc.cluster_number_selection(embeddings, method=method, k_range=[1, 2])

@@ -672,6 +672,7 @@ def embedding_per_video(
     decode_sticky: float = 0.4,
     decode_emit_tau: float = 1.0,
     cluster_mode: bool = False,
+    split_factor: float = 3.0,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -685,7 +686,8 @@ def embedding_per_video(
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
-        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "msm" (for msm-pcca) or "combined" for an approach that applies msm-pcca first, then filters out all samples with high tracking uncertainty and uses a gmm approach to predict separate clusters on the uncertain sampel fraction. If None, decoder of model is used. If model has no decoder, "msm" is used as a default.
+        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "msm" is used as a default.
+        split_factor (float): Only for "combined": states holding more than split_factor / states_per_gate of the samples are split into round(share * states_per_gate) sub-states, so the number of clusters can grow. Defaults to 3.
         distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
 
@@ -728,6 +730,12 @@ def embedding_per_video(
         return (id1, id2)
 
     extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
+    methods = {"gmm", "msm", "kmeans", "combined", "msm_chaos"}
+    if softcounts_extraction_method is not None and softcounts_extraction_method not in methods: # pragma: no cover
+        raise ValueError(f"\"softcounts_extraction_method\" needs to be None or one of {sorted(methods)}!")
+    if softcounts_extraction_method == "msm_chaos":
+        warnings.warn("softcounts_extraction_method=\"msm_chaos\" (the former \"combined\") is deprecated and will be "
+                      "removed; \"combined\" now splits oversized MSM-PCCA states instead.", DeprecationWarning)
 
     # at some point _check_enum_inputs will get moved somewhere else and be reworked to function as a general guard function 
     deepof.visuals_utils._check_enum_inputs(
@@ -867,7 +875,7 @@ def embedding_per_video(
     )
 
     gate_edges = None
-    if softcounts_extraction_method in {"gmm", "msm", "combined"}:
+    if softcounts_extraction_method in methods:
         if isinstance(animal_id,str):
             animal_id=[animal_id]
         gate_edges = deepof.post_hoc.compute_gate_edges(
@@ -898,7 +906,7 @@ def embedding_per_video(
         soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
 
 
-    elif softcounts_extraction_method == "msm" or softcounts_extraction_method == "combined":
+    elif softcounts_extraction_method in {"msm", "kmeans", "combined", "msm_chaos"}:
 
         soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
             coordinates=coordinates,
@@ -916,9 +924,10 @@ def embedding_per_video(
             decode_emit_tau=decode_emit_tau,
             temporal_smooth_win=temporal_smooth_win,
             gate_edges=gate_edges,
-
+            macro_method="kmeans" if softcounts_extraction_method == "kmeans" else "pcca",
+            split_factor=split_factor if softcounts_extraction_method == "combined" else None,
         )
-        if softcounts_extraction_method == "combined":
+        if softcounts_extraction_method == "msm_chaos":
 
             supervised_chaos = deepof.post_hoc.get_supervised_chaos(coordinates, quality_threshold, frac_bps_below)
 
@@ -943,8 +952,6 @@ def embedding_per_video(
         
         soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
 
-    elif softcounts_extraction_method is not None: # pragma: no cover
-        raise ValueError("For \"softcounts_extraction_method\" only \"gmm\", \"msm\" or \"combined\" are supported!")
     else:
         soft_counts=deepof.data.TableDict(
             soft_counts,

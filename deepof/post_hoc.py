@@ -68,6 +68,8 @@ table_dict = NewType("deepof_table_dict", Any)
 def _fit_hmm_range(embeddings, states, min_states, max_states, covariance_type="diag"):
     """Auxiliary function for fitting a range of HMMs with different number of states.
 
+    Deprecated: use cluster_number_selection (with plot_cluster_number_selection) to choose the number of clusters.
+
     Args:
         concat_embeddings (np.ndarray): Concatenated embeddings across all animal experiments.
         states (str): Whether to use AIC or BIC to select the number of states.
@@ -383,6 +385,8 @@ def get_supervised_chaos(
 ):  
     """Create a supervised-annotations-like table dict containing only quality-based chaos labels.
 
+    Deprecated: only used by softcounts_extraction_method="msm_chaos" (formerly "combined"), will be removed.
+
     Args:
         coordinates (coordinates): deepof.Coordinates object for the project at hand.
         quality_threshold (float): Per-bodypart quality threshold below which a bodypart is counted as low quality.
@@ -454,6 +458,8 @@ def add_chaos_gates(
     window_size: int,
 ):  
     """Combine regular and chaos-specific soft counts gate-wise.
+
+    Deprecated: only used by softcounts_extraction_method="msm_chaos" (formerly "combined"), will be removed.
 
     Args:
         soft_counts_dict (dict): Dictionary mapping gate -> TableDict with regular soft counts.
@@ -1447,6 +1453,84 @@ def _build_micro2macro(
     return micro2macro
 
 
+def _regroup_macrostates(
+    model: dict,
+    n_macro: int,
+    macro_method: str = "pcca",
+    split_factor: Optional[float] = None,
+    seed: int = 0,
+) -> dict:
+    """
+    Replace or refine the PCCA macrostates of a fitted MSM model by geometric groups of its microstates.
+
+    macro_method:
+        "pcca": keep the PCCA macrostates; with split_factor, every macrostate holding more than split_factor / n_macro
+            of the samples is split into round(share * n_macro) sub-states (k-means on the centroids of the
+            microstates it owns, weighted by their population; each microstate passes its membership of the split
+            macrostate on to the nearest sub-state). The split states are inserted in place. The share of a state is
+            the stationary population of the microstates it owns (largest membership), as the decoding assigns them:
+            the fuzzy PCCA+ memberships underrate large states that are a continuum (their microstates lend
+            membership to small states, which then decode almost empty). States that own no microstate would stay
+            empty and are dropped. With split_factor, the memberships are made crisp (each microstate belongs fully to
+            the state that owns it), even if nothing is split: decoding with the fuzzy memberships drains small states
+            (their few microstates lend most of their emission votes to the large neighbouring states) and smears the
+            coarse-grained transitions (per-frame stay probabilities of ~0.3-0.5 instead of ~0.8-0.9).
+        "kmeans": no PCCA; the microstates are grouped into n_macro states by population-weighted k-means on their
+            centroids (geometric clustering at microstate resolution, about k-means on all samples).
+
+    The transitions of the new states are coarse-grained from the microstate MSM, so the kinetic decoding (Viterbi,
+    forward-backward) works unchanged. Returns the model unchanged without split_factor ("pcca").
+    """
+    from sklearn.cluster import KMeans
+
+    active = np.asarray(model["active_syms"], dtype=np.int64)
+    centers = np.asarray(model["kmeans"].cluster_centers_, dtype=np.float64)[active]
+    pi = np.asarray(model["pi_micro"], dtype=np.float64)
+    chi = np.asarray(model["chi"], dtype=np.float64)
+
+    if macro_method == "kmeans":
+        k = int(min(n_macro, active.shape[0]))
+        groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
+        chi_new = np.zeros((active.shape[0], n_macro), dtype=np.float64)
+        chi_new[np.arange(active.shape[0]), groups] = 1.0
+    elif split_factor:
+        owner = np.argmax(chi, axis=1)
+        share = np.bincount(owner, weights=pi, minlength=chi.shape[1]) / max(pi.sum(), 1e-12)
+        cols = []
+        for m in range(chi.shape[1]):
+            if not np.any(owner == m):
+                continue
+            n_sub = int(min(max(2, round(share[m] * n_macro)), np.sum(owner == m)))
+            if share[m] > split_factor / n_macro and n_sub >= 2:
+                weight = pi[owner == m] * chi[owner == m, m] + 1e-12
+                sub = KMeans(n_clusters=n_sub, n_init=10, random_state=seed).fit(centers[owner == m], sample_weight=weight)
+                nearest = sub.predict(centers)
+                cols.extend(np.where(nearest == j, chi[:, m], 0.0) for j in range(n_sub))
+            else:
+                cols.append(chi[:, m])
+        chi_new = np.stack(cols, axis=1)
+        chi_new = np.eye(chi_new.shape[1])[np.argmax(chi_new, axis=1)]  # crisp memberships
+    else:
+        return model
+
+    P_macro, pi_macro = _coarse_grain_transition(model["P_micro"], pi, chi_new)
+    empty = pi_macro <= 0  # states without samples (padding) stay where they are
+    P_macro[empty] = np.eye(chi_new.shape[1])[empty]
+    chi_new = chi_new.astype(np.float32)
+    return {
+        **model,
+        "chi": chi_new,
+        "P_macro": P_macro,
+        "pi_macro": pi_macro,
+        "micro2macro": _build_micro2macro(
+            n_micro_eff=int(model["n_micro_eff"]),
+            N_clusters_per_gate=chi_new.shape[1],
+            active_syms=model["active_syms"],
+            chi=chi_new,
+        ),
+    }
+
+
 def _fit_msmpcca_models(
     *,
     keys,
@@ -1858,9 +1942,23 @@ def get_contrastive_soft_counts_msm_pcca(
     decode_emit_tau: float = 1.0,
     restrict_return_gates: Optional[Union[int, Sequence[int]]] = None,
     drop_out_of_gate: bool = True,
+    macro_method: str = "pcca",
+    split_factor: Optional[float] = None,
 ):
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
+
+    macro_method:
+        "pcca" (default) — PCCA macrostates (metastable sets).
+        "kmeans" — geometric states instead: population-weighted k-means on the microstate centroids, with the same
+        kinetic decoding.
+
+    split_factor:
+        Only for "pcca". If given, every macrostate holding more than split_factor / N_clusters of the samples is split
+        geometrically into round(share * N_clusters) sub-states (see _regroup_macrostates), e.g. N_clusters=10,
+        split_factor=3: states above 30% are split. The number of returned clusters then grows accordingly. PCCA only
+        finds states separated by kinetic barriers, so a continuum of behaviors without barriers otherwise ends up in
+        one large state.
 
     decode_method:
         "viterbi_macro" (default) — MSM/PCCA Viterbi on macrostates.
@@ -1924,6 +2022,11 @@ def get_contrastive_soft_counts_msm_pcca(
         gate_edges=gate_edges,
     )
 
+    if macro_method not in ("pcca", "kmeans"):
+        raise ValueError(f"macro_method needs to be \"pcca\" or \"kmeans\", got {macro_method!r}")
+    if split_factor is not None and not split_factor > 0:
+        raise ValueError(f"split_factor needs to be > 0 or None, got {split_factor!r}")
+
     n_clusters = np.asarray(N_clusters_per_gate, dtype=int)
     if restrict_return_gates is None:
         keep_bins = list(range(M_gates_eff))
@@ -1944,10 +2047,6 @@ def get_contrastive_soft_counts_msm_pcca(
         elif not isinstance(drop_out_of_gate, bool):
             raise TypeError("drop_out_of_gate must be a bool")
 
-    col_sizes = [int(n_clusters[b]) for b in keep_bins]
-    K_keep = int(np.sum(col_sizes))
-    col_offsets = np.cumsum([0] + col_sizes)
-
     # ---- fit per (gate, bin) ----
     models = _fit_msmpcca_models(
         keys=keys,
@@ -1963,6 +2062,23 @@ def get_contrastive_soft_counts_msm_pcca(
         min_micro_per_macro=min_micro_per_macro,
         lagtime=lagtime,
     )
+
+    # ---- geometric states or split of oversized PCCA states; the number of columns can change per (gate, bin) ----
+    if macro_method == "kmeans" or split_factor:
+        for gate_idx, gate in enumerate(gates):
+            for b, model in enumerate(models[gate]):
+                if model is not None:
+                    models[gate][b] = _regroup_macrostates(model, int(n_clusters[b]), macro_method=macro_method,
+                                                           split_factor=split_factor,
+                                                           seed=int(random_state + 1000 * gate_idx + 17 * b))
+    col_sizes = {gate: [int(models[gate][b]["chi"].shape[1]) if models[gate][b] is not None else int(n_clusters[b])
+                        for b in keep_bins] for gate in gates}
+    col_offsets = {gate: np.cumsum([0] + col_sizes[gate]) for gate in gates}
+    if split_factor and macro_method == "pcca":
+        changed = {gate: sizes for gate, sizes in col_sizes.items() if sizes != [int(n_clusters[b]) for b in keep_bins]}
+        if changed:
+            print("[33mInfo! Oversized macrostates were split; clusters per gate bin: "
+                  + "; ".join(f"{gate}: {sizes}" for gate, sizes in changed.items()) + "[0m")
 
     # ---- decode per gate ----
     soft_counts_out_by_gate = {gate: {} for gate in gates}
@@ -1981,18 +2097,18 @@ def get_contrastive_soft_counts_msm_pcca(
         Z0 = _get_Z(Z_by_key, embeddings, key)
 
         for gate_idx, gate in enumerate(gates):
-            P = np.full((Z0.shape[0], K_keep), np.float32(1e-4), dtype=np.float32)
+            P = np.full((Z0.shape[0], int(col_offsets[gate][-1])), np.float32(1e-4), dtype=np.float32)
             in_keep = np.zeros(Z0.shape[0], dtype=bool)
 
             for i, b in enumerate(keep_bins):
                 model = models[gate][b]
                 mask = np.asarray(gate_masks[gate][b][key], dtype=bool)
                 in_keep |= mask
-                block = slice(int(col_offsets[i]), int(col_offsets[i + 1]))
+                block = slice(int(col_offsets[gate][i]), int(col_offsets[gate][i + 1]))
 
                 if model is None:  # pragma: no cover
                     if np.any(mask):
-                        P[mask, block] = 1.0 / n_clusters[b]
+                        P[mask, block] = 1.0 / col_sizes[gate][i]
                     continue
 
                 for s, e in _mask_to_runs(mask, min_len=1):
@@ -2045,6 +2161,209 @@ def get_contrastive_soft_counts_msm_pcca(
     if do_drop:
         return soft_counts_tables, embeddings_out_by_gate
     return soft_counts_tables
+
+
+def _knee(k: np.ndarray, y: np.ndarray, increasing: bool) -> Optional[int]:
+    """Knee of a curve (kneedle on the min-max normalized curve): K with the largest distance to the chord."""
+    ok = np.isfinite(y)
+    if ok.sum() < 3 or np.ptp(y[ok]) == 0:
+        return None
+    x = (k[ok] - k[ok].min()) / np.ptp(k[ok])
+    y = (y[ok] - y[ok].min()) / np.ptp(y[ok])
+    return int(k[ok][np.argmax(y - x if increasing else y + x)])
+
+
+def _fit_msm_on_dtrajs(dtrajs: List[np.ndarray], lagtime: int) -> Optional[dict]:
+    """MSM on microstate trajectories: active microstates, transition matrix and stationary distribution."""
+    import logging
+    import deeptime.markov.msm._maximum_likelihood_msm as mlm
+
+    count_model = TransitionCountEstimator(lagtime=int(lagtime), count_mode="sliding").fit(dtrajs).fetch_model()
+    # deeptime logs every disconnected microstate it skips (common in bootstrap samples); only the active set is used
+    logger = logging.getLogger(mlm.__file__)
+    level = logger.level
+    logger.setLevel(logging.ERROR)
+    try:
+        msm = MaximumLikelihoodMSM(reversible=True).fit(count_model).fetch_model()
+    finally:
+        logger.setLevel(level)
+    active, n_msm = _get_active_state_symbols(count_model, msm)
+    if active is None:
+        active = np.arange(n_msm or 0, dtype=np.int32)
+    if active.shape[0] < 2:  # pragma: no cover
+        return None
+    pi = np.maximum(np.asarray(msm.stationary_distribution, dtype=np.float64).reshape(-1), 0.0)
+    return {"msm": msm, "active": active, "P": _row_normalize(np.asarray(msm.transition_matrix, dtype=np.float64)),
+            "pi": pi / max(pi.sum(), 1e-12)}
+
+
+def _pcca_memberships_fast(P: np.ndarray, pi: np.ndarray, n_macrostates: int) -> np.ndarray:
+    """PCCA+ memberships from the inner simplex algorithm only, without deeptime's rotation optimization (Nelder-Mead
+    over (K-1)^2 parameters, minutes for K of 20 and more). Soft memberships are less refined; the hard assignments
+    (argmax) mostly agree with full PCCA+. Needs a connected, reversible P (the active set of the MSM)."""
+    from deeptime.markov.tools.analysis import eigenvectors
+    from deeptime.markov.tools.analysis.dense._pcca import _pcca_connected_isa
+
+    evecs = np.real(eigenvectors(P, int(n_macrostates)))
+    evecs = evecs / np.sqrt(np.sum(evecs * pi[:, None] * evecs, axis=0))
+    evecs[:, 0] = np.abs(evecs[:, 0])
+    chi, _ = _pcca_connected_isa(evecs, int(n_macrostates))
+    chi = np.clip(np.asarray(chi, dtype=np.float64), 0.0, None)
+    empty = chi.sum(axis=1) <= 0
+    chi[empty, 0] = 1.0  # pragma: no cover (rows clipped to zero)
+    return (chi / chi.sum(axis=1, keepdims=True)).astype(np.float32)
+
+
+def cluster_number_selection(
+    embeddings: table_dict,
+    method: str = "combined",
+    k_range: Sequence[int] = range(4, 41, 2),
+    n_micro: int = 200,
+    lagtime: int = 3,
+    split_factor: float = 3.0,
+    n_repeats: int = 5,
+    sample_size: int = 200000,
+    random_state: int = 0,
+) -> pd.DataFrame:
+    """Criteria for choosing the number of clusters of the MSM-based soft count extraction (embedding_per_video).
+
+    The microstates (k-means with n_micro centroids) and their MSM are fitted once; every K is then clustered on the
+    microstates only (PCCA, the split of "combined", or weighted k-means of "kmeans"), so a sweep takes seconds after
+    the first fit. PCCA uses the fast inner simplex solution of PCCA+ (see _pcca_memberships_fast) instead of the
+    optimized memberships of embedding_per_video, which take minutes per K for larger K. No gating (as M_gates=1).
+    Criteria per K:
+        explained_dispersion: share of the dispersion of the microstate centroids explained by the clusters
+            (population-weighted, in the standardized embedding space); elbow
+        metastability: mean probability to stay in the same cluster after lagtime frames; drops once clusters cut
+            through regions the animals move through quickly
+        stability: mean adjusted Rand index between the microstate labels of the full data and of n_repeats bootstrap
+            samples of trajectory chunks (re-fitted MSM); is the clustering at this K reproducible?
+        timescale_gap: ratio of the (K-1)th to the Kth implied timescale of the microstate MSM; large if the dynamics
+            have K metastable states (independent of the method)
+        max_share: largest cluster share, from the microstates each cluster owns (as decoded; no suggestion; shows
+            oversized "leftover" clusters). n_clusters counts the clusters that own microstates.
+    For an embedding without clear structure no K is "the" optimum: each criterion gets its own suggestion (knee for
+    explained_dispersion and metastability, largest K within 0.01 of the maximum for stability, maximum for
+    timescale_gap), stored in df.attrs["suggested"].
+
+    Args:
+        embeddings (table_dict): Embeddings per experiment (as returned by embedding_per_video).
+        method (str): Soft count extraction method to evaluate: "msm" (PCCA), "kmeans" or "combined" (PCCA with the
+            split of oversized states; n_clusters then holds the final number of clusters per K).
+        k_range (Sequence[int]): Numbers of clusters (for "combined": PCCA states before the split) to evaluate.
+        n_micro (int): Number of microstates, at least 3 * max(k_range) are used. Use the same as for embedding_per_video.
+        lagtime (int): MSM lag time in frames, as in embedding_per_video.
+        split_factor (float): Only for "combined", as in embedding_per_video.
+        n_repeats (int): Number of bootstrap repeats for the stability (0: skip).
+        sample_size (int): Number of samples for fitting the microstates.
+        random_state (int): Random seed.
+
+    Returns:
+        pd.DataFrame: One row per K with the criteria; df.attrs["suggested"]: suggested K per criterion.
+    """
+    from sklearn.metrics import adjusted_rand_score
+
+    if method not in ("msm", "kmeans", "combined"):
+        raise ValueError(f"method needs to be \"msm\", \"kmeans\" or \"combined\", got {method!r}")
+    k_values = np.array(sorted(set(int(k) for k in k_range)))
+    if k_values.size == 0 or k_values.min() < 2:
+        raise ValueError("k_range needs to contain numbers of clusters >= 2")
+    if method == "combined" and not split_factor > 0:
+        raise ValueError(f"split_factor needs to be > 0, got {split_factor!r}")
+
+    # Contiguous runs of finite embeddings per experiment
+    segments = []
+    for key in embeddings.keys():
+        Z = np.asarray(get_dt(embeddings, key), dtype=np.float32)
+        segments.extend(Z[s:e] for s, e in _mask_to_runs(np.isfinite(Z).all(axis=1), min_len=lagtime + 2))
+    if not segments:
+        raise ValueError("No embedding segments long enough for the MSM lag time.")
+    k_max = int(k_values.max())
+    scaler, kmeans, n_micro_eff = _fit_microstates_kmeans(
+        seg_spatial=segments, sample_size=sample_size, seed=random_state, n_micro=max(int(n_micro), 3 * k_max),
+        min_micro_per_macro=3, N_clusters_per_gate=k_max)
+    dtrajs = _segments_to_dtrajs(seg_temporal=segments, scaler=scaler, kmeans=kmeans)
+    reference = _fit_msm_on_dtrajs(dtrajs, lagtime)
+    if reference is None:  # pragma: no cover
+        raise RuntimeError("The MSM of the microstates could not be fitted.")
+    centers = np.asarray(kmeans.cluster_centers_, dtype=np.float64)
+
+    def memberships(fit, k, seed):
+        """Cluster memberships (n_active, n_clusters) of the active microstates of an MSM fit."""
+        model = {"active_syms": fit["active"], "kmeans": kmeans, "pi_micro": fit["pi"], "P_micro": fit["P"],
+                 "n_micro_eff": n_micro_eff, "chi": np.ones((fit["active"].shape[0], 1), dtype=np.float32)}
+        k = int(min(k, fit["active"].shape[0]))
+        if method == "kmeans":
+            return _regroup_macrostates(model, k, macro_method="kmeans", seed=seed)["chi"]
+        chi = _pcca_memberships_fast(fit["P"], fit["pi"], k)
+        if method == "combined":
+            chi = _regroup_macrostates({**model, "chi": chi}, k, split_factor=split_factor, seed=seed)["chi"]
+        return chi
+
+    # Implied timescales of the microstate MSM (index i: ith slowest process, 0: stationary)
+    eig = np.sort(np.clip(np.abs(np.linalg.eigvals(reference["P"])), 1e-12, 1 - 1e-12))[::-1]
+    timescales = -lagtime / np.log(eig)
+
+    # Bootstrap samples: trajectory chunks (keep the dynamics within a chunk), drawn with replacement
+    rng = np.random.default_rng(random_state)
+    chunk = max(50 * lagtime, 500)
+    chunks = [d[s:s + chunk] for d in dtrajs for s in range(0, len(d), chunk) if len(d[s:s + chunk]) >= lagtime + 2]
+    boot_fits = []
+    for _ in range(n_repeats):
+        fit = _fit_msm_on_dtrajs([chunks[i] for i in rng.integers(len(chunks), size=len(chunks))], lagtime)
+        if fit is not None:
+            boot_fits.append(fit)
+
+    rows = []
+    pi = reference["pi"]
+    active_c = centers[reference["active"]]
+    total = np.sum(pi * np.sum((active_c - pi @ active_c) ** 2, axis=1))
+    for k in tqdm.tqdm(k_values, desc=f"{'Cluster number selection':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="K"):
+        row = {"K": int(k)}
+        try:
+            chi = memberships(reference, k, random_state)
+        except Exception:  # pragma: no cover  (PCCA can fail for single K)
+            rows.append(row)
+            continue
+        labels = np.argmax(chi, axis=1)
+        within = 0.0
+        for c in np.unique(labels):
+            w, x = pi[labels == c], active_c[labels == c]
+            within += np.sum(w * np.sum((x - w @ x / max(w.sum(), 1e-12)) ** 2, axis=1))
+        P_macro, pi_macro = _coarse_grain_transition(reference["P"], pi, chi)
+        used = pi_macro > 0
+        crisp = np.bincount(labels, weights=pi, minlength=chi.shape[1]) / max(pi.sum(), 1e-12)  # as decoded
+        row.update(n_clusters=int(np.sum(crisp > 0)), explained_dispersion=1.0 - within / max(total, 1e-12),
+                   metastability=float(np.mean(np.diag(P_macro)[used])), max_share=float(crisp.max()),
+                   timescale_gap=float(timescales[k - 1] / timescales[k]) if k < len(timescales) else np.nan)
+        scores = []
+        for r, fit in enumerate(boot_fits):
+            try:
+                boot_labels = np.argmax(memberships(fit, k, random_state + r + 1), axis=1)
+            except Exception:  # pragma: no cover
+                continue
+            _, i_ref, i_boot = np.intersect1d(reference["active"], fit["active"], return_indices=True)
+            scores.append(adjusted_rand_score(labels[i_ref], boot_labels[i_boot]))
+        row.update(stability=float(np.mean(scores)) if scores else np.nan,
+                   stability_std=float(np.std(scores)) if scores else np.nan)
+        rows.append(row)
+
+    columns = ["K", "n_clusters", "explained_dispersion", "metastability", "stability", "stability_std",
+               "timescale_gap", "max_share"]
+    df = pd.DataFrame(rows).reindex(columns=columns)
+    k_arr = df["K"].to_numpy(dtype=float)
+    best = lambda col: int(df.loc[df[col].idxmax(), "K"]) if df[col].notna().any() else None
+    # stability: largest K within 0.01 of the most stable one (ties are common, e.g. ARI 1 for several K)
+    finest_best = lambda col: (int(df.loc[df[col] >= df[col].max() - 0.01, "K"].max())
+                               if df[col].notna().any() else None)
+    df.attrs["method"] = method
+    df.attrs["suggested"] = {
+        "explained_dispersion": _knee(k_arr, df["explained_dispersion"].to_numpy(dtype=float), increasing=True),
+        "metastability": _knee(k_arr, df["metastability"].to_numpy(dtype=float), increasing=False),
+        "stability": finest_best("stability"),
+        "timescale_gap": best("timescale_gap"),
+    }
+    return df
 
 
 def recluster(

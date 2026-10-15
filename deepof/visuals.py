@@ -3159,6 +3159,89 @@ def plot_embedding_evaluation(
         )
 
 
+def plot_cluster_number_selection(
+    selection: pd.DataFrame,
+    coordinates: coordinates = None,
+    ax: Any = None,
+    save: bool = False,
+):
+    """Plot the criteria of deepof.post_hoc.cluster_number_selection over the number of clusters, on top of each other.
+
+    Every criterion is min-max normalized (its raw range is given in the legend); dotted vertical lines mark the K
+    suggested by each criterion. For "combined", the final number of clusters after the split is shown on the top axis.
+
+    Args:
+        selection (pd.DataFrame): Output of deepof.post_hoc.cluster_number_selection.
+        coordinates (coordinates): deepof.Coordinates object, only needed for saving.
+        ax (plt.AxesSubplot): Axes to plot on; a new figure is created if None.
+        save (bool): Saves the figure in the project's Figures folder (needs coordinates); a string is added to the
+            file name.
+
+    Returns:
+        plt.AxesSubplot: The axes of the plot.
+    """
+    from matplotlib.ticker import MaxNLocator
+
+    if save and coordinates is None:
+        raise ValueError("Saving the plot needs the coordinates of the project.")
+    show = ax is None
+    if ax is None:
+        _, ax = plt.subplots(figsize=(9, 5))
+
+    k = selection["K"].to_numpy(dtype=float)
+    suggested = selection.attrs.get("suggested", {})
+    criteria = [
+        ("explained_dispersion", "explained dispersion (knee)", "tab:blue", "-"),
+        ("metastability", "metastability (knee)", "tab:orange", "-"),
+        ("stability", "stability, ARI (maximum)", "tab:green", "-"),
+        ("timescale_gap", "timescale gap (maximum)", "tab:purple", "-"),
+        ("max_share", "largest cluster share", "tab:grey", "--"),
+    ]
+    for column, label, color, style in criteria:
+        y = selection[column].to_numpy(dtype=float)
+        ok = np.isfinite(y)
+        if not ok.any():
+            continue
+        lo, hi = np.nanmin(y), np.nanmax(y)
+        y_norm = (y - lo) / (hi - lo) if hi > lo else np.full_like(y, 0.5)
+        ax.plot(k[ok], y_norm[ok], style, marker="o", markersize=3, color=color,
+                label=f"{label} [{lo:.3g}, {hi:.3g}]")
+        if column == "stability" and selection["stability_std"].notna().any() and hi > lo:
+            std = selection["stability_std"].to_numpy(dtype=float) / (hi - lo)
+            ax.fill_between(k[ok], np.clip(y_norm - std, 0, 1)[ok], np.clip(y_norm + std, 0, 1)[ok], color=color,
+                            alpha=0.15, linewidth=0)
+        if suggested.get(column) is not None:
+            ax.axvline(suggested[column], color=color, linestyle=":", linewidth=1.5)
+
+    method = selection.attrs.get("method", "")
+    ax.set_xlabel("number of PCCA states before the split" if method == "combined" else "number of clusters")
+    ax.set_ylabel("criterion (min-max normalized)")
+    ax.set_title(f"Cluster number selection ({method}); dotted: suggestion per criterion")
+    ax.set_ylim(-0.05, 1.05)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
+    if method == "combined" and (selection["n_clusters"] != selection["K"]).any():
+        top = ax.secondary_xaxis("top")
+        top.set_xticks(k)
+        top.set_xticklabels([str(int(n)) if np.isfinite(n) else "" for n in selection["n_clusters"]], fontsize=7)
+        top.set_xlabel("final number of clusters")
+
+    if save:
+        plt.savefig(
+            os.path.join(
+                coordinates._project_path,
+                coordinates._project_name,
+                "Figures",
+                "deepof_cluster_number_selection{}_{}.pdf".format(
+                    (f"_{save}" if isinstance(save, str) else ""), calendar.timegm(time.gmtime())
+                ),
+            )
+        )
+    if show:
+        plt.show()
+    return ax
+
+
 def plot_training_metrics(log_summary: dict) -> dict:
     """Plot training curves from a log_summary dict.
 
