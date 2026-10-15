@@ -500,12 +500,27 @@ def _preprocess_embedding_evaluation(
 
     noncontinuous_behaviors = [behavior for behavior in include_behaviors if behavior in noncontinuous_behaviors]
 
-    # Global embedding pool for compactness normalisation
-    Z_all = np.concatenate(
-        [np.asarray(get_dt(embeddings, k), np.float32) for k in embeddings],
-        axis=0,
-    )
-        
+    # Global spread for compactness normalisation (trace of the covariance of all embeddings), accumulated video by
+    # video (Chan et al. merge of means and squared deviations), so that the embeddings are never all in memory
+    n_all, mean_all, m2_all = 0, None, None
+    for k in embeddings:
+        Z = np.asarray(get_dt(embeddings, k), np.float64)
+        if Z.shape[0] == 0:
+            continue
+        n_k, mean_k = Z.shape[0], Z.mean(axis=0)
+        m2_k = ((Z - mean_k) ** 2).sum(axis=0)
+        if mean_all is None:
+            n_all, mean_all, m2_all = n_k, mean_k, m2_k
+        else:
+            delta = mean_k - mean_all
+            n_new = n_all + n_k
+            mean_all = mean_all + delta * n_k / n_new
+            m2_all = m2_all + m2_k + delta ** 2 * n_all * n_k / n_new
+            n_all = n_new
+        del Z
+    trace_all = float(m2_all.sum() / (n_all - 1)) if n_all > 1 else float("nan")
+
+
     # Sample aligned embeddings and labels
     Xs, ys = [], {}
     for key in embeddings.keys():
@@ -567,7 +582,7 @@ def _preprocess_embedding_evaluation(
 
         Z_pos = X[yb]
 
-        comp = deepof.utils.compute_compactness(Z_pos, Z_all)
+        comp = deepof.utils.compute_compactness(Z_pos, trace_all=trace_all)
         row["trace_cov_pos"] = comp["trace_cov_pos"]
         row["trace_cov_pos_norm_global"] = comp["trace_cov_pos_norm_global"]
         

@@ -4172,8 +4172,9 @@ def gmm_model_selection(
 
 def compute_compactness(
     Z_pos: np.ndarray,
-    Z_all: np.ndarray,
+    Z_all: np.ndarray = None,
     eps: float = 1e-12,
+    trace_all: float = None,
 ) -> Dict[str, float]:
     """Compute compactness of positive-class embeddings relative to all embeddings.
 
@@ -4182,15 +4183,17 @@ def compute_compactness(
 
     Args:
         Z_pos: Positive-class embeddings, shape (N_pos, D).
-        Z_all: All embeddings, shape (N_all, D).
+        Z_all: All embeddings, shape (N_all, D). Not needed if trace_all is given.
         eps: Guard against division by zero.
+        trace_all: Precomputed trace of the covariance of all embeddings (e.g. accumulated per video for embeddings
+            that do not fit into memory). Replaces Z_all.
 
     Returns:
         dict: ``trace_cov_pos`` – absolute trace covariance of positives;
               ``trace_cov_pos_norm_global`` – ratio of positive to global trace.
     """
     tr_p = float(np.trace(np.cov(Z_pos.astype(np.float64, copy=False), rowvar=False)))
-    tr_a = float(np.trace(np.cov(Z_all.astype(np.float64, copy=False), rowvar=False)))
+    tr_a = trace_all if trace_all is not None else float(np.trace(np.cov(Z_all.astype(np.float64, copy=False), rowvar=False)))
     return {"trace_cov_pos": tr_p, "trace_cov_pos_norm_global": tr_p / max(eps, tr_a)}
 
 
