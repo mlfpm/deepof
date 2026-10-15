@@ -2159,7 +2159,8 @@ def align_trajectories(
 
     # run numba version for large videos
     if run_numba:
-        aligned_trajs = rotate_all_numba(data, angles, data_type)
+        # numba's matrix product needs one dtype (rotation matrix from the angles, positions in data_type)
+        aligned_trajs = rotate_all_numba(data.astype(data_type), angles.astype(data_type), data_type)
     else:
         aligned_trajs = np.zeros(data.shape)
 
