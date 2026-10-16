@@ -1804,8 +1804,8 @@ def _check_enum_inputs(
     if coordinates.get_animal_conditions is not None:
         # With animal-level conditions, body parts can also be given pooled over animals ("Center")
         bodypart_opts += deepof.conditions.pooled_behavior_names(bodypart_opts, coordinates._animal_ids)
-    # remove ids for in roi version
-    if(len(coordinates._animal_ids)>1):
+    # remove ids for in roi version (also for a single animal with an id, e.g. "B_Center")
+    if any(coordinates._animal_ids):
         in_roi_bodypart_opts=[bp.partition("_")[2] for bp in bodypart_opts]
     else:
         in_roi_bodypart_opts=copy.copy(bodypart_opts)

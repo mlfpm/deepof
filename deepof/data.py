@@ -3648,7 +3648,8 @@ class Coordinates:
 
             #get kinematics
             pbar.set_postfix(step="Loading kinematics")
-            if len(self._animal_ids) <= 1:
+            # Per animal id, as compute_immobility expects for every animal with an id (also a single one)
+            if not any(self._animal_ids):
                 features_dict = (
                     deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
                         self, center=center, align=align, include_angles=False, return_path=self._very_large_project
