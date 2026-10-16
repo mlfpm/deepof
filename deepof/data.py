@@ -3170,7 +3170,7 @@ class Coordinates:
             bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
             bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
             precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-            samples_max (int): Maximum number of frames used per video. Longer videos are cut at this number of frames.
+            samples_max (int): Maximum number of frames used per video. Longer videos are cut at this number of frames. None uses all frames.
             align_video_lengths (bool): If True (default), all videos are cut to the length of the shortest one, so that every video has the same weight in training. If False, all frames of all videos are used.
             precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
             center (str): Name of the body part to which the positions will be centered. If false, raw data is returned; if 'arena' (default), coordinates are centered on the pitch.

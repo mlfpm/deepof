@@ -2763,7 +2763,8 @@ def _pp_pass1_collect_samples(
 
                 col_types = deepof.utils.infer_column_types(tab_local)
 
-                n_take = min(samples_max, len(tab_local))
+                # samples_max=None (videos not cut): the scaler is still fitted on at most 227272 rows per video
+                n_take = min(samples_max if samples_max is not None else 227272, len(tab_local))
                 if n_take > 0:
                     idx = rng.choice(len(tab_local), size=n_take, replace=False)
 

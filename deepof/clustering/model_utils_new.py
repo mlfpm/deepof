@@ -675,7 +675,7 @@ def embedding_per_video(
     states_per_gate: Union[int, list] = [16,4,4],
     quality_threshold: float = 0.75,
     frac_bps_below: float = 0.5,
-    samples_max: int = 227272,
+    samples_max: Optional[int] = None,
     M_gates: int = 3,
     n_micro: int = 200,
     lagtime: int = 3,
@@ -701,7 +701,7 @@ def embedding_per_video(
         softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "msm" is used as a default.
         split_factor (float): Only for "combined": states holding more than split_factor / states_per_gate of the samples are split into round(share * states_per_gate) sub-states, so the number of clusters can grow. Defaults to 3.
         distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
-        samples_max (int): Maximum number of samples taken for plotting to avoid excessive computation times. If the number of rows in a data set exceeds this number the data is downsampled accordingly.
+        samples_max (int): Maximum number of frames embedded per video; longer videos are cut at this number of frames. None (default) embeds all frames.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
