@@ -68,7 +68,7 @@ def get_dt(
     key: str,
     return_path: bool = False,
     only_metainfo: bool = False,
-    load_index: bool = False,
+    load_index: Union[bool, str] = False,  # with only_metainfo, "bounds" gives only start_time / end_time (fast)
     load_range: np.ndarray = None
 ):
     raw_data = tab_dict.get(key)

@@ -8,10 +8,11 @@ Training functionality for all models
 from contextlib import contextmanager
 from typing import Any, NewType, Tuple, Dict, Optional, List, Callable, Union
 from types import SimpleNamespace
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, fields
 from functools import partial
 
 import os
+import random
 import warnings
 import numpy as np
 import math
@@ -46,6 +47,7 @@ from deepof.clustering.model_utils_new import (
     unwrap_dp,
     recompute_edges,
     ckpt_paths,
+    last_ckpt_path,
     save_model_info,
     load_best_checkpoints,
     slice_time_per_sample,
@@ -640,6 +642,7 @@ def step_contrastive_distill(
         shift_weights = 2.0 * torch.sigmoid(-float(contrastive_cfg.soft_temporal_tau) * dt)
     else:
         weighting_level = _shift_schedule_weight(ctx.epoch, ctx.num_epochs)
+
     # Base contrastive loss
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
         z_view1, z_view2, z_view3,
@@ -660,6 +663,7 @@ def step_contrastive_distill(
         weighting_level=weighting_level,
         shift_weights=shift_weights,
     )
+
     pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
     if base.loss_function != "vicreg":
         pos_mean=l_term1
@@ -763,6 +767,166 @@ def _make_cfg(cfg_cls, **kwargs):
     return cfg_cls(**{k: v for k, v in kwargs.items() if v is not None})
 
 
+def _continue_mode(continue_training) -> Union[bool, str]:
+    """Normalizes continue_training to False, "distill" or "resume"."""
+    if continue_training is None or continue_training is False:
+        return False
+    if isinstance(continue_training, str) and continue_training.lower() in ("distill", "resume"):
+        return continue_training.lower()
+    raise ValueError(f"\"continue_training\" needs to be False, \"distill\" or \"resume\", got {continue_training!r}")
+
+
+def _cfg_from_dict(cfg_cls, values: Optional[dict]):
+    """Config dataclass from a stored dict; fields added since keep their defaults, removed ones are dropped."""
+    names = {f.name for f in fields(cfg_cls)}
+    return cfg_cls(**{k: v for k, v in (values or {}).items() if k in names})
+
+
+def _load_continue_checkpoint(
+    mode: str,
+    common_cfg: CommonFitCfg,
+    teacher_cfg: TurtleTeacherCfg,
+    vade_cfg: VaDECfg,
+    contrastive_cfg: ContrastiveCfg,
+    device: torch.device,
+):
+    """
+    Loads the checkpoint common_cfg.pretrained to continue training from and prints one line about it.
+
+    "resume": the configs are the stored ones (except num_workers and prefetch_factor), the training continues after the
+    stored epoch until the original number of epochs. "distill": a new training with the given configs on top of the
+    checkpoint weights; the architecture (and the contrastive window) is taken from the checkpoint.
+
+    Returns:
+        (common_cfg, teacher_cfg, vade_cfg, contrastive_cfg, model, rebuild_spec, resume_state), resume_state is None
+        for "distill".
+    """
+    path = common_cfg.pretrained
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    spec = ckpt.get("rebuild_spec")
+    if spec is None:
+        raise ValueError(f"{path} has no rebuild_spec and can not be trained further.")
+    model_name = str(spec["model_name"]).lower()
+    if model_name == "vade":
+        raise NotImplementedError("continue_training is not available for VaDE yet.")
+
+    resume_state = None
+    if mode == "resume":
+        resume_state = ckpt.get("resume")
+        if resume_state is None:
+            raise ValueError(f"{path} can not be resumed: \"resume\" needs the last_model.pth of an interrupted training.")
+        cfgs = resume_state["configs"]
+        num_workers, prefetch_factor = common_cfg.num_workers, common_cfg.prefetch_factor
+        common_cfg = _cfg_from_dict(CommonFitCfg, cfgs["common_cfg"])
+        common_cfg.num_workers, common_cfg.prefetch_factor, common_cfg.pretrained = num_workers, prefetch_factor, path
+        teacher_cfg = _cfg_from_dict(TurtleTeacherCfg, cfgs["teacher_cfg"])
+        vade_cfg = _cfg_from_dict(VaDECfg, cfgs["vade_cfg"])
+        contrastive_cfg = _cfg_from_dict(ContrastiveCfg, cfgs["contrastive_cfg"])
+        done = int(resume_state["epoch"]) + 1
+        if done >= common_cfg.epochs:
+            raise ValueError(f"{path} has already finished all {common_cfg.epochs} epochs, there is nothing to resume.")
+        resume_state = dict(resume_state, log_summary=ckpt.get("log_summary"))
+        print(f"Resuming the training of {path} at epoch {done + 1}/{common_cfg.epochs} with its original settings; "
+              f"current inputs except the data, device and system settings (num_workers, prefetch_factor) are ignored.")
+    else:
+        arch = [("model_name", common_cfg, spec["model_name"]), ("encoder_type", common_cfg, spec["encoder_type"]),
+                ("latent_dim", common_cfg, int(spec["latent_dim"]))]
+        arch += [(name, common_cfg, spec[name]) for name in ("tcn_conv_filters", "tcn_kernel_size", "tcn_conv_stacks")
+                 if spec.get(name) is not None]
+        if spec.get("tcn_conv_dilations") is not None:
+            arch.append(("tcn_conv_dilations", common_cfg, tuple(spec["tcn_conv_dilations"])))
+        if model_name == "vqvae":
+            arch.append(("n_components", common_cfg, int(spec["n_components"])))
+        if model_name == "contrastive":
+            arch.append(("contrastive_window", contrastive_cfg, int(spec.get("window_len", 12))))
+        changed = []
+        for name, cfg, value in arch:
+            current = getattr(cfg, name)
+            if (str(current).lower() != str(value).lower()) if isinstance(value, str) else (current != value):
+                changed.append(f"{name}={value}")
+            setattr(cfg, name, value)
+        print(f"Continuing the training of {path} with the given settings (new schedule from epoch 1), architecture "
+              f"from the checkpoint" + (f" ({', '.join(changed)})." if changed else "."))
+
+    model, _, _, _ = deepof.clustering.model_utils_new.load_model_from_ckpt(path, device=device, print_info=False)
+    return common_cfg, teacher_cfg, vade_cfg, contrastive_cfg, model, spec, resume_state
+
+
+def _build_lazy_parameters(model: nn.Module, x_shape: tuple, a_shape: tuple, device: torch.device) -> None:
+    """Builds the parameters created on the first forward pass (CensNet) before the optimizer is set up, so they are
+    trained. Runs in eval mode (no dropout, no BatchNorm statistics); a no-op if they exist already."""
+    m = unwrap_dp(model)
+    was_training = m.training
+    m.eval()
+    deepof.clustering.model_utils_new._materialize_encoder(m, tuple(x_shape), tuple(a_shape), device)
+    m.train(was_training)
+
+
+def _training_state(
+    epoch: int,
+    configs: Dict[str, Any],
+    optimizer: torch.optim.Optimizer,
+    lr_scheduler,
+    scaler: GradScaler,
+    heads: Dict[str, Optional[nn.Module]],
+    lambda_scheduler: Optional[Dynamic_weight_manager],
+    best: Dict[str, float],
+    tau_star: Optional[torch.Tensor],
+) -> Dict[str, Any]:
+    """State to resume a training after this epoch (stored in last_model.pth): configs, optimizer, schedulers, heads,
+    best-model tracking, teacher targets and random states."""
+    return {
+        "epoch": int(epoch),
+        "configs": {name: (asdict(cfg) if cfg is not None else None) for name, cfg in configs.items()},
+        "optimizer": optimizer.state_dict(),
+        "lr_scheduler": lr_scheduler.state_dict() if lr_scheduler is not None else None,
+        "scaler": scaler.state_dict(),
+        "heads": {name: unwrap_dp(head).state_dict() for name, head in heads.items() if head is not None},
+        "lambda_iteration": lambda_scheduler.current_iteration if lambda_scheduler is not None else None,
+        "best": dict(best),
+        "tau_star": tau_star.detach().cpu() if tau_star is not None else None,
+        "rng": {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+            "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        },
+    }
+
+
+def _restore_training_state(
+    state: Dict[str, Any],
+    optimizer: torch.optim.Optimizer,
+    lr_scheduler,
+    scaler: GradScaler,
+    heads: Dict[str, Optional[nn.Module]],
+    lambda_scheduler: Optional[Dynamic_weight_manager],
+    train_loader: DataLoader,
+) -> Tuple[int, Dict[str, float]]:
+    """Restores a _training_state, right before the epoch loop. Returns (first epoch to train, best-model tracking)."""
+    optimizer.load_state_dict(state["optimizer"])
+    if lr_scheduler is not None and state["lr_scheduler"] is not None:
+        lr_scheduler.load_state_dict(state["lr_scheduler"])
+    if state["scaler"]:  # empty if saved from a disabled scaler
+        scaler.load_state_dict(state["scaler"])
+    for name, head in heads.items():
+        if head is not None and name in state["heads"]:
+            unwrap_dp(head).load_state_dict(state["heads"][name])
+    if lambda_scheduler is not None and state["lambda_iteration"] is not None:
+        lambda_scheduler.current_iteration = int(state["lambda_iteration"])
+    start_epoch = int(state["epoch"]) + 1
+    # The training loader shuffles with a counter of its iterations; worker copies take it over when they start, so it
+    # is set before the first iteration
+    train_loader.dataset._epoch = start_epoch
+    rng = state["rng"]
+    random.setstate(rng["python"])
+    np.random.set_state(rng["numpy"])
+    torch.set_rng_state(rng["torch"])
+    if rng["cuda"] is not None and torch.cuda.is_available() and len(rng["cuda"]) == torch.cuda.device_count():
+        torch.cuda.set_rng_state_all(rng["cuda"])
+    return start_epoch, dict(state["best"])
+
+
 def train_deepof_model(
     preprocessed_object: Tuple[dict, dict] = None,
     adjacency_matrix: np.ndarray = None,
@@ -778,6 +942,9 @@ def train_deepof_model(
     log_history: Optional[bool] = None,
     data_path: Optional[str] = None,
     pretrained: Optional[str] = None,
+    # With a pretrained checkpoint: False (only load it), "distill" (train it further with the given settings, new
+    # schedule) or "resume" (continue an interrupted training from its last_model.pth with the original settings)
+    continue_training: Union[bool, str] = False,
     save_weights: Optional[bool] = None,
     run: Optional[int] = None,
     # Encoder specific options
@@ -1126,22 +1293,35 @@ def train_deepof_model(
     )
 
     # Verify inputs on the resolved configs
-    deepof.clustering.model_utils_new.check_model_inputs(
-        preprocessed_object=preprocessed_object,
-        adjacency_matrix=adjacency_matrix,
-        meta_info=meta_info,
-        common_cfg=common_cfg,
-        teacher_cfg=teacher_cfg,
-        vade_cfg=vade_cfg,
-        contrastive_cfg=contrastive_cfg,
-        required_inputs={
+    continue_training = _continue_mode(continue_training)
+    if continue_training and (pretrained is None or not os.path.exists(pretrained)):
+        raise ValueError(f"continue_training=\"{continue_training}\" needs an existing checkpoint as \"pretrained\", "
+                         f"got {pretrained!r}.")
+    if continue_training == "resume":  # the configs come from the checkpoint, only the data is checked
+        deepof.clustering.model_utils_new.check_model_inputs(
+            preprocessed_object=preprocessed_object, adjacency_matrix=adjacency_matrix, meta_info=meta_info,
+        )
+    else:
+        required_inputs = {
             "encoder_type": encoder_type,
             "batch_size": batch_size,
             "latent_dim": latent_dim,
             "epochs": epochs,
             "output_path": output_path,
-        },
-    )
+        }
+        if continue_training == "distill":  # the architecture comes from the checkpoint
+            del required_inputs["encoder_type"], required_inputs["latent_dim"]
+        deepof.clustering.model_utils_new.check_model_inputs(
+            preprocessed_object=preprocessed_object,
+            adjacency_matrix=adjacency_matrix,
+            meta_info=meta_info,
+            common_cfg=common_cfg,
+            teacher_cfg=teacher_cfg,
+            vade_cfg=vade_cfg,
+            contrastive_cfg=contrastive_cfg,
+            required_inputs=required_inputs,
+            continue_training=continue_training,
+        )
 
     return train_deepof_model_base(
         preprocessed_object, 
@@ -1155,10 +1335,11 @@ def train_deepof_model(
         device=device,
         bootstrap_training=bootstrap_training,
         bootstrap_block_len=bootstrap_block_len,
+        continue_training=continue_training,
         use_ddp=use_ddp,
     )
 
-   
+
 
 def train_deepof_model_base(
     preprocessed_object: Tuple[dict, dict],
@@ -1173,19 +1354,20 @@ def train_deepof_model_base(
     device: str = None,
     bootstrap_training: bool = False,
     bootstrap_block_len: int = 250,
-    continue_training: bool = False,
+    continue_training: Union[bool, str] = False,
     use_ddp: bool = False,
 ) -> Tuple[nn.Module, nn.Module, Optional[nn.Module]]:
-
+    """continue_training: False, "distill" or "resume", see train_deepof_model (with "resume", the given configs are
+    replaced by the ones stored in the checkpoint)."""
 
     # Load pretrained model if available + early return
-    model=None
-    if common_cfg.pretrained:
+    continue_training = _continue_mode(continue_training)
+    model, spec, resume_state = None, None, None
+    if common_cfg.pretrained and not continue_training:
         print(f"Loading pretrained weights from {common_cfg.pretrained}")
         model, log_summary, spec, load_report = deepof.clustering.model_utils_new.load_model_from_ckpt(common_cfg.pretrained, device=device)
-        if not continue_training:
-            return unwrap_dp(model), None, None, log_summary
-    
+        return unwrap_dp(model), None, None, log_summary
+
     # ----------------------------------------------------
     # Check for possible multiprocessing
     # ----------------------------------------------------
@@ -1219,7 +1401,13 @@ def train_deepof_model_base(
     if is_ddp: # pragma: no cover
         print(f"DDP enabled: rank={rank}/{world_size}, local_rank={local_rank}")
 
-    
+    # Continue training from a checkpoint ("resume" also replaces the configs by the stored ones)
+    if continue_training:
+        common_cfg, teacher_cfg, vade_cfg, contrastive_cfg, model, spec, resume_state = _load_continue_checkpoint(
+            continue_training, common_cfg, teacher_cfg, vade_cfg, contrastive_cfg, device
+        )
+        model_name = common_cfg.model_name.lower()
+
     if "cuda" in device.type: # pragma: no cover
         torch.backends.cudnn.benchmark = True
         try:
@@ -1254,9 +1442,18 @@ def train_deepof_model_base(
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
-        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False, ddp_shard=False, 
+        persistent_workers=(common_cfg.num_workers > 0), block_shuffle=False, permute_within_block=False, ddp_shard=False,
         bootstrap_training=False,
     )
+    if spec is not None and (
+        tuple(spec["x_shape"]) != tuple(train_dataset.x_shape) or tuple(spec["a_shape"]) != tuple(train_dataset.a_shape)
+        or not np.array_equal(np.asarray(spec["adjacency_matrix"]), np.asarray(adjacency_matrix, dtype="float32"))
+    ):
+        raise ValueError(
+            f"The given data does not fit the checkpoint {common_cfg.pretrained}: windows {tuple(train_dataset.x_shape)} / "
+            f"{tuple(train_dataset.a_shape)} vs. {tuple(spec['x_shape'])} / {tuple(spec['a_shape'])} (nodes / edges), "
+            f"or a different adjacency matrix."
+        )
 
     writer = None
     if common_cfg.log_history and is_main:
@@ -1279,6 +1476,8 @@ def train_deepof_model_base(
             teacher_cfg,
             writer,
             device,
+            model=model,
+            resume_state=resume_state,
         )
 
     # ----------------------------------------------------
@@ -1297,6 +1496,7 @@ def train_deepof_model_base(
             writer,
             device,
             model=model,
+            resume_state=resume_state,
         )
 
     # ----------------------------------------------------
@@ -1328,8 +1528,10 @@ def fit_VQVAE(
     writer: SummaryWriter,
     device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
+    model: VQVAEPT = None,
+    resume_state: Optional[dict] = None,
 ):
-    
+
     tuning_mode=False
     if trial is not None:
         tuning_mode=True
@@ -1357,21 +1559,25 @@ def fit_VQVAE(
     }
     
     # Create model
-    model = VQVAEPT(
-        input_shape=train_loader.dataset.x_shape,
-        edge_feature_shape=train_loader.dataset.a_shape,
-        adjacency_matrix=adjacency_matrix,
-        latent_dim=common_cfg.latent_dim,
-        n_components=common_cfg.n_components,
-        encoder_type=common_cfg.encoder_type,
-        use_gnn=True,
-        interaction_regularization=common_cfg.interaction_regularization,
-        kmeans_loss=common_cfg.kmeans_loss,
-        tcn_conv_filters=common_cfg.tcn_conv_filters,
-        tcn_kernel_size=common_cfg.tcn_kernel_size,
-        tcn_conv_stacks=common_cfg.tcn_conv_stacks,
-        tcn_conv_dilations=common_cfg.tcn_conv_dilations,
-    ).to(device, non_blocking=True)
+    if model is None:
+        model = VQVAEPT(
+            input_shape=train_loader.dataset.x_shape,
+            edge_feature_shape=train_loader.dataset.a_shape,
+            adjacency_matrix=adjacency_matrix,
+            latent_dim=common_cfg.latent_dim,
+            n_components=common_cfg.n_components,
+            encoder_type=common_cfg.encoder_type,
+            use_gnn=True,
+            interaction_regularization=common_cfg.interaction_regularization,
+            kmeans_loss=common_cfg.kmeans_loss,
+            tcn_conv_filters=common_cfg.tcn_conv_filters,
+            tcn_kernel_size=common_cfg.tcn_kernel_size,
+            tcn_conv_stacks=common_cfg.tcn_conv_stacks,
+            tcn_conv_dilations=common_cfg.tcn_conv_dilations,
+        ).to(device, non_blocking=True)
+    else:  # continue_training: the loaded model takes the loss weight of the current config
+        model.to(device)
+        model.vq_layer.kmeans = common_cfg.kmeans_loss
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
@@ -1389,17 +1595,20 @@ def fit_VQVAE(
             # find_unused_parameters=True,  # only enable if you get “unused parameter” errors
         )
 
-    # Create teacher
+    # Create teacher (resume: the targets of the interrupted training)
     teacher_cfg.include_latent_view=False
-    teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
-        teacher_cfg=teacher_cfg,
-        common_cfg=common_cfg,
-        train_dataset=train_loader.dataset,
-        preprocessed_train=preprocessed_train,
-        data_path=data_path,
-        device=device,
-        latent_view=None,
-    )
+    if resume_state is not None:
+        tau_star = resume_state["tau_star"]
+    else:
+        teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
+            teacher_cfg=teacher_cfg,
+            common_cfg=common_cfg,
+            train_dataset=train_loader.dataset,
+            preprocessed_train=preprocessed_train,
+            data_path=data_path,
+            device=device,
+            latent_view=None,
+        )
     if tau_star is not None:
         tau_star = tau_star.to(device)
 
@@ -1421,6 +1630,7 @@ def fit_VQVAE(
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
     if is_ddp:
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+    _build_lazy_parameters(model, train_loader.dataset.x_shape, train_loader.dataset.a_shape, device)
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
@@ -1434,8 +1644,19 @@ def fit_VQVAE(
     score_tol = 0.01
     log_summary=init_log_summary(model_name)
 
+    # Resume an interrupted training (continue_training="resume")
+    last_path = last_ckpt_path(model_name, common_cfg)
+    heads = {"distill_head": distill_head}
+    start_epoch = 0
+    if resume_state is not None:
+        log_summary = resume_state.get("log_summary") or log_summary
+        start_epoch, best = _restore_training_state(
+            resume_state, optimizer, None, scaler, heads, lambda_scheduler, train_loader
+        )
+        best_val, best_score, best_score_val = best["best_val"], best["best_score"], best["best_score_val"]
+
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
-    for epoch in range(common_cfg.epochs):
+    for epoch in range(start_epoch, common_cfg.epochs):
 
         # Summarize some variables into namespace
         ctx = SimpleNamespace(
@@ -1540,7 +1761,27 @@ def fit_VQVAE(
                     save_weights=common_cfg.save_weights,
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
-        
+
+        # Most recent state, overwritten every epoch (continue_training="resume" continues from here)
+        if common_cfg.save_weights and is_main:
+            save_model_info(
+                last_path,
+                stage="last",
+                epoch=epoch,
+                train_steps=(epoch + 1) * len(train_loader),
+                val_total=v_total,
+                common_cfg=common_cfg,
+                teacher_cfg=teacher_cfg,
+                model=unwrap_dp(model),
+                log_summary=log_summary,
+                rebuild_spec=rebuild_spec,
+                resume_state=_training_state(
+                    epoch, {"common_cfg": common_cfg, "teacher_cfg": teacher_cfg, "vade_cfg": None,
+                            "contrastive_cfg": None},
+                    optimizer, None, scaler, heads, lambda_scheduler,
+                    {"best_val": best_val, "best_score": best_score, "best_score_val": best_score_val}, tau_star,
+                ),
+            )
 
     # Load states of best val and score models
     unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size
@@ -1553,7 +1794,7 @@ def fit_VQVAE(
         writer.close()
 
     if tuning_mode:
-        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
+        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score
 
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
 
@@ -1687,6 +1928,7 @@ def fit_contrastive(
     device: torch.device = torch.device("cpu"),
     trial: optuna.Trial = None,
     model: ContrastivePT = None,
+    resume_state: Optional[dict] = None,
 ):
     
     tuning_mode=False
@@ -1712,7 +1954,7 @@ def fit_contrastive(
             f"(({full_window} - {window_len}) // 2 = {max_room}); positive shifts will be clipped at the window edges."
         )
     neg_aug = contrastive_cfg.shift_view_mode == "neg_aug"
-    no_shift_neg = neg_aug and contrastive_cfg.neg_aug_shift_fraction == 0  # no time-shifted hard negative
+    no_shift_neg =neg_aug and contrastive_cfg.neg_aug_shift_fraction == 0  # no time-shifted hard negative
     if not no_shift_neg and neg_max_shift > max_room:
         warnings.warn(
             f"Hard-negative shift up to {neg_max_shift} exceeds the room left by the preprocessed window ({max_room}); "
@@ -1761,8 +2003,15 @@ def fit_contrastive(
             tcn_conv_stacks=common_cfg.tcn_conv_stacks,
             tcn_conv_dilations=common_cfg.tcn_conv_dilations,
         ).to(device)
-    else:
+    else:  # continue_training: the loaded model takes the loss settings of the current config
         model.to(device)
+        if model.window_size != window_len:
+            raise ValueError(f"The model works on windows of {model.window_size} frames, not contrastive_window={window_len}.")
+        model.similarity_function = contrastive_cfg.contrastive_similarity_function
+        model.loss_function = contrastive_cfg.contrastive_loss_function
+        model.temperature = contrastive_cfg.temperature
+        model.beta = contrastive_cfg.beta
+        model.tau = contrastive_cfg.tau
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
@@ -1827,6 +2076,8 @@ def fit_contrastive(
         regression_head = nn.Linear(backbone_dim, regression_targets.shape[1]).to(device)
         nn.init.zeros_(regression_head.weight)  # starts predicting zeros, so the loss starts at about lambda_regression
         nn.init.zeros_(regression_head.bias)
+    elif resume_state is not None:
+        tau_star = resume_state["tau_star"]  # the TURTLE targets of the interrupted training
     else:
         teacher, tau_star, teacher_views = deepof.clustering.teacher_model.maybe_build_turtle_teacher(
             teacher_cfg=teacher_cfg,
@@ -1859,6 +2110,8 @@ def fit_contrastive(
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
         if regression_head is not None:
             regression_head = DDP(regression_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+    _build_lazy_parameters(model, (window_len, *train_loader.dataset.x_shape[1:]),
+                           (window_len, *train_loader.dataset.a_shape[1:]), device)
     optimizer = build_optimizer_generic(
         model, regression_head if regression_head is not None else distill_head,
         base_lr=common_cfg.learning_rate, weight_decay=1e-4,
@@ -1887,8 +2140,19 @@ def fit_contrastive(
     log_summary=init_log_summary(model_name)
     max_score=-np.inf
 
+    # Resume an interrupted training (continue_training="resume")
+    last_path = last_ckpt_path(model_name, common_cfg)
+    heads = {"distill_head": distill_head, "regression_head": regression_head}
+    start_epoch = 0
+    if resume_state is not None:
+        log_summary = resume_state.get("log_summary") or log_summary
+        start_epoch, best = _restore_training_state(
+            resume_state, optimizer, lr_scheduler, scaler, heads, lambda_scheduler, train_loader
+        )
+        best_val, best_score, best_score_val = best["best_val"], best["best_score"], best["best_score_val"]
+
     print(f"\n--- Training Contrastive for {common_cfg.epochs} epochs ---")
-    for epoch in range(common_cfg.epochs):
+    for epoch in range(start_epoch, common_cfg.epochs):
 
         # Prototype loss: recluster the training windows with the current model at the start of every epoch
         prototypes = None
@@ -2026,6 +2290,28 @@ def fit_contrastive(
                 )
                 print(f"  Saved best SCORE model -> {best_path_score} (score: {best_score:.6f})")
 
+        # Most recent state, overwritten every epoch (continue_training="resume" continues from here)
+        if common_cfg.save_weights and is_main:
+            save_model_info(
+                last_path,
+                stage="last",
+                epoch=epoch,
+                train_steps=(epoch + 1) * len(train_loader),
+                val_total=v_total,
+                common_cfg=common_cfg,
+                teacher_cfg=teacher_cfg,
+                contrastive_cfg=contrastive_cfg,
+                model=unwrap_dp(model),
+                log_summary=log_summary,
+                rebuild_spec=rebuild_spec,
+                resume_state=_training_state(
+                    epoch, {"common_cfg": common_cfg, "teacher_cfg": teacher_cfg, "vade_cfg": None,
+                            "contrastive_cfg": contrastive_cfg},
+                    optimizer, lr_scheduler, scaler, heads, lambda_scheduler,
+                    {"best_val": best_val, "best_score": best_score, "best_score_val": best_score_val}, tau_star,
+                ),
+            )
+
 
     # Load states of best val and score models
     unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size
@@ -2038,9 +2324,9 @@ def fit_contrastive(
         writer.close()
 
     if tuning_mode:
-        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score 
+        return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score
 
-    return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary   
+    return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
 
 
 def fit_VADE(

@@ -2081,9 +2081,10 @@ class ContrastivePT(nn.Module):
       a: (B, T, E, F_edge)
 
     Behavior:
-      - Builds an encoder for sequences of length T//2.
-      - forward(x_half, a_half) returns embeddings (B, D) for a given half-window.
-      - compute_loss(x_full, a_full) slices pos/neg windows and returns (loss, pos_mean, neg_mean, debug).
+      - Builds an encoder for sequences of length window_len (default T//2).
+      - forward(x_win, a_win) returns embeddings (B, D) for a window of that length (the backbone output with
+        cluster_mode=True).
+      - The model has no loss of its own: views and loss are built in training.step_contrastive_distill.
     """
 
     def __init__(

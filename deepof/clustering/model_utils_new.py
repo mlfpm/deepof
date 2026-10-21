@@ -7,6 +7,7 @@
 """Utility functions for training autoencoder models for functionality within deepof.clustering."""
 
 import os
+import time
 from typing import Any, NewType, Tuple, Dict, Optional, Mapping, Union
 import copy
 from dataclasses import dataclass, asdict
@@ -355,8 +356,11 @@ def save_model_info(
     log_summary: Optional[Dict[str, Any]] = None,
     rebuild_spec: Optional[Dict[str, Any]] = None,
     save_weights: bool = True,
+    resume_state: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Saves all config and training information for a freshly trained model (+ optionally the model weights)."""
+    """Saves all config and training information for a freshly trained model (+ optionally the model weights).
+    resume_state (training state to resume from, see training._training_state) is stored in the bundle as "resume".
+    The bundle is written to a temporary file first, so an interruption while saving keeps the previous file intact."""
     info_path = os.path.splitext(ckpt_path)[0] + "_info.txt"
     lines = []
     lines.append(f"stage: {stage}")
@@ -376,6 +380,7 @@ def save_model_info(
         keys = ["state_dict"]
         if rebuild_spec is not None: keys.append("rebuild_spec")
         if log_summary is not None: keys.append("log_summary")
+        if resume_state is not None: keys.append("resume")
         lines.append("bundle_keys: " + ", ".join(keys))
         lines.append("")
 
@@ -400,11 +405,26 @@ def save_model_info(
             payload["rebuild_spec"] = rebuild_spec
         if log_summary is not None:
             payload["log_summary"] = log_summary
-        torch.save(payload, ckpt_path)
-
+        if resume_state is not None:
+            payload["resume"] = resume_state
+        torch.save(payload, ckpt_path + ".tmp")
+        _replace_file(ckpt_path + ".tmp", ckpt_path)
 
     with open(info_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+
+
+def _replace_file(src: str, dst: str, attempts: int = 10) -> None:
+    """os.replace, retried for a while: on Windows a file that was just written can be locked for a moment (e.g. by a
+    virus scanner)."""
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.1 * (attempt + 1))
 
 
 def recompute_edges(
@@ -452,6 +472,11 @@ def ckpt_paths(model_name: str, common_cfg : CommonFitCfg):
     return ckpt_dir, best_val_path, best_score_path, teacher_init_path
 
 
+def last_ckpt_path(model_name: str, common_cfg: CommonFitCfg) -> str:
+    """Checkpoint of the most recent epoch (overwritten every epoch), the one to resume an interrupted training from."""
+    return os.path.join(ckpt_paths(model_name, common_cfg)[0], "last_model.pth")
+
+
 def check_model_inputs(
     preprocessed_object: Optional[tuple] = None,
     adjacency_matrix: Optional[np.ndarray] = None,
@@ -461,6 +486,7 @@ def check_model_inputs(
     vade_cfg: Optional[VaDECfg] = None,
     contrastive_cfg: Optional[ContrastiveCfg] = None,
     required_inputs: Optional[Dict[str, Any]] = None,
+    continue_training: Union[bool, str] = False,
 ):
     """
     Checks and validates the main inputs and the resolved configs for model training.
@@ -476,9 +502,11 @@ def check_model_inputs(
         vade_cfg (VaDECfg): VaDE settings.
         contrastive_cfg (ContrastiveCfg): Contrastive model settings.
         required_inputs (dict): Inputs without a default (name -> value); None counts as missing.
+        continue_training (bool or str): False, "distill" or "resume" (see train_deepof_model).
     """
-    # Loading a pretrained model ignores all other inputs
-    if common_cfg is not None and common_cfg.pretrained is not None and os.path.exists(common_cfg.pretrained):
+    # Loading a pretrained model (without further training) ignores all other inputs
+    if (not continue_training and common_cfg is not None and common_cfg.pretrained is not None
+            and os.path.exists(common_cfg.pretrained)):
         return
 
     errors = []
@@ -1071,17 +1099,18 @@ def print_model_info(ckpt_path: str) -> None:
     print(rule + "\n")
 
 
-def load_model_from_ckpt(path: str, device=None, strict: bool = False):
+def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_info: bool = True):
     """
     Load a single model checkpoint saved via save_model_info(..., save_bundle=True)
-    using only the checkpoint path.
+    using only the checkpoint path. print_info: print the sibling info file.
     Returns: model, log_summary, rebuild_spec, load_report
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Print info file (if available)
-    print_model_info(path)
+    if print_info:
+        print_model_info(path)
 
     ckpt = torch.load(path, map_location=device, weights_only=False)  # weights_only=True is NOT compatible with arbitrary dict payloads
     if "state_dict" not in ckpt: # pragma: no cover

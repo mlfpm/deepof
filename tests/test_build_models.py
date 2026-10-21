@@ -192,7 +192,7 @@ def test_embedding_model_fittingPT(model_name):
         return dummy_return
 
     def fake_fit_vqvae(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                        common_cfg, teacher_cfg, writer, device):
+                        common_cfg, teacher_cfg, writer, device, model=None, resume_state=None):
         fit_calls["vqvae"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -205,7 +205,7 @@ def test_embedding_model_fittingPT(model_name):
         return dummy_return
 
     def fake_fit_contrastive(train_loader, val_loader, preprocessed_train, adjacency_matrix,
-                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer, device, model):
+                                meta_info, common_cfg, teacher_cfg, contrastive_cfg, writer, device, model, resume_state=None):
         fit_calls["contrastive"].append({
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -1359,6 +1359,69 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
         rmtree(out_path)
 
 
+@pytest.mark.parametrize("model_name", ["contrastive", "vqvae"])
+def test_continue_training(model_name, monkeypatch):
+    # An interrupted and resumed training ends exactly like an uninterrupted one; "distill" takes the architecture from
+    # the checkpoint
+    training = deepof.clustering.training
+    utils = deepof.clustering.model_utils_new
+    out_path = os.path.join(".", "tests", "test_examples", "test_data", "continue_training_test")
+    if os.path.exists(out_path):
+        rmtree(out_path)
+    step_name = "step_contrastive_distill" if model_name == "contrastive" else "step_vqvae_distill"
+    orig_step = getattr(training, step_name)
+
+    def fit(run, stop_at=None, model=None, resume_state=None, cfgs=None):
+        random.seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
+        train_loader, val_loader, adjacency, meta_info = _tiny_setup()  # random data
+        common_cfg, teacher_cfg, contrastive_cfg = cfgs or (
+            utils.CommonFitCfg(model_name=model_name, encoder_type="TCN", output_path=out_path, run=run, epochs=4,
+                               latent_dim=4, n_components=4, diag_max_batches=1),
+            utils.TurtleTeacherCfg(), utils.ContrastiveCfg(contrastive_window=12),
+        )
+
+        def step(model_, batch, ctx):
+            if ctx.epoch == stop_at:
+                raise KeyboardInterrupt
+            return orig_step(model_, batch, ctx)
+        monkeypatch.setattr(training, step_name, step)
+        if model_name == "contrastive":
+            return training.fit_contrastive(train_loader, val_loader, {}, adjacency, meta_info, common_cfg, teacher_cfg,
+                                            contrastive_cfg, DummyWriter(), model=model, resume_state=resume_state)
+        return training.fit_VQVAE(train_loader, val_loader, {}, adjacency, common_cfg, teacher_cfg, DummyWriter(),
+                                  model=model, resume_state=resume_state)
+
+    model_full, _, _, logs_full = fit(run=0)
+    with pytest.raises(KeyboardInterrupt):
+        fit(run=1, stop_at=2)
+    last_path = os.path.join(out_path, "models", model_name, "run_1", "last_model.pth")
+    common_cfg, teacher_cfg, _, contrastive_cfg, model, _, state = training._load_continue_checkpoint(
+        "resume", utils.CommonFitCfg(pretrained=last_path), utils.TurtleTeacherCfg(), utils.VaDECfg(),
+        utils.ContrastiveCfg(), torch.device("cpu"),
+    )
+    assert state["epoch"] == 1 and common_cfg.epochs == 4 and common_cfg.run == 1
+    model_resumed, _, _, logs_resumed = fit(1, model=model, resume_state=state,
+                                            cfgs=(common_cfg, teacher_cfg, contrastive_cfg))
+    assert logs_resumed["train"]["total_loss"] == logs_full["train"]["total_loss"]
+    full, resumed = model_full.state_dict(), model_resumed.state_dict()
+    assert all(torch.equal(full[k], resumed[k]) for k in full)
+
+    # A finished training can not be resumed; "distill" overrides the architecture
+    with pytest.raises(ValueError, match="already finished"):
+        training._load_continue_checkpoint("resume", utils.CommonFitCfg(pretrained=last_path), utils.TurtleTeacherCfg(),
+                                           utils.VaDECfg(), utils.ContrastiveCfg(), torch.device("cpu"))
+    common_cfg, _, _, contrastive_cfg, _, _, state = training._load_continue_checkpoint(
+        "distill", utils.CommonFitCfg(pretrained=last_path, latent_dim=8), utils.TurtleTeacherCfg(), utils.VaDECfg(),
+        utils.ContrastiveCfg(), torch.device("cpu"),
+    )
+    assert state is None and common_cfg.latent_dim == 4 and common_cfg.model_name == model_name
+    assert model_name == "vqvae" or contrastive_cfg.contrastive_window == 12
+    if os.path.exists(out_path):
+        rmtree(out_path)
+
+
 @settings(deadline=None)
 @given(
     use_gnn=st.booleans(),
@@ -1447,7 +1510,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
             assert 0.0 <= result.logs["neg_similarity"] <= 1.0001
         else:
             assert (1.0 / 3.0) - 1e-4 <= result.logs["neg_similarity"] <= 1.0001
-    # Distill needs to be 0 (as it is disabled in this test) 
+    # Distill needs to be 0 (as it is disabled in this test)
     assert result.logs['distill_loss'] == 0
 
 

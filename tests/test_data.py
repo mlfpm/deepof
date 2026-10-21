@@ -773,7 +773,8 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
 
     # deepof.table testing
     samples_max=sampler.draw(st.integers(min_value=10, max_value=500000))
-    bin_info_time=deepof.visuals_utils._preprocess_time_bins(coordinates=prun, bin_size=None, bin_index=None, samples_max=samples_max)
+    # Same frames as preprocess uses (videos cut at samples_max, not downsampled)
+    bin_info_time=deepof.visuals_utils._preprocess_time_bins(coordinates=prun, bin_size=None, bin_index=None, samples_max=samples_max, down_sample=False)
 
     # at least two entries per column need to be not nan to make sure that not the entire entire table is filtered out due to low variance
     if (np.sum(speeds['test'].iloc[bin_info_time['test'],:].notnull())>1).all() and (np.sum(speeds['test2'].iloc[bin_info_time['test2'],:].notnull())>1).all() :

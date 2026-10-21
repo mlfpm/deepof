@@ -1395,6 +1395,10 @@ def plot_enrichment(
             else:
                 annotator.annotate()
 
+    elif add_stats and len(set(exp_conditions.values())) < 2:
+        warnings.warn(
+            "\033[33mInfo! Only one value of the experimental condition, no statistics are added.\033[0m"
+        )
     elif add_stats:
         # creating pairs containing information about which data gets compared
         pairs = list(
@@ -2379,7 +2383,11 @@ def plot_stationary_entropy(
     np.random.seed(None)
     plt.ylabel("experimental condition")
 
-    if add_stats:
+    if add_stats and len(set(exp_conditions.values())) < 2:
+        warnings.warn(
+            "\033[33mInfo! Only one value of the experimental condition, no statistics are added.\033[0m"
+        )
+    elif add_stats:
         pairs = list(combinations(set(exp_conditions.values()), 2))
 
         annotator = Annotator(
@@ -4093,7 +4101,8 @@ def export_annotated_video(
 
     #preprocess time bins            
     bin_info_time = _preprocess_time_bins(
-        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=np.inf
+        coordinates, bin_size, bin_index, precomputed_bins, start_marker=start_marker, tab_dict_for_binning=tab_dict, samples_max=np.inf,
+        align_lengths=False,  # every video keeps its full selected range (no cut to the shortest experiment)
         )
     
     bin_info = _apply_rois_to_bin_info(coordinates, roi_number, bin_info_time, in_roi_criterion, invert_roi=invert_roi)

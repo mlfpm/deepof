@@ -7,6 +7,8 @@ import io
 import ast
 import copy
 import pickle
+import random
+import time
 import warnings
 import duckdb as db
 import numpy as np
@@ -54,7 +56,21 @@ class DataManager:
             raise FileNotFoundError(
                 f"Database {self.db_path} does not exist (path given: {db_path}, working directory: {os.getcwd()})."
             )
-        self.conn = db.connect(self.db_path)
+        self.conn = self._connect_waiting_for_lock(self.db_path)
+
+    @staticmethod
+    def _connect_waiting_for_lock(db_path: str, timeout: float = 1800.0):
+        """Connect; while another process holds the file lock (e.g. a training and an annotation job on the same
+        project), retry until the lock is free. DeepOF only holds connections for a single load or save."""
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                return db.connect(db_path)
+            except db.IOException as e:
+                locked = any(m in str(e) for m in ("Conflicting lock", "Could not set lock", "already open in"))
+                if not locked or time.monotonic() > deadline:
+                    raise
+                time.sleep(random.uniform(0.5, 2.0))
 
     def close(self):
         self.conn.close()
@@ -218,8 +234,7 @@ class DataManager:
                             periods=total_rows + 1,
                             closed="left",
                         )
-                        s = pd.Series(full.astype(str), copy=False).str.replace(r"^0 days ", "", regex=True)
-                        df.index = pd.Index(s.iloc[pos].to_numpy(dtype=object))
+                        df.index = pd.Index(self._format_legacy_index(full, pos))
 
         return (df, {"duckdb_file": self.db_path, "table": table_name}) if return_path else df
 
@@ -257,6 +272,15 @@ class DataManager:
                 f"n_rows mismatch between table and time metadata for '{table_name}' "
                 f"(table {num_rows}, meta {n_rows_meta})."
             )
+
+            if load_index == "bounds":
+                # Only start and end time: formatting the full index of long videos takes minutes
+                full = pd.timedelta_range("00:00:00", pd.to_timedelta(end_ns, unit="ns"), periods=n_rows_meta + 1,
+                                          closed="left")
+                bounds = self._format_legacy_index(full, [0, n_rows_meta - 1]) if n_rows_meta > 0 else [None, None]
+                meta["index_column"] = None
+                meta["start_time"], meta["end_time"] = bounds[0], bounds[-1]
+                return meta
 
             # Reconstruct full legacy index (HH:MM:SS.SSSSSSSSS)
             idx_strings = self._make_legacy_index_strings_from_end(
@@ -442,6 +466,19 @@ class DataManager:
             periods=int(total_rows) + 1,
             closed="left",
         )
-        s = pd.Series(full.astype(str), copy=False)
-        s = s.str.replace(r"^0 days ", "", regex=True)
-        return s.iloc[start_offset:start_offset + length].to_numpy(dtype=object)
+        return self._format_legacy_index(full, slice(start_offset, start_offset + length))
+
+    @staticmethod
+    def _format_legacy_index(full: pd.TimedeltaIndex, positions) -> np.ndarray:
+        """Legacy index strings of full[positions], identical to formatting the full index and selecting afterwards.
+
+        pandas formats a TimedeltaIndex as whole days ("0 days") if all its values are whole days, else per element
+        ("00:00:00", "00:00:00.066666666"). A one-nanosecond value appended to the selection keeps the format of the full
+        index, so only the selected rows are formatted.
+        """
+        part = full[positions]
+        if not (full.asi8 % 86_400_000_000_000 == 0).all():
+            strings = part.append(pd.TimedeltaIndex([pd.Timedelta(1)])).astype(str)[:-1]
+        else:
+            strings = part.astype(str)
+        return pd.Series(strings, copy=False).str.replace(r"^0 days ", "", regex=True).to_numpy(dtype=object)

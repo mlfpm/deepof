@@ -136,3 +136,38 @@ def test_duckdb_table_handling(tmp_path):
     df = pd.DataFrame([[1, 2, 3, 4]], columns=["a", "b", "a", "a"])
     with DataManager(entry["duckdb_file"]) as manager:
         assert list(manager._prepare_dataframe(df).columns) == ["a", "b", "a_duplicate0", "a_duplicate1"]
+
+
+def test_data_manager_waits_for_lock(tmp_path):
+    """A database locked by another process (e.g. a parallel job) is opened once the lock is released."""
+    import subprocess, sys, time
+    from deepof.data_manager import DataManager
+
+    db_path = str(tmp_path / "database.duckdb")
+    holder = subprocess.Popen([sys.executable, "-c",
+        f"import duckdb, time; c = duckdb.connect({db_path!r}); print('locked', flush=True); time.sleep(3); c.close()"],
+        stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "locked"
+    start = time.monotonic()
+    with DataManager(db_path) as manager:
+        manager.save("x", np.ones((2, 2)))
+    holder.wait()
+    assert time.monotonic() - start > 1
+
+
+def test_index_bounds_and_ranges_match_full_index(tmp_path):
+    """Start / end time ("bounds") and partial index loads give the same strings as the full index."""
+    from deepof.data_manager import DataManager
+
+    n = 1000
+    df = pd.DataFrame({"a": np.zeros(n)}, index=pd.timedelta_range(0, periods=n, freq=pd.Timedelta(seconds=1 / 15)))
+    db_path = str(tmp_path / "database.duckdb")
+    with DataManager(db_path) as manager:
+        tab = {"x": {"duckdb_file": db_path, "table": manager.save("t", df)}}
+
+    full = get_dt(tab, "x", only_metainfo=True, load_index=True)
+    bounds = get_dt(tab, "x", only_metainfo=True, load_index="bounds")
+    assert (bounds["start_time"], bounds["end_time"]) == (full["start_time"], full["end_time"]) == ("00:00:00", full["index_column"][-1])
+    pos = np.array([0, 3, 500, n - 1])
+    assert list(get_dt(tab, "x", load_index=True, load_range=pos).index) == list(full["index_column"][pos])
+    assert list(get_dt(tab, "x", load_index=True, load_range=[0, 9]).index) == list(full["index_column"][:10])

@@ -2688,14 +2688,14 @@ class Coordinates:
         # Trivial case with starts being at table starts
         if start_marker is None:
             for key in self._tables:
-                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['start_time']
+                start_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index="bounds")['start_time']
                 if isinstance(start_times[key], int):
                     start_times[key]=seconds_to_time(float(start_times[key])/self._frame_rate,cut_milliseconds=False)
         # take start times from markers
         else:
             for key in self._tables:
                 start_time = self._start_markers[key][start_marker].iloc[0]
-                end_time=get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+                end_time=get_dt(self._tables,key, only_metainfo=True, load_index="bounds")['end_time']
                 if isinstance(end_time, str):
                     end_time=np.round(time_to_seconds(end_time)*self._frame_rate)
                 assert np.round(time_to_seconds(start_time)*self._frame_rate) < end_time, f"start marker {start_marker} at experiment {key} is exceeding the length of the experiment table!"
@@ -2709,7 +2709,7 @@ class Coordinates:
         """Returns the end time for each table in a dictionary"""
         end_times = {}
         for key in self._tables:
-            end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index=True)['end_time']
+            end_times[key] = get_dt(self._tables,key, only_metainfo=True, load_index="bounds")['end_time']
             if isinstance(end_times[key], int):
                 end_times[key]=seconds_to_time(float(end_times[key])/self._frame_rate,cut_milliseconds=False)
         return end_times
@@ -4370,6 +4370,16 @@ class TableDict(dict):
             mouse_size_normalization=mouse_size_normalization,
             quality_to_load=quality_to_load,
         )
+
+        if not valid_keys:
+            raise ValueError(
+                "No data left to preprocess: the selected frames (time bins) of all videos contain only NaNs."
+            )
+        if isinstance(test_videos, int) and test_videos > len(valid_keys):
+            raise ValueError(
+                f"test_videos={test_videos} exceeds the number of videos with data ({len(valid_keys)}); videos whose "
+                "selected frames contain only NaNs are skipped."
+            )
 
         # ========== Step 2: Fit global scaler ==========
 
