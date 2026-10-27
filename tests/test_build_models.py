@@ -1430,11 +1430,12 @@ def test_continue_training(model_name, monkeypatch):
     similarity_function=st.sampled_from(["cosine","dot","euclidean","edit"]),
     loss_function=st.sampled_from(["nce","dcl","fc","hard_dcl"]),
     shift_view_mode=st.sampled_from(["schedule", "off", "soft_positive"]),
+    imputation_mask=st.booleans(),
 )
-def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_function,loss_function,shift_view_mode):
+def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_function,loss_function,shift_view_mode,imputation_mask):
     device = torch.device("cpu")
 
-    B, T, N, F_node = 2, 24, 11, 3
+    B, T, N, F_node = 2, 24, 11, (4 if imputation_mask else 3)
     E, F_edge = 11, 1
 
     adjacency = np.eye(N, dtype=np.float32)
@@ -1471,6 +1472,7 @@ def test_contrastive_backward_step(use_gnn,encoder_type,latent_dim,similarity_fu
         aug_p_interp = 0.5, 
         aug_noise_sigma = 0.03,  
         aug_p_noise = 0.5, 
+        aug_p_mask_drop = 0.5,
     )
 
     meta_info={}
@@ -1718,6 +1720,30 @@ def test_nce_soft_shift_weights():
     assert torch.isclose(neg, ones) and torch.isclose(off, zero, atol=1e-6)
 
 
+def test_imputation_mask_channel():
+    # The mask (fourth node channel) is reshaped like the other channels, kept by interpolation and node drop, zeroed
+    # per window by the mask dropout, and rejected for VaDE / VQVAE
+    flat = np.arange(2 * 3 * 4 * 5, dtype=float).reshape(2, 3, 20)  # 4 channels of 5 nodes as consecutive blocks
+    out = deepof.clustering.dataset.reorder_and_reshape(flat, 4)
+    assert out.shape == (2, 3, 5, 4) and np.array_equal(out[..., 3], flat[:, :, 15:])
+    torch.manual_seed(0)
+    x = torch.randn(64, 12, 6, 4)
+    x[..., 3] = (torch.rand(64, 12, 6) < 0.3).float()
+    edge_index = torch.tensor([[0, 1], [1, 2], [3, 4], [4, 5]])
+    training = deepof.clustering.training
+    interp = training._augment_linear_interpolate_segments(x, edge_index, min_len=3, max_len=5, p=1.0)
+    dropped = training._augment_node_drop(x, edge_index, min_drop=1, max_drop=2, p=1.0)
+    for aug in (interp, dropped):
+        assert not torch.equal(aug[..., :3], x[..., :3]) and torch.equal(aug[..., 3], x[..., 3])
+    no_mask = training._augment_mask_drop(x, p=0.5)
+    zeroed = (no_mask[..., 3] == 0).flatten(1).all(dim=1)
+    assert 0 < zeroed.sum() < 64 and torch.equal(no_mask[~zeroed], x[~zeroed]) and torch.equal(no_mask[..., :3], x[..., :3])
+    utils = deepof.clustering.model_utils_new
+    with pytest.raises(ValueError, match="imputation mask"):
+        utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={"node_channels": 4},
+                                 common_cfg=utils.CommonFitCfg(model_name="VaDE", encoder_type="TCN"))
+
+
 def test_temperature_schedule():
     # Constant without temperature_end; ramp in sync with the shift negatives (up or down), linear, cycle;
     # validation always at temperature_end
@@ -1796,6 +1822,41 @@ def test_regression_teacher_angle_view(tmp_path):
     ds = deepof.clustering.dataset.BatchDictDataset(no_angles, str(tmp_path), "other_", h5_chunk_len=4)
     with pytest.raises(ValueError, match="include_angles=True"):
         deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
+
+
+def test_regression_teacher_kinematics_view(tmp_path):
+    # Kinematics after the angles in the third array: log1p(x / median of the centre frames) per segment, the number
+    # of segments from the frame rate; the angle view keeps only the angles; nodes_view_parts selects PCA views
+    rng = np.random.default_rng(0)
+    T, K, window_len, fps = 10, 3, 6, 5.0
+    pre = {f"v{i}": (rng.normal(size=(n, T, 6)).astype(np.float32), rng.normal(size=(n, T, 4)).astype(np.float32),
+                     np.concatenate([rng.uniform(0, np.pi, size=(n, T, K)), rng.gamma(2, 50, size=(n, T, 2))],
+                                    axis=2).astype(np.float32)) for i, n in enumerate([7, 5])}
+    meta_info = {"angle_columns": list(range(K)), "kinematics_columns": [("kinematics", "speed_median"),
+                                                                        ("kinematics", "acc_median")], "frame_rate": fps}
+    ds = deepof.clustering.dataset.BatchDictDataset(pre, str(tmp_path), "train_", h5_chunk_len=4)
+    teacher = deepof.clustering.teacher_model
+    n_segments = teacher.kinematics_segments(window_len, fps, 3.0)  # 1.2 s x 3 per second
+    view = teacher.extract_kinematics_segments_view(ds, window_len, K, n_segments=n_segments, batch_size=3)
+    kin = np.concatenate([v[2] for v in pre.values()])[:, 2:8, K:]
+    x = np.log1p(kin / np.sort(kin[:, 3], axis=0)[(len(kin) - 1) // 2])  # torch.median: the lower middle value
+    expected = np.concatenate([s.mean(1) for s in np.array_split(x, n_segments, axis=1)], axis=1)
+    assert n_segments == 4 and np.allclose(view.numpy(), expected, atol=1e-5)
+
+    cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
+        include_nodes_view=True, nodes_view_parts=("speeds",), pca_nodes_dim=2, include_angles_view=True,
+        angle_segments=2, include_kinematics_view=True,
+    )
+    targets, n_views = teacher.build_regression_targets(cfg, ds, window_len, meta_info=meta_info)
+    assert targets.shape == (12, 2 + 2 * K + 2 * n_segments) and n_views == 3
+    with pytest.raises(ValueError, match="include_kinematics=True"):
+        teacher.build_regression_targets(cfg, ds, window_len, meta_info=None)
+    utils = deepof.clustering.model_utils_new
+    with pytest.raises(ValueError, match="include_kinematics_view"):
+        utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={"angle_columns": []},
+                                 common_cfg=utils.CommonFitCfg(model_name="contrastive"),
+                                 teacher_cfg=utils.TurtleTeacherCfg(use_turtle_teacher=True, teacher_mode="regression",
+                                                                     include_kinematics_view=True))
 
 
 def _contrastive_test_setup(T=24, N=11, window_len=12):

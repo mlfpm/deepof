@@ -24,7 +24,7 @@ import torch.distributed as dist
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 from deepof.data_loading import get_dt
 import deepof.utils
-from deepof.clustering.dataset import reorder_and_reshape
+from deepof.clustering.dataset import reorder_and_reshape, node_channels
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -125,6 +125,12 @@ class TurtleTeacherCfg:
     teacher_mode: Optional[str] = None
     lambda_regression: float = 1.0
     angle_segments: int = 1  # regression angle view: mean angle per segment of the centre window (1: whole window)
+    # Regression kinematics view (get_graph_dataset(..., include_kinematics=True)): speed and acceleration per animal,
+    # mean of log1p(x / median) per segment of the centre window, segments_per_second segments per second of the window
+    include_kinematics_view: bool = False
+    kinematics_segments_per_second: float = 3.0
+    # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
+    nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
 
     # Views
     include_latent_view: bool = True
@@ -252,6 +258,9 @@ class ContrastiveCfg:
     aug_node_drop_min: int = 1
     aug_node_drop_max: int = 2
     aug_p_node_drop: float = 0.4  
+    # Probability per view to zero the imputation mask (fourth node channel, get_graph_dataset(include_imputation_mask=
+    # True)), so that the embedding cannot rely on the mask alone; no effect without a mask
+    aug_p_mask_drop: float = 0.3
 
     # fc loss
     elimination_topk: float = 0.1
@@ -555,6 +564,11 @@ def check_model_inputs(
         check(is_int(common_cfg.lr_warmup_epochs, 0), "\"lr_warmup_epochs\" needs to be an integer >= 0")
         if model_name in ("vade", "vqvae"):
             check(is_int(common_cfg.n_components, 1), "\"n_clusters\" needs to be an integer greater than 0")
+            check(
+                meta_info is None or node_channels(meta_info) == 3,
+                "The imputation mask (get_graph_dataset(include_imputation_mask=True)) is only supported by the "
+                "contrastive model so far; preprocess the data without it",
+            )
         if encoder_type == "tcn":
             check(is_int(common_cfg.tcn_conv_filters, 1), "\"tcn_conv_filters\" needs to be an integer greater than 0")
             check(is_int(common_cfg.tcn_kernel_size, 1), "\"tcn_kernel_size\" needs to be an integer greater than 0")
@@ -622,7 +636,7 @@ def check_model_inputs(
             )
         check(is_number(c.elimination_topk, 0, 1), "\"elimination_topk\" needs to be between 0 and 1")
         check(is_int(c.contrastive_window, 1), "\"contrastive_window\" needs to be an integer greater than 0")
-        for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop"):
+        for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop", "aug_p_mask_drop"):
             check(is_number(getattr(c, name), 0, 1), f"\"{name}\" is a probability and needs to be between 0 and 1")
         check(is_number(c.aug_noise_sigma, 0), "\"aug_noise_sigma\" needs to be >= 0")
         for lo, hi, minimum in (
@@ -641,12 +655,31 @@ def check_model_inputs(
 
     # --- Teacher
     if teacher_cfg is not None and teacher_cfg.use_turtle_teacher:
-        views = [teacher_cfg.include_nodes_view, teacher_cfg.include_edges_view, teacher_cfg.include_angles_view]
+        views = [teacher_cfg.include_nodes_view, teacher_cfg.include_edges_view, teacher_cfg.include_angles_view,
+                 teacher_cfg.include_kinematics_view]
         if model_name != "contrastive":  # the contrastive model has no latent view
             views.append(teacher_cfg.include_latent_view)
         check(any(bool(v) for v in views), "The TURTLE teacher needs at least one included view")
         check(is_int(teacher_cfg.teacher_batch_size, 1), "\"teacher_batch_size\" needs to be an integer greater than 0")
         one_of("teacher_mode", teacher_cfg.teacher_mode, ["turtle", "regression"])
+        has_kinematics = meta_info is not None and len(meta_info.get("kinematics_columns", [])) > 0
+        if teacher_cfg.include_kinematics_view:
+            check(teacher_cfg.teacher_mode == "regression",
+                  "\"include_kinematics_view\" is only available with teacher_mode=\"regression\"")
+            check(has_kinematics and "frame_rate" in meta_info, "\"include_kinematics_view\" needs kinematics in the "
+                  "preprocessed data: get_graph_dataset(..., include_kinematics=True)")
+            check(is_number(teacher_cfg.kinematics_segments_per_second, 0, strict_min=True),
+                  "\"kinematics_segments_per_second\" needs to be > 0")
+        if has_kinematics and teacher_cfg.teacher_mode == "turtle" and teacher_cfg.include_angles_view:
+            check(False, "The TURTLE angle view does not separate the angles from the kinematics: preprocess without "
+                  "include_kinematics, or use teacher_mode=\"regression\"")
+        parts = tuple(teacher_cfg.nodes_view_parts) if isinstance(teacher_cfg.nodes_view_parts, (tuple, list)) else ()
+        check(len(parts) > 0 and set(parts) <= {"positions", "speeds"},
+              f"\"nodes_view_parts\" needs to be a non-empty subset of (\"positions\", \"speeds\"), "
+              f"got {teacher_cfg.nodes_view_parts!r}")
+        if teacher_cfg.teacher_mode == "turtle" and teacher_cfg.include_nodes_view:
+            check(set(parts) == {"positions", "speeds"},
+                  "\"nodes_view_parts\" is only available with teacher_mode=\"regression\"")
         if teacher_cfg.include_angles_view and isinstance(preprocessed_object, (tuple, list)) and preprocessed_object:
             train = preprocessed_object[0]
             first = get_dt(train, list(train.keys())[0])
@@ -814,8 +847,9 @@ def embedding_per_video(
             #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
             print("")
 
+            n_channels = 3
             if graph:
-                processed_exp, _, _, _, _ = coordinates.get_graph_dataset(
+                processed_exp, processed_meta, _, _, _ = coordinates.get_graph_dataset(
                     animal_id=animal_id,
                     precomputed_tab_dict=dict_to_preprocess,
                     preprocess=True,
@@ -831,6 +865,14 @@ def embedding_per_video(
                     # projects) would only write them to disk and replace the training windows (table "preprocessed")
                     return_as_paths=False,
                 )
+                n_channels = node_channels(processed_meta)
+                model_channels = getattr(model, "input_shape", (None,) * 3)[-1]
+                if model_channels is not None and model_channels != n_channels:
+                    raise ValueError(
+                        f"The model was trained on {model_channels} node features per body part, the data has {n_channels}: "
+                        "use the to_preprocess of a get_graph_dataset call with the same include_imputation_mask setting as in "
+                        "training."
+                    )
 
             else:
 
@@ -848,7 +890,7 @@ def embedding_per_video(
                 )
 
             tab_tuple=deepof.utils.get_dt(processed_exp[0],key)
-            tab_tuple = (reorder_and_reshape(tab_tuple[0]),np.expand_dims(tab_tuple[1],-1))
+            tab_tuple = (reorder_and_reshape(tab_tuple[0], n_channels),np.expand_dims(tab_tuple[1],-1))
         
             x_all = torch.as_tensor(tab_tuple[0], dtype=torch.float32, device=device)
             a_all = torch.as_tensor(tab_tuple[1], dtype=torch.float32, device=device)

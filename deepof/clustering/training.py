@@ -529,6 +529,7 @@ def step_contrastive_distill(
         node_drop_min = contrastive_cfg.aug_node_drop_min,
         node_drop_max = contrastive_cfg.aug_node_drop_max,
         p_node_drop = contrastive_cfg.aug_p_node_drop,          
+        p_mask_drop = contrastive_cfg.aug_p_mask_drop,
     )
 
     # Only the NCE loss uses the time-shifted third view; skip its augmentation and encoder pass otherwise
@@ -571,6 +572,7 @@ def step_contrastive_distill(
             node_drop_min = contrastive_cfg.aug_node_drop_min,
             node_drop_max = contrastive_cfg.aug_node_drop_max,
             p_node_drop = contrastive_cfg.aug_p_node_drop,          
+            p_mask_drop = contrastive_cfg.aug_p_mask_drop,
         )
 
     # Split back into two views
@@ -1032,6 +1034,9 @@ def train_deepof_model(
     teacher_mode: Optional[str] = None,
     lambda_regression: Optional[float] = None,
     angle_segments: Optional[int] = None,
+    include_kinematics_view: Optional[bool] = None,  # needs get_graph_dataset(..., include_kinematics=True)
+    kinematics_segments_per_second: Optional[float] = None,
+    nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     # Diagnostics
     diag_max_batches: Optional[int] = None,
     # Model type
@@ -1095,6 +1100,7 @@ def train_deepof_model(
     aug_node_drop_min: Optional[int] = None,
     aug_node_drop_max: Optional[int] = None,
     aug_p_node_drop: Optional[float] = None,
+    aug_p_mask_drop: Optional[float] = None,
     # Dataset management 
     device: str = None,
     h5_dataset_folder: Optional[str] = None,
@@ -1192,6 +1198,9 @@ def train_deepof_model(
         teacher_mode=_lower(teacher_mode),
         lambda_regression=lambda_regression,
         angle_segments=angle_segments,
+        include_kinematics_view=include_kinematics_view,
+        kinematics_segments_per_second=kinematics_segments_per_second,
+        nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
     )
     if teacher_freeze_at is False:  # None means "use the default", so False disables freezing
         teacher_cfg.teacher_freeze_at = None
@@ -1281,7 +1290,8 @@ def train_deepof_model(
         aug_p_rot=aug_p_rot,
         aug_node_drop_min = aug_node_drop_min,
         aug_node_drop_max = aug_node_drop_max,
-        aug_p_node_drop = aug_p_node_drop,  
+        aug_p_node_drop = aug_p_node_drop,
+        aug_p_mask_drop = aug_p_mask_drop,  
         # info nce
         sim_threshold = sim_threshold,
         # vicereg
@@ -1424,12 +1434,14 @@ def train_deepof_model_base(
     preprocessed_train, preprocessed_val = preprocessed_object
     train_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_train, data_path, "train_", force_rebuild=False,
-        h5_chunk_len=common_cfg.batch_size, supervised_dict=None, 
+        h5_chunk_len=common_cfg.batch_size, supervised_dict=None,
+        node_channels=deepof.clustering.dataset.node_channels(meta_info),
         global_shuffle=True if model_name == "contrastive" else False
     )
     val_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_val, data_path, "val_", force_rebuild=False,
         h5_chunk_len=common_cfg.batch_size, supervised_dict=None,
+        node_channels=deepof.clustering.dataset.node_channels(meta_info),
         global_shuffle=True if model_name == "contrastive" else False
     )
 
@@ -2066,7 +2078,7 @@ def fit_contrastive(
     if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
         # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
         regression_targets, n_regression_views = deepof.clustering.teacher_model.build_regression_targets(
-            teacher_cfg, train_loader.dataset, window_len
+            teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info
         )
         regression_targets = regression_targets.to(device)
         with torch.no_grad():
@@ -3200,7 +3212,8 @@ def _augment_linear_interpolate_segments(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Replace one random contiguous segment (length <= max_len) with linear interpolation, per sample with prob p.
-    Applies to all node channels (x,y,speed). Recomputes a from x after augmentation.
+    Applies to x, y and speed; an imputation mask (fourth channel) keeps its original values, so the interpolated
+    segment is not marked as imputed. Recomputes a from x after augmentation.
     """
     if max_len <= 0 or p <= 0.0:
         return x
@@ -3252,7 +3265,8 @@ def _augment_linear_interpolate_segments(
     alpha_e = alpha.unsqueeze(-1).unsqueeze(-1)                        # (B,T,1,1)
     interp = (1.0 - alpha_e) * start_e + alpha_e * end_e              # (B,T,N,3)
 
-    # Apply only on masked frames
+    # Apply only on masked frames, not to the imputation mask
+    interp[..., 3:] = x_aug[..., 3:]
     x_aug = torch.where(mask.unsqueeze(-1).unsqueeze(-1), interp, x_aug)
     # <^^^^ VECTORIZED interpolation <^^^^
 
@@ -3274,14 +3288,18 @@ def _augment_node_drop(
     if max_drop <= 0 or p <= 0.0:
         return x
 
-    B, T, N, F = x.shape
+    B, T, N = x.shape[:3]
     if N <= 1:
         return x
 
     max_drop = min(max_drop, N - 1)
     min_drop = min(min_drop, max_drop)
 
+    # Displaces x, y and speed; an imputation mask (fourth channel) keeps its values, as the moved body parts simulate
+    # confident wrong detections
     x_aug = x.clone()
+    x = x[..., :3]
+    F = 3  # (x, y, speed) are displaced as one 3D point
     device, dtype = x.device, x.dtype
     eps = 1e-8
     jitter_scale = 0.1
@@ -3320,14 +3338,24 @@ def _augment_node_drop(
     new_pos = centers.unsqueeze(2) + rel * scale
 
     index = drop_nodes[:, None, :, None].expand(B, T, K, F)
-    orig_at = x_aug.gather(2, index)
+    orig_at = x_aug[..., :3].gather(2, index)
     src = torch.where(valid[:, None, :, None], new_pos, orig_at)
-    x_aug = x_aug.scatter(2, index, src)
+    x_aug[..., :3] = x_aug[..., :3].scatter(2, index, src)
 
     if plot:  # pragma: no cover
         _plot_augmentation._edge_index = edge_index
         _plot_augmentation(x, x_aug)
 
+    return x_aug
+
+
+def _augment_mask_drop(x: torch.Tensor, p: float = 0.0) -> torch.Tensor:
+    """Zero the imputation mask (fourth node channel) of whole windows with probability p per sample, i.e. "all
+    positions tracked", so that the embedding cannot rely on the mask alone. No-op without a mask."""
+    if p <= 0.0 or x.shape[-1] < 4:
+        return x
+    x_aug = x.clone()
+    x_aug[torch.rand(x.shape[0], device=x.device) < p, :, :, 3] = 0.0
     return x_aug
 
 
@@ -3486,6 +3514,7 @@ def _make_augmented_view(
     node_drop_min: float = 1,
     node_drop_max: float = 2,
     p_node_drop: float = 0.4,
+    p_mask_drop: float = 0.0,
     return_shift: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -3502,6 +3531,7 @@ def _make_augmented_view(
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
     x_aug = _augment_node_drop(x_aug, edge_index, min_drop=node_drop_min, max_drop=node_drop_max, p=p_node_drop, plot=False)
+    x_aug = _augment_mask_drop(x_aug, p=p_mask_drop)
 
     a_aug = recompute_edges(x_aug, edge_index) 
 

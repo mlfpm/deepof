@@ -18,17 +18,16 @@ _DEFAULT_SHUFFLE_SEED = 42
 _SHUFFLE_COPY_RAM = 256 * 1024 ** 2  # ~256 MiB per permute chunk
 
 
-def reorder_and_reshape(data: np.ndarray) -> np.ndarray:
-    assert data.shape[2] % 3 == 0, "Error! Number of columns is not a multiple of 3 (x, y, speed)!"
-    D = data.shape[2]
-    N = D // 3
+def reorder_and_reshape(data: np.ndarray, n_channels: int = 3) -> np.ndarray:
+    """(B, W, n_channels * N) with the channels as consecutive blocks (x, y, speed, (imputation mask)) -> (B, W, N, n_channels)."""
+    assert data.shape[2] % n_channels == 0, f"Error! Number of columns is not a multiple of {n_channels} (node channels)!"
+    N = data.shape[2] // n_channels
+    return np.stack([data[:, :, c * N:(c + 1) * N] for c in range(n_channels)], axis=-1)
 
-    x = data[:, :, 0:N]
-    y = data[:, :, N:2*N]
-    s = data[:, :, 2*N:3*N]
 
-    out = np.stack([x, y, s], axis=-1)  # (B, W, N, 3)
-    return out
+def node_channels(meta_info: Dict) -> int:
+    """Number of node channels of a dataset: 3 (x, y, speed), 4 with the imputation mask."""
+    return int(meta_info.get("node_channels", 3))
 
 
 def _input_fingerprint(preprocessed_dict: Dict, keys) -> str:
@@ -60,8 +59,10 @@ class BatchDictDataset:
         read_only: bool = False,
         global_shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
+        node_channels: int = 3,
     ):
         self.dataset_folder = dataset_folder
+        self.node_channels = int(node_channels)  # x, y, speed, (imputation mask)
         self.dataset_name = dataset_name
         self.return_angles = return_angles
         self.supervised_dict = supervised_dict
@@ -104,7 +105,7 @@ class BatchDictDataset:
 
         X_first, a_first, ang_first = get_dt(preprocessed_dict, keys[0])
         expected_shapes = {
-            'x': tuple(reorder_and_reshape(X_first[:1]).shape[1:]),
+            'x': tuple(reorder_and_reshape(X_first[:1], self.node_channels).shape[1:]),
             'a': tuple(np.expand_dims(a_first[:1], -1).shape[1:]),
         }
         if self.has_angles and ang_first.size > 0:
@@ -266,7 +267,7 @@ class BatchDictDataset:
         X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
         n = int(X_batch.shape[0])
         arrays = {
-            "X": reorder_and_reshape(X_batch).astype(np.float32, copy=False),
+            "X": reorder_and_reshape(X_batch, self.node_channels).astype(np.float32, copy=False),
             "a": np.expand_dims(a_batch, -1).astype(np.float32, copy=False),
         }
         if self.has_angles and ang_batch.size > 0:
@@ -484,7 +485,7 @@ class BatchDictDataset:
         for i, key in enumerate(keys):
             X_batch, a_batch, ang_batch = get_dt(preprocessed_dict, key)
             if shapes_X is None:
-                sample_X = reorder_and_reshape(X_batch[:1])
+                sample_X = reorder_and_reshape(X_batch[:1], self.node_channels)
                 sample_A = np.expand_dims(a_batch[:1], -1)
                 sample_Ang = np.expand_dims(ang_batch[:1], -1)
                 shapes_X = tuple(sample_X.shape[1:])

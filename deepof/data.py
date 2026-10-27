@@ -244,8 +244,10 @@ def load_project(
     if not (hasattr(coordinates, "_custom_behaviors")):
             coordinates._custom_behaviors = None
             coordinates._custom_continuous_behavior_names=[]
-    if not (hasattr(coordinates, "_animal_presence_threshold")):        
+    if not (hasattr(coordinates, "_animal_presence_threshold")):
             coordinates._animal_presence_threshold = 0.5
+    if not (hasattr(coordinates, "_likelihood_tolerance")):
+            coordinates._likelihood_tolerance = likelihood_tol
     if not (hasattr(coordinates, "_start_markers")):        
             coordinates._start_markers = None
     # Error for not compatible versions
@@ -1692,6 +1694,7 @@ class Project:
             animal_conditions=self.animal_conditions,
             start_markers = self.start_markers,
             animal_presence_threshold = self.animal_presence_threshold,
+            likelihood_tolerance=self.likelihood_tolerance,
             path=self.project_path,
             quality=quality,
             scales=self.scales,
@@ -1874,6 +1877,7 @@ class Coordinates:
         animal_conditions: dict = None,
         start_markers: dict = None,
         animal_presence_threshold: float = 0.5,
+        likelihood_tolerance: float = 0.75,
         number_of_rois: int = 0,
         run_numba: bool = False,
         very_large_project: bool = False,
@@ -1907,6 +1911,7 @@ class Coordinates:
             exp_conditions (dict): Dictionary containing the experimental conditions of the experiment. See deepof.data.Project for more information.
             start_markers (dict): Dictionary containing the start markers of the experiment. See deepof.data.Project for more information.
             animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
+            likelihood_tolerance (float): Likelihood below which a body part position was treated as an outlier and imputed during project creation.
             number_of_rois (int): number of behavior rois t be drawn during project creation, default = 0,
             run_numba (bool): Determines if numba versions of functions should be used (run faster but require initial compilation time on first run)
             very_large_project (bool): Decides if memory efficient data loading and saving should be used
@@ -1928,6 +1933,7 @@ class Coordinates:
         self._animal_conditions = animal_conditions
         self._start_markers = start_markers
         self._animal_presence_threshold = animal_presence_threshold
+        self._likelihood_tolerance = likelihood_tolerance
         self._frame_rate = frame_rate
         self._path = path
         self._quality = quality
@@ -2829,6 +2835,86 @@ class Coordinates:
             table_path=os.path.join(self._project_path, self._project_name, "Tables"),
             animal_ids=self._animal_ids)
 
+    def get_imputation_mask(self, bodyparts: List[str], return_path: bool = False) -> table_dict:
+        """Binary mask of the imputed body part positions per frame: 1 where the likelihood is below the likelihood
+        tolerance used at project creation, and for all body parts of an animal in frames in which it counts as missing
+        (median likelihood below the animal presence threshold). Positions removed for deviating from the moving average
+        (interpolation_std) are not included.
+
+        Args:
+            bodyparts (List[str]): Body parts to include (with animal prefix), e.g. the nodes of the graph.
+            return_path (bool): If True, the tables are saved and returned as paths.
+
+        Returns:
+            table_dict: One table per video with the columns (bodypart, "mask").
+        """
+        quality = self.get_quality()
+        animal_ids = [a for a in self._animal_ids if a] if self._animal_ids and self._animal_ids[0] else [""]
+        masks = {}
+        for key in quality.keys():
+            lik = get_dt(quality, key)
+            missing = lik[bodyparts].to_numpy(float) < self._likelihood_tolerance
+            for animal in animal_ids:
+                cols = [i for i, bp in enumerate(bodyparts) if not animal or bp.startswith(animal + "_")]
+                animal_cols = [c for c in lik.columns if not animal or str(c).startswith(animal + "_")]
+                absent = (lik[animal_cols].median(axis=1) <= self._animal_presence_threshold).to_numpy()
+                missing[np.ix_(absent, cols)] = True
+            mask = pd.DataFrame(
+                missing.astype(self._bit_precision.dtype), index=lik.index,
+                columns=pd.MultiIndex.from_tuples([(bp, "mask") for bp in bodyparts]),
+            )
+            table_path = os.path.join(self._project_path, self._project_name, "Tables", key, key + "_imputation_mask")
+            masks[key] = save_dt(mask, table_path, return_path)
+        return TableDict(
+            masks, typ="imputation_mask", table_path=os.path.join(self._project_path, self._project_name, "Tables"),
+            animal_ids=self._animal_ids,
+        )
+
+    def get_kinematics(self, return_path: bool = False) -> table_dict:
+        """Speed and acceleration of every animal per frame, from the arena-centred positions before any alignment (the
+        aligned positions of get_graph_dataset are rotated per frame, so their changes would contain the rotation).
+        Per animal, the median and the second largest value over its body parts of the speed (displacement per frame
+        times the frame rate, mm/s) and of the acceleration (magnitude of the second difference of the positions times
+        the frame rate squared, mm/s^2; includes changes of direction at constant speed). No smoothing beyond the one
+        at project creation. Targets of the kinematics view of the regression teacher (see include_kinematics in
+        get_graph_dataset).
+
+        Args:
+            return_path (bool): If True, the tables are saved and returned as paths.
+
+        Returns:
+            table_dict: One table per video with the columns (<animal>_kinematics, <statistic>), statistics
+            speed_median, speed_second, acc_median and acc_second ("kinematics" without animal ids).
+        """
+        coords = self.get_coords(center="arena", return_path=return_path)
+        animal_ids = [a for a in self._animal_ids if a] if self._animal_ids and self._animal_ids[0] else [""]
+        tables = {}
+        for key in coords.keys():
+            tab = get_dt(coords, key)
+            columns, values = [], []
+            for animal in animal_ids:
+                parts = sorted({c[0] for c in tab.columns if c[1] == "x" and (not animal or c[0].startswith(animal + "_"))})
+                if len(parts) < 2:
+                    raise ValueError(f"The kinematics need at least two body parts per animal, got {parts}")
+                pos = np.stack([tab[[(p, "x") for p in parts]].to_numpy(float),
+                                tab[[(p, "y") for p in parts]].to_numpy(float)], axis=-1)  # (frames, parts, 2)
+                speed, acc = np.zeros(pos.shape[:2]), np.zeros(pos.shape[:2])
+                speed[1:] = np.linalg.norm(np.diff(pos, axis=0), axis=-1) * self._frame_rate
+                acc[1:-1] = np.linalg.norm(pos[2:] - 2 * pos[1:-1] + pos[:-2], axis=-1) * self._frame_rate ** 2
+                for name, x in (("speed", speed), ("acc", acc)):
+                    x = np.nan_to_num(x)  # missing positions count as no movement
+                    values += [np.median(x, axis=1), np.sort(x, axis=1)[:, -2]]
+                    columns += [(f"{animal}_kinematics" if animal else "kinematics", f"{name}_{stat}")
+                                for stat in ("median", "second")]
+            kinematics = pd.DataFrame(np.stack(values, axis=1).astype(self._bit_precision.dtype), index=tab.index,
+                                      columns=pd.MultiIndex.from_tuples(columns))
+            table_path = os.path.join(self._project_path, self._project_name, "Tables", key, key + "_kinematics")
+            tables[key] = save_dt(kinematics, table_path, return_path)
+        return TableDict(
+            tables, typ="kinematics", table_path=os.path.join(self._project_path, self._project_name, "Tables"),
+            animal_ids=self._animal_ids,
+        )
+
     @property
     def get_arenas(self):
         """Retrieve all available information associated with the arena."""
@@ -3161,6 +3247,8 @@ class Coordinates:
         return_as_paths: bool = None,
         include_angles: bool = False,
         mouse_size_normalization: bool = False,
+        include_imputation_mask: bool = False,
+        include_kinematics: bool = False,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -3182,11 +3270,15 @@ class Coordinates:
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
             include_angles (bool): If True, the windows additionally contain the (unsigned, unscaled) angles between three connected body parts as a third array next to nodes and edges. They are not used as model input, but as targets of the regression teacher (include_angles_view in train_deepof_model). Defaults to False.
             mouse_size_normalization (bool): If True, the coordinates of each animal are divided by its own body length, which removes size differences between animals but distorts the positions of the animals relative to each other. If False (default), the coordinates of all animals are divided by one shared body length, so that distances between animals are preserved. Speeds and distances are normalized per animal in both cases.
+            include_imputation_mask (bool): If True, every node gets a fourth feature next to x, y and speed: 1 if its position was imputed because of a low likelihood or a missing animal, else 0 (see get_imputation_mask). Only the contrastive model can be trained on it. Defaults to False.
+            include_kinematics (bool): If True, the third array additionally contains (after the angles, if included) the unscaled speed and acceleration per animal of get_kinematics, computed from the positions before alignment (meta_info["kinematics_columns"]). Not a model input, but the targets of the kinematics view of the regression teacher (include_kinematics_view in train_deepof_model). Not available with precomputed_tab_dict. Defaults to False.
 
         Returns:
             merged_features: A graph-based dataset.
 
         """
+        if include_kinematics and precomputed_tab_dict is not None:
+            raise ValueError("include_kinematics is not available with precomputed_tab_dict")
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
@@ -3241,11 +3333,22 @@ class Coordinates:
                 #get angle names from table
                 angle_feature_names = get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns']
 
+                masks = None
+                if include_imputation_mask:
+                    bodyparts = [c[0] for c in get_dt(coords, list(coords.keys())[0], only_metainfo=True)["columns"]
+                                 if c[1] == "x"]
+                    masks = self.get_imputation_mask(bodyparts, return_path=return_as_paths)
+
+                kinematics = self.get_kinematics(return_path=return_as_paths) if include_kinematics else None
+
                 # Merge and extract names
-                # Column order coords, speeds, (angles), distances is assumed by the sorting indices below
+                # Column order coords, speeds, (masks), (angles), (kinematics), distances is assumed by the sorting
+                # indices below
                 tab_dict = coords.merge(
                     speeds,
+                    *([masks] if masks is not None else []),
                     *([angles] if include_angles else []),
+                    *([kinematics] if kinematics is not None else []),
                     dists,
                     save_as_paths=return_as_paths
                     )
@@ -3296,15 +3399,14 @@ class Coordinates:
             edges = sorted(tuple(sorted(e)) for e in graph.edges())
             adj_matrix = nx.adjacency_matrix(graph, nodelist=nodes).todense() #adj_matrix in new node order
 
+            # A merged imputation mask (also in a precomputed_tab_dict built with include_imputation_mask) is the fourth
+            # node feature
+            has_mask = (nodes[0], "mask") in feature_names
             node_feature_names = (
                 [(i, "x") for i in nodes]
                 + [(i, "y") for i in nodes]
                 + nodes
-                #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
-            )
-
-            speed_feature_names = (
-                nodes
+                + ([(i, "mask") for i in nodes] if has_mask else [])
                 #+ get_dt(angles,list(angles.keys())[0], only_metainfo=True)['columns'][0:11]
             )
 
@@ -3321,8 +3423,12 @@ class Coordinates:
                 for j, f in enumerate(feature_names):
                     if n == f:
                         angle_sorting_indices.append(j)
+            # Kinematics (get_kinematics) follow the angles in the third array
+            kinematics_sorting_indices = [
+                j for j, f in enumerate(feature_names) if isinstance(f, tuple) and len(f) == 2
+                and str(f[0]).endswith("kinematics") and f[1] in ("speed_median", "speed_second", "acc_median", "acc_second")
+            ]
 
-            
 
             inner_link_bool_mask = []
             for e in [tuple(sorted(e)) for e in edges]:
@@ -3334,8 +3440,9 @@ class Coordinates:
                     inner_link_bool_mask.append(
                         len(set([node.split("_")[0] for node in e])) == 1
                     )
-            edge_sorting_indices=np.array(edge_sorting_indices)+len(node_sorting_indices)+len(angle_sorting_indices)
-            
+            edge_sorting_indices = (np.array(edge_sorting_indices) + len(node_sorting_indices) + len(angle_sorting_indices)
+                                    + len(kinematics_sorting_indices))
+
             pbar.update()
 
         # Create metainfo
@@ -3344,9 +3451,6 @@ class Coordinates:
         # Create graph datasets
         if preprocess:
 
-            collect_quality = True
-            if collect_quality==True:
-                quality_to_load = self.get_quality()
             to_preprocess, metainfo, global_scaler = tab_dict.preprocess(
                 coordinates=self,
                 #binning info, explicitely stated as otherwise warnings seem to get suppressed
@@ -3356,7 +3460,6 @@ class Coordinates:
                 samples_max=samples_max,
                 align_video_lengths=align_video_lengths,
                 save_as_paths=return_as_paths,
-                quality_to_load=None, #quality_to_load,
                 dist_standardize=dist_standardize,
                 speed_standardize=speed_standardize,
                 coord_standardize=coord_standardize,
@@ -3368,7 +3471,10 @@ class Coordinates:
             metainfo['node_columns']=feature_names[node_sorting_indices]
             metainfo['edge_columns']=feature_names[edge_sorting_indices]
             metainfo['angle_columns']=feature_names[angle_sorting_indices]
-   
+            metainfo['kinematics_columns']=feature_names[kinematics_sorting_indices]
+            metainfo['node_channels']=4 if has_mask else 3  # x, y, speed, (imputation mask)
+            metainfo['frame_rate']=self._frame_rate
+
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for k in range(0,len(to_preprocess)):
                 
@@ -3382,7 +3488,7 @@ class Coordinates:
                             table_path = result[1]
                         tab_nodes = tab[:, :, node_sorting_indices]
                         tab_edges = tab[:, :, edge_sorting_indices] 
-                        tab_angles = tab[:, :, angle_sorting_indices]                    
+                        tab_angles = tab[:, :, angle_sorting_indices + kinematics_sorting_indices]
                         dataset = (tab_nodes, tab_edges, tab_angles)
 
                         num_rows=num_rows+tab.shape[0]
@@ -3418,12 +3524,6 @@ class Coordinates:
 
                     tab, table_path = get_dt(to_preprocess, key, return_path=True) 
 
-                    collect_quality = True
-                    if collect_quality==True:
-                        quality_to_load = self.get_quality().filter_videos([key])
-                        quality = get_dt(quality_to_load, key)
-                        tab[speed_feature_names] = quality[speed_feature_names]
-
                     tab = np.array(tab).astype(self._bit_precision.dtype)
 
                     # Split node features (positions, speeds) from edge features (distances)
@@ -3452,6 +3552,7 @@ class Coordinates:
             metainfo['node_columns']=feature_names[node_sorting_indices]
             metainfo['edge_columns']=feature_names[edge_sorting_indices]
             metainfo['angle_columns']=feature_names[angle_sorting_indices]
+            metainfo['node_channels']=4 if has_mask else 3  # x, y, speed, (imputation mask)
             metainfo['dist_standardize'] = dist_standardize
             metainfo['speed_standardize'] = speed_standardize
             metainfo['coord_standardize'] = coord_standardize
@@ -4295,7 +4396,6 @@ class TableDict(dict):
         file_name: str = "preprocessed",
         save_as_paths: Optional[bool] = None,
         shuffle: bool = False,
-        quality_to_load=None,
         dist_standardize: str = "groupwise",
         speed_standardize: str = "groupwise",
         coord_standardize: str = "groupwise",
@@ -4307,10 +4407,9 @@ class TableDict(dict):
 
         Pipeline:
         1. Filter by time bins, drop all-NaN tables
-        2. Optionally replace speeds with quality scores
-        3. Collect samples to fit global scalers (size-normalized but not standardized)
-        4. Apply full scaling (size + statistical) and save
-        5. Extract sliding windows for training
+        2. Collect samples to fit global scalers (size-normalized but not standardized)
+        3. Apply full scaling (size + statistical) and save
+        4. Extract sliding windows for training
         """
         SCALERS = {"standard", "minmax", "robust"}
 
@@ -4368,7 +4467,6 @@ class TableDict(dict):
             coord_standardize=coord_standardize,
             log_distances=log_distances,
             mouse_size_normalization=mouse_size_normalization,
-            quality_to_load=quality_to_load,
         )
 
         if not valid_keys:
@@ -4412,7 +4510,6 @@ class TableDict(dict):
             mouse_size_normalization=mouse_size_normalization,
             file_name=file_name,
             save_as_paths=save_as_paths,
-            quality_to_load=quality_to_load,
         )
 
         # ========== Step 4: Extract windows ==========

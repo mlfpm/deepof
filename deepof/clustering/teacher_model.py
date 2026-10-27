@@ -885,7 +885,8 @@ def maybe_build_turtle_teacher(
         print("\n--- Building PCA views for teacher (angles) ---")
         angles_train_dataset = BatchDictDataset(
             preprocessed_train, data_path, "train_",
-            force_rebuild=False, h5_chunk_len=common_cfg.batch_size, return_angles=True
+            force_rebuild=False, h5_chunk_len=common_cfg.batch_size, return_angles=True,
+            node_channels=getattr(train_dataset, "node_channels", 3),
         )
         _, pca_angles_train = fit_angles_pca(
             angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=teacher_cfg.batch_size_angles, num_workers=0 
@@ -904,11 +905,12 @@ def maybe_build_turtle_teacher(
     return teacher, tau_star.detach(), views
 
 
-def _with_angles(dataset: BatchDictDataset) -> BatchDictDataset:
-    """The same HDF5 dataset (no rebuild), additionally returning the angles."""
+def _with_angles(dataset: BatchDictDataset, error: str = "The angle view needs angles in the preprocessed data: "
+                 "get_graph_dataset(..., include_angles=True)") -> BatchDictDataset:
+    """The same HDF5 dataset (no rebuild), additionally returning the third array (angles and / or kinematics)."""
     dataset = getattr(dataset, "base_dataset", dataset)  # a loader's dataset is the iterable wrapper
     if not dataset.has_angles:
-        raise ValueError("The angle view needs angles in the preprocessed data: get_graph_dataset(..., include_angles=True)")
+        raise ValueError(error)
     out = copy(dataset)
     out.return_angles = True
     out._h5_X = None  # file handles of the original are not shared
@@ -921,6 +923,7 @@ def extract_angle_segments_view(
     window_len: int,
     n_segments: int = 1,
     batch_size: int = 8192,
+    n_angles: Optional[int] = None,
 ) -> torch.Tensor:
     """
     Mean angle per segment of the centre window (the unaugmented contrastive view) for all samples, in dataset order.
@@ -930,6 +933,8 @@ def extract_angle_segments_view(
         window_len (int): Length of the centre window (contrastive_window).
         n_segments (int): Number of equal segments of the window with one mean each. Defaults to 1 (whole window).
         batch_size (int): Batch size used to read the data. Defaults to 8192.
+        n_angles (int): Number of angle columns at the start of the third array (followed by the kinematics, if
+            included). None (default): all columns are angles.
 
     Returns:
         torch.Tensor: Tensor of shape [N_samples, n_segments * n_angles], segment-major.
@@ -940,9 +945,61 @@ def extract_angle_segments_view(
     )
     feats = []
     for batch in loader:
-        ang = batch[2][..., 0]  # (B, T, n_angles)
+        ang = batch[2][..., 0][..., :n_angles]  # (B, T, n_angles)
         start = (ang.shape[1] - window_len) // 2
         segments = torch.tensor_split(ang[:, start:start + window_len], n_segments, dim=1)
+        feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
+    return torch.cat(feats, dim=0)
+
+
+def kinematics_segments(window_len: int, frame_rate: float, segments_per_second: float) -> int:
+    """Number of segments of the kinematics view: segments_per_second over the duration of the window, at least 1."""
+    return int(min(max(round(window_len / frame_rate * segments_per_second), 1), window_len))
+
+
+@torch.no_grad()
+def extract_kinematics_segments_view(
+    dataset: BatchDictDataset,
+    window_len: int,
+    n_angles: int,
+    n_segments: int = 1,
+    batch_size: int = 8192,
+) -> torch.Tensor:
+    """
+    Kinematics view: per segment of the centre window (the unaugmented contrastive view), the mean of log1p(x / scale)
+    of every kinematics column (speed and acceleration per animal, get_graph_dataset(..., include_kinematics=True)),
+    with scale the median of the column over the centre frames of all samples, for all samples in dataset order.
+
+    Args:
+        dataset (BatchDictDataset): Training dataset, built from data that contains kinematics.
+        window_len (int): Length of the centre window (contrastive_window).
+        n_angles (int): Number of angle columns before the kinematics in the third array.
+        n_segments (int): Number of equal segments of the window with one mean each. Defaults to 1 (whole window).
+        batch_size (int): Batch size used to read the data. Defaults to 8192.
+
+    Returns:
+        torch.Tensor: Tensor of shape [N_samples, n_segments * n_kinematics], segment-major.
+    """
+    def centre_windows():
+        loader = _with_angles(dataset, "The kinematics view needs kinematics in the preprocessed data: "
+                                       "get_graph_dataset(..., include_kinematics=True)").make_loader(
+            batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
+            pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
+        )
+        for batch in loader:
+            kin = batch[2][..., 0][..., n_angles:].float()  # (B, T, n_kinematics)
+            start = (kin.shape[1] - window_len) // 2
+            yield kin[:, start:start + window_len]
+
+    centre = torch.cat([k[:, window_len // 2] for k in centre_windows()], dim=0)
+    if centre.shape[1] == 0:
+        raise ValueError("The kinematics view needs kinematics in the preprocessed data: "
+                         "get_graph_dataset(..., include_kinematics=True)")
+    scale = centre.median(dim=0).values
+    scale = torch.where(scale > 0, scale, centre.mean(dim=0)).clamp_min(1e-6)  # columns that are mostly zero
+    feats = []
+    for kin in centre_windows():
+        segments = torch.tensor_split(torch.log1p(kin.clamp_min(0) / scale), n_segments, dim=1)
         feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
     return torch.cat(feats, dim=0)
 
@@ -951,22 +1008,29 @@ def build_regression_targets(
     teacher_cfg: TurtleTeacherCfg,
     train_dataset: BatchDictDataset,
     window_len: int,
+    meta_info: Optional[dict] = None,
 ) -> Tuple[torch.Tensor, int]:
     """
     Targets of the regression teacher: the included views per training sample (dataset order), concatenated.
 
     Every view is scaled to a mean squared norm of 1, so each view weighs the same in the loss independent of its size:
-    angles are standardized per angle (each angle counts the same), PCA views are centred and divided by their overall
-    RMS (components keep their relative variance, so low-variance components do not get inflated).
+    angles and kinematics are standardized per column (each one counts the same), PCA views are centred and divided by
+    their overall RMS (components keep their relative variance, so low-variance components do not get inflated). The
+    nodes view contributes one view per part (positions, speeds) in teacher_cfg.nodes_view_parts.
 
     Args:
-        teacher_cfg (TurtleTeacherCfg): Teacher settings (included views, PCA sizes, angle_segments).
+        teacher_cfg (TurtleTeacherCfg): Teacher settings (included views, PCA sizes, segments).
         train_dataset (BatchDictDataset): Training dataset.
-        window_len (int): Length of the contrastive view (for the angle view).
+        window_len (int): Length of the contrastive view (for the angle and kinematics views).
+        meta_info (dict): meta_info of get_graph_dataset; needed for the kinematics view (columns of the third array,
+            frame rate).
 
     Returns:
         Tuple[torch.Tensor, int]: Targets of shape [N_samples, D] and the number of views.
     """
+    # The third array holds the angles, then the kinematics (if included)
+    n_angles = len(meta_info["angle_columns"]) if meta_info is not None and len(
+        meta_info.get("kinematics_columns", [])) else None
     views = []
     if teacher_cfg.include_nodes_view:
         print("\n--- Building PCA views for the regression teacher (nodes) ---")
@@ -974,7 +1038,7 @@ def build_regression_targets(
             train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
             batch_size=teacher_cfg.batch_size_nodes, num_workers=0,
         )
-        views += [pca_pos, pca_spd]
+        views += [v for v, part in ((pca_pos, "positions"), (pca_spd, "speeds")) if part in teacher_cfg.nodes_view_parts]
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for the regression teacher (edges) ---")
         views.append(extract_pca_edges_view(
@@ -986,12 +1050,27 @@ def build_regression_targets(
         scaled.append(view / view.pow(2).sum(dim=1).mean().sqrt().clamp_min(1e-8))
     if teacher_cfg.include_angles_view:
         print("\n--- Building the angle view for the regression teacher ---")
+        if n_angles == 0:
+            raise ValueError("The angle view needs angles in the preprocessed data: "
+                             "get_graph_dataset(..., include_angles=True)")
         angles = extract_angle_segments_view(
-            train_dataset, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles
+            train_dataset, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles,
+            n_angles=n_angles,
         )
         angles = (angles - angles.mean(dim=0)) / angles.std(dim=0).clamp_min(1e-8)
         scaled.append(angles / angles.shape[1] ** 0.5)
+    if teacher_cfg.include_kinematics_view:
+        print("\n--- Building the kinematics view for the regression teacher ---")
+        if n_angles is None or "frame_rate" not in meta_info:
+            raise ValueError("The kinematics view needs kinematics in the preprocessed data: "
+                             "get_graph_dataset(..., include_kinematics=True), and its meta_info")
+        n_segments = kinematics_segments(window_len, meta_info["frame_rate"], teacher_cfg.kinematics_segments_per_second)
+        kinematics = extract_kinematics_segments_view(
+            train_dataset, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles
+        )
+        kinematics = (kinematics - kinematics.mean(dim=0)) / kinematics.std(dim=0).clamp_min(1e-8)
+        scaled.append(kinematics / kinematics.shape[1] ** 0.5)
     if not scaled:
-        raise ValueError("The regression teacher needs at least one included view (nodes, edges or angles)")
+        raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
     return torch.cat(scaled, dim=1), len(scaled)
 

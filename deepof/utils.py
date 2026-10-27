@@ -2634,18 +2634,9 @@ def _pp_load_and_prepare_table(
     table_dict,
     key: str,
     bin_indices,
-    quality_to_load=None,
 ) -> pd.DataFrame:
-    """Load table, apply binning, and optionally replace speeds with quality scores."""
-    tab = get_dt(table_dict, key).iloc[bin_indices]
-
-    if quality_to_load is not None:  # pragma: no cover
-        quality = get_dt(quality_to_load.filter_videos([key]), key)
-        shared_cols = list(set(tab.columns) & set(quality.columns))
-        if shared_cols:
-            tab[shared_cols] = quality[shared_cols].iloc[bin_indices]
-
-    return tab
+    """Load table and apply binning."""
+    return get_dt(table_dict, key).iloc[bin_indices]
 
 
 def _pp_filter_low_variance(tab: pd.DataFrame, filter_low_variance: Any) -> pd.DataFrame:
@@ -2723,7 +2714,6 @@ def _pp_pass1_collect_samples(
     coord_standardize: Optional[str],
     log_distances: bool,
     mouse_size_normalization: bool = False,
-    quality_to_load=None,
 ):
     rng = np.random.RandomState(2)
 
@@ -2737,9 +2727,7 @@ def _pp_pass1_collect_samples(
         unit="table",
     ) as pbar:
         for key in keys_list:
-            tab = _pp_load_and_prepare_table(
-                table_dict, key, bin_info[key], quality_to_load=quality_to_load
-            )
+            tab = _pp_load_and_prepare_table(table_dict, key, bin_info[key])
 
             if tab.isna().all().all():
                 pbar.update()
@@ -2989,7 +2977,6 @@ def _pp_pass2_scale_and_save(
     mouse_size_normalization: bool = False,
     file_name: str,
     save_as_paths: bool,
-    quality_to_load=None,
 ):
     """
     Pass 2: Apply scaling + clipping/interpolation + angle reattachment + saving.
@@ -3002,9 +2989,7 @@ def _pp_pass2_scale_and_save(
         unit="table",
     ) as pbar:
         for key in valid_keys:
-            tab = _pp_load_and_prepare_table(
-                table_dict, key, bin_info[key], quality_to_load=quality_to_load
-            )
+            tab = _pp_load_and_prepare_table(table_dict, key, bin_info[key])
             orig_cols = tab.columns
 
             col_types = infer_column_types(tab)
