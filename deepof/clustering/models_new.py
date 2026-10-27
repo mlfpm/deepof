@@ -34,6 +34,35 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
+def _encoder_head(in_features: int, latent_dim: int, dropout_rate: float = 0.0) -> nn.Sequential:
+    """Projection head of the encoders: Dense(2*latent) -> LayerNorm -> Dense(latent) -> LayerNorm -> Dense(latent)."""
+    head = nn.Sequential(
+        nn.Linear(in_features, 2 * latent_dim),
+        nn.ReLU(),
+        nn.Dropout(dropout_rate),
+        nn.LayerNorm(2 * latent_dim),
+        nn.Linear(2 * latent_dim, latent_dim),
+        nn.ReLU(),
+        nn.Dropout(dropout_rate),
+        nn.LayerNorm(latent_dim),
+        nn.Linear(latent_dim, latent_dim),
+    )
+    for m in head.modules():
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.zeros_(m.bias)
+    return head
+
+
+def _normalize_backbone(enc: torch.Tensor) -> torch.Tensor:
+    """Per-sample RMS normalization of the backbone output (the embedding used for clustering), clamped and NaN-free."""
+    head_in = enc.float()
+    rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B, 1)
+    head_in = head_in / rms.clamp(min=1.0)  # avoid division by tiny values
+    head_in = head_in.clamp(min=-1e4, max=1e4)
+    return torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
+
+
 class RecurrentEncoderPT(nn.Module):
     """
     PyTorch translation of the TF recurrent encoder.
@@ -104,9 +133,7 @@ class RecurrentEncoderPT(nn.Module):
             self.register_buffer("edge_laplacian", edge_lap.float())
             self.register_buffer("incidence", inc.float())
 
-            # Final projection after concatenating node+edge embeddings
             final_in = (self.num_nodes * latent_dim) + (self.num_edges * latent_dim)
-            self.final_dense = nn.Linear(final_in, latent_dim)
 
         else:
             # Non-GNN: single recurrent block over a single "group" dimension
@@ -115,7 +142,10 @@ class RecurrentEncoderPT(nn.Module):
                 input_features=in_features,
                 latent_dim=latent_dim,
             )
-            self.final_dense = nn.Linear(2 * latent_dim, latent_dim)
+            final_in = 2 * latent_dim
+
+        # Head MLP after concatenating node+edge embeddings, as in the TCN encoder
+        self.head = _encoder_head(final_in, latent_dim)
 
     @staticmethod
     def tf_style_group_reshape(x: torch.Tensor, groups: int, feat_per_group: int) -> torch.Tensor:
@@ -178,20 +208,16 @@ class RecurrentEncoderPT(nn.Module):
             x_grouped = x_flat.unsqueeze(1)              # (B, 1, T, N*F)
             encoder = self.recurrent_block(x_grouped).squeeze(1)  # (B, 2*latent)
 
-        # Final projection
+        head_in = _normalize_backbone(encoder)
         if return_backbone:
-            return self.final_dense(encoder), encoder
-        if not cluster_mode:
-            out = self.final_dense(encoder)
-        else:
-            out = encoder
-        return out
+            return self.head(head_in), head_in
+        return self.head(head_in) if not cluster_mode else head_in
         
 
 class RecurrentBlockPT(nn.Module):
-    def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat"):
+    def __init__(self, input_features: int, latent_dim: int, bidirectional_merge: str = "concat", internal_dim: int = 32):
         super().__init__()
-        self.internal_dim = int(torch.min(torch.tensor([64,latent_dim]))) # Cap maximum internal dimension to avoid tensor size explosion
+        self.internal_dim = int(internal_dim)  # 32: the width of the TCN (tcn_conv_filters)
         self.latent_dim = latent_dim
         if bidirectional_merge != "concat":
             warnings.warn("Bidirectional merge mode defaulting to 'concat'.")
@@ -234,54 +260,24 @@ class RecurrentBlockPT(nn.Module):
             x32 = x.float()    
             conv_in = x32.reshape(B * T, N, -1).permute(0, 2, 1)  # (B*T, F, N)
             conv_out = F.relu(self.conv1d(conv_in))             # (B*T, 2*latent, N)
-            gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*latent)
+            gru1_in = conv_out.permute(0, 2, 1)                 # (B*T, N, 2*internal)
 
-            # Mask/lengths for packing
-            mask = (gru1_in.abs().sum(dim=-1) > 0)              # (B*T, N)
-            lengths_cpu = mask.sum(dim=1).to(torch.int64).cpu() # lengths must be CPU for pack_padded_sequence
-            valid_idx_cpu = torch.where(lengths_cpu > 0)[0]     # CPU index for CPU lengths
-            valid_idx = valid_idx_cpu.to(dev)                   # GPU index for GPU tensors
-
-            # Stage 2: First GRU with packing
-            gru1_out_full = torch.zeros(
-                B * T, N, 4 * self.internal_dim, device=gru1_in.device, dtype=gru1_in.dtype
-            )
-            if valid_idx.numel() > 0:
-                packed_input = pack_padded_sequence(
-                    gru1_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
-                )
-                packed_output, _ = self.gru1(packed_input)
-                unpacked_output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=N)
-                # Cast source to buffer dtype to avoid AMP mismatch
-                gru1_out_full[valid_idx] = unpacked_output.to(gru1_out_full.dtype)
+            # Stage 2: First GRU over the full sequences (windows have no padding; zeros are valid values)
+            gru1_out, _ = self.gru1(gru1_in)                    # (B*T, N, 4*internal)
 
             # Stage 3: First LayerNorm
-            norm1_in = gru1_out_full.reshape(B, T, N, -1)
-            norm1_out = self.norm1(norm1_in)
+            norm1_out = self.norm1(gru1_out)
 
-            # Stage 4: Second GRU with packing
-            gru2_in = norm1_out.reshape(B * T, N, -1)
-            gru2_h_n_full = torch.zeros(
-                2, B * T, self.internal_dim, device=gru2_in.device, dtype=gru2_in.dtype
-            )
-            if valid_idx.numel() > 0:
-                packed_input_2 = pack_padded_sequence(
-                    gru2_in[valid_idx], lengths_cpu[valid_idx_cpu], batch_first=True, enforce_sorted=False
-                )
-                _, h_n_2 = self.gru2(packed_input_2)  # (2, B_valid, latent)
-                # Cast source to buffer dtype to avoid AMP mismatch
-                gru2_h_n_full[:, valid_idx, :] = h_n_2.to(gru2_h_n_full.dtype)
-
-            gru2_final_state = gru2_h_n_full.permute(1, 0, 2).reshape(B * T, -1)
+            # Stage 4: Second GRU, final states of both directions
+            _, h_n_2 = self.gru2(norm1_out)                     # (2, B*T, internal)
+            gru2_final_state = h_n_2.permute(1, 0, 2).reshape(B * T, -1)
 
             # Stage 5: Second LayerNorm
-            norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*latent)
+            norm2_out = self.norm2(gru2_final_state)  # (B*T, 2*internal)
 
-            final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*latent)
+            final_output = norm2_out.reshape(B, T, -1)  # (B, T, 2*internal)
             if self.internal_dim != self.latent_dim:
-                final_output=self.projection(final_output) # restore latent space dependent output shape 
-            if torch.isnan(final_output).any():
-                print("z issues!")
+                final_output=self.projection(final_output) # restore latent space dependent output shape
         return final_output.to(x.dtype)
 
 
@@ -640,24 +636,12 @@ class TCNEncoderPT(nn.Module):
                 BatchNorm1dKerasFP32(latent_dim, eps=1e-3),
                 nn.Linear(latent_dim, latent_dim),
             )
+            for m in self.head.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight)
+                    nn.init.zeros_(m.bias)
         else:
-            self.head = nn.Sequential(
-                nn.Linear(final_in, 2 * latent_dim),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate),          
-                nn.LayerNorm(2 * latent_dim),     
-                nn.Linear(2 * latent_dim, latent_dim),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate),
-                nn.LayerNorm(latent_dim),
-                nn.Linear(latent_dim, latent_dim),
-            )
-
-
-        for m in self.head.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.zeros_(m.bias)
+            self.head = _encoder_head(final_in, latent_dim, dropout_rate)
 
     def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
@@ -698,17 +682,7 @@ class TCNEncoderPT(nn.Module):
             x_flat = x.view(B, W, N * F_node)        # (B, W, N*NF)
             enc = self.flat_tcn(x_flat)              # (B, C)
 
-        head_in = enc.float()
-        
-        # Per-sample RMS normalization to control scale
-        rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B, 1)
-        head_in = head_in / rms.clamp(min=1.0)  # avoid division by tiny values
-
-        # Clamp extreme outliers to keep BN/Linear in a sane range
-        head_in = head_in.clamp(min=-1e4, max=1e4)
-
-        # As a final guard: replace any NaN/Inf just in case
-        head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
+        head_in = _normalize_backbone(enc)
         head_out = self.head(head_in)
         if return_backbone:
             return head_out, head_in
@@ -1019,12 +993,9 @@ class TransformerCorePT(nn.Module):
             (B, T, key_dim) if return_sequences else (B, key_dim)
         """
         B, T, _ = x.shape
-        
-        # Compute padding mask (True = pad/invalid)
-        with torch.no_grad():
-            mask = torch.all(x == 0.0, dim=-1)  # (B, T)
 
-        # Embed
+        # Embed (no padding mask: windows have a fixed length and zeros are valid values; a node with only zeros
+        # would mask all keys and give NaN)
         y = self.embed(x)
         y = F.relu(y)
         y = y * (self.key_dim ** 0.5)
@@ -1037,7 +1008,7 @@ class TransformerCorePT(nn.Module):
 
         # Apply transformer layers
         for layer in self.layers:
-            y = layer(y, attn_mask=mask)
+            y = layer(y)
 
         return y[:, -1, :]  # (B, key_dim) - last timestep
 
@@ -1055,11 +1026,11 @@ class TFMEncoderPT(nn.Module):
         adjacency_matrix: np.ndarray,
         latent_dim: int,
         use_gnn: bool = True,
-        num_layers: int = 2,      # Reduced from 4 for speed
-        num_heads: int = 4,       # Reduced from 8 for speed
+        num_layers: int = 4,      # about the parameters of the TCN (32 filters, 2 stacks, dilations 1-8)
+        num_heads: int = 4,
         dff: int = 128,
-        dropout_rate: float = 0.1,
-        key_dim: int = None,      # Allow explicit key_dim
+        dropout_rate: float = 0.0,  # as the TCN (the augmentations regularize; dropout would differ between views)
+        key_dim: int = 32,        # the width of the TCN; None: min(64, nodes * features)
     ):
         super().__init__()
         self.use_gnn = use_gnn
@@ -1130,22 +1101,8 @@ class TFMEncoderPT(nn.Module):
             )
             final_in = self.key_dim
 
-        # MLP head: matches TCN encoder structure
-        self.head = nn.Sequential(
-            nn.Linear(final_in, 2 * self.latent_dim),
-            nn.ReLU(),
-            BatchNorm1dKerasFP32(2 * self.latent_dim, eps=1e-3),
-            nn.Linear(2 * self.latent_dim, self.latent_dim),
-            nn.ReLU(),
-            BatchNorm1dKerasFP32(self.latent_dim, eps=1e-3),
-            nn.Linear(self.latent_dim, self.latent_dim),
-        )
-        
-        # Initialize head weights
-        for m in self.head.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.zeros_(m.bias)
+        # MLP head as in the TCN encoder (LayerNorm: BatchNorm statistics would be a cue across the batch)
+        self.head = _encoder_head(final_in, self.latent_dim)
 
     def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
@@ -1208,26 +1165,12 @@ class TFMEncoderPT(nn.Module):
             x_flat = x.reshape(B, W, N * NF)  # (B, W, N*NF)
             enc = self.flat_tf(x_flat)     # (B, key_dim)
 
-        # === Apply MLP head ===
-        # Stabilize input similar to TCN encoder
-        head_in = enc.float()
-        rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()
-        head_in = head_in / rms.clamp(min=1.0)
-        head_in = head_in.clamp(min=-1e4, max=1e4)
-        head_in = torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
-        
-        if not cluster_mode or return_backbone:
-            out = self.head(head_in)
-        else:
-            out = head_in
-
-        # Force diversity during training by batch standardization
-        if self.training and out.size(0) > 1:
-            out = (out - out.mean(dim=0, keepdim=True)) / (out.std(dim=0, keepdim=True).clamp(min=0.1))
-
+        # === Apply MLP head === (as the TCN encoder; no batch standardization of the output, which would be a cue
+        # across the batch and differ between training and inference)
+        head_in = _normalize_backbone(enc)
         if return_backbone:
-            return out, head_in
-        return out
+            return self.head(head_in), head_in
+        return self.head(head_in) if not cluster_mode else head_in
 
 
 class TFMDecoderPT(nn.Module):

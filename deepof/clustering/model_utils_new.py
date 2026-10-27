@@ -1095,6 +1095,7 @@ def _materialize_encoder(model, x_shape, a_shape, device):
     T, N, F = x_shape
     T2, E, EF = a_shape
     assert T == T2
+    T = int(getattr(model, "window_size", T))  # the contrastive model encodes views shorter than the stored window
 
     x = torch.zeros((1, T, N, F), device=device, dtype=torch.float32)
     a = torch.zeros((1, T, E, EF), device=device, dtype=torch.float32)
