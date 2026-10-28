@@ -1009,7 +1009,7 @@ def build_regression_targets(
     train_dataset: BatchDictDataset,
     window_len: int,
     meta_info: Optional[dict] = None,
-) -> Tuple[torch.Tensor, int]:
+) -> Tuple[torch.Tensor, List[Tuple[str, int]]]:
     """
     Targets of the regression teacher: the included views per training sample (dataset order), concatenated.
 
@@ -1026,7 +1026,8 @@ def build_regression_targets(
             frame rate).
 
     Returns:
-        Tuple[torch.Tensor, int]: Targets of shape [N_samples, D] and the number of views.
+        Tuple[torch.Tensor, List[Tuple[str, int]]]: Targets of shape [N_samples, D] and the views in column order as
+        (name, dimension): "nodes_positions", "nodes_speeds", "edges", "angles", "kinematics".
     """
     # The third array holds the angles, then the kinematics (if included)
     n_angles = len(meta_info["angle_columns"]) if meta_info is not None and len(
@@ -1038,16 +1039,18 @@ def build_regression_targets(
             train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
             batch_size=teacher_cfg.batch_size_nodes, num_workers=0,
         )
-        views += [v for v, part in ((pca_pos, "positions"), (pca_spd, "speeds")) if part in teacher_cfg.nodes_view_parts]
+        views += [(f"nodes_{part}", v) for v, part in ((pca_pos, "positions"), (pca_spd, "speeds"))
+                  if part in teacher_cfg.nodes_view_parts]
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for the regression teacher (edges) ---")
-        views.append(extract_pca_edges_view(
+        views.append(("edges", extract_pca_edges_view(
             train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0
-        ))
-    scaled = []
-    for view in views:
+        )))
+    scaled, names = [], []
+    for name, view in views:
         view = view - view.mean(dim=0)
         scaled.append(view / view.pow(2).sum(dim=1).mean().sqrt().clamp_min(1e-8))
+        names.append(name)
     if teacher_cfg.include_angles_view:
         print("\n--- Building the angle view for the regression teacher ---")
         if n_angles == 0:
@@ -1059,6 +1062,7 @@ def build_regression_targets(
         )
         angles = (angles - angles.mean(dim=0)) / angles.std(dim=0).clamp_min(1e-8)
         scaled.append(angles / angles.shape[1] ** 0.5)
+        names.append("angles")
     if teacher_cfg.include_kinematics_view:
         print("\n--- Building the kinematics view for the regression teacher ---")
         if n_angles is None or "frame_rate" not in meta_info:
@@ -1070,7 +1074,8 @@ def build_regression_targets(
         )
         kinematics = (kinematics - kinematics.mean(dim=0)) / kinematics.std(dim=0).clamp_min(1e-8)
         scaled.append(kinematics / kinematics.shape[1] ** 0.5)
+        names.append("kinematics")
     if not scaled:
         raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
-    return torch.cat(scaled, dim=1), len(scaled)
+    return torch.cat(scaled, dim=1), [(name, view.shape[1]) for name, view in zip(names, scaled)]
 

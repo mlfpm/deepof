@@ -316,6 +316,8 @@ def init_log_summary(model_name: str):
         log_summary[data_type]['kmeans_loss']=[]
         log_summary[data_type]['distill_loss']=[]
         log_summary[data_type]['proto_loss']=[]
+        log_summary[data_type]['pred_loss']=[]  # contrastive: predictive loss (weighted) and its top-1 accuracy
+        log_summary[data_type]['pred_acc']=[]
         log_summary[data_type]['temporal_loss']=[]
         log_summary[data_type]['scatter_loss']=[]
         log_summary[data_type]['nonempty_loss']=[]
@@ -342,6 +344,11 @@ def _update_log_summary(log_summary: dict, train_logs: dict, val_logs: dict):
     """Append the current losses from train and val logs to the log summary."""
     
     for data_type, logs in zip(['train', 'val'], [train_logs, val_logs]):
+        # Per-view losses of the regression teacher (view_<name>): their keys depend on the included views
+        n_epochs = len(log_summary[data_type]['total_loss'])
+        for key in logs:
+            if key.startswith("view_") and key not in log_summary[data_type]:
+                log_summary[data_type][key] = [np.nan] * n_epochs
         # Append scores directly
         if data_type=="train":
             for key in log_summary.keys():
@@ -385,7 +392,7 @@ def print_losses(model_name: str,
     loss_names = [
         "total_loss", "pos_similarity", "neg_similarity", "v3_similarity", "v3v3_similarity", "invariance_loss",
         "variance_loss", "covariance_loss", "reconstruct_loss", "prior_loss", "kl_div",
-        "kmeans_loss", "cat_clust_loss", "distill_loss", "proto_loss", "temporal_loss", 
+        "kmeans_loss", "cat_clust_loss", "distill_loss", "proto_loss", "pred_loss", "pred_acc", "temporal_loss",
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
 
@@ -419,6 +426,9 @@ def print_losses(model_name: str,
     # Print train and validation sections
     _print_phase("Train", train_logs)
     _print_phase("Val", val_logs)
+    views = [(k[len("view_"):], v) for k, v in train_logs.items() if k.startswith("view_")]
+    if views:
+        print("  Views (train, unexplained fraction): " + " | ".join(f"{name}: {v:.3f}" for name, v in views))
 
     print("Scores:")
 

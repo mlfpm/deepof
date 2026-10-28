@@ -131,6 +131,10 @@ class TurtleTeacherCfg:
     kinematics_segments_per_second: float = 3.0
     # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
     nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
+    # Relative weights of the regression views in the loss, {view: weight} with the views "nodes_positions",
+    # "nodes_speeds", "edges", "angles" and "kinematics"; missing views weigh 1. The weighted mean keeps the total scale
+    # of lambda_regression, so only the ratios matter. None: all views weigh the same
+    regression_view_weights: Optional[Dict[str, float]] = None
 
     # Views
     include_latent_view: bool = True
@@ -244,6 +248,12 @@ class ContrastiveCfg:
     # their window, with a temperature per prototype that grows with the spread of its cluster. proto_space: "backbone"
     # (the embedding used for clustering, cluster_mode=True) or "projection" (output of the projection head, as in PCL)
     proto_weight: float = 0.0
+    # Predictive loss (as CPC, van den Oord et al. 2018), added with weight predictive_weight (0: off; nce loss with a
+    # time-shifted view only): a small MLP predicts the projection of the time-shifted third view from the backbone
+    # output of the anchor view (the embedding used for clustering) and the signed frame offset between the two, scored
+    # with InfoNCE against the third views of the other windows and both views of the same window, so the prediction
+    # has to carry what changes, not what stays constant within a video. Contrastive temperature, whole training
+    predictive_weight: float = 0.0
     proto_space: str = "backbone"
     proto_clusters: Tuple[int, ...] = (25, 50, 100)
     proto_warmup_epochs: int = 5
@@ -623,6 +633,11 @@ def check_model_inputs(
             )
         check(is_number(c.soft_temporal_tau, 0), "\"soft_temporal_tau\" needs to be >= 0")
         check(is_number(c.proto_weight, 0), "\"proto_weight\" needs to be >= 0")
+        check(is_number(c.predictive_weight, 0), "\"predictive_weight\" needs to be >= 0")
+        if is_number(c.predictive_weight, 0, strict_min=True):
+            check(str(c.contrastive_loss_function).lower() == "nce" and str(c.shift_view_mode).lower() != "off",
+                  "\"predictive_weight\" > 0 needs the time-shifted view: contrastive_loss_function=\"nce\" and "
+                  "shift_view_mode other than \"off\"")
         one_of("proto_space", str(c.proto_space).lower(), ["backbone", "projection"])
         check(
             isinstance(c.proto_clusters, (tuple, list)) and len(c.proto_clusters) > 0
@@ -689,6 +704,19 @@ def check_model_inputs(
             check(model_name == "contrastive", "teacher_mode=\"regression\" is only available for the contrastive model")
             check(is_number(teacher_cfg.lambda_regression, 0), "\"lambda_regression\" needs to be >= 0")
             check(is_int(teacher_cfg.angle_segments, 1), "\"angle_segments\" needs to be an integer greater than 0")
+            weights = teacher_cfg.regression_view_weights
+            if weights is not None:
+                included = [f"nodes_{p}" for p in parts if teacher_cfg.include_nodes_view] + [
+                    v for v in ("edges", "angles", "kinematics") if getattr(teacher_cfg, f"include_{v}_view")]
+                check(isinstance(weights, Mapping) and set(weights) <= set(included),
+                      f"\"regression_view_weights\" needs to be a dict with keys of the included views {included}, "
+                      f"got {weights!r}")
+                if isinstance(weights, Mapping):
+                    numeric = all(is_number(w, 0) for w in weights.values())
+                    check(numeric, "\"regression_view_weights\" need to be numbers >= 0")
+                    if numeric:
+                        check(any(weights.get(v, 1.0) > 0 for v in included),
+                              "\"regression_view_weights\" need at least one included view with a weight > 0")
             if contrastive_cfg is not None and is_int(teacher_cfg.angle_segments, 1):
                 check(teacher_cfg.angle_segments <= contrastive_cfg.contrastive_window,
                       "\"angle_segments\" can not exceed \"contrastive_window\"")

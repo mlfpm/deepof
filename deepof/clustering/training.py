@@ -487,6 +487,41 @@ def label_separation_score(
     return score
 
 
+class PredictiveHead(nn.Module):
+    """Predictive loss: predicts the projection of the time-shifted view from the backbone output of the anchor view
+    and the signed offset between them (in windows); one hidden layer."""
+
+    def __init__(self, backbone_dim: int, out_dim: int):
+        super().__init__()
+        hidden = max(64, 2 * backbone_dim)
+        self.net = nn.Sequential(nn.Linear(backbone_dim + 1, hidden), nn.LayerNorm(hidden), nn.GELU(),
+                                 nn.Linear(hidden, out_dim))
+
+    def forward(self, backbone: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
+        return self.net(torch.cat([backbone, offset[:, None].to(backbone.dtype)], dim=1))
+
+
+def predictive_nce(pred: torch.Tensor, z1: torch.Tensor, z2: torch.Tensor, z3: torch.Tensor, valid: torch.Tensor,
+                   temperature: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    InfoNCE of the predicted third views: per window, the candidates are the third views of all windows (its own is
+    the target) and its own two views (z1, z2: same video, other time), so what stays constant within the video does
+    not identify the target. Only windows with valid (a time-shifted third view) are scored. z1-z3 are normalized.
+
+    Returns:
+        (loss, top-1 accuracy), both 0 without valid windows.
+    """
+    p = F.normalize(pred.float(), dim=1)
+    logits = torch.cat([p @ z3.float().T, (p * z1.float()).sum(1, keepdim=True), (p * z2.float()).sum(1, keepdim=True)],
+                       dim=1) / temperature
+    target = torch.arange(len(p), device=p.device)
+    if not valid.any():
+        return logits.sum() * 0.0, logits.new_zeros(())
+    loss = F.cross_entropy(logits[valid], target[valid])
+    acc = (logits[valid].argmax(dim=1) == target[valid]).float().mean()
+    return loss, acc
+
+
 def step_contrastive_distill(
     model: nn.Module,  # ContrastivePT or DataParallel(ContrastivePT)
     batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],  # (x, a, idx)
@@ -583,8 +618,9 @@ def step_contrastive_distill(
     regression_targets = getattr(ctx, "regression_targets", None)
     prototypes = getattr(ctx, "prototypes", None)
     proto_backbone = prototypes is not None and contrastive_cfg.proto_space == "backbone"
+    predictive_head = getattr(ctx, "predictive_head", None) if use_shift_view else None
     backbone1, backbone2 = None, None
-    if regression_targets is not None or proto_backbone:
+    if regression_targets is not None or proto_backbone or predictive_head is not None:
         z_view1, backbone1 = model(x_aug1, a_aug1, return_backbone=True)
     else:
         z_view1 = model(x_aug1, a_aug1)
@@ -646,12 +682,13 @@ def step_contrastive_distill(
         weighting_level = _shift_schedule_weight(ctx.epoch, ctx.num_epochs)
 
     # Base contrastive loss
+    temperature = _temperature_at(contrastive_cfg, base.temperature, ctx.epoch, ctx.num_epochs,
+                                  train=getattr(ctx, "train", True))
     loss, l_term1, l_term2, l_term3 = select_contrastive_loss_pt(
         z_view1, z_view2, z_view3,
         similarity=base.similarity_function,
         loss_fn=base.loss_function,
-        temperature=_temperature_at(contrastive_cfg, base.temperature, ctx.epoch, ctx.num_epochs,
-                                    train=getattr(ctx, "train", True)),
+        temperature=temperature,
         tau=base.tau,
         beta=base.beta,
         elimination_topk=contrastive_cfg.elimination_topk,
@@ -727,16 +764,35 @@ def step_contrastive_distill(
         total = loss
 
     # Regression teacher: predict the views of the unaugmented window from the backbone output of the augmented view.
-    # Every view has a mean squared norm of 1, so predicting zeros gives a loss of about lambda_regression.
-    # Logged as distill_loss.
+    # Every view has a mean squared norm of 1, so predicting zeros gives a loss of about lambda_regression; the views
+    # are combined with their weighted mean. Logged as distill_loss, each view's unweighted error (about the fraction
+    # of its variance not explained) as view_<name>.
+    view_losses = {}
     if regression_targets is not None:
         target = regression_targets[idx.to(device).long()]
-        pred = ctx.regression_head(backbone1.float())
-        distill_loss = ctx.lambda_regression * (pred - target).pow(2).sum(dim=1).mean() / ctx.n_regression_views
+        err = (ctx.regression_head(backbone1.float()) - target).pow(2)
+        weighted, weight_sum = 0.0, 0.0
+        for name, start, end, weight in ctx.regression_views:
+            view_loss = err[:, start:end].sum(dim=1).mean()
+            view_losses[f"view_{name}"] = float(view_loss.detach().item())
+            weighted, weight_sum = weighted + weight * view_loss, weight_sum + weight
+        distill_loss = ctx.lambda_regression * weighted / weight_sum
         total = total + distill_loss
 
     # Prototype loss (ProtoNCE, training only): both views are pulled towards the prototype of their window and pushed
     # away from the other prototypes, each prototype with its own temperature (concentration), averaged over clusterings
+    # Predictive loss: the third view from the anchor's backbone output and the signed offset between the two views
+    pred_loss, pred_acc = None, None
+    if predictive_head is not None:
+        offset = (shift_third - torch.chunk(shift_twice, chunks=2, dim=0)[0]).float()
+        valid = offset != 0  # clipped at the window edges, or "neg_aug" samples without a shift
+        if is_shift is not None:
+            valid = valid & is_shift
+        pred = predictive_head(backbone1.float(), offset / window_len)
+        pred_loss, pred_acc = predictive_nce(pred, z_view1, z_view2, z_view3, valid, temperature)
+        pred_loss = ctx.predictive_weight * pred_loss
+        total = total + pred_loss
+
     proto_loss = None
     if prototypes is not None:
         idx_long = idx.to(device).long()
@@ -759,7 +815,10 @@ def step_contrastive_distill(
         "covariance_loss" : float(cov_loss.detach().item()) if cov_loss is not None else None,
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
         "proto_loss": float(proto_loss.detach().item()) if proto_loss is not None else None,
-        "seperability": float(seperability.detach().item())
+        "pred_loss": float(pred_loss.detach().item()) if pred_loss is not None else None,
+        "pred_acc": float(pred_acc.item()) if pred_acc is not None else None,
+        "seperability": float(seperability.detach().item()),
+        **view_losses,
     }
     return StepResult(loss=total, logs=logs)
 
@@ -1037,6 +1096,7 @@ def train_deepof_model(
     include_kinematics_view: Optional[bool] = None,  # needs get_graph_dataset(..., include_kinematics=True)
     kinematics_segments_per_second: Optional[float] = None,
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
+    regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
     # Diagnostics
     diag_max_batches: Optional[int] = None,
     # Model type
@@ -1087,6 +1147,7 @@ def train_deepof_model(
     # Prototype loss (PCL), see ContrastiveCfg
     proto_weight: Optional[float] = None,
     proto_space: Optional[str] = None,
+    predictive_weight: Optional[float] = None,  # predictive loss (CPC-style), see ContrastiveCfg
     proto_clusters: Optional[Tuple[int, ...]] = None,
     proto_warmup_epochs: Optional[int] = None,
     aug_max_rot: Optional[int] = None,
@@ -1201,6 +1262,7 @@ def train_deepof_model(
         include_kinematics_view=include_kinematics_view,
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
+        regression_view_weights=regression_view_weights,
     )
     if teacher_freeze_at is False:  # None means "use the default", so False disables freezing
         teacher_cfg.teacher_freeze_at = None
@@ -1278,6 +1340,7 @@ def train_deepof_model(
         neg_aug_block_len=neg_aug_block_len,
         proto_weight=proto_weight,
         proto_space=_lower(proto_space),
+        predictive_weight=predictive_weight,
         proto_clusters=proto_clusters,
         proto_warmup_epochs=proto_warmup_epochs,
         aug_noise_sigma=aug_noise_sigma,
@@ -2074,13 +2137,14 @@ def fit_contrastive(
 
     # Create teacher
     teacher_cfg.include_latent_view=False
-    tau_star, regression_targets, regression_head = None, None, None
+    tau_star, regression_targets, regression_head, regression_views = None, None, None, None
     if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
         # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
-        regression_targets, n_regression_views = deepof.clustering.teacher_model.build_regression_targets(
+        regression_targets, views = deepof.clustering.teacher_model.build_regression_targets(
             teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info
         )
         regression_targets = regression_targets.to(device)
+        regression_views = _regression_view_layout(views, teacher_cfg.regression_view_weights)
         with torch.no_grad():
             x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
             a0 = torch.zeros((2, window_len, *train_loader.dataset.a_shape[1:]), device=device)
@@ -2124,8 +2188,19 @@ def fit_contrastive(
             regression_head = DDP(regression_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     _build_lazy_parameters(model, (window_len, *train_loader.dataset.x_shape[1:]),
                            (window_len, *train_loader.dataset.a_shape[1:]), device)
+    predictive_head = None
+    if contrastive_cfg.predictive_weight > 0:
+        with torch.no_grad():
+            x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
+            a0 = torch.zeros((2, window_len, *train_loader.dataset.a_shape[1:]), device=device)
+            z0, backbone0 = unwrap_dp(model)(x0, a0, return_backbone=True)
+        predictive_head = PredictiveHead(backbone0.shape[1], z0.shape[1]).to(device)
+        if is_ddp:
+            predictive_head = DDP(predictive_head, device_ids=[local_rank], output_device=local_rank,
+                                  broadcast_buffers=False)
     optimizer = build_optimizer_generic(
-        model, regression_head if regression_head is not None else distill_head,
+        model, nn.ModuleList([h for h in (regression_head if regression_head is not None else distill_head,
+                                          predictive_head) if h is not None]),
         base_lr=common_cfg.learning_rate, weight_decay=1e-4,
     )
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
@@ -2154,7 +2229,7 @@ def fit_contrastive(
 
     # Resume an interrupted training (continue_training="resume")
     last_path = last_ckpt_path(model_name, common_cfg)
-    heads = {"distill_head": distill_head, "regression_head": regression_head}
+    heads = {"distill_head": distill_head, "regression_head": regression_head, "predictive_head": predictive_head}
     start_epoch = 0
     if resume_state is not None:
         log_summary = resume_state.get("log_summary") or log_summary
@@ -2188,7 +2263,9 @@ def fit_contrastive(
             apply_distill=apply_distill,
             regression_targets=regression_targets,
             regression_head=regression_head,
-            n_regression_views=(n_regression_views if regression_targets is not None else 1),
+            regression_views=regression_views,
+            predictive_head=predictive_head,
+            predictive_weight=contrastive_cfg.predictive_weight,
             lambda_regression=teacher_cfg.lambda_regression,
             edge_index=edge_index_global,
             edge_index_local=edge_index_local,
@@ -3011,6 +3088,16 @@ def _shift_schedule_weight(epoch: int, num_epochs: int) -> float:
     if t < t_off:
         return 0.0
     return -_cosine01((t - t_off) / (t_c - t_off))
+
+
+def _regression_view_layout(views: List[Tuple[str, int]], weights: Optional[Dict[str, float]]
+                            ) -> List[Tuple[str, int, int, float]]:
+    """(name, first column, end column, weight) per regression view; views missing in weights weigh 1."""
+    layout, start = [], 0
+    for name, dim in views:
+        layout.append((name, start, start + dim, float((weights or {}).get(name, 1.0))))
+        start += dim
+    return layout
 
 
 def _hard_negative_shift_range(contrastive_cfg, window_len: int) -> Tuple[int, int]:

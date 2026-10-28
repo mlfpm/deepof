@@ -1791,13 +1791,62 @@ def test_contrastive_step_with_regression_teacher(encoder_type):
         contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len),
         rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
         apply_distill=False, epoch=0, num_epochs=1,
-        regression_targets=torch.randn(10, 5), regression_head=head, n_regression_views=1, lambda_regression=1.0,
+        regression_targets=torch.randn(10, 5), regression_head=head, lambda_regression=1.0,
+        regression_views=deepof.clustering.training._regression_view_layout([("edges", 2), ("angles", 3)],
+                                                                            {"angles": 0.5}),
     )
     result = deepof.clustering.training.step_contrastive_distill(model, (x, a, torch.tensor([0, 3, 5, 9])), ctx)
     result.loss.backward()
     assert result.logs["distill_loss"] > 0 and torch.isfinite(result.loss)
+    # Weighted mean of the per-view errors
+    logs = result.logs
+    assert np.isclose(logs["distill_loss"], (logs["view_edges"] + 0.5 * logs["view_angles"]) / 1.5, rtol=1e-4)
     assert head.weight.grad.abs().sum() > 0
     assert sum(p.grad.abs().sum() for p in model.parameters() if p.grad is not None) > 0
+
+
+def test_predictive_loss():
+    # The target is the own third view; the own anchor views are candidates, invalid windows are not scored
+    training = deepof.clustering.training
+    z3 = torch.eye(4)
+    z1 = z2 = torch.roll(torch.eye(4), 1, dims=1)
+    loss, acc = training.predictive_nce(z3 * 5, z1, z2, z3, torch.ones(4, dtype=torch.bool), temperature=0.1)
+    assert acc == 1.0 and loss < 0.01
+    loss, acc = training.predictive_nce(z1, z1, z2, z3, torch.tensor([True, True, False, False]), temperature=0.1)
+    assert acc == 0.0 and loss > 1.0
+    assert training.predictive_nce(z1, z1, z2, z3, torch.zeros(4, dtype=torch.bool), 0.1)[0] == 0.0
+
+    # In the training step (nce with the time-shifted view), the loss reaches the head and the encoder
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model = deepof.clustering.models_new.ContrastivePT(
+        input_shape=(T, N, 3), edge_feature_shape=(T, N, 1), adjacency_matrix=np.eye(N, dtype=np.float32),
+        window_len=window_len, latent_dim=4,
+    )
+    meta_info = {"node_columns": [(chr(65 + i), "x") for i in range(N)],
+                 "edge_columns": [(chr(65 + i), chr(66 + i)) for i in range(N - 1)] + [("A", "C")]}
+    edge_index_global, edge_index_local, _ = training._build_edge_from_metainfo(
+        meta_info=meta_info, device=torch.device("cpu"), n_nodes=N, return_local=True,
+    )
+    x, a = torch.randn(8, T, N, 3), torch.randn(8, T, N, 1)
+    z, backbone = model(x[:, :window_len], a[:, :window_len], return_backbone=True)
+    head = training.PredictiveHead(backbone.shape[1], z.shape[1])
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len,
+                                                                         predictive_weight=1.0),
+        rot_precomp=training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1, predictive_head=head, predictive_weight=1.0,
+    )
+    result = training.step_contrastive_distill(model, (x, a, torch.arange(8)), ctx)
+    result.loss.backward()
+    assert result.logs["pred_loss"] > 0 and 0 <= result.logs["pred_acc"] <= 1
+    assert head.net[0].weight.grad.abs().sum() > 0
+    utils = deepof.clustering.model_utils_new
+    with pytest.raises(ValueError, match="predictive_weight"):
+        utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
+                                 common_cfg=utils.CommonFitCfg(model_name="contrastive"),
+                                 contrastive_cfg=utils.ContrastiveCfg(predictive_weight=1.0, shift_view_mode="off"))
 
 
 def test_regression_teacher_angle_view(tmp_path):
@@ -1814,8 +1863,8 @@ def test_regression_teacher_angle_view(tmp_path):
     cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
         include_nodes_view=False, include_angles_view=True, angle_segments=2,
     )
-    targets, n_views = deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
-    assert targets.shape == (12, 2 * K) and n_views == 1
+    targets, views = deepof.clustering.teacher_model.build_regression_targets(cfg, ds, window_len)
+    assert targets.shape == (12, 2 * K) and views == [("angles", 2 * K)]
     assert np.isclose(targets.pow(2).sum(1).mean().item(), 1.0, atol=0.1)
 
     no_angles = {k: (v[0], v[1], np.empty((0,))) for k, v in pre.items()}
@@ -1847,8 +1896,9 @@ def test_regression_teacher_kinematics_view(tmp_path):
         include_nodes_view=True, nodes_view_parts=("speeds",), pca_nodes_dim=2, include_angles_view=True,
         angle_segments=2, include_kinematics_view=True,
     )
-    targets, n_views = teacher.build_regression_targets(cfg, ds, window_len, meta_info=meta_info)
-    assert targets.shape == (12, 2 + 2 * K + 2 * n_segments) and n_views == 3
+    targets, views = teacher.build_regression_targets(cfg, ds, window_len, meta_info=meta_info)
+    assert targets.shape == (12, 2 + 2 * K + 2 * n_segments)
+    assert views == [("nodes_speeds", 2), ("angles", 2 * K), ("kinematics", 2 * n_segments)]
     with pytest.raises(ValueError, match="include_kinematics=True"):
         teacher.build_regression_targets(cfg, ds, window_len, meta_info=None)
     utils = deepof.clustering.model_utils_new
@@ -1857,6 +1907,12 @@ def test_regression_teacher_kinematics_view(tmp_path):
                                  common_cfg=utils.CommonFitCfg(model_name="contrastive"),
                                  teacher_cfg=utils.TurtleTeacherCfg(use_turtle_teacher=True, teacher_mode="regression",
                                                                      include_kinematics_view=True))
+    # View weights only for included views
+    with pytest.raises(ValueError, match="regression_view_weights"):
+        utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
+                                 common_cfg=utils.CommonFitCfg(model_name="contrastive"),
+                                 teacher_cfg=utils.TurtleTeacherCfg(use_turtle_teacher=True, teacher_mode="regression",
+                                                                     regression_view_weights={"kinematics": 0.5}))
 
 
 def _contrastive_test_setup(T=24, N=11, window_len=12):
