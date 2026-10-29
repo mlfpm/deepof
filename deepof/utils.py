@@ -31,7 +31,7 @@ import regex as re
 import requests
 import sleap_io as sio
 from joblib import Parallel, delayed
-from scipy.signal import savgol_filter, medfilt
+from scipy.signal import fftconvolve, savgol_filter, medfilt
 from segment_anything import SamPredictor, sam_model_registry
 from shapely.geometry import Point, Polygon
 from sklearn import mixture
@@ -4431,3 +4431,78 @@ def validate_parameter(
             raise ValueError(
                 f'Invalid value for "{param_name}". Must be a subset of: [{options_preview}]'
             )  # pragma: no cover
+
+
+# Kinematics (targets of the kinematics view of the regression teacher, Coordinates.get_kinematics). Chosen with
+# kinematics_view_check.ipynb (round 2): smoothed derivatives with peaks, posture wavelet bands and the change of the
+# distances between animals hold clearly more behaviour information than raw differences of positions
+KINEMATICS_SMOOTHING_S = 0.2  # Savitzky-Golay window of the speed and acceleration of the body parts
+KINEMATICS_WAVELET_HZ = (1.0, 2.0, 4.0, 7.0, 11.0)  # Morlet (5 cycles) bands of the posture
+KINEMATICS_RELATIONAL_S = 0.33  # Savitzky-Golay window of the distances between animals
+KINEMATICS_RELATIONAL_PAIRS = (("Center", "Center"), ("Nose", "Nose"), ("Nose", "Tail_base"), ("Tail_base", "Nose"))
+
+
+def _savgol_derivative(x: np.ndarray, seconds: float, frame_rate: float, deriv: int) -> np.ndarray:
+    """Savitzky-Golay (quadratic) derivative along the first axis over about `seconds`; zeros for < 3 frames."""
+    if len(x) < 3:
+        return np.zeros_like(x)
+    window = max(3, int(round(seconds * frame_rate)))
+    window = min(window + 1 - window % 2, len(x) - 1 + len(x) % 2)  # odd, at most the length
+    return savgol_filter(x, window, 2, deriv=deriv, delta=1 / frame_rate, axis=0, mode="interp")
+
+
+def kinematics_features(
+    positions: Dict[str, np.ndarray], part_names: Dict[str, List[str]], frame_rate: float
+) -> Tuple[np.ndarray, List[Tuple[str, str]]]:
+    """
+    Kinematics per frame of every animal, from positions before any alignment (arena-centred).
+
+    Per animal (<animal>_kinematics): median and second largest over the body parts of the speed and of the
+    acceleration magnitude (Savitzky-Golay derivatives over KINEMATICS_SMOOTHING_S; mm/s, mm/s^2), and of the Morlet
+    amplitude of the posture (body parts relative to the animal's mean position) per band of KINEMATICS_WAVELET_HZ
+    below 0.45 x the frame rate. Per pair of animals (<a>_<b>_kinematics): rate of change (signed, mm/s) and magnitude
+    of the second derivative (mm/s^2) of the distances KINEMATICS_RELATIONAL_PAIRS (part of a, part of b) whose parts
+    exist. Missing positions are interpolated linearly.
+
+    Args:
+        positions (dict): {animal: array (frames, parts, 2)}; "" as the only animal for single-animal projects.
+        part_names (dict): {animal: body part names without the animal prefix, in the order of positions}.
+        frame_rate (float): Frames per second.
+
+    Returns:
+        (values (frames, columns), columns as (group, statistic)).
+    """
+    bands = [f for f in KINEMATICS_WAVELET_HZ if f < 0.45 * frame_rate]
+    values, columns, clean = [], [], {}
+    for animal, P in positions.items():
+        if P.shape[1] < 2:
+            raise ValueError(f"The kinematics need at least two body parts per animal, got {part_names[animal]}")
+        flat = pd.DataFrame(P.reshape(len(P), -1)).interpolate(limit_direction="both").fillna(0.0).to_numpy(float)
+        P = clean[animal] = flat.reshape(P.shape)
+        group = f"{animal}_kinematics" if animal else "kinematics"
+        quantities = {
+            "speed": np.linalg.norm(_savgol_derivative(P, KINEMATICS_SMOOTHING_S, frame_rate, 1), axis=-1),
+            "acc": np.linalg.norm(_savgol_derivative(P, KINEMATICS_SMOOTHING_S, frame_rate, 2), axis=-1),
+        }
+        posture = (P - P.mean(axis=1, keepdims=True)).reshape(len(P), -1)
+        for f in bands:
+            sigma = 5 / (2 * np.pi * f) * frame_rate  # frames
+            t = np.arange(-int(3 * sigma), int(3 * sigma) + 1)
+            kernel = np.exp(2j * np.pi * f * t / frame_rate - t ** 2 / (2 * sigma ** 2))
+            amplitude = np.abs(fftconvolve(posture, (kernel / np.abs(kernel).sum())[:, None], mode="same", axes=0))
+            quantities[f"wave{f:g}hz"] = amplitude.reshape(P.shape).mean(axis=-1)
+        for name, x in quantities.items():
+            values += [np.median(x, axis=1), np.sort(x, axis=1)[:, -2]]
+            columns += [(group, f"{name}_median"), (group, f"{name}_second")]
+    animals = [a for a in positions if a]
+    for i, a in enumerate(animals):
+        for b in animals[i + 1:]:
+            for pa, pb in KINEMATICS_RELATIONAL_PAIRS:
+                if pa not in part_names[a] or pb not in part_names[b]:
+                    continue
+                d = np.linalg.norm(clean[a][:, part_names[a].index(pa)] - clean[b][:, part_names[b].index(pb)], axis=-1)
+                values += [_savgol_derivative(d, KINEMATICS_RELATIONAL_S, frame_rate, 1),
+                           np.abs(_savgol_derivative(d, KINEMATICS_RELATIONAL_S, frame_rate, 2))]
+                columns += [(f"{a}_{b}_kinematics", f"dist_rate_{pa}-{pb}"),
+                            (f"{a}_{b}_kinematics", f"dist_acc_{pa}-{pb}")]
+    return np.stack(values, axis=1), columns

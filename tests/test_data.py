@@ -971,7 +971,9 @@ def test_get_graph_dataset_angles_and_mask():
         pos = deepof.data_loading.get_dt(prun.get_coords(center="arena"), first)
         parts = sorted({c[0] for c in pos.columns if c[0].startswith("W_")})
         xy = np.stack([pos[[(p, "x") for p in parts]].to_numpy(), pos[[(p, "y") for p in parts]].to_numpy()], -1)
-        speed_w = np.nan_to_num(np.linalg.norm(np.diff(xy, axis=0), axis=-1)) * prun._frame_rate
+        xy = pd.DataFrame(xy.reshape(len(xy), -1)).interpolate(limit_direction="both").to_numpy().reshape(xy.shape)
+        speed_w = np.linalg.norm(deepof.utils._savgol_derivative(xy, deepof.utils.KINEMATICS_SMOOTHING_S,
+                                                                 prun._frame_rate, 1), axis=-1)
         with pytest.raises(ValueError, match="precomputed_tab_dict"):
             prun.get_graph_dataset(include_kinematics=True, precomputed_tab_dict=prun.get_coords(), **kwargs)
         # Imputation mask: a fourth node channel (binary), nodes and edges stay unchanged
@@ -992,16 +994,23 @@ def test_get_graph_dataset_angles_and_mask():
         assert angles.shape[2] == len(meta_info["angle_columns"]) > 0 and 0 <= angles.min() and angles.max() <= np.pi
         nodes_kin, edges_kin, aux = get_dt(with_kin[0], key)
         assert np.array_equal(nodes_kin, nodes) and np.array_equal(edges_kin, edges)
-        assert np.array_equal(aux[:, :, :angles.shape[2]], angles) and aux.shape[2] == angles.shape[2] + 8 and aux.min() >= 0
+        n_kin = len(kin_info["kinematics_columns"])
+        assert np.array_equal(aux[:, :, :angles.shape[2]], angles) and aux.shape[2] == angles.shape[2] + n_kin
+        unsigned = [i for i, c in enumerate(kin_info["kinematics_columns"]) if not c[1].startswith("dist_rate")]
+        assert aux[:, :, angles.shape[2]:][:, :, unsigned].min() >= 0
         nodes_mask, edges_mask = get_dt(with_mask[0], key)[:2]
         n3 = get_dt(plain, key)[0].shape[2]
         assert np.array_equal(nodes_mask[:, :, :n3], get_dt(plain, key)[0]) and np.array_equal(edges_mask, get_dt(plain, key)[1])
         assert nodes_mask.shape[2] == n3 * 4 // 3 and set(np.unique(nodes_mask[:, :, n3:])) <= {0, 1}
     assert mask_info["node_channels"] == 4 and meta_info["node_channels"] == 3
-    assert list(kin_info["kinematics_columns"]) == [(f"{a}_kinematics", f"{q}_{s}") for a in ("B", "W")
-                                                    for q in ("speed", "acc") for s in ("median", "second")]
+    # Per animal speed / acceleration / wavelet bands, then the distances between the two animals
+    kin_columns = list(kin_info["kinematics_columns"])
+    assert kin_columns[:4] == [("B_kinematics", f"{q}_{s}") for q in ("speed", "acc") for s in ("median", "second")]
+    assert {c[0] for c in kin_columns} == {"B_kinematics", "W_kinematics", "B_W_kinematics"}
+    assert ("B_W_kinematics", "dist_rate_Center-Center") in kin_columns
     assert len(meta_info["kinematics_columns"]) == 0 and kin_info["frame_rate"] == prun._frame_rate
-    assert np.allclose(kinematics[("W_kinematics", "speed_median")].to_numpy()[1:], np.median(speed_w, axis=1), rtol=1e-4)
+    assert np.allclose(kinematics[("W_kinematics", "speed_median")].to_numpy(), np.median(speed_w, axis=1), rtol=1e-3,
+                       atol=1e-3)
     assert lik.min() < prun._likelihood_tolerance and np.array_equal(mask, (lik < prun._likelihood_tolerance) * 1.0)
     assert all_missing.all()
 

@@ -702,6 +702,7 @@ def step_contrastive_distill(
         weighting_level=weighting_level,
         shift_weights=shift_weights,
     )
+    loss = float(getattr(contrastive_cfg, "contrastive_weight", 1.0)) * loss
 
     pos_mean, neg_mean, inv_loss, var_loss, cov_loss = None, None, None, None, None
     if base.loss_function != "vicreg":
@@ -1148,6 +1149,7 @@ def train_deepof_model(
     proto_weight: Optional[float] = None,
     proto_space: Optional[str] = None,
     predictive_weight: Optional[float] = None,  # predictive loss (CPC-style), see ContrastiveCfg
+    contrastive_weight: Optional[float] = None,  # weight of the contrastive loss itself (0: predictive loss only)
     proto_clusters: Optional[Tuple[int, ...]] = None,
     proto_warmup_epochs: Optional[int] = None,
     aug_max_rot: Optional[int] = None,
@@ -1341,6 +1343,7 @@ def train_deepof_model(
         proto_weight=proto_weight,
         proto_space=_lower(proto_space),
         predictive_weight=predictive_weight,
+        contrastive_weight=contrastive_weight,
         proto_clusters=proto_clusters,
         proto_warmup_epochs=proto_warmup_epochs,
         aug_noise_sigma=aug_noise_sigma,

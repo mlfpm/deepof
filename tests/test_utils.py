@@ -1362,3 +1362,31 @@ def test_in_field_of_view(mouse_pts, fov_angle_deg, x0, y0, w, h, bit_precision)
 
     # Both versions are the same for random head / angle / ROI combinations / bit precisions (because views are binary and hence way above precision level))
     assert np.allclose(out_nb, out_py, rtol=0.0, atol=0.0, equal_nan=True)
+
+
+
+def test_kinematics_features():
+    # Animal A moves at 100 mm/s along x (one part also oscillates at 4 Hz), B stands still: speeds, accelerations,
+    # the dominant wavelet band and the rate of change of the distance between the centres are recovered
+    fps, T = 30.0, 300
+    t = np.arange(T) / fps
+    parts = ["Center", "Nose", "Tail_base"]
+    a = np.stack([np.c_[100 * t, np.zeros(T)], np.c_[100 * t + 30, np.zeros(T)],
+                  np.c_[100 * t - 30, 5 * np.sin(2 * np.pi * 4 * t)]], axis=1)
+    a[100, 0] = np.nan  # interpolated
+    b = np.tile(np.array([[-1000.0, 0], [-970, 0], [-1030, 0]]), (T, 1, 1))
+    values, columns = deepof.utils.kinematics_features({"A": a, "B": b}, {"A": parts, "B": parts}, fps)
+    tab = pd.DataFrame(values, columns=pd.MultiIndex.from_tuples(columns)).iloc[30:-30]
+    bands = [f"wave{f:g}hz" for f in deepof.utils.KINEMATICS_WAVELET_HZ]
+    assert [c for c in columns if c[0] == "A_kinematics"] == [
+        ("A_kinematics", f"{q}_{s}") for q in ["speed", "acc"] + bands for s in ("median", "second")]
+    assert len([c for c in columns if c[0] == "A_B_kinematics"]) == 2 * len(deepof.utils.KINEMATICS_RELATIONAL_PAIRS)
+    assert np.allclose(tab[("A_kinematics", "speed_median")], 100, atol=1e-3)
+    assert np.allclose(tab[("A_kinematics", "acc_median")], 0, atol=1e-3)
+    assert np.allclose(tab[("B_kinematics", "speed_second")], 0, atol=1e-6)
+    assert tab["A_kinematics"][[f"{band}_second" for band in bands]].mean().idxmax() == "wave4hz_second"
+    assert np.allclose(tab[("A_B_kinematics", "dist_rate_Center-Center")], 100, atol=1e-3)
+    assert np.allclose(tab[("A_B_kinematics", "dist_acc_Center-Center")], 0, atol=1e-3)
+    # Bands at or above 0.45 x the frame rate are left out
+    columns = deepof.utils.kinematics_features({"A": a}, {"A": parts}, 20.0)[1]
+    assert not any(c[1].startswith("wave11hz") for c in columns) and not any("dist" in c[1] for c in columns)

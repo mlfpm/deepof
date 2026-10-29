@@ -254,6 +254,9 @@ class ContrastiveCfg:
     # with InfoNCE against the third views of the other windows and both views of the same window, so the prediction
     # has to carry what changes, not what stays constant within a video. Contrastive temperature, whole training
     predictive_weight: float = 0.0
+    # Weight of the contrastive loss itself (0: off, e.g. to train with the predictive loss and the regression teacher
+    # only; the time-shifted view is still computed for the predictive loss)
+    contrastive_weight: float = 1.0
     proto_space: str = "backbone"
     proto_clusters: Tuple[int, ...] = (25, 50, 100)
     proto_warmup_epochs: int = 5
@@ -634,6 +637,10 @@ def check_model_inputs(
         check(is_number(c.soft_temporal_tau, 0), "\"soft_temporal_tau\" needs to be >= 0")
         check(is_number(c.proto_weight, 0), "\"proto_weight\" needs to be >= 0")
         check(is_number(c.predictive_weight, 0), "\"predictive_weight\" needs to be >= 0")
+        check(is_number(c.contrastive_weight, 0), "\"contrastive_weight\" needs to be >= 0")
+        if c.contrastive_weight == 0:
+            check(is_number(c.predictive_weight, 0, strict_min=True),
+                  "\"contrastive_weight\"=0 needs the predictive loss (\"predictive_weight\" > 0)")
         if is_number(c.predictive_weight, 0, strict_min=True):
             check(str(c.contrastive_loss_function).lower() == "nce" and str(c.shift_view_mode).lower() != "off",
                   "\"predictive_weight\" > 0 needs the time-shifted view: contrastive_loss_function=\"nce\" and "

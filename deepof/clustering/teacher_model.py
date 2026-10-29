@@ -964,21 +964,29 @@ def extract_kinematics_segments_view(
     n_angles: int,
     n_segments: int = 1,
     batch_size: int = 8192,
+    columns: Optional[List[str]] = None,
 ) -> torch.Tensor:
     """
-    Kinematics view: per segment of the centre window (the unaugmented contrastive view), the mean of log1p(x / scale)
-    of every kinematics column (speed and acceleration per animal, get_graph_dataset(..., include_kinematics=True)),
-    with scale the median of the column over the centre frames of all samples, for all samples in dataset order.
+    Kinematics view of the centre window (the unaugmented contrastive view) for all samples in dataset order, from the
+    kinematics columns of get_graph_dataset(..., include_kinematics=True), each scaled as log1p(x / scale) with scale
+    the median of |x| over the centre frames of all samples, by kind (the column's statistic name):
+      - speed_* / acc_*: mean and max per segment (max: short peaks such as a jump take-off)
+      - wave*: mean over the window (the wavelet amplitude is already smoothed over its period)
+      - dist_rate_*: signed (sign(x) * log1p(|x| / scale)), mean per segment
+      - other (dist_acc_*): mean per segment
 
     Args:
         dataset (BatchDictDataset): Training dataset, built from data that contains kinematics.
         window_len (int): Length of the centre window (contrastive_window).
         n_angles (int): Number of angle columns before the kinematics in the third array.
-        n_segments (int): Number of equal segments of the window with one mean each. Defaults to 1 (whole window).
+        n_segments (int): Number of equal segments of the window. Defaults to 1 (whole window).
         batch_size (int): Batch size used to read the data. Defaults to 8192.
+        columns (list): Statistic names of the kinematics columns (meta_info["kinematics_columns"][:, 1]). None: every
+            column is treated as speed / acceleration.
 
     Returns:
-        torch.Tensor: Tensor of shape [N_samples, n_segments * n_kinematics], segment-major.
+        torch.Tensor: Tensor of shape [N_samples, n_features]: segment means (segment-major) and maxima of the speed /
+        acceleration columns, window means of the wavelet columns, segment means of the distance columns.
     """
     def centre_windows():
         loader = _with_angles(dataset, "The kinematics view needs kinematics in the preprocessed data: "
@@ -991,16 +999,26 @@ def extract_kinematics_segments_view(
             start = (kin.shape[1] - window_len) // 2
             yield kin[:, start:start + window_len]
 
-    centre = torch.cat([k[:, window_len // 2] for k in centre_windows()], dim=0)
+    centre = torch.cat([k[:, window_len // 2] for k in centre_windows()], dim=0).abs()
     if centre.shape[1] == 0:
         raise ValueError("The kinematics view needs kinematics in the preprocessed data: "
                          "get_graph_dataset(..., include_kinematics=True)")
+    columns = [str(c) for c in columns] if columns is not None else ["speed"] * centre.shape[1]
+    if len(columns) != centre.shape[1]:
+        raise ValueError(f"{len(columns)} kinematics column names for {centre.shape[1]} kinematics columns")
     scale = centre.median(dim=0).values
     scale = torch.where(scale > 0, scale, centre.mean(dim=0)).clamp_min(1e-6)  # columns that are mostly zero
+    peak = torch.tensor([c.startswith(("speed", "acc")) for c in columns])
+    wave = torch.tensor([c.startswith("wave") for c in columns])
+    signed = torch.tensor([c.startswith("dist_rate") for c in columns])
+    rest = ~(peak | wave)
     feats = []
     for kin in centre_windows():
-        segments = torch.tensor_split(torch.log1p(kin.clamp_min(0) / scale), n_segments, dim=1)
-        feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
+        x = torch.where(signed, kin.sign() * torch.log1p(kin.abs() / scale), torch.log1p(kin.clamp_min(0) / scale))
+        segments = torch.tensor_split(x, n_segments, dim=1)
+        feats.append(torch.cat(
+            [s[..., peak].mean(dim=1) for s in segments] + [s[..., peak].amax(dim=1) for s in segments]
+            + [x[..., wave].mean(dim=1)] + [s[..., rest].mean(dim=1) for s in segments], dim=1))
     return torch.cat(feats, dim=0)
 
 
@@ -1070,7 +1088,8 @@ def build_regression_targets(
                              "get_graph_dataset(..., include_kinematics=True), and its meta_info")
         n_segments = kinematics_segments(window_len, meta_info["frame_rate"], teacher_cfg.kinematics_segments_per_second)
         kinematics = extract_kinematics_segments_view(
-            train_dataset, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles
+            train_dataset, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles,
+            columns=[c[1] for c in meta_info["kinematics_columns"]],
         )
         kinematics = (kinematics - kinematics.mean(dim=0)) / kinematics.std(dim=0).clamp_min(1e-8)
         scaled.append(kinematics / kinematics.shape[1] ** 0.5)

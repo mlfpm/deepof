@@ -2871,45 +2871,49 @@ class Coordinates:
         )
 
     def get_kinematics(self, return_path: bool = False) -> table_dict:
-        """Speed and acceleration of every animal per frame, from the arena-centred positions before any alignment (the
-        aligned positions of get_graph_dataset are rotated per frame, so their changes would contain the rotation).
-        Per animal, the median and the second largest value over its body parts of the speed (displacement per frame
-        times the frame rate, mm/s) and of the acceleration (magnitude of the second difference of the positions times
-        the frame rate squared, mm/s^2; includes changes of direction at constant speed). No smoothing beyond the one
-        at project creation. Targets of the kinematics view of the regression teacher (see include_kinematics in
-        get_graph_dataset).
+        """Kinematics of every animal per frame (deepof.utils.kinematics_features), from the arena-centred positions
+        before any alignment (the aligned positions of get_graph_dataset are rotated per frame, so their changes would
+        contain the rotation). Per animal, the median and the second largest value over its body parts of the speed
+        (mm/s) and the acceleration (mm/s^2; includes changes of direction at constant speed), both Savitzky-Golay
+        derivatives over 0.2 s, and of the wavelet amplitude of the posture in 5 bands from 1 to 11 Hz (fast rhythmic
+        movement such as fighting or grooming); per pair of animals, the rate of change and the |second derivative| of
+        the distances centre-centre, nose-nose and nose-tail base (both ways). Targets of the kinematics view of the
+        regression teacher (see include_kinematics in get_graph_dataset).
 
         Args:
             return_path (bool): If True, the tables are saved and returned as paths.
 
         Returns:
-            table_dict: One table per video with the columns (<animal>_kinematics, <statistic>), statistics
-            speed_median, speed_second, acc_median and acc_second ("kinematics" without animal ids).
+            table_dict: One table per video with the columns (<animal>_kinematics, <statistic>) with the statistics
+            speed_ / acc_ / wave<f>hz_ median and second, and (<a>_<b>_kinematics, dist_rate_<part a>-<part b> /
+            dist_acc_<part a>-<part b>) ("kinematics" without animal ids).
         """
         coords = self.get_coords(center="arena", return_path=return_path)
         animal_ids = [a for a in self._animal_ids if a] if self._animal_ids and self._animal_ids[0] else [""]
-        tables = {}
+        bands = [f for f in deepof.utils.KINEMATICS_WAVELET_HZ if f >= 0.45 * self._frame_rate]
+        if bands:
+            warnings.warn(f"Kinematics: the wavelet bands {bands} Hz are above 0.45 x the frame rate "
+                          f"({self._frame_rate:g} fps) and left out.")
+        tables, missing_pairs = {}, set()
         for key in coords.keys():
             tab = get_dt(coords, key)
-            columns, values = [], []
+            positions, part_names = {}, {}
             for animal in animal_ids:
                 parts = sorted({c[0] for c in tab.columns if c[1] == "x" and (not animal or c[0].startswith(animal + "_"))})
-                if len(parts) < 2:
-                    raise ValueError(f"The kinematics need at least two body parts per animal, got {parts}")
-                pos = np.stack([tab[[(p, "x") for p in parts]].to_numpy(float),
-                                tab[[(p, "y") for p in parts]].to_numpy(float)], axis=-1)  # (frames, parts, 2)
-                speed, acc = np.zeros(pos.shape[:2]), np.zeros(pos.shape[:2])
-                speed[1:] = np.linalg.norm(np.diff(pos, axis=0), axis=-1) * self._frame_rate
-                acc[1:-1] = np.linalg.norm(pos[2:] - 2 * pos[1:-1] + pos[:-2], axis=-1) * self._frame_rate ** 2
-                for name, x in (("speed", speed), ("acc", acc)):
-                    x = np.nan_to_num(x)  # missing positions count as no movement
-                    values += [np.median(x, axis=1), np.sort(x, axis=1)[:, -2]]
-                    columns += [(f"{animal}_kinematics" if animal else "kinematics", f"{name}_{stat}")
-                                for stat in ("median", "second")]
-            kinematics = pd.DataFrame(np.stack(values, axis=1).astype(self._bit_precision.dtype), index=tab.index,
+                positions[animal] = np.stack([tab[[(p, "x") for p in parts]].to_numpy(float),
+                                              tab[[(p, "y") for p in parts]].to_numpy(float)], axis=-1)
+                part_names[animal] = [p[len(animal) + 1:] if animal else p for p in parts]
+            if len(animal_ids) > 1:
+                missing_pairs |= {pair for pair in deepof.utils.KINEMATICS_RELATIONAL_PAIRS
+                                  if not all(p in part_names[a] for p, a in zip(pair, animal_ids[:2]))}
+            values, columns = deepof.utils.kinematics_features(positions, part_names, self._frame_rate)
+            kinematics = pd.DataFrame(values.astype(self._bit_precision.dtype), index=tab.index,
                                       columns=pd.MultiIndex.from_tuples(columns))
             table_path = os.path.join(self._project_path, self._project_name, "Tables", key, key + "_kinematics")
             tables[key] = save_dt(kinematics, table_path, return_path)
+        if missing_pairs:
+            warnings.warn(f"Kinematics: the distance pairs {sorted(missing_pairs)} are left out, their body parts are "
+                          "missing in this skeleton.")
         return TableDict(
             tables, typ="kinematics", table_path=os.path.join(self._project_path, self._project_name, "Tables"),
             animal_ids=self._animal_ids,
@@ -3271,7 +3275,7 @@ class Coordinates:
             include_angles (bool): If True, the windows additionally contain the (unsigned, unscaled) angles between three connected body parts as a third array next to nodes and edges. They are not used as model input, but as targets of the regression teacher (include_angles_view in train_deepof_model). Defaults to False.
             mouse_size_normalization (bool): If True, the coordinates of each animal are divided by its own body length, which removes size differences between animals but distorts the positions of the animals relative to each other. If False (default), the coordinates of all animals are divided by one shared body length, so that distances between animals are preserved. Speeds and distances are normalized per animal in both cases.
             include_imputation_mask (bool): If True, every node gets a fourth feature next to x, y and speed: 1 if its position was imputed because of a low likelihood or a missing animal, else 0 (see get_imputation_mask). Only the contrastive model can be trained on it. Defaults to False.
-            include_kinematics (bool): If True, the third array additionally contains (after the angles, if included) the unscaled speed and acceleration per animal of get_kinematics, computed from the positions before alignment (meta_info["kinematics_columns"]). Not a model input, but the targets of the kinematics view of the regression teacher (include_kinematics_view in train_deepof_model). Not available with precomputed_tab_dict. Defaults to False.
+            include_kinematics (bool): If True, the third array additionally contains (after the angles, if included) the unscaled kinematics of get_kinematics (speed, acceleration and posture wavelet bands per animal, change of the distances between animals), computed from the positions before alignment (meta_info["kinematics_columns"]). Not a model input, but the targets of the kinematics view of the regression teacher (include_kinematics_view in train_deepof_model). Not available with precomputed_tab_dict. Defaults to False.
 
         Returns:
             merged_features: A graph-based dataset.
@@ -3426,7 +3430,7 @@ class Coordinates:
             # Kinematics (get_kinematics) follow the angles in the third array
             kinematics_sorting_indices = [
                 j for j, f in enumerate(feature_names) if isinstance(f, tuple) and len(f) == 2
-                and str(f[0]).endswith("kinematics") and f[1] in ("speed_median", "speed_second", "acc_median", "acc_second")
+                and str(f[0]).endswith("kinematics")
             ]
 
 

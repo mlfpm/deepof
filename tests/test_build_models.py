@@ -1842,6 +1842,11 @@ def test_predictive_loss():
     result.loss.backward()
     assert result.logs["pred_loss"] > 0 and 0 <= result.logs["pred_acc"] <= 1
     assert head.net[0].weight.grad.abs().sum() > 0
+    # Without the contrastive loss, only the predictive loss is left
+    ctx.contrastive_cfg = deepof.clustering.model_utils_new.ContrastiveCfg(
+        contrastive_window=window_len, predictive_weight=1.0, contrastive_weight=0.0)
+    logs = training.step_contrastive_distill(model, (x, a, torch.arange(8)), ctx).logs
+    assert np.isclose(logs["total_loss"], logs["pred_loss"], rtol=1e-5)
     utils = deepof.clustering.model_utils_new
     with pytest.raises(ValueError, match="predictive_weight"):
         utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
@@ -1874,31 +1879,41 @@ def test_regression_teacher_angle_view(tmp_path):
 
 
 def test_regression_teacher_kinematics_view(tmp_path):
-    # Kinematics after the angles in the third array: log1p(x / median of the centre frames) per segment, the number
-    # of segments from the frame rate; the angle view keeps only the angles; nodes_view_parts selects PCA views
+    # Kinematics after the angles in the third array, log1p(|x| / median of the centre frames), by kind: speed /
+    # acceleration mean and max per segment, wavelet mean over the window, distance rate signed, the number of segments
+    # from the frame rate; the angle view keeps only the angles; nodes_view_parts selects PCA views
     rng = np.random.default_rng(0)
     T, K, window_len, fps = 10, 3, 6, 5.0
     pre = {f"v{i}": (rng.normal(size=(n, T, 6)).astype(np.float32), rng.normal(size=(n, T, 4)).astype(np.float32),
-                     np.concatenate([rng.uniform(0, np.pi, size=(n, T, K)), rng.gamma(2, 50, size=(n, T, 2))],
+                     np.concatenate([rng.uniform(0, np.pi, size=(n, T, K)), rng.gamma(2, 50, size=(n, T, 2)),
+                                     rng.normal(0, 30, size=(n, T, 1)), rng.gamma(2, 50, size=(n, T, 1))],
                                     axis=2).astype(np.float32)) for i, n in enumerate([7, 5])}
-    meta_info = {"angle_columns": list(range(K)), "kinematics_columns": [("kinematics", "speed_median"),
-                                                                        ("kinematics", "acc_median")], "frame_rate": fps}
+    names = ["speed_median", "wave1hz_median", "dist_rate_Nose-Nose", "dist_acc_Nose-Nose"]
+    meta_info = {"angle_columns": list(range(K)), "kinematics_columns": [("kinematics", c) for c in names],
+                 "frame_rate": fps}
     ds = deepof.clustering.dataset.BatchDictDataset(pre, str(tmp_path), "train_", h5_chunk_len=4)
     teacher = deepof.clustering.teacher_model
     n_segments = teacher.kinematics_segments(window_len, fps, 3.0)  # 1.2 s x 3 per second
-    view = teacher.extract_kinematics_segments_view(ds, window_len, K, n_segments=n_segments, batch_size=3)
+    view = teacher.extract_kinematics_segments_view(ds, window_len, K, n_segments=n_segments, batch_size=3,
+                                                    columns=names)
     kin = np.concatenate([v[2] for v in pre.values()])[:, 2:8, K:]
-    x = np.log1p(kin / np.sort(kin[:, 3], axis=0)[(len(kin) - 1) // 2])  # torch.median: the lower middle value
-    expected = np.concatenate([s.mean(1) for s in np.array_split(x, n_segments, axis=1)], axis=1)
-    assert n_segments == 4 and np.allclose(view.numpy(), expected, atol=1e-5)
+    scale = np.sort(np.abs(kin[:, 3]), axis=0)[(len(kin) - 1) // 2]  # torch.median: the lower middle value
+    x = np.sign(kin) * np.log1p(np.abs(kin) / scale)
+    segments = np.array_split(x, n_segments, axis=1)
+    expected = np.concatenate([s[..., 0].mean(1, keepdims=True) for s in segments]
+                              + [s[..., 0].max(1, keepdims=True) for s in segments] + [x[..., 1].mean(1, keepdims=True)]
+                              + [s[..., 2:].mean(1) for s in segments], axis=1)
+    assert n_segments == 4 and view.shape[1] == 4 * n_segments + 1 and np.allclose(view.numpy(), expected, atol=1e-5)
+    with pytest.raises(ValueError, match="column names"):
+        teacher.extract_kinematics_segments_view(ds, window_len, K, n_segments=n_segments, columns=names[:2])
 
     cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
         include_nodes_view=True, nodes_view_parts=("speeds",), pca_nodes_dim=2, include_angles_view=True,
         angle_segments=2, include_kinematics_view=True,
     )
     targets, views = teacher.build_regression_targets(cfg, ds, window_len, meta_info=meta_info)
-    assert targets.shape == (12, 2 + 2 * K + 2 * n_segments)
-    assert views == [("nodes_speeds", 2), ("angles", 2 * K), ("kinematics", 2 * n_segments)]
+    assert targets.shape == (12, 2 + 2 * K + 4 * n_segments + 1)
+    assert views == [("nodes_speeds", 2), ("angles", 2 * K), ("kinematics", 4 * n_segments + 1)]
     with pytest.raises(ValueError, match="include_kinematics=True"):
         teacher.build_regression_targets(cfg, ds, window_len, meta_info=None)
     utils = deepof.clustering.model_utils_new
