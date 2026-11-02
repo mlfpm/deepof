@@ -756,6 +756,39 @@ def _inference_state(model: nn.Module, device: torch.device, cluster_mode: Optio
             model.cluster_mode = original_cluster_mode
 
 
+def _extract_pair_to_gate_key(
+    coordinates,
+    extract_pair: Optional[list],
+) -> Any:
+    """
+    Convert extract_pair list to the gate key used in soft_counts_dict.
+    """
+    animal_ids = coordinates._animal_ids
+    if extract_pair is None:
+        if len(animal_ids) == 1:
+            return ""
+        elif len(animal_ids) >= 2:
+            return (animal_ids[0], animal_ids[1])
+        else: # pragma: no cover
+            raise AssertionError("No animal IDs found in coordinates._animal_ids.")
+
+    if extract_pair == [""]:
+        return ""
+
+    if not isinstance(extract_pair, list) or len(extract_pair) != 2: # pragma: no cover
+        raise AssertionError(
+            "extract_pair must be a list with two animal ids or [\"\"] in case of a single mouse!"
+        )
+
+    id1, id2 = extract_pair
+    if id1 not in animal_ids or id2 not in animal_ids: # pragma: no cover
+        raise AssertionError(
+            f"Animal IDs {id1}, {id2} not found in coordinates._animal_ids: {animal_ids}"
+        )
+
+    return (id1, id2)
+
+
 def embedding_per_video(
     coordinates: coordinates,
     to_preprocess: table_dict,
@@ -804,38 +837,6 @@ def embedding_per_video(
         soft_counts (table_dict): soft_counts per experiment.
 
     """
-
-    def _extract_pair_to_gate_key(
-        coordinates,
-        extract_pair: Optional[list],
-    ) -> Any:
-        """
-        Convert extract_pair list to the gate key used in soft_counts_dict.
-        """
-        animal_ids = coordinates._animal_ids
-        if extract_pair is None:
-            if len(animal_ids) == 1:
-                return ""
-            elif len(animal_ids) >= 2:
-                return (animal_ids[0], animal_ids[1])
-            else: # pragma: no cover
-                raise AssertionError("No animal IDs found in coordinates._animal_ids.")
-
-        if extract_pair == [""]:
-            return ""
-
-        if not isinstance(extract_pair, list) or len(extract_pair) != 2: # pragma: no cover
-            raise AssertionError(
-                "extract_pair must be a list with two animal ids or [\"\"] in case of a single mouse!"
-            )
-
-        id1, id2 = extract_pair
-        if id1 not in animal_ids or id2 not in animal_ids: # pragma: no cover
-            raise AssertionError(
-                f"Animal IDs {id1}, {id2} not found in coordinates._animal_ids: {animal_ids}"
-            )
-
-        return (id1, id2)
 
     extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
     methods = {"gmm", "msm", "kmeans", "combined", "msm_chaos"}
@@ -995,20 +996,79 @@ def embedding_per_video(
         exp_conditions=exp_conds,
     )
 
-    gate_edges = None
     if softcounts_extraction_method in methods:
-        if isinstance(animal_id,str):
-            animal_id=[animal_id]
-        gate_edges = deepof.post_hoc.compute_gate_edges(
+        soft_counts = soft_counts_from_embeddings(
             coordinates=coordinates,
-            animal_ids=animal_id,
-            keys=list(embeddings.keys()),
+            embeddings=embeddings,
             window_size=window_size,
+            softcounts_extraction_method=softcounts_extraction_method,
             supervised_annotations=supervised_annotations,
-            M_gates=M_gates,
+            animal_id=animal_id,
+            extract_pair=extract_pair,
             embedding_gates=embedding_gates,
+            states_per_gate=states_per_gate,
+            quality_threshold=quality_threshold,
+            frac_bps_below=frac_bps_below,
+            M_gates=M_gates,
+            n_micro=n_micro,
+            lagtime=lagtime,
+            temporal_smooth_win=temporal_smooth_win,
+            decode_method=decode_method,
+            decode_sticky=decode_sticky,
+            decode_emit_tau=decode_emit_tau,
+            split_factor=split_factor,
+        )
+    else:
+        soft_counts=deepof.data.TableDict(
+            soft_counts,
+            typ="unsupervised_counts",
+            table_path=table_path,
+            exp_conditions=exp_conds,
         )
 
+    return (
+        embeddings,
+        soft_counts,
+    )
+
+
+def soft_counts_from_embeddings(
+    coordinates: coordinates,
+    embeddings: table_dict,
+    window_size: int,
+    softcounts_extraction_method: str = "msm",
+    supervised_annotations: table_dict = None,
+    animal_id: str = None,
+    extract_pair: Any = None,
+    embedding_gates: str = "Center",
+    states_per_gate: Union[int, list] = [16,4,4],
+    quality_threshold: float = 0.75,
+    frac_bps_below: float = 0.5,
+    M_gates: int = 3,
+    n_micro: int = 200,
+    lagtime: int = 3,
+    temporal_smooth_win: int = 3,
+    decode_method: str = "lookup",
+    decode_sticky: float = 0.4,
+    decode_emit_tau: float = 1.0,
+    split_factor: float = 3.0,
+):  # pragma: no cover
+    """Soft counts of existing embeddings (the clustering part of embedding_per_video, see there for the arguments), e.g.
+    to recluster without embedding again. window_size is the model's window size; extract_pair as in
+    embedding_per_video (list of two animal ids, [""] or None) or an already converted gate key."""
+    if extract_pair is None or isinstance(extract_pair, list):
+        extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
+    if isinstance(animal_id,str):
+        animal_id=[animal_id]
+    gate_edges = deepof.post_hoc.compute_gate_edges(
+        coordinates=coordinates,
+        animal_ids=animal_id,
+        keys=list(embeddings.keys()),
+        window_size=window_size,
+        supervised_annotations=supervised_annotations,
+        M_gates=M_gates,
+        embedding_gates=embedding_gates,
+    )
 
     if softcounts_extraction_method == "gmm":
 
@@ -1024,9 +1084,6 @@ def embedding_per_video(
             M_gates=M_gates,
             gate_edges=gate_edges,
         )
-        soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
-
-
     elif softcounts_extraction_method in {"msm", "kmeans", "combined", "msm_chaos"}:
 
         soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
@@ -1068,23 +1125,15 @@ def embedding_per_video(
                 coordinates=coordinates, 
                 soft_counts_dict=soft_counts_dict, 
                 soft_counts_chaos_dict=soft_counts_chaos_dict,
-                supervised_chaos=supervised_chaos, 
+                supervised_chaos=supervised_chaos,
                 window_size=window_size)
-        
-        soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
+    else: # pragma: no cover
+        raise ValueError(f"Unknown softcounts_extraction_method {softcounts_extraction_method!r}.")
 
-    else:
-        soft_counts=deepof.data.TableDict(
-            soft_counts,
-            typ="unsupervised_counts",
-            table_path=table_path, 
-            exp_conditions=exp_conds,
-        )
-
-    return (
-        embeddings,
-        soft_counts,
-    )
+    # Gates by supervised behaviors give a single entry for all animals, distance gates one entry per animal pair
+    if set(soft_counts_dict) == {"behavior_combinations"}:
+        return soft_counts_dict["behavior_combinations"]
+    return deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
 
 
 def contrastive_edges(x: torch.Tensor, meta_info: dict) -> torch.Tensor:

@@ -3427,10 +3427,18 @@ class Coordinates:
                 for j, f in enumerate(feature_names):
                     if n == f:
                         angle_sorting_indices.append(j)
-            # Kinematics (get_kinematics) follow the angles in the third array
-            kinematics_sorting_indices = [
+            # Kinematics (get_kinematics) follow the angles in the third array. get_kinematics covers all animals, so
+            # with animal_id only the columns of the selected animals are kept (<a>_kinematics, and <a>_<b>_kinematics
+            # if both are selected): a single-animal dataset must not contain the other animals as targets
+            selected_ids = None if animal_id is None else set([animal_id] if isinstance(animal_id, str) else animal_id)
+            all_kinematics_indices = [
                 j for j, f in enumerate(feature_names) if isinstance(f, tuple) and len(f) == 2
                 and str(f[0]).endswith("kinematics")
+            ]
+            kinematics_sorting_indices = [
+                j for j in all_kinematics_indices
+                if selected_ids is None or str(feature_names[j][0]) == "kinematics"
+                or set(str(feature_names[j][0])[:-len("_kinematics")].split("_")) <= selected_ids
             ]
 
 
@@ -3445,7 +3453,7 @@ class Coordinates:
                         len(set([node.split("_")[0] for node in e])) == 1
                     )
             edge_sorting_indices = (np.array(edge_sorting_indices) + len(node_sorting_indices) + len(angle_sorting_indices)
-                                    + len(kinematics_sorting_indices))
+                                    + len(all_kinematics_indices))  # all kinematics columns lie before the distances
 
             pbar.update()
 

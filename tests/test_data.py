@@ -966,6 +966,8 @@ def test_get_graph_dataset_angles_and_mask():
         with_angles, meta_info = prun.get_graph_dataset(include_angles=True, **kwargs)[:2]
         # Kinematics: after the angles in the third array, from the positions before alignment
         with_kin, kin_info = prun.get_graph_dataset(include_angles=True, include_kinematics=True, **kwargs)[:2]
+        single, kin_single = prun.get_graph_dataset(include_kinematics=True, animal_id="W", **kwargs)[:2]
+        single_plain, single_info = prun.get_graph_dataset(animal_id="W", **kwargs)[:2]
         first = sorted(prun._tables.keys())[0]
         kinematics = deepof.data_loading.get_dt(prun.get_kinematics(), first)
         pos = deepof.data_loading.get_dt(prun.get_coords(center="arena"), first)
@@ -1008,6 +1010,14 @@ def test_get_graph_dataset_angles_and_mask():
     assert kin_columns[:4] == [("B_kinematics", f"{q}_{s}") for q in ("speed", "acc") for s in ("median", "second")]
     assert {c[0] for c in kin_columns} == {"B_kinematics", "W_kinematics", "B_W_kinematics"}
     assert ("B_W_kinematics", "dist_rate_Center-Center") in kin_columns
+    # A single-animal dataset keeps only the kinematics of that animal (no other animal, no pair); its nodes and edges
+    # are the same as without kinematics
+    assert {c[0] for c in kin_single["kinematics_columns"]} == {"W_kinematics"}
+    assert list(kin_single["edge_columns"]) == list(single_info["edge_columns"])
+    assert all(isinstance(e, tuple) and all(n.startswith("W_") for n in e) for e in single_info["edge_columns"])
+    single_key = sorted(single[0].keys())[0]
+    for with_k, without_k in zip(get_dt(single[0], single_key)[:2], get_dt(single_plain[0], single_key)[:2]):
+        assert np.array_equal(with_k, without_k)
     assert len(meta_info["kinematics_columns"]) == 0 and kin_info["frame_rate"] == prun._frame_rate
     assert np.allclose(kinematics[("W_kinematics", "speed_median")].to_numpy(), np.median(speed_w, axis=1), rtol=1e-3,
                        atol=1e-3)
