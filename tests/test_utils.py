@@ -1237,7 +1237,9 @@ polygons = [
 )
 def test_point_in_polygon(points, polygons):
 
-    points = np.array(points)
+    # Points on the boundary are excluded: shapely counts them as outside, the ray casting decides arbitrarily
+    boundary = Polygon(polygons).boundary
+    points = np.array([p for p in points if boundary.distance(Point(p)) > 1e-9]).reshape(-1, 2)
     polygons = np.array(polygons)
     assert all(
         deepof.utils.point_in_polygon_numba(points, polygons)
