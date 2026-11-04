@@ -1092,9 +1092,13 @@ def get_contrastive_soft_counts_gmm(
     random_state: int = 0,
     embedding_gates: Any = "Center",
     temporal_smooth_win: Optional[int] = 3,
+    table_suffix: str = "",
 ):  
     """
     Distance/behavior-gated GMM decoder.
+
+    table_suffix: appended to the names of the soft count tables saved in the project (very large projects), so that
+        parallel runs on the same project (e.g. with different gates) do not overwrite each other's tables.
 
     Returns:
         Dict[Any, TableDict]: one soft-count TableDict per gate.
@@ -1224,7 +1228,7 @@ def get_contrastive_soft_counts_gmm(
 
             gate_tag = _gate_to_tag(gate)
             table_path_key = os.path.join(
-                table_path, key, f"{key}_soft_counts_gmm_{gate_tag}"
+                table_path, key, f"{key}_soft_counts_gmm_{gate_tag}{table_suffix}"
             )
             soft_counts_out_by_gate[gate][key] = deepof.utils.save_dt(
                 P, table_path_key, coordinates._very_large_project
@@ -1956,9 +1960,14 @@ def get_contrastive_soft_counts_msm_pcca(
     drop_out_of_gate: bool = True,
     macro_method: str = "pcca",
     split_factor: Optional[float] = None,
+    table_suffix: str = "",
 ):
     """
     Distance/behavior-gated MSM + PCCA with k-means microstates.
+
+    table_suffix:
+        Appended to the names of the soft count tables saved in the project (very large projects), so that parallel
+        runs on the same project (e.g. with different gates) do not overwrite each other's tables.
 
     macro_method:
         "pcca" (default) — PCCA macrostates (metastable sets).
@@ -2154,7 +2163,7 @@ def get_contrastive_soft_counts_msm_pcca(
                 if do_drop:
                     suffix += "_dropped"
             table_path_key = os.path.join(
-                table_path, key, f"{key}_soft_counts_msmpcca_{gate_tag}{suffix}"
+                table_path, key, f"{key}_soft_counts_msmpcca_{gate_tag}{suffix}{table_suffix}"
             )
             soft_counts_out_by_gate[gate][key] = deepof.utils.save_dt(
                 P, table_path_key, coordinates._very_large_project

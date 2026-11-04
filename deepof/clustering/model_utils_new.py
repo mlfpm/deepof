@@ -1052,10 +1052,13 @@ def soft_counts_from_embeddings(
     decode_sticky: float = 0.4,
     decode_emit_tau: float = 1.0,
     split_factor: float = 3.0,
+    table_suffix: str = "",
 ):  # pragma: no cover
     """Soft counts of existing embeddings (the clustering part of embedding_per_video, see there for the arguments), e.g.
     to recluster without embedding again. window_size is the model's window size; extract_pair as in
-    embedding_per_video (list of two animal ids, [""] or None) or an already converted gate key."""
+    embedding_per_video (list of two animal ids, [""] or None) or an already converted gate key. table_suffix is
+    appended to the names of the soft count tables saved in the project (very large projects), so that parallel runs
+    on the same project do not overwrite each other's tables."""
     if extract_pair is None or isinstance(extract_pair, list):
         extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
     if isinstance(animal_id,str):
@@ -1083,6 +1086,7 @@ def soft_counts_from_embeddings(
             N_clusters_per_gate=states_per_gate,
             M_gates=M_gates,
             gate_edges=gate_edges,
+            table_suffix=table_suffix,
         )
     elif softcounts_extraction_method in {"msm", "kmeans", "combined", "msm_chaos"}:
 
@@ -1104,6 +1108,7 @@ def soft_counts_from_embeddings(
             gate_edges=gate_edges,
             macro_method="kmeans" if softcounts_extraction_method == "kmeans" else "pcca",
             split_factor=split_factor if softcounts_extraction_method == "combined" else None,
+            table_suffix=table_suffix,
         )
         if softcounts_extraction_method == "msm_chaos":
 
