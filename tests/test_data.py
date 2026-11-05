@@ -1025,6 +1025,38 @@ def test_get_graph_dataset_angles_and_mask():
     assert all_missing.all()
 
 
+def test_get_graph_dataset_center_and_speeds():
+    # A body part as center: all animals shifted and rotated together (no position in the arena, distances within and
+    # between the animals unchanged); speeds from the unrotated positions, independent of position and direction
+    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
+    prun = deepof.data.Project(
+        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
+        project_name="deepof_project_center", arena="circular-autodetect", video_scale="380 mm",
+        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
+    ).create(force=True, test=True)
+    get_dt = deepof.data_loading.get_dt
+    try:
+        kwargs = dict(align="Spine_1", window_size=10, window_step=5, test_videos=0)
+        key = sorted(prun._tables.keys())[0]
+        tab = get_dt(prun.get_graph_dataset(center="Center", **kwargs)[3], key)
+        raw, speeds = get_dt(prun.get_coords(), key), get_dt(prun.get_coords(speed=1), key)
+        with pytest.raises(ValueError, match="Polar"):
+            prun.get_graph_dataset(center="Center", polar=True, **kwargs)
+    finally:
+        rmtree(os.path.join(path, "deepof_project_center"))
+    assert np.nanmax(np.abs(tab[[("B_Center", "x"), ("B_Center", "y"), ("B_Spine_1", "x")]].to_numpy())) == 0
+    parts = sorted({c[0] for c in raw.columns if c[1] == "x"})
+
+    def distances(t):
+        xy = np.stack([t[[(p, "x") for p in parts]].to_numpy(float), t[[(p, "y") for p in parts]].to_numpy(float)], -1)
+        return np.linalg.norm(xy[:, :, None] - xy[:, None], axis=-1)
+
+    centred, original = distances(tab), distances(raw)
+    valid = np.isfinite(centred)
+    assert valid.mean() > 0.5 and np.allclose(centred[valid], original[valid])
+    assert np.allclose(tab[parts].to_numpy(float), speeds[parts].to_numpy(float), equal_nan=True)
+
+
 @pytest.mark.parametrize("align_group", [True, False])
 def test_align_trajectories_group(align_group):
     # Group alignment rotates all animals by the same angle per frame, so all distances are preserved; without it, every

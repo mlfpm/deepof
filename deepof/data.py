@@ -1974,6 +1974,7 @@ class Coordinates:
     def get_coords(
         self,
         center: str = False,
+        center_group: bool = False,
         polar: bool = False,
         speed: int = 0,
         align: str = False,
@@ -1992,6 +1993,7 @@ class Coordinates:
 
         Args:
             center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            center_group (bool): Only for a body part as center. If True, all animals are centered on this body part of the first animal (the distances between the animals are kept); if False (default), every animal on its own.
             polar (bool) States whether the coordinates should be converted to polar values.
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
@@ -2023,6 +2025,7 @@ class Coordinates:
                 key = key,
                 scale = self._scales[key], 
                 center = center,
+                center_group = center_group,
                 polar = polar,
                 speed = speed,
                 align = align,
@@ -2140,13 +2143,22 @@ class Coordinates:
         polar_tab = deepof.utils.tab2polar(tab)
         return polar_tab, ("rho", "phi"), polar_scale
         
-    def _center_coordinates(self, tab: pd.DataFrame, center: str, scale: np.array, coords: Tuple[str, str], animal_ids: List[str]) -> pd.DataFrame:
-        """Centers the coordinates either to the arena or a specific body part."""
+    def _center_coordinates(self, tab: pd.DataFrame, center: str, scale: np.array, coords: Tuple[str, str], animal_ids: List[str], center_group: bool = False) -> pd.DataFrame:
+        """Centers the coordinates either to the arena or a specific body part (of every animal, or with center_group of
+        the first animal for all animals)."""
         coord_1, coord_2 = coords
 
         if center == "arena":
             tab.loc[:, (slice("x"), [coord_1])] -= scale[0]
             tab.loc[:, (slice("x"), [coord_2])] -= scale[1]
+        elif isinstance(center, str) and center_group:
+            # One shift per frame for all animals: the distances within and between the animals stay unchanged. Plain
+            # subtraction, so that a missing reference body part gives NaN (not uncentred values)
+            first = animal_ids[0]
+            reference = tab[f"{first}{'_' if first else ''}{center}"]
+            for coord in coords:
+                columns = [col for col in tab.columns if col[1] == coord]
+                tab.loc[:, columns] = tab[columns].to_numpy() - reference[[coord]].to_numpy()
         elif isinstance(center, str):
             for aid in animal_ids:
                 center_bp_name = f"{aid}{'_' if aid else ''}{center}"
@@ -2243,6 +2255,7 @@ class Coordinates:
     scale: np.array,
     quality: table_dict = None,
     center: str = False,
+    center_group: bool = False,
     polar: bool = False,
     speed: int = 0,
     align: str = False,
@@ -2262,6 +2275,7 @@ class Coordinates:
             scale (np.array): scale of the current arena.
             quality: (table_dict): Quality information for current data Frame
             center (str): Name of the body part to which the positions will be centered. If false, the raw data is returned; if 'arena' (default), coordinates are centered in the pitch
+            center_group (bool): Only for a body part as center. If True, all animals are centered on this body part of the first animal; if False (default), every animal on its own.
             polar (bool) States whether the coordinates should be converted to polar values.
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
@@ -2295,11 +2309,11 @@ class Coordinates:
             tab, coords, current_scale = self._transform_to_polar(tab, scale)
 
         # 5. Determine which animals to process for subsequent steps
-        animal_ids = [selected_id] if selected_id else self._animal_ids
+        animal_ids = ([selected_id] if isinstance(selected_id, str) else list(selected_id)) if selected_id else self._animal_ids
 
         # 6. Center coordinates
         if center:
-            tab = self._center_coordinates(tab, center, current_scale, coords, animal_ids)
+            tab = self._center_coordinates(tab, center, current_scale, coords, animal_ids, center_group)
             
         # 7. Rescale to video pixels if requested
         if to_video:
@@ -3265,9 +3279,9 @@ class Coordinates:
             samples_max (int): Maximum number of frames used per video. Longer videos are cut at this number of frames. None uses all frames.
             align_video_lengths (bool): If True (default), all videos are cut to the length of the shortest one, so that every video has the same weight in training. If False, all frames of all videos are used.
             precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
-            center (str): Name of the body part to which the positions will be centered. If false, raw data is returned; if 'arena' (default), coordinates are centered on the pitch.
+            center (str): Name of the body part on which the coordinates are centered: all animals on this body part of the first animal, so that the distances within and between the animals are kept, and the position in the arena is not part of the input. 'arena' or False (default): centered on the arena, the position in the arena stays in the coordinates.
             polar (bool) States whether the coordinates should be converted to polar values.
-            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
+            align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation). The frames are rotated around the center, so with a body part as center (e.g. "Center" and align="Spine_1") the coordinates are the posture relative to the body axis of the first animal.
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
             dist_standardize (str): standardize distance columns individually (per_column) or as a group (groupwise)
             speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
@@ -3283,6 +3297,9 @@ class Coordinates:
         """
         if include_kinematics and precomputed_tab_dict is not None:
             raise ValueError("include_kinematics is not available with precomputed_tab_dict")
+        center = center if center else "arena"
+        if polar and center != "arena":
+            raise ValueError("Polar coordinates can only be centered on the arena (center='arena').")
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
@@ -3315,13 +3332,16 @@ class Coordinates:
 
                 # Get all relevant features
                 coords = self.get_coords(
-                    selected_id=animal_id, center="arena", align=align, align_group=True, polar=polar, return_path=return_as_paths,
+                    selected_id=animal_id, center=center, center_group=True, align=align, align_group=True, polar=polar,
+                    return_path=return_as_paths,
                 )
 
                 pbar.update()
                 pbar.set_postfix(step="Loading speeds")
 
-                speeds = self.get_coords(selected_id=animal_id, speed=1, align=align, align_group=True, file_name='speed', return_path=return_as_paths)
+                # Speeds from the unrotated positions: the alignment rotates every frame by its own angle, so the
+                # changes of the aligned positions would depend on where the animal is and in which direction it moves
+                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
 
                 pbar.update()
                 pbar.set_postfix(step="Loading distances")
