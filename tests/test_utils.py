@@ -228,6 +228,31 @@ def test_scale_table_mouse_size_normalization(mouse_size_normalization):
         assert np.allclose(out[speeds], tab[speeds] / size)
 
 
+def test_scale_table_single_animal_body_length():
+    # Single animal without id, body part names with "_": body length = Nose - Tail_base while moving (80 mm), not
+    # the curled resting posture (40 mm) that dominates the frames; a frame's value does not depend on how much the
+    # rest of the video rests; all distances are within the animal
+    rows = []
+    for n, length, speed in ((200, 80.0, 100.0), (400, 40.0, 0.0)):
+        for _ in range(n):
+            rows.append({("Nose", "x"): length, ("Nose", "y"): 0.0, ("Spine_1", "x"): 20.0, ("Spine_1", "y"): 0.0,
+                         ("Center", "x"): 10.0, ("Center", "y"): 0.0, ("Tail_base", "x"): 0.0, ("Tail_base", "y"): 0.0,
+                         "Nose": speed, "Spine_1": speed, "Center": speed, "Tail_base": speed,
+                         ("Center", "Spine_1"): 10.0, ("Center", "Tail_base"): 10.0})
+    tab = pd.DataFrame(rows)
+    tab.columns = pd.Index(list(rows[0]), tupleize_cols=False)
+    assert deepof.utils.table_body_lengths(tab, [""]) == {"": 80.0}
+    # rows: only 50 moving frames left (< BODY_LENGTH_MIN_FRAMES), so all frames of rows count
+    assert deepof.utils.table_body_lengths(tab, [""], rows=np.arange(len(tab)) >= 150) == {"": 40.0}
+    out = deepof.utils.scale_table(tab, animal_ids=[""], standardize=False)
+    assert np.allclose(out[("Nose", "x")].iloc[0], 1.0) and np.allclose(out["Center"].iloc[0], 100.0 / 80)
+    assert np.allclose(out[("Center", "Spine_1")].iloc[0], np.log1p(10.0 / 80))
+    longer = pd.concat([tab, tab.iloc[200:]], ignore_index=True)  # more rest
+    assert np.allclose(deepof.utils.scale_table(longer, animal_ids=[""], standardize=False).iloc[:len(tab)], out)
+    types = deepof.utils.infer_column_types(tab, [""])
+    assert len(types["inner_dists"]) == 2 and not types["intra_dists"]
+
+
 @settings(deadline=None)
 @given(
     data=arrays(
@@ -1392,3 +1417,7 @@ def test_kinematics_features():
     # Bands at or above 0.45 x the frame rate are left out
     columns = deepof.utils.kinematics_features({"A": a}, {"A": parts}, 20.0)[1]
     assert not any(c[1].startswith("wave11hz") for c in columns) and not any("dist" in c[1] for c in columns)
+    # Independent of the direction in the image: the same animal rotated by 45 degrees has the same kinematics
+    c, s = np.cos(np.pi / 4), np.sin(np.pi / 4)
+    turned = deepof.utils.kinematics_features({"A": a @ np.array([[c, s], [-s, c]])}, {"A": parts}, fps)[0]
+    assert np.allclose(turned, deepof.utils.kinematics_features({"A": a}, {"A": parts}, fps)[0], atol=1e-6)

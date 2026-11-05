@@ -897,6 +897,10 @@ def embedding_per_video(
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
                     coord_standardize=meta_info['coord_standardize'],
+                    # centering and window alignment as in training (meta_info of older versions: neither)
+                    center=meta_info.get('center', False),
+                    align=meta_info.get('align'),
+                    align_per_window=meta_info.get('align_per_window', False),
                     # windows of this single video are loaded completely below anyway; saving them (very large
                     # projects) would only write them to disk and replace the training windows (table "preprocessed")
                     return_as_paths=False,

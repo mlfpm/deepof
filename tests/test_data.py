@@ -1057,6 +1057,57 @@ def test_get_graph_dataset_center_and_speeds():
     assert np.allclose(tab[parts].to_numpy(float), speeds[parts].to_numpy(float), equal_nan=True)
 
 
+def test_get_graph_dataset_window_alignment_and_frame_mask():
+    # align_per_window: every window shifted and rotated as a whole onto its centre frame (B_Center at 0, B_Spine_1 on
+    # the y-axis there): distances within a frame and the movement between frames are those of the scaled positions;
+    # one global standardization (no per-video one); body lengths only from the frames of frame_mask
+    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
+    prun = deepof.data.Project(
+        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
+        project_name="deepof_project_window", arena="circular-autodetect", video_scale="380 mm",
+        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
+    ).create(force=True, test=True)
+    get_dt = deepof.data_loading.get_dt
+    try:
+        lengths = prun.get_table_lengths()
+        mask = {k: np.arange(n) < n // 2 for k, n in lengths.items()}
+        kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0, frame_mask=mask,
+                      dist_standardize="groupwise", speed_standardize="groupwise", coord_standardize="groupwise")
+        windows, meta, _, tabs, scaler = prun.get_graph_dataset(align_per_window=True, **kwargs)
+        with pytest.raises(ValueError, match="frame_mask"):
+            prun.get_graph_dataset(**{**kwargs, "frame_mask": {}})
+        with pytest.raises(ValueError, match="align_per_window"):
+            prun.get_graph_dataset(**{**kwargs, "coord_standardize": "per_column"}, align_per_window=True)
+    finally:
+        rmtree(os.path.join(path, "deepof_project_window"))
+    key = sorted(windows[0].keys())[0]
+    tab = get_dt(tabs, key)
+    assert scaler["body_length"][key] == deepof.utils.table_body_lengths(tab, ["B", "W"], rows=mask[key])
+    nodes = get_dt(windows[0], key)[0]
+    names = [c[0] for c in meta["node_columns"] if isinstance(c, tuple) and c[1] == "x"]
+    n, T = len(names), nodes.shape[1]
+    x, y = nodes[..., :n], nodes[..., n:2 * n]
+    centre, spine = names.index("B_Center"), names.index("B_Spine_1")
+    assert np.abs(x[:, T // 2, centre]).max() < 1e-5 and np.abs(y[:, T // 2, centre]).max() < 1e-5
+    assert np.abs(x[:, T // 2, spine]).max() < 1e-4 and (y[:, T // 2, spine] > 0).all()
+    # The same windows of the scaled positions (window k: frames 5k ... 5k + 9), before the alignment
+    s = np.mean(list(scaler["body_length"][key].values()))  # one shared length for the coordinates of both animals
+    pos = [(tab[[(p, a) for p in names]].to_numpy(float) / s - scaler["coord"].mean_[0]) / scaler["coord"].scale_[0]
+           for a in ("x", "y")]
+    rows = 5 * np.arange(len(nodes))[:, None] + np.arange(T)
+    px, py = pos[0][rows], pos[1][rows]
+    pairwise = lambda a, b: np.hypot(a[..., :, None] - a[..., None, :], b[..., :, None] - b[..., None, :])
+    assert np.isclose(pairwise(x, y), pairwise(px, py), atol=1e-3).mean() > 0.99  # rigid (except clipped values)
+    moved = lambda a, b: np.hypot(a[:, :, centre] - a[:, T // 2:T // 2 + 1, centre],
+                                  b[:, :, centre] - b[:, T // 2:T // 2 + 1, centre])
+    assert np.isclose(moved(x, y), moved(px, py), atol=1e-3).mean() > 0.99 and moved(x, y).max() > 0.1  # movement kept
+    # Global standardization: speeds = (raw / body length - mean) / std of all videos (no per-video standardization)
+    raw = tab[names[centre]].to_numpy(float)[:T] / scaler["body_length"][key]["B"]
+    expected = (raw - scaler["speed"].mean_[0]) / scaler["speed"].scale_[0]
+    known = np.isfinite(expected)  # the first frames have no speed (filled in)
+    assert known.sum() > 3 and np.allclose(nodes[0, known, 2 * n + centre], expected[known], atol=1e-4)
+
+
 @pytest.mark.parametrize("align_group", [True, False])
 def test_align_trajectories_group(align_group):
     # Group alignment rotates all animals by the same angle per frame, so all distances are preserved; without it, every

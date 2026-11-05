@@ -2884,7 +2884,7 @@ class Coordinates:
             animal_ids=self._animal_ids,
         )
 
-    def get_kinematics(self, return_path: bool = False) -> table_dict:
+    def get_kinematics(self, return_path: bool = False, frame_mask: dict = None) -> table_dict:
         """Kinematics of every animal per frame (deepof.utils.kinematics_features), from the arena-centred positions
         before any alignment (the aligned positions of get_graph_dataset are rotated per frame, so their changes would
         contain the rotation). Per animal, the median and the second largest value over its body parts of the speed
@@ -2896,6 +2896,10 @@ class Coordinates:
 
         Args:
             return_path (bool): If True, the tables are saved and returned as paths.
+            frame_mask (dict): {video: boolean array over its frames}: positions of the frames that are False are
+                replaced by the linear interpolation of the neighbouring frames (as missing positions), so that e.g.
+                tracking errors do not reach the smoothed derivatives and wavelets of the frames around them. None
+                (default): all frames.
 
         Returns:
             table_dict: One table per video with the columns (<animal>_kinematics, <statistic>) with the statistics
@@ -2911,6 +2915,9 @@ class Coordinates:
         tables, missing_pairs = {}, set()
         for key in coords.keys():
             tab = get_dt(coords, key)
+            if frame_mask is not None:
+                tab = tab.copy()
+                tab.loc[~np.asarray(frame_mask[key], bool), :] = np.nan
             positions, part_names = {}, {}
             for animal in animal_ids:
                 parts = sorted({c[0] for c in tab.columns if c[1] == "x" and (not animal or c[0].startswith(animal + "_"))})
@@ -3267,6 +3274,8 @@ class Coordinates:
         mouse_size_normalization: bool = False,
         include_imputation_mask: bool = False,
         include_kinematics: bool = False,
+        align_per_window: bool = False,
+        frame_mask: dict = None,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -3290,6 +3299,8 @@ class Coordinates:
             mouse_size_normalization (bool): If True, the coordinates of each animal are divided by its own body length, which removes size differences between animals but distorts the positions of the animals relative to each other. If False (default), the coordinates of all animals are divided by one shared body length, so that distances between animals are preserved. Speeds and distances are normalized per animal in both cases.
             include_imputation_mask (bool): If True, every node gets a fourth feature next to x, y and speed: 1 if its position was imputed because of a low likelihood or a missing animal, else 0 (see get_imputation_mask). Only the contrastive model can be trained on it. Defaults to False.
             include_kinematics (bool): If True, the third array additionally contains (after the angles, if included) the unscaled kinematics of get_kinematics (speed, acceleration and posture wavelet bands per animal, change of the distances between animals), computed from the positions before alignment (meta_info["kinematics_columns"]). Not a model input, but the targets of the kinematics view of the regression teacher (include_kinematics_view in train_deepof_model). Not available with precomputed_tab_dict. Defaults to False.
+            align_per_window (bool): Only with body parts as center and align, and coord_standardize="groupwise" or None. If True, every window is aligned on its centre frame (window_size // 2, the centre of the crop the models take): all frames are shifted and rotated together so that in that frame the center body part (of the first animal) is at 0 and the align body part on the y-axis. Movement and turning within the window stay in the coordinates, the position and direction in the arena do not. If False (default), every frame is centered and rotated on its own (posture only). Speeds are the true speeds of the body parts in both cases.
+            frame_mask (dict): {video: boolean array over all frames of its table}. Only the frames that are True enter the statistics of the scaling (body length per video, global scalers) and the kinematics (the other frames are interpolated there, see get_kinematics); all frames are scaled and windowed. E.g. the frames without tracking errors. None (default): all frames. Statistics are global in any case (one standardization of all videos; the body length per video is the median Nose - Tail_base distance of the frames in which the animal moves).
 
         Returns:
             merged_features: A graph-based dataset.
@@ -3300,6 +3311,21 @@ class Coordinates:
         center = center if center else "arena"
         if polar and center != "arena":
             raise ValueError("Polar coordinates can only be centered on the arena (center='arena').")
+        if align_per_window and (center == "arena" or not align or not preprocess or coord_standardize == "per_column"):
+            raise ValueError("align_per_window needs body parts as center and align (e.g. center='Center', "
+                             "align='Spine_1'), preprocess=True and coord_standardize='groupwise' or None (one scale "
+                             "for x and y; the rotation of a window would distort coordinates scaled per column).")
+        if frame_mask is not None:
+            lengths = self.get_table_lengths(tab_dict_for_binning=precomputed_tab_dict)
+            missing = sorted(set(lengths) - set(frame_mask))
+            wrong = sorted(k for k in lengths if k in frame_mask and len(frame_mask[k]) != lengths[k])
+            if missing or wrong:
+                raise ValueError(f"frame_mask needs one boolean array per video with one entry per frame; missing: "
+                                 f"{missing}, wrong length: {wrong}.")
+        # The reference body parts (first selected animal) of the centering, the outlier test and the window alignment
+        ids = ([animal_id] if isinstance(animal_id, str) else list(animal_id)) if animal_id else list(self._animal_ids)
+        prefix = f"{ids[0]}_" if ids[0] else ""
+        reference = None if center == "arena" else prefix + center
 
         if return_as_paths is None:
             return_as_paths = self._very_large_project
@@ -3330,9 +3356,11 @@ class Coordinates:
                 
                 pbar.set_postfix(step="Loading coords")
 
-                # Get all relevant features
+                # Get all relevant features. align_per_window: positions in the arena here, every window is centered
+                # and rotated after windowing
                 coords = self.get_coords(
-                    selected_id=animal_id, center=center, center_group=True, align=align, align_group=True, polar=polar,
+                    selected_id=animal_id, center="arena" if align_per_window else center, center_group=True,
+                    align=None if align_per_window else align, align_group=True, polar=polar,
                     return_path=return_as_paths,
                 )
 
@@ -3363,7 +3391,8 @@ class Coordinates:
                                  if c[1] == "x"]
                     masks = self.get_imputation_mask(bodyparts, return_path=return_as_paths)
 
-                kinematics = self.get_kinematics(return_path=return_as_paths) if include_kinematics else None
+                kinematics = (self.get_kinematics(return_path=return_as_paths, frame_mask=frame_mask)
+                              if include_kinematics else None)
 
                 # Merge and extract names
                 # Column order coords, speeds, (masks), (angles), (kinematics), distances is assumed by the sorting
@@ -3498,8 +3527,12 @@ class Coordinates:
                 window_size=window_size,
                 scale=scale,
                 mouse_size_normalization=mouse_size_normalization,
+                frame_mask=frame_mask,
+                coord_reference=reference,
                 **kwargs,
                 )
+            # Centering and alignment, also for a later preprocessing of the same data (embedding_per_video)
+            metainfo['center'], metainfo['align'], metainfo['align_per_window'] = center, align, bool(align_per_window)
             metainfo['node_columns']=feature_names[node_sorting_indices]
             metainfo['edge_columns']=feature_names[edge_sorting_indices]
             metainfo['angle_columns']=feature_names[angle_sorting_indices]
@@ -3519,6 +3552,9 @@ class Coordinates:
                             tab = result[0].astype(self._bit_precision.dtype)
                             table_path = result[1]
                         tab_nodes = tab[:, :, node_sorting_indices]
+                        if align_per_window:
+                            deepof.utils.align_windows(tab_nodes, len(nodes), nodes.index(reference),
+                                                       nodes.index(prefix + align))
                         tab_edges = tab[:, :, edge_sorting_indices] 
                         tab_angles = tab[:, :, angle_sorting_indices + kinematics_sorting_indices]
                         dataset = (tab_nodes, tab_edges, tab_angles)
@@ -4433,6 +4469,8 @@ class TableDict(dict):
         coord_standardize: str = "groupwise",
         log_distances: bool = True,
         mouse_size_normalization: bool = False,
+        frame_mask: Optional[dict] = None,
+        coord_reference: Optional[str] = None,
     ) -> tuple:
         """
         Preprocess pose tables for model training (refactor of preprocess).
@@ -4440,8 +4478,12 @@ class TableDict(dict):
         Pipeline:
         1. Filter by time bins, drop all-NaN tables
         2. Collect samples to fit global scalers (size-normalized but not standardized)
-        3. Apply full scaling (size + statistical) and save
+        3. Apply full scaling (size per video, standardization over all videos) and save
         4. Extract sliding windows for training
+
+        frame_mask ({video: boolean array over all frames of its table}): only these frames enter the statistics (body
+        length per video, global scalers); all frames are scaled. coord_reference (body part column name, e.g.
+        "Center"): the coordinate scaler is fitted on, and outliers are tested with, the positions relative to it.
         """
         SCALERS = {"standard", "minmax", "robust"}
 
@@ -4485,7 +4527,7 @@ class TableDict(dict):
 
         # ========== Step 1: Collect samples for global scaler fitting ==========
 
-        valid_keys, samples, _refs = deepof.utils._pp_pass1_collect_samples(
+        valid_keys, samples, _refs, body_lengths = deepof.utils._pp_pass1_collect_samples(
             self,
             keys_list=keys_list,
             animal_ids=animal_ids,
@@ -4499,6 +4541,8 @@ class TableDict(dict):
             coord_standardize=coord_standardize,
             log_distances=log_distances,
             mouse_size_normalization=mouse_size_normalization,
+            frame_mask=frame_mask,
+            coord_reference=coord_reference,
         )
 
         if not valid_keys:
@@ -4521,6 +4565,7 @@ class TableDict(dict):
             speed_standardize=speed_standardize,
             coord_standardize=coord_standardize,
             log_distances=log_distances,
+            body_lengths=body_lengths,
         )
 
         # ========== Step 3: Apply scaling + save ==========
@@ -4542,6 +4587,8 @@ class TableDict(dict):
             mouse_size_normalization=mouse_size_normalization,
             file_name=file_name,
             save_as_paths=save_as_paths,
+            frame_mask=frame_mask,
+            coord_reference=coord_reference,
         )
 
         # ========== Step 4: Extract windows ==========

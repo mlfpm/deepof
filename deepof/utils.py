@@ -2175,6 +2175,35 @@ def align_trajectories(
     return aligned_trajs
 
 
+def align_windows(nodes: np.ndarray, n_nodes: int, center: int, align: int, chunk: int = 50_000) -> np.ndarray:
+    """Aligns every window on its centre frame (index T // 2, the centre of the centred crop the models take), in
+    place: all frames of a window are shifted by the position of node `center` in that frame and rotated by the angle
+    that puts node `align` there on the positive y-axis. Movement and turning within the window are kept, the position
+    and direction in the arena are not.
+
+    Args:
+        nodes (np.ndarray): Node windows (n_windows, T, features); the features start with the x of the n_nodes
+            nodes, then their y (layout of get_graph_dataset), further channels (speed, mask) stay unchanged.
+        n_nodes (int): Number of nodes.
+        center (int): Index of the node that is put at 0 in the centre frame.
+        align (int): Index of the node that is put on the positive y-axis in the centre frame.
+        chunk (int): Windows processed at once (memory).
+
+    Returns:
+        np.ndarray: nodes, aligned.
+    """
+    c = nodes.shape[1] // 2
+    for s in range(0, len(nodes), chunk):
+        w = nodes[s:s + chunk]
+        x, y = w[..., :n_nodes], w[..., n_nodes:2 * n_nodes]
+        dx, dy = x - x[:, c:c + 1, center:center + 1], y - y[:, c:c + 1, center:center + 1]
+        angle = np.arctan2(dx[:, c, align], dy[:, c, align])[:, None, None]  # as align_trajectories
+        cos, sin = np.cos(angle), np.sin(angle)
+        w[..., :n_nodes] = cos * dx - sin * dy
+        w[..., n_nodes:2 * n_nodes] = sin * dx + cos * dy
+    return nodes
+
+
 def align_embeddings_at_key(embeddings, supervised_annotations, key, window_size=None, alignment_mode="center"):
     """returns mid-sections of current embedding and supervised_annotations at key"""
 
@@ -2399,6 +2428,9 @@ class GlobalScalerSpec:
     dist_inner: Any = None
     dist_intra: Any = None
     coord: Any = None
+    # Body lengths of the fitted videos ({video: {animal id or "": length}}, table_body_lengths): a preprocessing with
+    # this scaler as pretrained_scaler (e.g. the embedding of the same videos) divides by the same lengths
+    body_length: Any = None
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         return {
@@ -2412,6 +2444,7 @@ class GlobalScalerSpec:
             "dist_mode": self.dist_mode,
             "coord_mode": self.coord_mode,
             "log_distances": self.log_distances,
+            "body_length": self.body_length,
         }
 
     def is_effectively_empty(self) -> bool:
@@ -2433,8 +2466,18 @@ def infer_scalar_cols(df: pd.DataFrame):
     return speed_cols + dist_cols
 
 
-def infer_column_types(df):
-    """Identify coord, speed, distance, and angle columns from a pose table."""
+def _animal_of(bodypart: str, animal_ids) -> Optional[str]:
+    """Animal id of a body part ("<id>_<part>"); None for a single animal without id ("" / None in animal_ids)."""
+    for aid in animal_ids or []:
+        if aid and bodypart.startswith(f"{aid}_"):
+            return aid
+    return None
+
+
+def infer_column_types(df, animal_ids=None):
+    """Identify coord, speed, distance, and angle columns from a pose table. Distances within one animal (inner) and
+    between animals (intra) are told apart by animal_ids (body parts "<id>_<part>"); without them by the text before
+    the first "_", which is only right if the body part names themselves contain no "_" (not e.g. "Spine_1")."""
     coord_cols = [c for c in df.columns 
                   if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")]
     bodyparts = {c[0] for c in coord_cols}
@@ -2446,6 +2489,8 @@ def infer_column_types(df):
     angle_cols = [c for c in df.columns if isinstance(c, tuple) and len(c) == 3]
 
     def _prefix(bp: str):
+        if animal_ids is not None:
+            return _animal_of(bp, animal_ids)
         return bp.split("_", 1)[0] if "_" in bp else None
 
     inner_dist_cols = [d for d in dist_cols if _prefix(d[0]) == _prefix(d[1])]
@@ -2463,6 +2508,53 @@ def infer_column_types(df):
     }
   
 
+# Body length (size normalization of the preprocessing): median Nose - Tail_base distance over the frames in which the
+# animal moves (Center speed >= BODY_LENGTH_MIN_SPEED mm/s), where a walking mouse is stretched; the share of resting,
+# curled or grooming frames, which differs between animals, does not change it. All frames if fewer than
+# BODY_LENGTH_MIN_FRAMES move (or without a Center speed column).
+BODY_LENGTH_MIN_SPEED = 50.0
+BODY_LENGTH_MIN_FRAMES = 100
+
+
+def _animal_ids_of_table(bodyparts, animal_ids) -> list:
+    """Animal ids of a table, None for a single animal without id. animal_ids=None: the text before the first "_" of
+    the body parts (old heuristic, wrong for single-animal names such as "Spine_1")."""
+    if animal_ids is None:
+        prefixes = {bp.split("_", 1)[0] for bp in bodyparts if "_" in bp}
+        return sorted(prefixes) or [None]
+    return [aid if aid else None for aid in animal_ids]
+
+
+def table_body_lengths(
+    df: pd.DataFrame, animal_ids=None, size_ref=("Nose", "Tail_base"), rows: Optional[np.ndarray] = None
+) -> Dict[str, float]:
+    """Body length per animal of one table ({animal id or "": length}, NaN if the size_ref body parts are missing):
+    median size_ref distance over the frames in rows (all if None) in which the animal moves (see
+    BODY_LENGTH_MIN_SPEED). The speed columns are the body part names (mm/s)."""
+    bodyparts = {c[0] for c in df.columns if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")}
+    use_rows = np.ones(len(df), bool) if rows is None else np.asarray(rows, bool)
+    if len(use_rows) != len(df):
+        raise ValueError(f"rows has {len(use_rows)} entries for a table of {len(df)} frames")
+    lengths = {}
+    for aid in _animal_ids_of_table(bodyparts, animal_ids):
+        prefix = f"{aid}_" if aid else ""
+        a, b = prefix + size_ref[0], prefix + size_ref[1]
+        if not all((p, c) in df.columns for p in (a, b) for c in ("x", "y")):
+            lengths[aid or ""] = np.nan
+            continue
+        # (frames, copies): a merged table can contain the same columns twice (e.g. positions as "speed" 0)
+        column = lambda c: np.asarray(df[c], dtype=float).reshape(len(df), -1)
+        d = np.hypot(column((a, "x")) - column((b, "x")), column((a, "y")) - column((b, "y")))
+        use = use_rows & np.isfinite(d).all(axis=1)
+        if prefix + "Center" in {c for c in df.columns if isinstance(c, str)}:  # speed column (not a MultiIndex level)
+            with np.errstate(invalid="ignore"):
+                moving = use & (column(prefix + "Center")[:, 0] >= BODY_LENGTH_MIN_SPEED)
+            if moving.sum() >= BODY_LENGTH_MIN_FRAMES:
+                use = moving
+        lengths[aid or ""] = float(np.median(d[use])) if use.any() else np.nan
+    return lengths
+
+
 def scale_table(
     df: pd.DataFrame,
     scale: str = "standard",
@@ -2475,7 +2567,10 @@ def scale_table(
     coord_standardize: str = "per_column",
     log_distances: bool = True,
     mouse_size_normalization: bool = False,  # coordinates: own body length per animal (True) or one shared (False)
+    body_lengths: Optional[Dict[str, float]] = None,  # table_body_lengths, computed here (all frames) if None
 ) -> pd.DataFrame:
+    """Size normalization (body length, table_body_lengths) of one table and, with standardize, standardization of
+    this table on its own (the preprocessing uses standardize=False and one global standardization of all videos)."""
     if not scale:
         return df.copy()
 
@@ -2493,41 +2588,22 @@ def scale_table(
     out = df.copy()
 
     # ----- infer columns -----
-    col_types = infer_column_types(out)
+    bodyparts = sorted({c[0] for c in out.columns if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")})
+    # Animal of every body part from its id prefix; a single animal without id (None) owns all body parts
+    animal_ids = _animal_ids_of_table(bodyparts, animal_ids)
+    named = [aid for aid in animal_ids if aid]
+    bp_to_aid = {bp: _animal_of(bp, named) for bp in bodyparts}
+    col_types = infer_column_types(out, named)
     coord_cols = col_types["coords"]
     speed_cols = col_types["speeds"]
     dist_cols = col_types["dists"]
     inner_dist_cols = col_types["inner_dists"]
     intra_dist_cols = col_types["intra_dists"]
-    bodyparts = sorted(col_types["bodyparts"])
-
-    def _split_bp(bp: str):
-        return bp.split("_", 1) if "_" in bp else (None, bp)
-
-    # Infer animal_ids from bodypart prefixes if not provided
-    if animal_ids is None:
-        prefixes = {_split_bp(bp)[0] for bp in bodyparts if _split_bp(bp)[0] is not None}
-        animal_ids = sorted(prefixes) or [None]
-    animal_ids = list(animal_ids)
-
-    # Map bodypart -> animal_id prefix (or None)
-    bp_to_aid = {bp: _split_bp(bp)[0] for bp in bodyparts}
 
     # ----- size factors per animal -----
-    ref_a, ref_b = size_ref
-    s_by_aid = {}
-
-    for aid in animal_ids:
-        a = ref_a if aid is None else f"{aid}_{ref_a}"
-        b = ref_b if aid is None else f"{aid}_{ref_b}"
-        need = [(a, "x"), (a, "y"), (b, "x"), (b, "y")]
-
-        if all(c in out.columns for c in need):
-            dx = out[(a, "x")].to_numpy(float) - out[(b, "x")].to_numpy(float)
-            dy = out[(a, "y")].to_numpy(float) - out[(b, "y")].to_numpy(float)
-            s_by_aid[aid] = np.nanmedian(np.hypot(dx, dy))
-        else:
-            s_by_aid[aid] = np.nan
+    if body_lengths is None:
+        body_lengths = table_body_lengths(out, animal_ids, size_ref)
+    s_by_aid = {aid: float(body_lengths.get(aid or "", np.nan)) for aid in animal_ids}
 
     valid = [v for v in s_by_aid.values() if np.isfinite(v) and v > 0]
     s_default = float(np.nanmedian(valid)) if valid else 1.0
@@ -2564,7 +2640,7 @@ def scale_table(
         if xy:
             out.loc[:, xy] = out.loc[:, xy].to_numpy(float) / (s if s_coords is None else s_coords)
 
-        sp = [bp for bp in bps if bp in out.columns]  # speed columns are strings == bp
+        sp = [bp for bp in bps if bp in speed_cols]  # speed columns are strings == bp
         if sp:
             out.loc[:, sp] = out.loc[:, sp].to_numpy(float) / s
 
@@ -2574,7 +2650,10 @@ def scale_table(
             s = s_by_aid.get(a1, s_default)
         else:
             s = _comb(s_by_aid.get(a1, s_default), s_by_aid.get(a2, s_default))
-        out.loc[:, (bp1, bp2)] = out.loc[:, (bp1, bp2)].to_numpy(float) / s
+        # By position: with mixed (not MultiIndex) columns, .loc[:, (bp1, bp2)] selects the two speed columns bp1 and
+        # bp2 instead of the distance (before 2026-11-05 the speeds were divided once more per edge, the distances never)
+        j = out.columns.get_loc((bp1, bp2))
+        out.iloc[:, j] = out.iloc[:, j].to_numpy(float) / s
 
     if log_distances and dist_cols:
         arr = out[dist_cols].to_numpy(float)
@@ -2699,6 +2778,20 @@ def _section_standardize(
     return ref_cols
 
 
+def _centred_coords(tab: pd.DataFrame, coord_cols: list, reference: str) -> pd.DataFrame:
+    """The coordinate columns relative to the reference body part (its x and y subtracted per frame)."""
+    out = tab[coord_cols].copy()
+    for axis in ("x", "y"):
+        cols = [c for c in coord_cols if c[1] == axis]
+        out.loc[:, cols] = out[cols].to_numpy(float) - tab[(reference, axis)].to_numpy(float)[:, None]
+    return out
+
+
+def _fit_rows(frame_mask: Optional[Dict[str, np.ndarray]], key: str, bin_indices) -> Optional[np.ndarray]:
+    """Frames of the time bin used for the statistics (frame_mask of get_graph_dataset), None = all."""
+    return None if frame_mask is None else np.asarray(frame_mask[key], bool)[bin_indices]
+
+
 
 def _pp_pass1_collect_samples(
     table_dict,
@@ -2714,12 +2807,18 @@ def _pp_pass1_collect_samples(
     coord_standardize: Optional[str],
     log_distances: bool,
     mouse_size_normalization: bool = False,
+    frame_mask: Optional[Dict[str, np.ndarray]] = None,
+    coord_reference: Optional[str] = None,
 ):
+    """Pass 1: samples (size-normalized, not standardized) for the global scalers, only from the frames of frame_mask
+    (all if None), and the body length of every video (from the same frames). With coord_reference (body part), the
+    coordinate samples are relative to it, so the coordinate scale is that of the posture, not of the positions."""
     rng = np.random.RandomState(2)
 
     samples_speed, samples_dist, samples_coord, samples_inner, samples_intra = [], [], [], [], []
     ref_speed_cols, ref_dist_cols, ref_coord_cols = None, None, None
     valid_keys: List[str] = []
+    body_lengths: Dict[str, Dict[str, float]] = {}
 
     with tqdm(
         total=len(keys_list),
@@ -2737,24 +2836,27 @@ def _pp_pass1_collect_samples(
             tab = _pp_filter_low_variance(tab, filter_low_variance)
 
             if scale and pretrained_scaler is None:
+                rows = _fit_rows(frame_mask, key, bin_info[key])
+                body_lengths[key] = table_body_lengths(tab, animal_ids, rows=rows)
+                # Only size normalization per video; the standardization is global (fitted on these samples), so a
+                # frame's value does not depend on the rest of its video
                 tab_local = deepof.utils.scale_table(
                     tab,
                     scale=scale,
                     animal_ids=animal_ids,
-                    standardize=True,
-                    dist_standardize=dist_standardize,
-                    speed_standardize=speed_standardize,
-                    coord_standardize=None,
+                    standardize=False,
                     log_distances=log_distances,
                     mouse_size_normalization=mouse_size_normalization,
+                    body_lengths=body_lengths[key],
                 )
 
-                col_types = deepof.utils.infer_column_types(tab_local)
+                col_types = deepof.utils.infer_column_types(tab_local, animal_ids)
 
                 # samples_max=None (videos not cut): the scaler is still fitted on at most 227272 rows per video
-                n_take = min(samples_max if samples_max is not None else 227272, len(tab_local))
+                candidates = np.arange(len(tab_local)) if rows is None else np.flatnonzero(rows)
+                n_take = min(samples_max if samples_max is not None else 227272, len(candidates))
                 if n_take > 0:
-                    idx = rng.choice(len(tab_local), size=n_take, replace=False)
+                    idx = rng.choice(candidates, size=n_take, replace=False)
 
                     # Speeds
                     if speed_standardize is not None and col_types["speeds"]:
@@ -2805,7 +2907,8 @@ def _pp_pass1_collect_samples(
                     ]
                     if coord_standardize is not None and coord_cols_local:
                         ref_coord_cols = _section_standardize(
-                            tab_local=tab_local,
+                            tab_local=(tab_local if coord_reference is None
+                                       else _centred_coords(tab_local, coord_cols_local, coord_reference)),
                             samples=samples_coord,
                             cols=coord_cols_local,
                             ref_cols=ref_coord_cols,
@@ -2827,7 +2930,7 @@ def _pp_pass1_collect_samples(
         "dist": ref_dist_cols,
         "coord": ref_coord_cols,
     }
-    return valid_keys, samples, refs
+    return valid_keys, samples, refs, body_lengths
 
 
 def _pp_fit_global_scaler(
@@ -2839,6 +2942,7 @@ def _pp_fit_global_scaler(
     speed_standardize: Optional[str],
     coord_standardize: Optional[str],
     log_distances: bool,
+    body_lengths: Optional[Dict[str, Dict[str, float]]] = None,
 ):
     """
     Fit the global scalers (legacy output format).
@@ -2846,7 +2950,7 @@ def _pp_fit_global_scaler(
     Returns:
         - pretrained_scaler as-is if provided
         - None if no scaling requested
-        - legacy dict {kind, speed, dist, dist_inner, dist_intra, coord, ...} otherwise
+        - legacy dict {kind, speed, dist, dist_inner, dist_intra, coord, ..., body_length} otherwise
     """
 
     def _fit_global_per_column(samples_2d):
@@ -2874,6 +2978,7 @@ def _pp_fit_global_scaler(
         dist_mode=dist_standardize,
         coord_mode=coord_standardize,
         log_distances=log_distances,
+        body_length=body_lengths,
     )
 
     # Speeds
@@ -2908,13 +3013,15 @@ def _pp_apply_global(
     dist_standardize: Optional[str],
     coord_standardize: Optional[str],
     global_scaler,
+    animal_ids=None,
 ) -> pd.DataFrame:
     """
     Apply global scalers according to configured modes.
 
     Note:
         This mirrors the original preprocess implementation. It uses the mode arguments
-        rather than reading them back from global_scaler.
+        rather than reading them back from global_scaler. animal_ids: as for infer_column_types (inner / intra
+        distances); must be the same as in the fit.
     """
     if global_scaler is None:
         return tab_scaled
@@ -2930,7 +3037,7 @@ def _pp_apply_global(
             return
         tab_scaled.loc[:, cols] = scaler.transform(tab_scaled[cols].to_numpy(float))
 
-    col_types = infer_column_types(tab_scaled)
+    col_types = infer_column_types(tab_scaled, animal_ids)
 
     # Speeds
     if speed_standardize == "per_column":
@@ -2977,11 +3084,16 @@ def _pp_pass2_scale_and_save(
     mouse_size_normalization: bool = False,
     file_name: str,
     save_as_paths: bool,
+    frame_mask: Optional[Dict[str, np.ndarray]] = None,
+    coord_reference: Optional[str] = None,
 ):
     """
-    Pass 2: Apply scaling + clipping/interpolation + angle reattachment + saving.
+    Pass 2: Apply scaling + clipping/interpolation + angle reattachment + saving. Body lengths from the global scaler
+    (fitted videos, also when it is a pretrained one), else from the frames of frame_mask. With coord_reference, the
+    outlier test of the coordinates uses the positions relative to that body part.
     """
     table_temp = _pp_init_empty_output_container(table_dict)
+    stored_lengths = (global_scaler or {}).get("body_length") or {}
 
     with tqdm(
         total=len(valid_keys),
@@ -2992,7 +3104,7 @@ def _pp_pass2_scale_and_save(
             tab = _pp_load_and_prepare_table(table_dict, key, bin_info[key])
             orig_cols = tab.columns
 
-            col_types = infer_column_types(tab)
+            col_types = infer_column_types(tab, animal_ids)
 
             # Separate angles (dimensionless; only need interpolation, not scaling)
             angle_cols = col_types["angles"]
@@ -3001,18 +3113,19 @@ def _pp_pass2_scale_and_save(
 
             tab = _pp_filter_low_variance(tab, filter_low_variance)
 
-            # Apply full scaling (size + statistical)
+            # Apply full scaling (size per video + global standardization)
             if scale:
+                lengths = stored_lengths.get(key)
+                if lengths is None:
+                    lengths = table_body_lengths(tab, animal_ids, rows=_fit_rows(frame_mask, key, bin_info[key]))
                 tab_local = scale_table(
                     tab,
                     scale=scale,
                     animal_ids=animal_ids,
-                    standardize=True,
-                    dist_standardize=dist_standardize,
-                    speed_standardize=speed_standardize,
-                    coord_standardize=None,
+                    standardize=False,
                     log_distances=log_distances,
                     mouse_size_normalization=mouse_size_normalization,
+                    body_lengths=lengths,
                 )
 
                 tab = tab_local
@@ -3022,6 +3135,7 @@ def _pp_pass2_scale_and_save(
                     dist_standardize=dist_standardize,
                     coord_standardize=coord_standardize,
                     global_scaler=global_scaler,
+                    animal_ids=animal_ids,
                 )
 
                 # Clip outliers and interpolate (scalars + coords)
@@ -3035,7 +3149,13 @@ def _pp_pass2_scale_and_save(
                     clip_cols = list(dict.fromkeys(scalars + coord_cols_clip))
                     if clip_cols:
                         arr = tab[clip_cols].to_numpy(float)
-                        arr[np.abs(arr) > interpolate_normalized] = np.nan
+                        test = arr.copy()
+                        if coord_reference is not None:  # positions in the arena: outliers relative to the animal
+                            for axis in ("x", "y"):
+                                js = [j for j, c in enumerate(clip_cols) if c in coord_cols_clip and c[1] == axis]
+                                test[:, js] -= tab[(coord_reference, axis)].to_numpy(float)[:, None]
+                        with np.errstate(invalid="ignore"):
+                            arr[np.abs(test) > interpolate_normalized] = np.nan
                         tab[clip_cols] = pd.DataFrame(
                             arr, index=tab.index, columns=clip_cols
                         ).interpolate(limit_direction="both")
@@ -4459,8 +4579,8 @@ def kinematics_features(
 
     Per animal (<animal>_kinematics): median and second largest over the body parts of the speed and of the
     acceleration magnitude (Savitzky-Golay derivatives over KINEMATICS_SMOOTHING_S; mm/s, mm/s^2), and of the Morlet
-    amplitude of the posture (body parts relative to the animal's mean position) per band of KINEMATICS_WAVELET_HZ
-    below 0.45 x the frame rate. Per pair of animals (<a>_<b>_kinematics): rate of change (signed, mm/s) and magnitude
+    amplitude of the posture (body parts relative to the animal's mean position; length of the x / y amplitude vector,
+    so independent of the direction in the image) per band of KINEMATICS_WAVELET_HZ below 0.45 x the frame rate. Per pair of animals (<a>_<b>_kinematics): rate of change (signed, mm/s) and magnitude
     of the second derivative (mm/s^2) of the distances KINEMATICS_RELATIONAL_PAIRS (part of a, part of b) whose parts
     exist. Missing positions are interpolated linearly.
 
@@ -4490,7 +4610,9 @@ def kinematics_features(
             t = np.arange(-int(3 * sigma), int(3 * sigma) + 1)
             kernel = np.exp(2j * np.pi * f * t / frame_rate - t ** 2 / (2 * sigma ** 2))
             amplitude = np.abs(fftconvolve(posture, (kernel / np.abs(kernel).sum())[:, None], mode="same", axes=0))
-            quantities[f"wave{f:g}hz"] = amplitude.reshape(P.shape).mean(axis=-1)
+            # Length of the (x, y) amplitude vector, independent of the direction of the movement in the image (the
+            # mean of the x and y amplitudes would be up to 41 % larger for diagonal than for axis-parallel movements)
+            quantities[f"wave{f:g}hz"] = np.linalg.norm(amplitude.reshape(P.shape), axis=-1)
         for name, x in quantities.items():
             values += [np.median(x, axis=1), np.sort(x, axis=1)[:, -2]]
             columns += [(group, f"{name}_median"), (group, f"{name}_second")]

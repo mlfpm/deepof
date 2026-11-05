@@ -916,12 +916,15 @@ class _H5BatchIterableDataset(IterableDataset):
             x_np = X[s:e]
             a_np = A[s:e]
             vid = video_idx[s:e]
+            # Sample indices (dataset order, e.g. for the targets of the regression teacher), permuted with the samples
+            idx_np = np.arange(s, e, dtype=np.int64)
 
             ang_np = Ang[s:e] if Ang is not None else None
             y_np = Y[s:e] if Y is not None else None
 
             if self.shuffle and self.permute_within_block:
                 perm = rng.permutation(e - s)
+                idx_np = idx_np[perm]
                 x_np = x_np[perm]
                 a_np = a_np[perm]
                 if ang_np is not None:
@@ -933,7 +936,6 @@ class _H5BatchIterableDataset(IterableDataset):
             x = torch.from_numpy(np.ascontiguousarray(x_np)).float()
             a = torch.from_numpy(np.ascontiguousarray(a_np)).float()
             vid_t = torch.from_numpy(np.ascontiguousarray(vid.astype(np.int32)))
-            idx_np = np.arange(s, e, dtype=np.int64)
             idx_t = torch.from_numpy(idx_np)
 
             batch = [x, a]

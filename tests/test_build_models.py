@@ -1689,6 +1689,12 @@ def test_global_shuffle_matches_permutation(tmp_path, monkeypatch):
         assert fx.attrs["global_shuffle"] and fx.attrs["build_complete"]
     assert np.array_equal(np.load(d.idx_path), np.repeat(np.arange(len(lengths)), lengths)[perm])
     assert not [f for f in os.listdir(tmp_path) if f.endswith((".tmp", ".bucket.npy"))]
+    # Shuffled batches, also within the block: every sample keeps its dataset index (teacher targets are indexed by it)
+    loader = d.make_loader(batch_size=16, shuffle=True, drop_last=False, num_workers=0, iterable_for_h5=True,
+                           pin_memory=False, block_shuffle=True, permute_within_block=True, prefetch_factor=0,
+                           ddp_shard=False)
+    for batch in loader:
+        assert np.array_equal(batch[0].numpy(), X[batch[-2].numpy()])
 
 
 def test_dataset_cache_rebuilds_on_changed_input(tmp_path, capsys):
