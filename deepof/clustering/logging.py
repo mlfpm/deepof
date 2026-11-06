@@ -63,21 +63,14 @@ def get_q_vqvae(
     model: nn.Module,
     x: torch.Tensor,
     a: torch.Tensor,
-    *,
-    distill_head: nn.Module,
 ) -> torch.Tensor:
     """
-    Extracts soft cluster assignments for VQVAE by applying the distillation head
-    to the pre-quantization encoder output.
+    Extracts the soft cluster assignments of VQVAE: the soft counts of the codebook (the readout of the model).
     """
-    _, _, _, _, encoder_output, _ = model(
-        x, a, return_losses=True, return_all_outputs=True
-    )
-
-    logits = distill_head(encoder_output.float())
-    q = F.softmax(logits, dim=-1).clamp_min(1e-8)
-    q = q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
-    return q
+    base = deepof.clustering.model_utils_new.unwrap_dp(model)
+    _, q = base.vq_layer(base.encoder(x, a), return_losses=False)
+    q = q.float().clamp_min(1e-8)
+    return q / q.sum(dim=-1, keepdim=True).clamp_min(1e-8)
 
 
 @torch.no_grad()
@@ -310,9 +303,12 @@ def init_log_summary(model_name: str):
     for data_type in ['train','val']:
         log_summary[data_type]={}
         log_summary[data_type]['total_loss']=[]
-        log_summary[data_type]['reconstruction_loss']=[]
-        log_summary[data_type]['kl_divergence']=[]
-        log_summary[data_type]['cat_cluster_loss']=[]
+        log_summary[data_type]['reconstruct_loss']=[]
+        log_summary[data_type]['enc_rec_loss']=[]  # VQVAE: reconstruction from the codes
+        log_summary[data_type]['vq_loss']=[]
+        log_summary[data_type]['number_of_populated_clusters']=[]
+        log_summary[data_type]['kl_div']=[]
+        log_summary[data_type]['cat_clust_loss']=[]
         log_summary[data_type]['kmeans_loss']=[]
         log_summary[data_type]['distill_loss']=[]
         log_summary[data_type]['proto_loss']=[]
@@ -322,7 +318,7 @@ def init_log_summary(model_name: str):
         log_summary[data_type]['scatter_loss']=[]
         log_summary[data_type]['nonempty_loss']=[]
         log_summary[data_type]['repel_loss']=[]
-        log_summary[data_type]['tf_cluster_loss']=[]
+        log_summary[data_type]['tf_clust_loss']=[]
         log_summary[data_type]['prior_loss']=[]
         log_summary[data_type]['activity_l1']=[]
         log_summary[data_type]['pos_similarity']=[]
@@ -391,7 +387,8 @@ def print_losses(model_name: str,
 
     loss_names = [
         "total_loss", "pos_similarity", "neg_similarity", "v3_similarity", "v3v3_similarity", "invariance_loss",
-        "variance_loss", "covariance_loss", "reconstruct_loss", "prior_loss", "kl_div",
+        "variance_loss", "covariance_loss", "reconstruct_loss", "enc_rec_loss", "vq_loss", "number_of_populated_clusters",
+        "prior_loss", "kl_div",
         "kmeans_loss", "cat_clust_loss", "distill_loss", "proto_loss", "pred_loss", "pred_acc", "temporal_loss",
         "scatter_loss", "repel_loss", "nonempty_loss", "tf_clust_loss",
     ]
@@ -417,6 +414,7 @@ def print_losses(model_name: str,
             key_label = key_label.replace("reconstruct", "recon")
             key_label = key_label.replace("similarity", "-sim")
             key_label = key_label.replace("variance", "var")
+            key_label = {"number_of_populated_clusters": "codes"}.get(name, key_label)  # used codes per batch
             line += f" {key_label[:9]:<9}: {_fmt_loss(name, logs)} |"
             if (z + 1) % 5 == 0 and z != len(loss_names) - 1:  # line wrap for long outputs
                 line += "\n          "

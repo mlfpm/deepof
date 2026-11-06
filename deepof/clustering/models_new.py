@@ -15,6 +15,7 @@ from typing import Any, NewType, Iterable, Tuple, Dict
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
@@ -57,7 +58,7 @@ def _encoder_head(in_features: int, latent_dim: int, dropout_rate: float = 0.0) 
 def _normalize_backbone(enc: torch.Tensor) -> torch.Tensor:
     """Per-sample RMS normalization of the backbone output (the embedding used for clustering), clamped and NaN-free."""
     head_in = enc.float()
-    rms = head_in.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B, 1)
+    rms = (head_in.pow(2).mean(dim=1, keepdim=True) + 1e-12).sqrt()  # (B, 1), eps: finite gradient at 0
     head_in = head_in / rms.clamp(min=1.0)  # avoid division by tiny values
     head_in = head_in.clamp(min=-1e4, max=1e4)
     return torch.nan_to_num(head_in, nan=0.0, posinf=1e4, neginf=-1e4)
@@ -705,6 +706,12 @@ class AffineTransformedDistribution(TransformedDistribution):
         # The transform itself is callable and applies the affine transformation.
         return self.transforms[0](self.base_dist.mean)
 
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        """Log-likelihood per frame; frames with scale 0 (all-zero padding frames, see the validity mask of the
+        decoders) contribute 0 instead of the NaN of the affine transform. Valid frames have scale 1."""
+        valid = self.transforms[0].scale.squeeze(-1) > 0
+        return torch.where(valid, self.base_dist.log_prob(value), torch.zeros((), device=value.device))
+
 
 class ProbabilisticDecoderPT(nn.Module):
     """
@@ -817,7 +824,7 @@ class TCNDecoderPT(nn.Module):
         g = g.float()
         #if self.training:
         # Per-sample RMS normalization
-        rms = g.pow(2).mean(dim=1, keepdim=True).sqrt()  # (B,1)
+        rms = (g.pow(2).mean(dim=1, keepdim=True) + 1e-12).sqrt()  # (B,1), eps: finite gradient for a zero latent
         # Scale down to roughly unit RMS; avoid tiny denominators
         g = g / rms.clamp(min=1.0)
         # Clamp outliers to keep Dense/BN numerically safe
@@ -1347,22 +1354,77 @@ class VectorQuantizerPT(nn.Module):
         embedding_dim: int,
         beta: float,
         kmeans_loss: float = 0.0,
+        ema_decay: float = 0.0,
     ):
         super(VectorQuantizerPT, self).__init__()
         self.embedding_dim = embedding_dim
         self.n_components = n_components
         self.beta = beta
         self.kmeans = kmeans_loss
+        # ema_decay > 0: the codes are running centroids of their encoder outputs (EMA per training batch) and get no
+        # gradient; 0: the codebook is trained by the codebook loss and by the reconstruction from the codes
+        self.ema_decay = float(ema_decay)
+        # Codes whose running usage share (ema_count) falls below restart_below are moved to an encoder output of the
+        # batch (EMA mode, set per epoch by fit_VQVAE; 0 = off); n_restarts counts them
+        self.restart_below = 0.0
+        self.n_restarts = 0
 
-        self.codebook = nn.Parameter(
-            torch.empty(self.embedding_dim, self.n_components).uniform_(0, 1)
-        )
-        
-        # Store individual loss components for inspection (but not for summing)
-        self.last_commitment_loss = None
-        self.last_codebook_loss = None
-        self.last_kmeans_loss = None
-        self.last_vq_loss = None
+        # Centred random start; fit_VQVAE replaces it by k-means centroids of the encoder outputs after the warm-up
+        self.codebook = nn.Parameter(0.1 * torch.randn(self.embedding_dim, self.n_components))
+        # Running mean of the squared distance to the assigned code per latent dimension (training batches); sets the
+        # sharpness of the soft counts
+        self.register_buffer("code_variance", torch.ones(()))
+        # EMA mode: running share of the batch windows per code and running sum of their encoder outputs / batch size
+        self.register_buffer("ema_count", torch.full((n_components,), 1.0 / n_components))
+        self.register_buffer("ema_sum", self.codebook.detach().clone() / n_components)
+
+    @torch.no_grad()
+    def init_from_centroids(self, centroids: torch.Tensor, variance: float, usage: torch.Tensor = None) -> None:
+        """Sets the codebook to centroids [K, D], the soft-count variance (per dimension) and the EMA statistics (usage:
+        share of the windows per code, default uniform)."""
+        self.codebook.data.copy_(centroids.T.to(self.codebook.dtype))
+        self.code_variance.fill_(max(float(variance), 1e-8))
+        share = (torch.full((self.n_components,), 1.0 / self.n_components) if usage is None else usage.float())
+        self.ema_count.copy_(share.to(self.ema_count.device))
+        self.ema_sum.copy_(self.codebook.detach().float() * self.ema_count[None, :])
+
+    @torch.no_grad()
+    def sync_ema(self) -> None:
+        """Makes the EMA sums consistent with the current codebook (e.g. a loaded checkpoint)."""
+        self.ema_sum.copy_(self.codebook.detach().float() * self.ema_count[None, :])
+
+    @torch.no_grad()
+    def _restart_dead_codes(self, flattened: torch.Tensor) -> None:
+        """Moves the codes with a running usage share below restart_below to random encoder outputs of the batch
+        (under DDP those of rank 0; the shares are averaged over the ranks, so all ranks find the same codes)."""
+        dead = self.ema_count < self.restart_below
+        if not dead.any():
+            return
+        pick = torch.randint(flattened.shape[0], (int(dead.sum()),), device=flattened.device)
+        new = flattened[pick].detach().float().T.contiguous()  # [D, n_dead]
+        if dist.is_available() and dist.is_initialized():
+            dist.broadcast(new, src=0)
+        share = 1.0 / self.n_components
+        self.codebook.data[:, dead] = new.to(self.codebook.dtype)
+        self.ema_count[dead] = share
+        self.ema_sum[:, dead] = new * share
+        self.n_restarts += int(dead.sum())
+
+    @torch.no_grad()
+    def _ema_update(self, flattened: torch.Tensor, encodings: torch.Tensor) -> None:
+        """EMA of the share of the windows and of the sum of their encoder outputs per code (averaged over DDP ranks);
+        codes without windows for a long time keep their position."""
+        n = encodings.sum(0) / flattened.shape[0]
+        s = flattened.detach().float().T @ encodings / flattened.shape[0]
+        if dist.is_available() and dist.is_initialized():
+            stats = torch.cat([n[None, :], s])
+            dist.all_reduce(stats)
+            stats /= dist.get_world_size()
+            n, s = stats[0], stats[1:]
+        self.ema_count.mul_(self.ema_decay).add_((1.0 - self.ema_decay) * n)
+        self.ema_sum.mul_(self.ema_decay).add_((1.0 - self.ema_decay) * s)
+        alive = self.ema_count > 1e-12
+        self.codebook.data[:, alive] = (self.ema_sum[:, alive] / self.ema_count[alive]).to(self.codebook.dtype)
 
     def forward(self, x: torch.Tensor, return_losses: bool = True):
         """
@@ -1379,57 +1441,48 @@ class VectorQuantizerPT(nn.Module):
 
         # Kmeans loss on flattened 2D tensor
         if self.kmeans and return_losses:
-            kmeans_loss_val = deepof.clustering.losses.compute_kmeans_loss_pt(flattened, self.kmeans)
-            losses['kmeans_loss'] = kmeans_loss_val
-            self.last_kmeans_loss = kmeans_loss_val.item()
+            losses['kmeans_loss'] = deepof.clustering.losses.compute_kmeans_loss_pt(flattened, self.kmeans)
+
+        ema = self.ema_decay > 0
+        if ema and self.training and self.restart_below > 0:
+            self._restart_dead_codes(flattened)
 
         # Get encodings
-        encoding_indices = self.get_code_indices(
-            flattened, return_soft_counts=False
-        ).long()
-        soft_counts = self.get_code_indices(flattened, return_soft_counts=True)
-
+        distances = self._distances(flattened)
+        encoding_indices = torch.argmin(distances, dim=1)
         encodings = F.one_hot(encoding_indices, self.n_components).float()
-        quantized = torch.matmul(encodings, self.codebook.T)
+        if self.training:
+            with torch.no_grad():
+                d_min = distances.gather(1, encoding_indices[:, None]).clamp_min(0).mean() / self.embedding_dim
+                self.code_variance.mul_(0.99).add_(0.01 * d_min)
+            if ema:
+                self._ema_update(flattened, encodings)
+        soft_counts = self._soft_counts(distances)
+
+        # EMA mode: the decoder reconstructs from the codes without moving them (no gradient into the codebook)
+        quantized = torch.matmul(encodings, (self.codebook.detach() if ema else self.codebook).T)
         quantized = quantized.reshape(input_shape)
 
         if return_losses:
             commitment_loss = self.beta * torch.mean(
                 (quantized.detach() - x) ** 2
             )
-            codebook_loss = torch.mean((quantized - x.detach()) ** 2)
-            vq_loss = commitment_loss + codebook_loss
-            
-            # Store the COMBINED vq_loss in the losses dict (matching TF behavior)
-            losses['vq_loss'] = vq_loss
-            
-            # Store individual components for inspection/logging only
-            self.last_commitment_loss = commitment_loss.item()
-            self.last_codebook_loss = codebook_loss.item()
-            self.last_vq_loss = vq_loss.item()
-
-        if return_losses:
+            losses['vq_loss'] = commitment_loss if ema else commitment_loss + torch.mean((quantized - x.detach()) ** 2)
             return quantized, soft_counts, losses
-        else:
-            return quantized, soft_counts
+        return quantized, soft_counts
 
-    def get_code_indices(
-        self, flattened_inputs: torch.Tensor, return_soft_counts: bool = False
-    ) -> torch.Tensor:
-        similarity = torch.matmul(flattened_inputs, self.codebook)
-        distances = (
+    def _distances(self, flattened_inputs: torch.Tensor) -> torch.Tensor:
+        """Squared L2 distances [B, K] to the codes."""
+        return (
             torch.sum(flattened_inputs**2, dim=1, keepdim=True)
             + torch.sum(self.codebook**2, dim=0)
-            - 2 * similarity
+            - 2 * torch.matmul(flattened_inputs, self.codebook)
         )
 
-        if return_soft_counts:
-            similarity = (1 / distances) ** 2
-            soft_counts = similarity / torch.sum(similarity, dim=1, keepdim=True)
-            return soft_counts
-
-        encoding_indices = torch.argmin(distances, dim=1)
-        return encoding_indices
+    def _soft_counts(self, distances: torch.Tensor) -> torch.Tensor:
+        """Posterior of an isotropic Gaussian mixture with equal weights around the codes, with the running
+        per-dimension variance of the assignments: softmax(-d / (2 * variance))."""
+        return F.softmax(-distances.clamp_min(0) / (2.0 * self.code_variance.clamp_min(1e-8)), dim=1)
     
 
 def init_encoder_decoder(
@@ -1543,8 +1596,9 @@ class VQVAEPT(nn.Module):
         encoder_type: str = "recurrent", 
         use_gnn: bool = True, 
         kmeans_loss: float = 0.0,
-        interaction_regularization: float = 0.0,      
-        beta: float = 1.0,
+        interaction_regularization: float = 0.0,
+        beta: float = 0.25,
+        ema_decay: float = 0.0,
         tcn_conv_filters: int = 32,
         tcn_kernel_size: int = 4,
         tcn_conv_stacks: int = 2,
@@ -1559,7 +1613,9 @@ class VQVAEPT(nn.Module):
             adjacency_matrix (np.ndarray): Adjacency matrix for GNN.
             latent_dim (int): Dimensionality of the latent space.
             n_components (int): Number of embeddings (clusters) in the codebook.
-            beta (float): Beta parameter of the VQ loss.
+            beta (float): Weight of the commitment loss (pulls the encoder outputs to their codes).
+            ema_decay (float): > 0: codes as running centroids of their encoder outputs (EMA per batch), see
+                VectorQuantizerPT; 0: codebook trained by gradient.
             kmeans_loss (float): Regularization parameter for the Gram matrix.
             use_gnn (bool): Whether to use GNN in encoder.
             encoder_type (str): Type of encoder ("recurrent", "TCN", or "transformer").
@@ -1600,6 +1656,7 @@ class VQVAEPT(nn.Module):
             embedding_dim=latent_dim,
             beta=beta,
             kmeans_loss=kmeans_loss,
+            ema_decay=ema_decay,
         )
 
     def forward(
@@ -1754,19 +1811,16 @@ class GaussianMixtureLatentPT(nn.Module):
     def _encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Encodes the input into mean and log-variance of the latent distribution."""
         z_mean = self.encoder_mean(x)
-        z_log_var_pre = self.encoder_log_var(x) # Note: softplus is applied in the forward pass
-        return z_mean, z_log_var_pre
+        # Log-variance bounded smoothly to (-8, 8): beyond a hard clamp the gradient is zero, and pretraining (KL weight
+        # ~0) drives most dimensions below the bound, where they would stay frozen in the main phase
+        z_log_var = 8.0 * torch.tanh(self.encoder_log_var(x) / 8.0)
+        return z_mean, z_log_var
 
     def _reparameterize(
         self, mean: torch.Tensor, log_var: torch.Tensor, epsilon: torch.Tensor = None
     ) -> torch.Tensor:
-        """
-        Performs reparameterization.
-        MODIFIED to exactly replicate the original TF model's non-standard scale calculation.
-        """
-        # Original TF logic: scale = sqrt(exp(variance))
-        # The 'var' input here is the direct output of the softplus activation.
-        scale = torch.exp(0.5 * log_var)  # sqrt(exp(log_var))
+        """Reparameterization z = mean + exp(log_var / 2) * epsilon."""
+        scale = torch.exp(0.5 * log_var)
         if epsilon is None:
             epsilon = torch.randn_like(scale)
         return mean + scale * epsilon        
@@ -1792,10 +1846,7 @@ class GaussianMixtureLatentPT(nn.Module):
         self, x: torch.Tensor, epsilon: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         
-        z_mean, z_log_var_pre = self._encode(x)
-        z_log_var = F.softplus(z_log_var_pre) # Apply activation
-
-        # Pass z_var directly, not z_log_var
+        z_mean, z_log_var = self._encode(x)
         z_sample = self._reparameterize(z_mean, z_log_var, epsilon)
         z_for_downstream = z_sample if self.training else z_mean
 
@@ -1892,8 +1943,6 @@ class VaDEPT(nn.Module):
             - gmm_params (dict) [if return_gmm_params=True]
         """
         encoder_output = self.encoder(x, a)
-        z_mean_head = self.latent_space.encoder_mean(encoder_output)               
-        z_var_param = torch.nn.functional.softplus(self.latent_space.encoder_log_var(encoder_output))  
         (
             latent,
             categorical,
@@ -1904,9 +1953,6 @@ class VaDEPT(nn.Module):
             h_log_var,
             z_for_gaussian,
         ) = self.latent_space(encoder_output)
-
-        #if torch.isnan(z_mean_head).any() or torch.isnan(z_var_param).any():
-        #    print("z issues!")
 
         B, T, _, _ = x.shape
         x_for_decoder = x.reshape(B, T, self.input_n_nodes * self.input_n_features_per_node)
@@ -1944,23 +1990,25 @@ class VaDEPT(nn.Module):
         """Sets the pretrain flag in the latent space."""
         self.latent_space.pretrain.fill_(1.0 if pretrain_on else 0.0)
 
-    def initialize_gmm_from_data(self, data_loader, n_samples=10000):
+    def initialize_gmm_from_data(self, data_loader, n_samples=50000):
         """
         Runs the autoencoder part of the model over the data to get embeddings,
-        then fits a scikit-learn GMM to initialize the latent space.
+        then fits a scikit-learn GMM to initialize the latent space. Uses the first n_samples windows of the loader,
+        a random sample across videos with the globally shuffled training data.
         """
         print("Initializing GMM from data embeddings...")
         self.eval()
         
-        all_embeddings = []
+        all_embeddings, posterior_vars = [], []
         samples_gathered = 0
         dev = next(self.parameters()).device
         with torch.no_grad():
             for x, a, *_ in data_loader:
                 x, a = x.to(dev), a.to(dev)
                 enc = self.encoder(x, a)
-                z_mean, _ = self.latent_space._encode(enc) 
+                z_mean, z_log_var = self.latent_space._encode(enc)
                 all_embeddings.append(z_mean.cpu())
+                posterior_vars.append(z_log_var.exp().cpu())
                 samples_gathered += z_mean.size(0)
                 if samples_gathered >= n_samples:
                     break
@@ -1979,8 +2027,12 @@ class VaDEPT(nn.Module):
 
         print("Assigning learned GMM parameters to the model.")
         self.latent_space.gmm_means.data = torch.from_numpy(gmm.means_).float().to(dev)
-        # Store log-variances (not log-sigmas)
-        self.latent_space.gmm_log_vars.data = torch.from_numpy(np.log(gmm.covariances_)).float().to(dev)
+        # Log-variances of the posterior samples the KL compares with the GMM: spread of the means plus the mean
+        # posterior variance (with the means only they can be far below the posterior noise, e.g. 1e-4 vs ~1, and the
+        # KL explodes); within the clamp of the loss (VadeLoss.gmm_logvar_clamp), else they get no gradient
+        posterior_var = torch.cat(posterior_vars, dim=0)[: all_embeddings.shape[0]].mean(dim=0).numpy()
+        self.latent_space.gmm_log_vars.data = torch.from_numpy(
+            np.clip(np.log(gmm.covariances_ + posterior_var[None, :]), -8.0, 8.0)).float().to(dev)
 
     @torch.no_grad()
     def embed(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
@@ -1994,9 +2046,7 @@ class VaDEPT(nn.Module):
         Returns:
             torch.Tensor: The latent representation `z`.
         """
-        encoder_output = self.encoder(x, a)
-        latent, _, _, _, _, _, _ = self.latent_space(encoder_output)
-        return latent
+        return self.latent_space(self.encoder(x, a))[0]
 
     @torch.no_grad()
     def group(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
@@ -2010,9 +2060,7 @@ class VaDEPT(nn.Module):
         Returns:
             torch.Tensor: The soft cluster assignments (categorical probabilities).
         """
-        encoder_output = self.encoder(x, a)
-        _, categorical, _, _, _, _, _ = self.latent_space(encoder_output)
-        return categorical
+        return self.latent_space(self.encoder(x, a))[1]
 
 
 class ContrastivePT(nn.Module):

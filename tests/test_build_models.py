@@ -1270,6 +1270,73 @@ def test_vqvae_backward_step_with_distillation(
     assert 1 <= result.logs["number_of_populated_clusters"] <= n_components
 
 
+def test_vq_losses_train_encoder_and_codebook():
+    # The commitment loss reaches the encoder (its weight changes the gradient); the warm-up trains the bypass path only
+    torch.manual_seed(0)
+    model = deepof.clustering.models_new.VQVAEPT(
+        input_shape=(24, 11, 3), edge_feature_shape=(24, 11, 1), adjacency_matrix=np.eye(11, dtype=np.float32),
+        latent_dim=4, n_components=4, encoder_type="recurrent",
+    )
+    x, a, idx = torch.randn(8, 24, 11, 3), torch.randn(8, 24, 11, 1), torch.arange(8)
+    grads = []
+    for beta, warmup in ((0.25, False), (100.0, False), (0.25, True)):
+        model.zero_grad()
+        model.vq_layer.beta = beta
+        deepof.clustering.training.step_vqvae_distill(
+            model, (x, a, idx), SimpleNamespace(apply_distill=False, vq_warmup=warmup)).loss.backward()
+        grads.append((model.encoder.head[-1].weight.grad.clone(), model.vq_layer.codebook.grad.clone()))
+    assert not torch.allclose(grads[0][0], grads[1][0])
+    assert grads[0][1].abs().sum() > 0 and grads[2][1].abs().sum() == 0
+
+
+def test_vq_soft_counts_and_codebook_init():
+    # Soft counts are a softmax over the scaled distances; the k-means init puts the codes on the data clusters
+    vq = deepof.clustering.models_new.VectorQuantizerPT(n_components=3, embedding_dim=2, beta=0.25)
+    centres = torch.tensor([[0.0, 0.0], [5.0, 0.0], [0.0, 5.0]])
+    z = centres.repeat_interleave(20, dim=0) + 0.1 * torch.randn(60, 2)
+    centroids, assignments = deepof.clustering.training._kmeans(z, 3, spherical=False)
+    vq.init_from_centroids(centroids, 0.01)
+    vq.eval()
+    _, soft_counts = vq(z, return_losses=False)
+    assert torch.allclose(soft_counts.sum(1), torch.ones(60))
+    assert (soft_counts.argmax(1) == assignments).all() and soft_counts.max(1).values.min() > 0.99
+
+
+def test_decoder_log_prob_ignores_zero_frames():
+    decoder = deepof.clustering.models_new.ProbabilisticDecoderPT(hidden_dim=4, data_dim=6)
+    x = torch.randn(2, 5, 6)
+    x[:, 0] = 0.0  # padding frame
+    log_prob = decoder(torch.randn(2, 5, 4), ~torch.all(x == 0.0, dim=-1)).log_prob(x)
+    assert torch.isfinite(log_prob).all() and (log_prob[:, 0] == 0).all()
+
+
+def test_vq_ema_codebook_and_restarts():
+    # EMA: a code becomes the running centroid of its windows and gets no gradient; a code whose usage share falls
+    # below restart_below is moved to an encoder output of the batch
+    torch.manual_seed(0)
+    vq = deepof.clustering.models_new.VectorQuantizerPT(n_components=2, embedding_dim=2, beta=0.25, ema_decay=0.5)
+    vq.init_from_centroids(torch.tensor([[0.0, 0.0], [9.0, 9.0]]), 0.01, usage=torch.tensor([1.0, 0.0]))
+    z = (torch.tensor([[1.0, 1.0]]) + 0.1 * torch.randn(64, 2)).requires_grad_()
+    for _ in range(30):
+        _, _, losses = vq(z)
+    losses["vq_loss"].backward()
+    assert torch.allclose(vq.codebook[:, 0], z.detach().mean(0), atol=1e-4) and vq.codebook.grad is None
+    assert torch.equal(vq.codebook[:, 1], torch.tensor([9.0, 9.0]))  # unused: keeps its position
+    vq.restart_below = 0.1
+    vq(z)
+    assert vq.n_restarts == 1 and (vq.codebook[:, 1] - z.detach().mean(0)).norm() < 1.0
+
+
+def test_vade_log_var_bound_keeps_gradient():
+    # The posterior log-variance is bounded smoothly: far below the bound it still gets a gradient
+    ls = deepof.clustering.models_new.GaussianMixtureLatentPT(input_dim=4, n_components=3, latent_dim=2, kmeans=0.0)
+    with torch.no_grad():
+        ls.encoder_log_var.bias.fill_(-30.0)
+    _, z_log_var = ls._encode(torch.randn(5, 4))
+    z_log_var.sum().backward()
+    assert z_log_var.min() > -8.0 and (ls.encoder_log_var.bias.grad.abs() > 0).all()
+
+
 ###################
 # CONTRASTIVE TESTS
 ###################
@@ -2063,21 +2130,21 @@ def test_contrastive_edges():
                        deepof.clustering.model_utils_new.recompute_edges(x, edge_index_global))
 
 
-def test_spherical_kmeans_and_concentration():
+def test_kmeans_and_concentration():
     # Three well separated directions are recovered; loose clusters get higher temperatures, with mean temperature
     gen = torch.Generator().manual_seed(0)
     centres = torch.eye(3)
     spread = torch.tensor([0.02, 0.05, 0.1])
     labels = torch.arange(3).repeat_interleave(50)
     z = torch.nn.functional.normalize(centres[labels] + spread[labels, None] * torch.randn(150, 3, generator=gen), dim=1)
-    centroids, assignments = deepof.clustering.training._spherical_kmeans(z, 3, generator=gen)
+    centroids, assignments = deepof.clustering.training._kmeans(z, 3, generator=gen)
     assert all(len(torch.unique(assignments[labels == c])) == 1 for c in range(3))
     assert len(torch.unique(assignments)) == 3
     phi = deepof.clustering.training._prototype_concentration(z, centroids, assignments, temperature=0.1)
     order = assignments[[0, 50, 100]]
     assert phi[order[0]] < phi[order[2]] and np.isclose(phi.mean().item(), 0.1)
     with pytest.raises(ValueError, match="proto_clusters"):
-        deepof.clustering.training._spherical_kmeans(z, 151)
+        deepof.clustering.training._kmeans(z, 151)
 
 
 def test_build_prototypes(tmp_path):

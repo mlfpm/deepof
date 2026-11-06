@@ -242,23 +242,6 @@ def step_vade(
     ctx: SimpleNamespace,
 ) -> StepResult:
     x, a, idx = batch
-
-
-    base_m = unwrap_dp(model)
-    T_high = float(getattr(ctx, "resp_temp_start", 1.8))
-    T_low = 1.0
-    T_resp = T_high
-    if hasattr(ctx.criterion, "kl_scheduler") and (ctx.criterion.kl_scheduler is not None):
-        w = float(ctx.criterion.kl_scheduler.get_weight())
-        w_max = float(getattr(ctx.criterion.kl_scheduler, "max_weight", 1.0))
-        prog = 0.0 if w_max <= 0 else min(1.0, max(0.0, w / w_max))
-        T_resp = T_low + (T_high - T_low) * (1.0 - prog)
-    # Clamp and set
-    T_resp = float(max(1.0, min(T_high, T_resp)))
-    if hasattr(base_m, "latent_space"):
-        setattr(base_m.latent_space, "responsibility_temp", T_resp)
-
-
     outputs = model(x, a, return_gmm_params=True)
 
     if hasattr(ctx, "criterion") and ctx.criterion is not None:
@@ -275,28 +258,6 @@ def step_vade(
         loss_dict = ctx.criterion(outputs, x, batch_indices=batch_indices)
         total = loss_dict["total_loss"]
         
-        if loss_dict["reconstruct_loss"] > 50000:
-            print("Halt!")
-
-        # EMA update of π from current batch responsibilities, currently unused 
-        with torch.no_grad(): # pragma: no cover
-            beta = float(getattr(ctx, "pi_ema_beta", 0.00))
-            if beta > 0.0 and outputs[2] is not None:
-                q_batch = outputs[2].detach()                 # (B,C)
-                m = q_batch.mean(dim=0)                       # (C,)
-                base = unwrap_dp(model)
-                if hasattr(base.latent_space, "prior"):
-                    pi = base.latent_space.prior
-                    if isinstance(pi, torch.nn.Parameter):
-                        pi_data = pi.data
-                        pi_data.mul_(1.0 - beta).add_(beta * m)
-                        pi_data.clamp_(min=1e-6)
-                        pi_data.div_(pi_data.sum())
-                    else:
-                        pi.mul_(1.0 - beta).add_(beta * m)
-                        pi.clamp_(min=1e-6)
-                        pi.div_(pi.sum())
-
         logs = {
             "total_loss": float(total.detach().item()),
             "reconstruct_loss": float(loss_dict["reconstruct_loss"].detach().item()),
@@ -335,15 +296,19 @@ def step_vqvae_distill(
     B, T, N, F = x.shape
     x_flat = x.view(B, T, N * F)
 
+    # enc_rec_loss: reconstruction from the codes; rec_loss: from the unquantised encoder output (bypass path that
+    # trains the encoder, alone during the autoencoder warm-up)
     with torch.amp.autocast(device_type=device.type, enabled=False):
         enc_rec_loss = -(encoding_recon.log_prob(x_flat.float())).mean()
         rec_loss = -(recon.log_prob(x_flat.float())).mean()
 
-    vq_loss = float(vq_losses.get("vq_loss", 0.0))
-    kmeans_loss = float(vq_losses.get("kmeans_loss", 0.0))
-    vq_total_t = torch.as_tensor(vq_loss + kmeans_loss, device=device, dtype=enc_rec_loss.dtype)
+    zero = torch.zeros((), device=device, dtype=rec_loss.dtype)
+    vq_loss = vq_losses.get("vq_loss", zero).to(rec_loss.dtype)  # tensors: commitment and codebook losses train
+    kmeans_loss = vq_losses.get("kmeans_loss", zero).to(rec_loss.dtype)
 
-    base_total = enc_rec_loss + rec_loss + vq_total_t
+    vq_terms = enc_rec_loss + vq_loss + kmeans_loss
+    # Warm-up: the codebook stays in the graph with zero gradient (DDP needs every parameter to take part)
+    base_total = rec_loss + (0.0 if getattr(ctx, "vq_warmup", False) else 1.0) * vq_terms
     distill_loss = torch.tensor(0.0, device=device, dtype=enc_rec_loss.dtype)
 
     # Distillation on z_e
@@ -389,8 +354,8 @@ def step_vqvae_distill(
         "total_loss": float(total.detach().item()),
         "enc_rec_loss": float(enc_rec_loss.detach().item()),
         "reconstruct_loss": float(rec_loss.detach().item()),
-        "vq_loss": vq_loss,
-        "kmeans_loss": kmeans_loss,
+        "vq_loss": float(vq_loss.detach().item()),
+        "kmeans_loss": float(kmeans_loss.detach().item()),
         "number_of_populated_clusters": populated_f,
         "distill_loss": float(distill_loss.detach().item()) if torch.is_tensor(distill_loss) else float(distill_loss),
     }
@@ -1029,6 +994,14 @@ def train_deepof_model(
     # Regularization knobs
     interaction_regularization: Optional[float] = None,
     kmeans_loss: Optional[float] = None,
+    # VQVAE: weight of the commitment loss, and epochs of autoencoder warm-up (bypass decoder only) before the codebook is
+    # set to k-means centroids of the encoder outputs
+    vq_beta: Optional[float] = None,
+    vq_warmup_epochs: Optional[int] = None,
+    # VQVAE codebook: EMA decay of the codes as running centroids (0: trained by gradient) and the usage share below
+    # which a code is moved to an encoder output (first half of the training)
+    vq_ema_decay: Optional[float] = None,
+    vq_restart_below: Optional[float] = None,
     # System
     num_workers: Optional[int] = None,
     prefetch_factor: Optional[int] = None,
@@ -1211,6 +1184,10 @@ def train_deepof_model(
         use_amp=use_amp,
         interaction_regularization=interaction_regularization,
         kmeans_loss=kmeans_loss,
+        vq_beta=vq_beta,
+        vq_warmup_epochs=vq_warmup_epochs,
+        vq_ema_decay=vq_ema_decay,
+        vq_restart_below=vq_restart_below,
         diag_max_batches=diag_max_batches,
         seed=random_seed,
         tcn_conv_filters = tcn_conv_filters,
@@ -1502,13 +1479,13 @@ def train_deepof_model_base(
         preprocessed_train, data_path, "train_", force_rebuild=False,
         h5_chunk_len=common_cfg.batch_size, supervised_dict=None,
         node_channels=deepof.clustering.dataset.node_channels(meta_info),
-        global_shuffle=True if model_name == "contrastive" else False
+        global_shuffle=True,  # batches mix windows of all videos (batch-level losses, BatchNorm statistics)
     )
     val_dataset = deepof.clustering.dataset.BatchDictDataset(
         preprocessed_val, data_path, "val_", force_rebuild=False,
         h5_chunk_len=common_cfg.batch_size, supervised_dict=None,
         node_channels=deepof.clustering.dataset.node_channels(meta_info),
-        global_shuffle=True if model_name == "contrastive" else False
+        global_shuffle=True,  # batches mix windows of all videos (batch-level losses, BatchNorm statistics)
     )
 
     train_loader = train_dataset.make_loader(
@@ -1596,6 +1573,43 @@ def train_deepof_model_base(
         raise ValueError(f"Unsupported model: {model_name}")
 
 
+@torch.no_grad()
+def _init_codebook_kmeans(
+    model: nn.Module, dataset, device: torch.device, seed: int = 0, n_samples: int = 100000, batch_size: int = 4096,
+) -> None:
+    """Sets the VQ codebook to k-means++ centroids of the encoder outputs of the first n_samples training windows (a
+    random sample across videos in the globally shuffled data) and the soft-count variance to their mean squared
+    distance per dimension. All DDP ranks take the result of rank 0."""
+    base = unwrap_dp(model)
+    vq = base.vq_layer
+    if not (dist.is_available() and dist.is_initialized()) or dist.get_rank() == 0:
+        dataset = getattr(dataset, "base_dataset", dataset)  # a loader's dataset is the iterable wrapper
+        loader = dataset.make_loader(  # under DDP the shard of rank 0, also a random sample
+            batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
+            pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0,
+        )
+        was_training = base.training
+        base.eval()
+        zs, n = [], 0
+        for batch in loader:
+            zs.append(base.encoder(batch[0].to(device), batch[1].to(device)).float())
+            n += zs[-1].shape[0]
+            if n >= n_samples:
+                break
+        base.train(was_training)
+        z = torch.cat(zs)[:n_samples]
+        centroids, assignments = _kmeans(z, vq.n_components, generator=torch.Generator().manual_seed(int(seed)),
+                                         spherical=False)
+        usage = torch.bincount(assignments, minlength=vq.n_components).float() / len(assignments)
+        vq.init_from_centroids(centroids, float((z - centroids[assignments]).pow(2).sum(dim=1).mean()) / z.shape[1],
+                               usage=usage)
+        print(f"Codebook set to k-means centroids of {len(z)} encoder outputs (smallest code: {usage.min():.1%}, "
+              f"largest: {usage.max():.1%} of the windows)")
+    if dist.is_available() and dist.is_initialized():
+        for t in (vq.codebook.data, vq.code_variance, vq.ema_count, vq.ema_sum):
+            dist.broadcast(t, src=0)
+
+
 def fit_VQVAE(
     train_loader: DataLoader,
     val_loader: DataLoader,
@@ -1636,8 +1650,9 @@ def fit_VQVAE(
         "tcn_conv_dilations": common_cfg.tcn_conv_dilations, 
     }
     
-    # Create model
-    if model is None:
+    # Create model (a new model gets the autoencoder warm-up and the k-means codebook)
+    new_model = model is None
+    if new_model:
         model = VQVAEPT(
             input_shape=train_loader.dataset.x_shape,
             edge_feature_shape=train_loader.dataset.a_shape,
@@ -1648,14 +1663,20 @@ def fit_VQVAE(
             use_gnn=True,
             interaction_regularization=common_cfg.interaction_regularization,
             kmeans_loss=common_cfg.kmeans_loss,
+            beta=common_cfg.vq_beta,
+            ema_decay=common_cfg.vq_ema_decay,
             tcn_conv_filters=common_cfg.tcn_conv_filters,
             tcn_kernel_size=common_cfg.tcn_kernel_size,
             tcn_conv_stacks=common_cfg.tcn_conv_stacks,
             tcn_conv_dilations=common_cfg.tcn_conv_dilations,
         ).to(device, non_blocking=True)
-    else:  # continue_training: the loaded model takes the loss weight of the current config
+    else:  # continue_training: the loaded model takes the loss weights of the current config
         model.to(device)
         model.vq_layer.kmeans = common_cfg.kmeans_loss
+        model.vq_layer.beta = common_cfg.vq_beta
+        model.vq_layer.ema_decay = common_cfg.vq_ema_decay
+        model.vq_layer.sync_ema()  # EMA sums of the loaded codebook (checkpoints without them load the defaults)
+    _build_lazy_parameters(model, train_loader.dataset.x_shape, train_loader.dataset.a_shape, device)  # before DDP
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
@@ -1699,7 +1720,7 @@ def fit_VQVAE(
             mode="tf_sigmoid",
             warmup_epochs=0,
             at_max_epochs=teacher_cfg.lambda_decay_start,
-            max_weight=teacher_cfg.lambda_distill,
+            max_weight=teacher_cfg.generic_lambda_distill,
             cooldown_epochs=teacher_cfg.lambda_cooldown,
             end_weight=teacher_cfg.lambda_end_weight,
         )
@@ -1708,12 +1729,12 @@ def fit_VQVAE(
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
     if is_ddp:
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
-    _build_lazy_parameters(model, train_loader.dataset.x_shape, train_loader.dataset.a_shape, device)
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
 
     # Set up best-val and best-score saving
     _, best_path_val, best_path_score, _ = ckpt_paths("vqvae", common_cfg=common_cfg)
+    best_path_val += ".pth"  # the prefix of the contrastive best_model_val_<epoch>.pth
     best_val = float("inf")
     best_score = -float("inf")
     best_score_val = float("inf")
@@ -1733,8 +1754,22 @@ def fit_VQVAE(
         )
         best_val, best_score, best_score_val = best["best_val"], best["best_score"], best["best_score_val"]
 
+    # Autoencoder warm-up (bypass decoder only), then the codebook is set to k-means centroids of the encoder outputs;
+    # checkpoints are only taken after the warm-up. A resumed training repeats the initialisation only if it stopped
+    # during the warm-up
+    warmup_epochs = (min(common_cfg.vq_warmup_epochs, common_cfg.epochs - 1)
+                     if (new_model or resume_state is not None) else 0)
+    init_codebook = new_model or (resume_state is not None and start_epoch <= warmup_epochs)
+
     print(f"\n--- Training VQVAE for {common_cfg.epochs} epochs ---")
     for epoch in range(start_epoch, common_cfg.epochs):
+        if init_codebook and epoch == warmup_epochs:
+            _init_codebook_kmeans(model, train_loader.dataset, device, seed=common_cfg.seed or 0)
+        # Dead-code restarts (EMA codebook) after the warm-up, during the first half of the training, so that the codes
+        # settle before the end
+        vq_layer = unwrap_dp(model).vq_layer
+        vq_layer.restart_below = (common_cfg.vq_restart_below if vq_layer.ema_decay > 0
+                                  and warmup_epochs <= epoch < common_cfg.epochs // 2 else 0.0)
 
         # Summarize some variables into namespace
         ctx = SimpleNamespace(
@@ -1745,6 +1780,7 @@ def fit_VQVAE(
             distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
+            vq_warmup=epoch < warmup_epochs,
         )
 
         # Train and validate
@@ -1759,34 +1795,32 @@ def fit_VQVAE(
             ctx=SimpleNamespace(apply_distill=False), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
-        score_value = float("nan")
+        if vq_layer.n_restarts and is_main:
+            print(f"  {vq_layer.n_restarts} code(s) restarted (usage share below {vq_layer.restart_below})")
+        vq_layer.n_restarts = 0
 
-        if apply_distill:
-            diag = compute_diagnostics(
-                model=model,
-                dataloader=val_loader,
-                q_fn=partial(get_q_vqvae, distill_head=distill_head),
-                device=device,
-                n_components=common_cfg.n_components,
-                tau_star=tau_star,
-                distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
-                distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
-                distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
-                max_batches=common_cfg.diag_max_batches,
-            )
-            val_logs.update(diag)
-            score_value = float(val_logs["alignment_score"])
-        else:
-            val_logs["alignment_score"] = float("nan")
-            val_logs["conf_norm"] = float("nan")
-            val_logs["bal_norm"] = float("nan")
+        # Confidence and balance of the codebook assignments (the readout), balance relative to the teacher if any
+        diag = compute_diagnostics(
+            model=model,
+            dataloader=val_loader,
+            q_fn=get_q_vqvae,
+            device=device,
+            n_components=common_cfg.n_components,
+            tau_star=tau_star,
+            distill_sharpen_T=teacher_cfg.generic_distill_sharpen_T,
+            distill_conf_weight=teacher_cfg.generic_distill_conf_weight,
+            distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
+            max_batches=common_cfg.diag_max_batches,
+        )
+        val_logs.update(diag)
+        score_value = float(val_logs["alignment_score"])
 
         # Print training progress            
         log_summary = print_losses(model_name="vqvae", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, lambda_d=lam, train_logs=train_logs, val_logs=val_logs, is_main=is_main)
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
         # Save best model based on total validation loss
-        if v_total < best_val:
+        if epoch >= warmup_epochs and v_total < best_val:
             best_val = v_total
             if common_cfg.save_weights and is_main:
                 save_model_info(
@@ -1807,7 +1841,7 @@ def fit_VQVAE(
 
         # Save best model based on model balance and certainty score
         improved_score = (
-            apply_distill and math.isfinite(score_value) and
+            epoch >= warmup_epochs and math.isfinite(score_value) and
             (
                 (score_value > best_score) or
                 (abs(score_value - best_score) <= score_tol and v_total < best_score_val)
@@ -1915,17 +1949,19 @@ def _embed_centre_windows(
     return z_all
 
 
-def _spherical_kmeans(
+def _kmeans(
     z: torch.Tensor, k: int, n_iter: int = 20, generator: Optional[torch.Generator] = None, chunk: int = 65536,
+    spherical: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """k-means with cosine similarity on unit-norm rows; empty clusters are re-seeded with random samples.
+    """k-means++ with cosine similarity on unit-norm rows (spherical) or with Euclidean distances; empty clusters are
+    re-seeded with random samples.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Unit-norm centroids [k, D] and the cluster of every row [N].
+        Tuple[torch.Tensor, torch.Tensor]: Centroids [k, D] (unit-norm if spherical) and the cluster of every row [N].
     """
     n = z.shape[0]
     if k > n:
-        raise ValueError(f"Cannot build {k} prototypes from {n} training samples, reduce proto_clusters.")
+        raise ValueError(f"Cannot build {k} clusters from {n} training samples, reduce proto_clusters / n_clusters.")
     # k-means++ seeding: each new centroid is drawn with probability proportional to the squared distance to the closest one
     centroids = z[torch.randint(n, (1,), generator=generator).to(z.device)]
     d2 = (z - centroids[0]).pow(2).sum(dim=1)
@@ -1934,14 +1970,19 @@ def _spherical_kmeans(
         centroids = torch.cat([centroids, new])
         d2 = torch.minimum(d2, (z - new[0]).pow(2).sum(dim=1))
     for it in range(n_iter + 1):
-        assignments = torch.cat([(z[i:i + chunk] @ centroids.T).argmax(dim=1) for i in range(0, n, chunk)])
+        # Euclidean: argmin |z - c|^2 = argmax 2 z.c - |c|^2
+        offset = 0.0 if spherical else centroids.pow(2).sum(dim=1)
+        assignments = torch.cat([((1.0 if spherical else 2.0) * z[i:i + chunk] @ centroids.T - offset).argmax(dim=1)
+                                 for i in range(0, n, chunk)])
         if it == n_iter:
             break
         sums = torch.zeros_like(centroids).index_add_(0, assignments, z)
-        empty = torch.bincount(assignments, minlength=k) == 0
+        counts = torch.bincount(assignments, minlength=k).to(z.dtype)
+        empty = counts == 0
         if empty.any():
             sums[empty] = z[torch.randint(n, (int(empty.sum()),), generator=generator).to(z.device)]
-        centroids = F.normalize(sums, dim=1)
+            counts[empty] = 1.0
+        centroids = F.normalize(sums, dim=1) if spherical else sums / counts[:, None]
     return centroids, assignments
 
 
@@ -1983,7 +2024,7 @@ def build_prototypes(
     generator = torch.Generator().manual_seed(int(seed))
     prototypes = []
     for k in contrastive_cfg.proto_clusters:
-        centroids, assignments = _spherical_kmeans(z, int(k), generator=generator)
+        centroids, assignments = _kmeans(z, int(k), generator=generator)
         concentration = _prototype_concentration(z, centroids, assignments, contrastive_cfg.temperature)
         prototypes.append((centroids, assignments, concentration))
     if dist.is_available() and dist.is_initialized():  # all ranks use the clustering of rank 0
@@ -2463,6 +2504,8 @@ def fit_VADE(
         tcn_conv_dilations=common_cfg.tcn_conv_dilations,
     ).to(device, non_blocking=True)
     step_fn = step_vade
+    # Parameters created on the first forward (CensNet) have to exist before DDP and the pretraining optimizer
+    _build_lazy_parameters(model, train_loader.dataset.x_shape, train_loader.dataset.a_shape, device)
 
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
@@ -2565,6 +2608,7 @@ def fit_VADE(
 
     # VaDE unified checkpoint paths
     _, best_path_val, best_path_score, teacher_init_path = ckpt_paths("vade", common_cfg=common_cfg)
+    best_path_val += ".pth"  # the prefix of the contrastive best_model_val_<epoch>.pth
 
     tau_star = None
     teacher_init_model = None  # returned as 3rd output
@@ -2633,15 +2677,17 @@ def fit_VADE(
         unwrap_dp(model).initialize_gmm_from_data(train_loader)
 
     # Inits for training
-    best_val = -float("inf") #start negative, as Vade first is expected to get worse validation wise, then top out and get better
+    best_val = float("inf")
     best_score = -float("inf")
     max_score = -float("inf")
     best_score_val = float("inf")
     score_value = float("nan")
+    val_total = float("nan")
     score_tol = 0.01
-    val_tol = 0.01
     score_start_epoch = max(3, math.ceil(0.1 * common_cfg.epochs))
-    val_top_reached=False
+    # The val loss contains the KL with its scheduled weight: losses are comparable only once the weight is constant
+    val_start_epoch = min(common_cfg.epochs - 1, vade_cfg.kl_warmup + (
+        vade_cfg.kl_cooldown if vade_cfg.kl_end_weight != vade_cfg.kl_max_weight else 0))
 
     # Epoch dependent weights
     lambda_d = 0.0
@@ -2658,12 +2704,7 @@ def fit_VADE(
             print(f"Freezing GMM for {vade_cfg.freeze_gmm_epochs} epoch(s)")
             base.latent_space.gmm_means.requires_grad = False
             base.latent_space.gmm_log_vars.requires_grad = False
-        if epoch == vade_cfg.freeze_gmm_epochs:
-            new_base_lr = 5e-4
-            new_gmm_lr = 2e-4
-            for i, group in enumerate(optimizer.param_groups):
-                if i == 0: group["lr"] = new_base_lr
-                elif i == 1: group["lr"] = new_gmm_lr
+        if vade_cfg.freeze_gmm_epochs > 0 and epoch == vade_cfg.freeze_gmm_epochs:
             print("Unfreezing GMM")
             base.latent_space.gmm_means.requires_grad = True
             base.latent_space.gmm_log_vars.requires_grad = True
@@ -2672,7 +2713,7 @@ def fit_VADE(
             print(f"Freezing decoder for {vade_cfg.freeze_decoder_epochs} epoch(s)")
             for p in base.decoder.parameters():
                 p.requires_grad = False
-        if epoch == vade_cfg.freeze_decoder_epochs:
+        if vade_cfg.freeze_decoder_epochs > 0 and epoch == vade_cfg.freeze_decoder_epochs:
             print("Unfreezing decoder")
             for p in base.decoder.parameters():
                 p.requires_grad = True
@@ -2748,11 +2789,8 @@ def fit_VADE(
         log_summary = print_losses(model_name="vade", log_summary=log_summary, epoch=epoch, n_epochs=common_cfg.epochs, klw=klw, lambda_d=lambda_d, train_logs=train_logs, val_logs=val_logs, is_main=is_main)
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value)
 
-        # Deterimine if validation loss and / or balance + certainty score has improved
-        improved_val = ((val_total + val_tol) < best_val)
-
-        if not improved_val and not val_top_reached:
-            best_val = val_total
+        # Determine if validation loss and / or balance + certainty score has improved
+        improved_val = epoch >= val_start_epoch and val_total < best_val
 
         improved_score = (
             math.isfinite(score_value) and (
@@ -2769,9 +2807,7 @@ def fit_VADE(
 
         # Save best model based on total validation loss
         if improved_val:
-            val_top_reached=True
             best_val = val_total
-            val_tol=0.0
             if common_cfg.save_weights and is_main:
                 save_model_info(
                     best_path_val,
@@ -2812,6 +2848,24 @@ def fit_VADE(
                 )
                 print(f"Saved best SCORE model -> {best_path_score} (score={best_score:.4f})")
 
+    # Neither checkpoint saved (no finite score, no comparable val loss): keep the final model as best_model_val.pth
+    if (common_cfg.save_weights and is_main and not os.path.exists(best_path_val)
+            and not os.path.exists(best_path_score)):
+        save_model_info(
+            best_path_val,
+            stage="final",
+            epoch=common_cfg.epochs - 1,
+            train_steps=common_cfg.epochs * len(train_loader),
+            val_total=val_total,
+            common_cfg=common_cfg,
+            teacher_cfg=teacher_cfg,
+            vade_cfg=vade_cfg,
+            model=unwrap_dp(model),
+            log_summary=log_summary,
+            rebuild_spec=rebuild_spec,
+            save_weights=common_cfg.save_weights,
+        )
+        print(f"No best checkpoint was saved; final model -> {best_path_val}")
 
     # Load states of best val and score models
     unwrap_dp(model).train_batch_size = common_cfg.batch_size  # used as inference batch size

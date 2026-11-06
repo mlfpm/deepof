@@ -887,6 +887,7 @@ def maybe_build_turtle_teacher(
             preprocessed_train, data_path, "train_",
             force_rebuild=False, h5_chunk_len=common_cfg.batch_size, return_angles=True,
             node_channels=getattr(train_dataset, "node_channels", 3),
+            global_shuffle=getattr(train_dataset, "global_shuffle", False),  # same window order as the training data
         )
         _, pca_angles_train = fit_angles_pca(
             angles_train_dataset, n_components=teacher_cfg.pca_angles_dim, batch_size=teacher_cfg.batch_size_angles, num_workers=0 

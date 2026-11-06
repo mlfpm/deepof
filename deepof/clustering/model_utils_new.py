@@ -71,6 +71,14 @@ class CommonFitCfg:
     interaction_regularization: float = 3e-4
     kmeans_loss: float = 0.0
 
+    # VQVAE: commitment loss weight; epochs of autoencoder warm-up before the k-means initialisation of the codebook;
+    # codebook as running centroids (EMA decay per batch, 0: trained by gradient) with restarts of codes whose usage
+    # share falls below vq_restart_below (first half of the training, 0: off)
+    vq_beta: float = 0.25
+    vq_warmup_epochs: int = 2
+    vq_ema_decay: float = 0.99
+    vq_restart_below: float = 0.01
+
     # Diagnostics
     diag_max_batches: int = 4
     seed: Optional[int] = 0
@@ -159,7 +167,7 @@ class TurtleTeacherCfg:
 class VaDECfg:
 
     learning_rate_pretrain: float = 1e-3
-    gmm_learning_rate: float = 1e-3 
+    gmm_learning_rate: float = 2e-4
     pretrain_epochs: int = 10
 
     reg_cat_clusters: float = 0.0
@@ -582,6 +590,18 @@ def check_model_inputs(
                 "The imputation mask (get_graph_dataset(include_imputation_mask=True)) is only supported by the "
                 "contrastive model so far; preprocess the data without it",
             )
+        if model_name == "vqvae":
+            check(is_number(common_cfg.vq_beta, 0), "\"vq_beta\" needs to be >= 0")
+            check(is_int(common_cfg.vq_warmup_epochs, 0), "\"vq_warmup_epochs\" needs to be an integer >= 0")
+            check(is_number(common_cfg.vq_ema_decay, 0) and common_cfg.vq_ema_decay < 1,
+                  "\"vq_ema_decay\" needs to be in [0, 1)")
+            check(is_number(common_cfg.vq_restart_below, 0) and (not is_int(common_cfg.n_components, 1)
+                  or common_cfg.vq_restart_below < 1 / common_cfg.n_components),
+                  "\"vq_restart_below\" needs to be >= 0 and below the uniform usage share 1 / n_clusters")
+            if (is_int(common_cfg.vq_warmup_epochs, 0) and is_int(common_cfg.epochs, 1)
+                    and common_cfg.vq_warmup_epochs >= common_cfg.epochs):
+                warnings.warn(f"vq_warmup_epochs={common_cfg.vq_warmup_epochs} >= epochs={common_cfg.epochs}: the "
+                              f"warm-up is shortened to {common_cfg.epochs - 1} epoch(s).")
         if encoder_type == "tcn":
             check(is_int(common_cfg.tcn_conv_filters, 1), "\"tcn_conv_filters\" needs to be an integer greater than 0")
             check(is_int(common_cfg.tcn_kernel_size, 1), "\"tcn_kernel_size\" needs to be an integer greater than 0")
@@ -599,6 +619,8 @@ def check_model_inputs(
         kl_modes = ["linear", "sigmoid", "tf_sigmoid"]
         one_of("kl_annealing_mode", str(vade_cfg.kl_annealing_mode).lower(), kl_modes)
         one_of("kl_annealing_mode_pretrain", str(vade_cfg.kl_annealing_mode_pretrain).lower(), kl_modes)
+        check(not vade_cfg.temporal_cohesion_weight, "\"temporal_cohesion_weight\" compares neighbouring windows of a "
+              "batch, but VaDE batches are shuffled across videos; leave it at 0")
 
     # --- Contrastive
     if contrastive_cfg is not None and model_name == "contrastive":
@@ -956,8 +978,9 @@ def embedding_per_video(
                     if isinstance(model, deepof.clustering.models_new.VaDEPT):
                         _, emb_out, sc_out, _ = model(xb, ab, return_gmm_params=False)
                         sc_list.append(sc_out.detach().cpu())
-                    elif isinstance(model, deepof.clustering.models_new.VQVAEPT):
-                        _, _, _, sc_out, emb_out, _ = model(xb, ab, return_all_outputs=True)
+                    elif isinstance(model, deepof.clustering.models_new.VQVAEPT):  # encoder and codebook only
+                        emb_out = model.encoder(xb, ab)
+                        _, sc_out = model.vq_layer(emb_out, return_losses=False)
                         sc_list.append(sc_out.detach().cpu())
                     elif isinstance(model, deepof.clustering.models_new.ContrastivePT):
                         emb_out = model(xb, ab)

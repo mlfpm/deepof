@@ -589,8 +589,8 @@ def compute_kmeans_loss_pt(latent_means: torch.Tensor, weight: float) -> torch.T
 
     kmeans_loss = weight * torch.nanmean(penalization[~torch.isinf(penalization)])
     if torch.isnan(kmeans_loss):  # pragma: no cover
-        return 0.0
-    return kmeans_loss
+        return torch.zeros((), device=latent_means.device, dtype=latent_means.dtype)
+    return kmeans_loss.to(latent_means.dtype)
 
 
 class Dynamic_weight_manager:
@@ -683,7 +683,8 @@ class VadeLoss(nn.Module):
         vade_cfg (VaDECfg): VaDE-specific configuration including both pretrain and main parameter values.
         teacher_cfg (TurtleTeacherCfg): Teacher distillation configuration.
         kl_scheduler (Optional[Dynamic_weight_manager]): KL weight scheduler. Can be replaced later via set_kl_scheduler().
-        l1_activity_weight (float): L1 regularization weight on z_log_var. Defaults to 0.1.
+        l1_activity_weight (float): L1 regularization weight on z_log_var (pulls the posterior variance to 1).
+            Defaults to 0.0 (off).
         gmm_logvar_clamp (Tuple[float, float]): Min and max clamp values for GMM log-variances. Defaults to (-8.0, 8.0).
     """
     def __init__(
@@ -692,7 +693,7 @@ class VadeLoss(nn.Module):
             vade_cfg: "VaDECfg",
             teacher_cfg: "TurtleTeacherCfg",
             kl_scheduler: Optional["Dynamic_weight_manager"] = None,
-            l1_activity_weight: float = 0.1,
+            l1_activity_weight: float = 0.0,
             gmm_logvar_clamp: Tuple[float, float] = (-8.0, 8.0),
         ):
         super().__init__()
@@ -835,7 +836,6 @@ class VadeLoss(nn.Module):
 
         This is the key loss term that pulls latent representations toward cluster centers.
         """
-        z_log_var = torch.clamp(z_log_var, min=-4.0, max=4.0)
         B, D = z_mean.shape
         scale_q = torch.exp(0.5 * z_log_var)
 
@@ -907,7 +907,7 @@ class VadeLoss(nn.Module):
 
         # KL terms
         z_mean32 = z_mean.float()
-        z_log_var32 = z_log_var.float().clamp(min=-4.0, max=2.0)
+        z_log_var32 = z_log_var.float()  # bounded to (-8, 8) by the model
 
         if self.pretrain_mode:
             # Pretrain: weak standard-VAE KL against N(0, I).
@@ -1002,11 +1002,6 @@ class VadeLoss(nn.Module):
             post_like = torch.softmax(logp, dim=-1)
             tf_cluster = -(q * post_like).sum(dim=-1).mean() * self.tf_cluster_weight
 
-            # Prior match (uniform)
-            C = self.n_components
-            log_pi = math.log(1.0 / max(1, C))
-            prior_loss = -(q * log_pi).sum(dim=-1).mean()
-
             # Cat balance (optional)
             if self.reg_cat_clusters_weight > 0 and q is not None:
                 cat_cluster_loss = self.reg_cat_clusters_weight * cluster_frequencies_regularizer(q)
@@ -1076,7 +1071,6 @@ class VadeLoss(nn.Module):
             + temporal_loss
             + nonempty_loss
             + tf_cluster
-            + prior_loss
             + kmeans_loss
             + activity_l1
             + scatter_loss
@@ -1114,10 +1108,16 @@ def build_optimizer_generic(
     base_lr: float = 3e-4,
     weight_decay: float = 1e-4,
 ) -> torch.optim.Optimizer:
-    params = list(deepof.clustering.model_utils_new.unwrap_dp(model).parameters())
+    """Adam with weight decay on all parameters except a VQ codebook (decay would pull unused codes to the origin)."""
+    named = list(deepof.clustering.model_utils_new.unwrap_dp(model).named_parameters())
     if distill_head is not None:
-        params += list(distill_head.parameters())
-    return torch.optim.Adam(params, lr=base_lr, weight_decay=weight_decay)
+        named += list(distill_head.named_parameters())
+    decay = [p for n, p in named if not n.endswith("codebook")]
+    no_decay = [p for n, p in named if n.endswith("codebook")]
+    groups = [{"params": decay, "weight_decay": weight_decay}]
+    if no_decay:
+        groups.append({"params": no_decay, "weight_decay": 0.0})
+    return torch.optim.Adam(groups, lr=base_lr)
 
 
 def build_optimizer_vade(
