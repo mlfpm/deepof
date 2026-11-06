@@ -4594,7 +4594,8 @@ def kinematics_features(
     amplitude of the posture (body parts relative to the animal's mean position; length of the x / y amplitude vector,
     so independent of the direction in the image) per band of KINEMATICS_WAVELET_HZ below 0.45 x the frame rate. Per pair of animals (<a>_<b>_kinematics): rate of change (signed, mm/s) and magnitude
     of the second derivative (mm/s^2) of the distances KINEMATICS_RELATIONAL_PAIRS (part of a, part of b) whose parts
-    exist. Missing positions are interpolated linearly.
+    exist (names in any case, e.g. "nose" / "tail_base" in CalMS21; the columns keep the names of the pairs). Missing
+    positions are interpolated linearly.
 
     Args:
         positions (dict): {animal: array (frames, parts, 2)}; "" as the only animal for single-animal projects.
@@ -4629,12 +4630,14 @@ def kinematics_features(
             values += [np.median(x, axis=1), np.sort(x, axis=1)[:, -2]]
             columns += [(group, f"{name}_median"), (group, f"{name}_second")]
     animals = [a for a in positions if a]
+    index = {a: {p.lower(): j for j, p in enumerate(part_names[a])} for a in animals}
     for i, a in enumerate(animals):
         for b in animals[i + 1:]:
             for pa, pb in KINEMATICS_RELATIONAL_PAIRS:
-                if pa not in part_names[a] or pb not in part_names[b]:
+                ja, jb = index[a].get(pa.lower()), index[b].get(pb.lower())
+                if ja is None or jb is None:
                     continue
-                d = np.linalg.norm(clean[a][:, part_names[a].index(pa)] - clean[b][:, part_names[b].index(pb)], axis=-1)
+                d = np.linalg.norm(clean[a][:, ja] - clean[b][:, jb], axis=-1)
                 values += [_savgol_derivative(d, KINEMATICS_RELATIONAL_S, frame_rate, 1),
                            np.abs(_savgol_derivative(d, KINEMATICS_RELATIONAL_S, frame_rate, 2))]
                 columns += [(f"{a}_{b}_kinematics", f"dist_rate_{pa}-{pb}"),

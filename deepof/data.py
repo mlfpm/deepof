@@ -2924,9 +2924,10 @@ class Coordinates:
                 positions[animal] = np.stack([tab[[(p, "x") for p in parts]].to_numpy(float),
                                               tab[[(p, "y") for p in parts]].to_numpy(float)], axis=-1)
                 part_names[animal] = [p[len(animal) + 1:] if animal else p for p in parts]
-            if len(animal_ids) > 1:
+            if len(animal_ids) > 1:  # names in any case, as in kinematics_features
                 missing_pairs |= {pair for pair in deepof.utils.KINEMATICS_RELATIONAL_PAIRS
-                                  if not all(p in part_names[a] for p, a in zip(pair, animal_ids[:2]))}
+                                  if not all(p.lower() in {n.lower() for n in part_names[a]}
+                                             for p, a in zip(pair, animal_ids[:2]))}
             values, columns = deepof.utils.kinematics_features(positions, part_names, self._frame_rate)
             kinematics = pd.DataFrame(values.astype(self._bit_precision.dtype), index=tab.index,
                                       columns=pd.MultiIndex.from_tuples(columns))

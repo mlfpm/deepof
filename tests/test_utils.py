@@ -1419,6 +1419,11 @@ def test_kinematics_features():
     assert tab["A_kinematics"][[f"{band}_second" for band in bands]].mean().idxmax() == "wave4hz_second"
     assert np.allclose(tab[("A_B_kinematics", "dist_rate_Center-Center")], 100, atol=1e-3)
     assert np.allclose(tab[("A_B_kinematics", "dist_acc_Center-Center")], 0, atol=1e-3)
+    # Body part names in another case (CalMS21: "nose", "tail_base"): the same pairs and values, the columns keep
+    # the names of KINEMATICS_RELATIONAL_PAIRS
+    lower = [p if p == "Center" else p.lower() for p in parts]
+    values_lower, columns_lower = deepof.utils.kinematics_features({"A": a, "B": b}, {"A": lower, "B": lower}, fps)
+    assert columns_lower == columns and np.allclose(values_lower, values, equal_nan=True)
     # Bands at or above 0.45 x the frame rate are left out
     columns = deepof.utils.kinematics_features({"A": a}, {"A": parts}, 20.0)[1]
     assert not any(c[1].startswith("wave11hz") for c in columns) and not any("dist" in c[1] for c in columns)
