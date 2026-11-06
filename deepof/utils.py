@@ -2530,15 +2530,18 @@ def table_body_lengths(
 ) -> Dict[str, float]:
     """Body length per animal of one table ({animal id or "": length}, NaN if the size_ref body parts are missing):
     median size_ref distance over the frames in rows (all if None) in which the animal moves (see
-    BODY_LENGTH_MIN_SPEED). The speed columns are the body part names (mm/s)."""
+    BODY_LENGTH_MIN_SPEED). The speed columns are the body part names (mm/s). Body part names match in any case (e.g.
+    "nose" / "tail_base" in CalMS21)."""
     bodyparts = {c[0] for c in df.columns if isinstance(c, tuple) and len(c) == 2 and c[1] in ("x", "y")}
+    part = {bp.lower(): bp for bp in bodyparts}
+    speed = {c.lower(): c for c in df.columns if isinstance(c, str)}  # speed columns (not a MultiIndex level)
     use_rows = np.ones(len(df), bool) if rows is None else np.asarray(rows, bool)
     if len(use_rows) != len(df):
         raise ValueError(f"rows has {len(use_rows)} entries for a table of {len(df)} frames")
     lengths = {}
     for aid in _animal_ids_of_table(bodyparts, animal_ids):
         prefix = f"{aid}_" if aid else ""
-        a, b = prefix + size_ref[0], prefix + size_ref[1]
+        a, b = (part.get((prefix + p).lower(), prefix + p) for p in size_ref)
         if not all((p, c) in df.columns for p in (a, b) for c in ("x", "y")):
             lengths[aid or ""] = np.nan
             continue
@@ -2546,9 +2549,12 @@ def table_body_lengths(
         column = lambda c: np.asarray(df[c], dtype=float).reshape(len(df), -1)
         d = np.hypot(column((a, "x")) - column((b, "x")), column((a, "y")) - column((b, "y")))
         use = use_rows & np.isfinite(d).all(axis=1)
-        if prefix + "Center" in {c for c in df.columns if isinstance(c, str)}:  # speed column (not a MultiIndex level)
+        if not use.any():  # no frame of rows (e.g. a video without any frame in frame_mask): all frames
+            use = np.isfinite(d).all(axis=1)
+        centre = speed.get((prefix + "Center").lower())
+        if centre is not None:
             with np.errstate(invalid="ignore"):
-                moving = use & (column(prefix + "Center")[:, 0] >= BODY_LENGTH_MIN_SPEED)
+                moving = use & (column(centre)[:, 0] >= BODY_LENGTH_MIN_SPEED)
             if moving.sum() >= BODY_LENGTH_MIN_FRAMES:
                 use = moving
         lengths[aid or ""] = float(np.median(d[use])) if use.any() else np.nan
@@ -2787,6 +2793,12 @@ def _centred_coords(tab: pd.DataFrame, coord_cols: list, reference: str) -> pd.D
     return out
 
 
+def _reference_in(tab: pd.DataFrame, reference: Optional[str]) -> Optional[str]:
+    """The reference body part, if its coordinates are in the table (filter_low_variance drops them when they are
+    constant, e.g. 0 after centering on it every frame: then the positions are relative to it already)."""
+    return reference if reference is not None and all((reference, a) in tab.columns for a in ("x", "y")) else None
+
+
 def _fit_rows(frame_mask: Optional[Dict[str, np.ndarray]], key: str, bin_indices) -> Optional[np.ndarray]:
     """Frames of the time bin used for the statistics (frame_mask of get_graph_dataset), None = all."""
     return None if frame_mask is None else np.asarray(frame_mask[key], bool)[bin_indices]
@@ -2907,7 +2919,7 @@ def _pp_pass1_collect_samples(
                     ]
                     if coord_standardize is not None and coord_cols_local:
                         ref_coord_cols = _section_standardize(
-                            tab_local=(tab_local if coord_reference is None
+                            tab_local=(tab_local if _reference_in(tab_local, coord_reference) is None
                                        else _centred_coords(tab_local, coord_cols_local, coord_reference)),
                             samples=samples_coord,
                             cols=coord_cols_local,
@@ -3150,7 +3162,7 @@ def _pp_pass2_scale_and_save(
                     if clip_cols:
                         arr = tab[clip_cols].to_numpy(float)
                         test = arr.copy()
-                        if coord_reference is not None:  # positions in the arena: outliers relative to the animal
+                        if _reference_in(tab, coord_reference) is not None:  # outliers relative to the animal
                             for axis in ("x", "y"):
                                 js = [j for j, c in enumerate(clip_cols) if c in coord_cols_clip and c[1] == axis]
                                 test[:, js] -= tab[(coord_reference, axis)].to_numpy(float)[:, None]

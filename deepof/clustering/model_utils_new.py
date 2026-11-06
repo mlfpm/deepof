@@ -814,6 +814,8 @@ def embedding_per_video(
     decode_emit_tau: float = 1.0,
     cluster_mode: bool = False,
     split_factor: float = 3.0,
+    embedding_path: Optional[str] = None,
+    table_suffix: str = "",
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -831,6 +833,8 @@ def embedding_per_video(
         split_factor (float): Only for "combined": states holding more than split_factor / states_per_gate of the samples are split into round(share * states_per_gate) sub-states, so the number of clusters can grow. Defaults to 3.
         distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of frames embedded per video; longer videos are cut at this number of frames. None (default) embeds all frames.
+        embedding_path (str): Very large projects: folder for the embedding tables of the model (one DuckDB file per video, <embedding_path>/<video>/database.duckdb), e.g. in the model's folder, so that the embeddings of several models can coexist and deleting the folder frees the space. None (default): the project's Tables folder.
+        table_suffix (str): Appended to the names of the soft count tables saved in the project (see soft_counts_from_embeddings), so that readouts of several models can run in parallel.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -867,6 +871,7 @@ def embedding_per_video(
         graph = True 
     
     keys_to_drop=[]
+    model_tables = embedding_path or os.path.join(coordinates._project_path, coordinates._project_name, 'Tables')
     window_size = model.window_size
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # The caller's model keeps its device, train/eval mode and cluster_mode
@@ -965,16 +970,18 @@ def embedding_per_video(
             emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
             print('completed')
             emb = emb_raw.cpu().numpy()
+            if coordinates._very_large_project:
+                os.makedirs(os.path.join(model_tables, key), exist_ok=True)
 
             if not contrastive:
                 sc_raw = torch.cat(sc_list, dim=0) if sc_list else None
                 sc = sc_raw.cpu().numpy()
                 # save paths for modified tables
-                table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_softc')
+                table_path = os.path.join(model_tables, key, key + '_' + file_name + '_softc')
                 soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
             # save paths for modified tables
-            table_path = os.path.join(coordinates._project_path, coordinates._project_name, 'Tables',key, key + '_' + file_name + '_embed')
+            table_path = os.path.join(model_tables, key, key + '_' + file_name + '_embed')
             embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
 
             #to not flood the output with loading bars
@@ -1021,6 +1028,7 @@ def embedding_per_video(
             decode_sticky=decode_sticky,
             decode_emit_tau=decode_emit_tau,
             split_factor=split_factor,
+            table_suffix=table_suffix,
         )
     else:
         soft_counts=deepof.data.TableDict(

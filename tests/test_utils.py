@@ -251,6 +251,11 @@ def test_scale_table_single_animal_body_length():
     assert np.allclose(deepof.utils.scale_table(longer, animal_ids=[""], standardize=False).iloc[:len(tab)], out)
     types = deepof.utils.infer_column_types(tab, [""])
     assert len(types["inner_dists"]) == 2 and not types["intra_dists"]
+    # Body part names in another case (CalMS21: "nose", "tail_base", derived "Center"): the same length
+    lower = tab.copy()
+    lower.columns = pd.Index([(c[0].lower(), c[1]) if isinstance(c, tuple) and c[1] in ("x", "y") and c[0] != "Center"
+                              else c for c in tab.columns], tupleize_cols=False)
+    assert deepof.utils.table_body_lengths(lower, [""]) == {"": 80.0}
 
 
 @settings(deadline=None)
