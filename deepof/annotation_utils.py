@@ -154,7 +154,7 @@ class DeepOF_behavior:
     def set_color(self, color: Optional[str]) -> "DeepOF_behavior":
         return replace(self, color=color)
 
-    def column_name(self, ctx: BehaviorContext, animal_ids: animal_ids) -> str:
+    def column_name(self, ctx: BehaviorContext, animal_ids: animal_ids) -> str:  # pragma: no cover (suspected unused, 2026-11, Behavior_scope.GLOBAL does not exist)
         if self.scope is Behavior_scope.INDIVIDUAL:
             animal_id = animal_ids  # type: ignore[assignment]
             return f"{ctx.prefix(animal_id)}{self.name}"
@@ -390,7 +390,7 @@ def compute_sniffing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
                                   float(ctx.params["nose_likelihood"]),
                                   center_name=center, animal_id=aid))
 
-def compute_rearing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:
+def compute_rearing(ctx: BehaviorContext, animal_id: animal_ids) -> np.ndarray:  # pragma: no cover (suspected unused, 2026-11, rearing is disabled in supervised_tagging)
     aid = animal_id  # type: ignore[assignment]
     center = ctx.extra.get("center", "Center")
     return np.asarray(rearing(ctx.raw_coords, ctx.speeds, ctx.likelihoods,
@@ -1216,7 +1216,7 @@ def sniff_around(
     return lookaround
 
 
-def rearing(
+def rearing(  # pragma: no cover (suspected unused, 2026-11, rearing is disabled in supervised_tagging)
     pos_dframe: pd.DataFrame,
     speed_dframe: pd.DataFrame,
     likelihood_dframe: pd.DataFrame,

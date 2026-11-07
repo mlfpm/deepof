@@ -1402,7 +1402,7 @@ class VectorQuantizerPT(nn.Module):
             return
         pick = torch.randint(flattened.shape[0], (int(dead.sum()),), device=flattened.device)
         new = flattened[pick].detach().float().T.contiguous()  # [D, n_dead]
-        if dist.is_available() and dist.is_initialized():
+        if dist.is_available() and dist.is_initialized():  # pragma: no cover (DDP, not run in CI)
             dist.broadcast(new, src=0)
         share = 1.0 / self.n_components
         self.codebook.data[:, dead] = new.to(self.codebook.dtype)
@@ -1416,7 +1416,7 @@ class VectorQuantizerPT(nn.Module):
         codes without windows for a long time keep their position."""
         n = encodings.sum(0) / flattened.shape[0]
         s = flattened.detach().float().T @ encodings / flattened.shape[0]
-        if dist.is_available() and dist.is_initialized():
+        if dist.is_available() and dist.is_initialized():  # pragma: no cover (DDP, not run in CI)
             stats = torch.cat([n[None, :], s])
             dist.all_reduce(stats)
             stats /= dist.get_world_size()

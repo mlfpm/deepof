@@ -627,7 +627,7 @@ class BatchDictDataset:
         # get DDP identity (if needed)
         ddp_rank = 0
         ddp_world_size = 1
-        if ddp_shard and dist.is_available() and dist.is_initialized():
+        if ddp_shard and dist.is_available() and dist.is_initialized():  # pragma: no cover (DDP, not run in CI)
             ddp_rank = dist.get_rank()
             ddp_world_size = dist.get_world_size()
 
@@ -750,7 +750,7 @@ class _H5BatchIterableDataset(IterableDataset):
         total_batches = (n // bs) if self.drop_last else ((n + bs - 1) // bs)
 
         # If sharded across ranks, each rank sees exactly 1/world_size of batches (excess is dropped)
-        if self.ddp_world_size > 1:
+        if self.ddp_world_size > 1:  # pragma: no cover (DDP, not run in CI)
             total_batches = (total_batches // self.ddp_world_size) * self.ddp_world_size
             return total_batches // self.ddp_world_size
 
@@ -868,7 +868,7 @@ class _H5BatchIterableDataset(IterableDataset):
             rng.shuffle(starts)
 
         # Ensure divisible by world_size so every rank gets the same number of batches
-        if self.ddp_world_size > 1:
+        if self.ddp_world_size > 1:  # pragma: no cover (DDP, not run in CI)
             n_full = (len(starts) // self.ddp_world_size) * self.ddp_world_size
             starts = starts[:n_full]
 
@@ -898,7 +898,7 @@ class _H5BatchIterableDataset(IterableDataset):
                 )
 
         # DDP shard first
-        if self.ddp_world_size > 1:
+        if self.ddp_world_size > 1:  # pragma: no cover (DDP, not run in CI)
             starts = starts[self.ddp_rank :: self.ddp_world_size]
 
         # Then worker shard

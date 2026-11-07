@@ -9,6 +9,7 @@ Testing module for deepof.preprocess
 """
 
 import os
+import pickle
 import random
 import re
 import string
@@ -24,6 +25,9 @@ from hypothesis import strategies as st
 from deepof.data import TableDict
 import deepof.data
 import deepof.utils
+from tests.test_objects.test_objects import (
+    create_project, example_path, make_project, remove_test_folders, unique_project_name
+)
 
 
 @settings(max_examples=20, deadline=None)
@@ -54,15 +58,8 @@ def test_project_init(table_type, arena_detection, table_bodyparts, bit_precisio
     if table_type in ["slp", "analysis.h5", "npy"]:
         tables_path = os.path.join(tables_path, "SLEAP")
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", tables_path
-        ),
-        project_name=f"test_{table_type[1:]}",
+    prun = make_project(
+        table_path=example_path("test_single_topview", tables_path),
         rename_bodyparts=(None if not table_bodyparts else table_bodyparts),
         bodypart_graph=(
             "deepof_14"
@@ -70,8 +67,6 @@ def test_project_init(table_type, arena_detection, table_bodyparts, bit_precisio
             else {table_bodyparts[0]: table_bodyparts[1:]}
         ),
         arena=arena_detection,
-        video_scale="380 mm",
-        video_format=".mp4",
         table_format=table_type,
         bit_precision=bit_precision,
     )
@@ -80,16 +75,6 @@ def test_project_init(table_type, arena_detection, table_bodyparts, bit_precisio
     assert isinstance(prun.preprocess_tables(), tuple)
 
     prun = prun.create(test=True, force=True)
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_single_topview",
-            f"test_{table_type[1:]}",
-        )
-    )
-
     assert isinstance(prun, deepof.data.Coordinates)
 
     # verify correct bit precision for all created table objects
@@ -123,8 +108,6 @@ def test_project_init(table_type, arena_detection, table_bodyparts, bit_precisio
 )
 def test_rename_bodyparts(table_type, rename_len):
 
-    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
-
     # Match existing test structure for table paths
     tables_path = "Tables"
     if table_type in ["slp", "analysis.h5"]:
@@ -134,15 +117,9 @@ def test_rename_bodyparts(table_type, rename_len):
     #(The purpose of rename_bodyparts is to FIX naming errors in the table after all, not cause them)
     rename_bodyparts = [f"custom_bp_{i}" for i in range(rename_len)]
 
-    prun = deepof.data.Project(
-        project_path=base_path,
-        project_name=f"test_rename_bodyparts_{table_type}_{rename_len}",
-        video_path=os.path.join(base_path, "Videos"),
-        table_path=os.path.join(base_path, tables_path),
-        arena="circular-autodetect",
+    prun = make_project(
+        table_path=example_path("test_single_topview", tables_path),
         animal_ids="",
-        video_scale="380 mm",
-        video_format=".mp4",
         table_format=table_type,
         rename_bodyparts=rename_bodyparts,
         bodypart_graph=f"deepof_{rename_len}",
@@ -169,9 +146,7 @@ def test_rename_bodyparts(table_type, rename_len):
 )
 def test_arena_loading(partial_save_data, load_also_rois, n_rois_to_load):
 
-    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
-    video_path = os.path.join(base_path, "Videos")
-    table_path = os.path.join(base_path, "Tables")
+    base_path = example_path("test_single_topview")
 
     tmp_dir = os.path.join(base_path, "_tmp_load_arena_data")
     arena_file = os.path.join(tmp_dir, "arena_data.pkl")
@@ -181,17 +156,7 @@ def test_arena_loading(partial_save_data, load_also_rois, n_rois_to_load):
 
     try:
         # 1) Create and save arena data (file has 3 ROIs)
-        pr_raw = deepof.data.Project(
-            project_path=base_path,
-            project_name="test_get_arena_loading_save",
-            video_path=video_path,
-            table_path=table_path,
-            arena="polygonal-autodetect",
-            video_scale="380 mm",
-            video_format=".mp4",
-            table_format=".h5",
-            number_of_rois=2,
-        )
+        pr_raw = make_project(arena="polygonal-autodetect", number_of_rois=2)
         
         pr_save=pr_raw.create(force=True, test=True) # Note: test mode will result in 2 rois independent from the number chosen
 
@@ -216,17 +181,7 @@ def test_arena_loading(partial_save_data, load_also_rois, n_rois_to_load):
         if os.path.exists(out_project_dir):
             rmtree(out_project_dir)
 
-        pr_load = deepof.data.Project(
-            project_path=base_path,
-            project_name=project_name,
-            video_path=video_path,
-            table_path=table_path,
-            arena="polygonal-autodetect",
-            video_scale="380 mm",
-            video_format=".mp4",
-            table_format=".h5",
-            number_of_rois=n_rois_to_load,
-        )
+        pr_load = make_project(project_name=project_name, arena="polygonal-autodetect", number_of_rois=n_rois_to_load)
         pr_load.set_up_project_directory(debug=True)  # ensures Arena_detection/Coordinates exist
 
         got_scales, got_arena, got_rois, got_res = pr_load.get_arena(
@@ -254,129 +209,63 @@ def test_arena_loading(partial_save_data, load_also_rois, n_rois_to_load):
     finally:
         if os.path.exists(tmp_dir):
             rmtree(tmp_dir)
-        if os.path.exists(out_project_dir):
-            rmtree(out_project_dir)
 
 
 def test_start_markers():
 
-    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
-    video_path = os.path.join(base_path, "Videos")
-    table_path = os.path.join(base_path, "Tables")
-    project_name = "test_start_markers"
     keys = ['test2', 'test']
 
-    # 2) Define start markers 
+    # 2) Define start markers
     # dict[key] -> DataFrame with one row, columns = marker names, values = time strings
     marker_name = "trial_start"
     start_time_str = "00:00:01.000"  # 1 second
     start_markers = {k: pd.DataFrame({marker_name: [start_time_str]}) for k in keys}
 
-    try:
-        # 3) Create project WITH start_markers
-        coords = deepof.data.Project(
-            project_path=base_path,
-            project_name=project_name,
-            video_path=video_path,
-            table_path=table_path,
-            arena="polygonal-autodetect",
-            video_scale="380 mm",
-            video_format=".mp4",
-            table_format=".h5",
-            start_markers=start_markers,
-        ).create(force=True, test=True)
+    # 3) Create project WITH start_markers
+    coords = create_project(arena="polygonal-autodetect", start_markers=start_markers)
 
-        # 4) Validate start marker frame values
-        start_frames = coords.get_start_marker_values(marker_name, return_frames=True)
-        expected_start_frame = int(np.round(coords._frame_rate))  # 1 second * fps
+    # 4) Validate start marker frame values
+    start_frames = coords.get_start_marker_values(marker_name, return_frames=True)
+    expected_start_frame = int(np.round(coords._frame_rate))  # 1 second * fps
 
-        for k in keys:
-            assert start_frames[k] == expected_start_frame
+    for k in keys:
+        assert start_frames[k] == expected_start_frame
 
-        # 5) Validate table lengths are shortened accordingly
-        full_lengths = coords.get_table_lengths()
-        shortened_lengths = coords.get_table_lengths(start_marker=marker_name)
+    # 5) Validate table lengths are shortened accordingly
+    full_lengths = coords.get_table_lengths()
+    shortened_lengths = coords.get_table_lengths(start_marker=marker_name)
 
-        for k in keys:
-            assert shortened_lengths[k] == full_lengths[k] - expected_start_frame
-
-    finally:
-        out_dir = os.path.join(base_path, project_name)
-        if os.path.exists(out_dir):
-            rmtree(out_dir)
+    for k in keys:
+        assert shortened_lengths[k] == full_lengths[k] - expected_start_frame
 
 
 def test_project_extend():
 
-    #create a new folder with only one video and table  
-    # Define the base path
-    base_path = os.path.join('.','tests', 'test_examples')
-
-    # Create folder under the local path './tests'
-    to_extend_path = os.path.join(base_path, 'to_extend')
-    os.makedirs(to_extend_path)
-
-    # Create 'Tables' and 'Videos' folders
+    # create a new folder with only one video and table
+    to_extend_path = example_path("to_extend")
+    rmtree(to_extend_path, ignore_errors=True)  # left over from an interrupted run
     tables_path = os.path.join(to_extend_path, 'Tables')
     videos_path = os.path.join(to_extend_path, 'Videos')
     os.makedirs(tables_path)
     os.makedirs(videos_path)
 
-    # Define source file paths
-    source_table_file = os.path.join(base_path, 'test_single_topview', 'Tables', 'testDLC_h5_table.h5')
-    source_video_file = os.path.join(base_path, 'test_single_topview', 'Videos', 'testDLC_video_circular_arena.mp4')
+    try:
+        copy(example_path("test_single_topview", "Tables", "testDLC_h5_table.h5"), tables_path)
+        copy(example_path("test_single_topview", "Videos", "testDLC_video_circular_arena.mp4"), videos_path)
 
-    # Copy files to the new folders
-    copy(source_table_file, tables_path)
-    copy(source_video_file, videos_path)
-    
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "to_extend"),
-        video_path=videos_path,
-        table_path=tables_path,
-        project_name=f"test_extend",
-        rename_bodyparts=None,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format="h5",
-    )
+        video_extend = example_path("test_single_topview", "Videos")
+        table_extend = example_path("test_single_topview", "Tables")
+        prun = make_project("to_extend", video_path=videos_path, table_path=tables_path, project_name="test_extend",
+                            table_format="h5")
+        ext_prun = make_project("to_extend", video_path=video_extend, table_path=table_extend, project_name="test_extend",
+                                table_format="h5")
 
-    video_extend = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "Videos"
-    )
-    table_extend = os.path.join(
-        ".", "tests", "test_examples", "test_single_topview", "Tables"
-    )
-    ext_prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "to_extend"),
-        video_path=video_extend,
-        table_path=table_extend,
-        project_name=f"test_extend",
-        rename_bodyparts=None,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format="h5",
-    )
-
-    prun_path = os.path.join(
-        ".",
-        "tests",
-        "test_examples",
-        "to_extend",
-        "test_extend",
-    )
-
-    prun.create(test=True, force=True)
-
-    ext_prun.extend(prun_path, video_path=video_extend, table_path=table_extend)
+        prun.create(test=True, force=True)
+        ext_prun.extend(os.path.join(to_extend_path, "test_extend"), video_path=video_extend, table_path=table_extend)
+    finally:
+        rmtree(to_extend_path)
 
     # ensure that new project has all four datasets from both sources
-    
-    rmtree(prun_path)
-    rmtree(to_extend_path)
-
     assert len(prun.tables) == 1
     assert len(prun.videos) == 1
 
@@ -389,19 +278,7 @@ def test_project_extend():
 
 def test_project_properties():
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    )
+    prun = make_project()
 
     assert prun.distances == "all"
     prun.distances = "testing"
@@ -418,19 +295,7 @@ def test_project_properties():
 
 def test_project_filters():
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    ).create(force=True, test=True)
+    prun = create_project()
 
     # Update experimental conditions with mock values
     prun._exp_conditions = {
@@ -441,12 +306,6 @@ def test_project_filters():
     }
 
     coords = prun.get_coords()
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
     assert isinstance(coords.filter_id("B"), dict)
     assert isinstance(coords.filter_videos(coords.keys()), dict)
     assert isinstance(coords.filter_condition(exp_filters={"CSDS": "Control"}), dict)
@@ -462,19 +321,7 @@ def test_get_distances(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    )
+    prun = make_project()
     prun.create(force=True, test=True)
 
     tables, _ = prun.preprocess_tables()
@@ -484,12 +331,6 @@ def test_get_distances(nodes, ego):
     prun.distances = nodes
     prun.ego = ego
     prun = prun.get_distances(prun.preprocess_tables()[0])
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
     assert isinstance(prun, dict)
 
@@ -504,19 +345,7 @@ def test_get_angles(nodes, ego):
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    )
+    prun = make_project()
 
     prun.distances = nodes
     prun.ego = ego
@@ -539,17 +368,7 @@ def test_run(nodes, ego, use_numba):
     if use_numba:
         fast_implementations_threshold = 10
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
+    prun = make_project(
         table_format=".csv",
         iterative_imputation="full",
         fast_implementations_threshold=fast_implementations_threshold,
@@ -558,11 +377,6 @@ def test_run(nodes, ego, use_numba):
     prun.distances = nodes
     prun.ego = ego
     prun = prun.create(force=True, test=True)
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
 
     assert isinstance(prun, deepof.data.Coordinates)
 
@@ -588,30 +402,15 @@ def test_get_supervised_annotation(use_numba,detection_mode,bodypart_graph):
     if use_numba:
         fast_implementations_threshold = 10
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", arena_type),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Tables"
-        ),
+    prun = create_project(
+        arena_type,
         arena=detection_mode,
         bodypart_graph=bodypart_graph,
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
         fast_implementations_threshold=fast_implementations_threshold,
-    ).create(force=True, test=True)
+    )
 
     prun = prun.supervised_annotation()
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", arena_type, "deepof_project"
-        )
-    )
 
     assert isinstance(prun, deepof.data.TableDict)
     assert prun._type == "supervised"
@@ -619,20 +418,7 @@ def test_get_supervised_annotation(use_numba,detection_mode,bodypart_graph):
 
 def test_supervised_parameters():
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    ).create(force=True, test=True)
+    prun = create_project(exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"])
 
     #get and update parameters, get supervised with parameters
     params=prun.get_supervised_parameters()
@@ -646,12 +432,6 @@ def test_supervised_parameters():
     prun.reset_supervised_parameters()
     supervised_b = prun.supervised_annotation()
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
-
     #ensure that more behavior was detected with more generous parameters
     assert np.sum(supervised_a['test']['sniff-arena']) > np.sum(supervised_b['test']['sniff-arena'])
     
@@ -663,11 +443,10 @@ def test_supervised_parameters():
     ego=st.integers(min_value=0, max_value=1),
     exclude=st.one_of(st.just(tuple([""])), st.just(["Tail_tip"])),
     sampler=st.data(),
-    random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     use_numba=st.booleans(),  # intended to be so low that numba runs (10) or not
     to_video=st.booleans()
 )
-def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numba, to_video):
+def test_get_table_dicts(nodes, mode, ego, exclude, sampler, use_numba, to_video):
 
     nodes = ["all", ["Center", "Nose", "Tail_base"]][nodes]
     ego = [False, "Center", "Nose"][ego]
@@ -683,22 +462,10 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
     else:
         animal_ids = [""]
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Tables"
-        ),
-        project_name=f"deepof_project_{random_id}",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
+    prun = make_project(
+        "test_{}_topview".format(mode),
+        project_name=unique_project_name(),  # very large project mode: a new folder per example
         animal_ids=animal_ids,
-        table_format=".h5",
         exclude_bodyparts=exclude,
         exp_conditions={
             "test": pd.DataFrame({"CSDS": "test_cond"}, index=[0]),
@@ -802,16 +569,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         assert isinstance(coords.random_projection(n_components=2), tuple)
         assert isinstance(coords.pca(n_components=2), tuple)
 
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            f"deepof_project_{random_id}",
-        )
-    )
-    
+    remove_test_folders()  # the project of this example
 
     #table info
     assert all(
@@ -845,7 +603,6 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
 @given(
     mode=st.one_of(st.just("single"), st.just("multi"), st.just("madlc")),
     sampler=st.data(),
-    random_id=st.text(alphabet=string.ascii_letters, min_size=50, max_size=50),
     test_videos=st.one_of(st.just(1),st.just(["test"])),
     full_nan_table=st.booleans(),
     dist_standardize_groups=st.booleans(),
@@ -854,7 +611,7 @@ def test_get_table_dicts(nodes, mode, ego, exclude, sampler, random_id, use_numb
         st.just(64), st.just(32), st.just(None)
     ),
 )
-def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups, bit_precision):
+def test_get_graph_dataset(mode, sampler, test_videos, full_nan_table, dist_standardize_groups,speed_standardize_groups, bit_precision):
 
     if mode == "multi":
         animal_ids = ["B", "W"]
@@ -869,24 +626,7 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
     if speed_standardize_groups:
         speed_standardize="groupwise"
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Tables"
-        ),
-        project_name=f"deepof_project_{random_id}",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        animal_ids=animal_ids,
-        table_format=".h5",
-        bit_precision=bit_precision,
-    ).create(force=True, test=True)
+    prun = create_project("test_{}_topview".format(mode), animal_ids=animal_ids, bit_precision=bit_precision)
     prun._frame_rate=25
 
     if full_nan_table:
@@ -913,16 +653,6 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
         speed_standardize=speed_standardize,
     )
 
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            f"deepof_project_{random_id}",
-        )
-    )
-    
     assert isinstance(graph_dset, tuple)
     assert isinstance(adj_matrix, np.ndarray)
     assert isinstance(to_preprocess, deepof.data.TableDict)
@@ -954,40 +684,32 @@ def test_get_graph_dataset(mode, sampler, random_id, test_videos, full_nan_table
 
 def test_get_graph_dataset_angles_and_mask():
     # Angles only add a third array, the imputation mask a fourth node channel; nodes and edges stay unchanged
-    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
-    prun = deepof.data.Project(
-        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
-        project_name="deepof_project_angles", arena="circular-autodetect", video_scale="380 mm",
-        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
-    ).create(force=True, test=True)
-    try:
-        kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0)
-        plain = prun.get_graph_dataset(**kwargs)[0][0]
-        with_angles, meta_info = prun.get_graph_dataset(include_angles=True, **kwargs)[:2]
-        # Kinematics: after the angles in the third array, from the positions before alignment
-        with_kin, kin_info = prun.get_graph_dataset(include_angles=True, include_kinematics=True, **kwargs)[:2]
-        single, kin_single = prun.get_graph_dataset(include_kinematics=True, animal_id="W", **kwargs)[:2]
-        single_plain, single_info = prun.get_graph_dataset(animal_id="W", **kwargs)[:2]
-        first = sorted(prun._tables.keys())[0]
-        kinematics = deepof.data_loading.get_dt(prun.get_kinematics(), first)
-        pos = deepof.data_loading.get_dt(prun.get_coords(center="arena"), first)
-        parts = sorted({c[0] for c in pos.columns if c[0].startswith("W_")})
-        xy = np.stack([pos[[(p, "x") for p in parts]].to_numpy(), pos[[(p, "y") for p in parts]].to_numpy()], -1)
-        xy = pd.DataFrame(xy.reshape(len(xy), -1)).interpolate(limit_direction="both").to_numpy().reshape(xy.shape)
-        speed_w = np.linalg.norm(deepof.utils._savgol_derivative(xy, deepof.utils.KINEMATICS_SMOOTHING_S,
-                                                                 prun._frame_rate, 1), axis=-1)
-        with pytest.raises(ValueError, match="precomputed_tab_dict"):
-            prun.get_graph_dataset(include_kinematics=True, precomputed_tab_dict=prun.get_coords(), **kwargs)
-        # Imputation mask: a fourth node channel (binary), nodes and edges stay unchanged
-        with_mask, mask_info = prun.get_graph_dataset(include_imputation_mask=True, **kwargs)[:2]
-        bodyparts = [c[0] for c in mask_info["node_columns"] if isinstance(c, tuple) and c[1] == "x"]
-        key = list(plain.keys())[0]
-        lik = deepof.data_loading.get_dt(prun.get_quality(), key)[bodyparts].to_numpy()
-        mask = deepof.data_loading.get_dt(prun.get_imputation_mask(bodyparts), key).to_numpy()
-        prun._animal_presence_threshold = 1.0  # every animal counts as missing: everything imputed
-        all_missing = deepof.data_loading.get_dt(prun.get_imputation_mask(bodyparts), key).to_numpy()
-    finally:
-        rmtree(os.path.join(path, "deepof_project_angles"))
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"])
+    kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0)
+    plain = prun.get_graph_dataset(**kwargs)[0][0]
+    with_angles, meta_info = prun.get_graph_dataset(include_angles=True, **kwargs)[:2]
+    # Kinematics: after the angles in the third array, from the positions before alignment
+    with_kin, kin_info = prun.get_graph_dataset(include_angles=True, include_kinematics=True, **kwargs)[:2]
+    single, kin_single = prun.get_graph_dataset(include_kinematics=True, animal_id="W", **kwargs)[:2]
+    single_plain, single_info = prun.get_graph_dataset(animal_id="W", **kwargs)[:2]
+    first = sorted(prun._tables.keys())[0]
+    kinematics = deepof.data_loading.get_dt(prun.get_kinematics(), first)
+    pos = deepof.data_loading.get_dt(prun.get_coords(center="arena"), first)
+    parts = sorted({c[0] for c in pos.columns if c[0].startswith("W_")})
+    xy = np.stack([pos[[(p, "x") for p in parts]].to_numpy(), pos[[(p, "y") for p in parts]].to_numpy()], -1)
+    xy = pd.DataFrame(xy.reshape(len(xy), -1)).interpolate(limit_direction="both").to_numpy().reshape(xy.shape)
+    speed_w = np.linalg.norm(deepof.utils._savgol_derivative(xy, deepof.utils.KINEMATICS_SMOOTHING_S,
+                                                             prun._frame_rate, 1), axis=-1)
+    with pytest.raises(ValueError, match="precomputed_tab_dict"):
+        prun.get_graph_dataset(include_kinematics=True, precomputed_tab_dict=prun.get_coords(), **kwargs)
+    # Imputation mask: a fourth node channel (binary), nodes and edges stay unchanged
+    with_mask, mask_info = prun.get_graph_dataset(include_imputation_mask=True, **kwargs)[:2]
+    bodyparts = [c[0] for c in mask_info["node_columns"] if isinstance(c, tuple) and c[1] == "x"]
+    key = list(plain.keys())[0]
+    lik = deepof.data_loading.get_dt(prun.get_quality(), key)[bodyparts].to_numpy()
+    mask = deepof.data_loading.get_dt(prun.get_imputation_mask(bodyparts), key).to_numpy()
+    prun._animal_presence_threshold = 1.0  # every animal counts as missing: everything imputed
+    all_missing = deepof.data_loading.get_dt(prun.get_imputation_mask(bodyparts), key).to_numpy()
     get_dt = deepof.data_loading.get_dt
     for key in plain.keys():
         nodes, edges, angles = get_dt(with_angles[0], key)
@@ -1028,22 +750,14 @@ def test_get_graph_dataset_angles_and_mask():
 def test_get_graph_dataset_center_and_speeds():
     # A body part as center: all animals shifted and rotated together (no position in the arena, distances within and
     # between the animals unchanged); speeds from the unrotated positions, independent of position and direction
-    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
-    prun = deepof.data.Project(
-        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
-        project_name="deepof_project_center", arena="circular-autodetect", video_scale="380 mm",
-        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
-    ).create(force=True, test=True)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"])
     get_dt = deepof.data_loading.get_dt
-    try:
-        kwargs = dict(align="Spine_1", window_size=10, window_step=5, test_videos=0)
-        key = sorted(prun._tables.keys())[0]
-        tab = get_dt(prun.get_graph_dataset(center="Center", **kwargs)[3], key)
-        raw, speeds = get_dt(prun.get_coords(), key), get_dt(prun.get_coords(speed=1), key)
-        with pytest.raises(ValueError, match="Polar"):
-            prun.get_graph_dataset(center="Center", polar=True, **kwargs)
-    finally:
-        rmtree(os.path.join(path, "deepof_project_center"))
+    kwargs = dict(align="Spine_1", window_size=10, window_step=5, test_videos=0)
+    key = sorted(prun._tables.keys())[0]
+    tab = get_dt(prun.get_graph_dataset(center="Center", **kwargs)[3], key)
+    raw, speeds = get_dt(prun.get_coords(), key), get_dt(prun.get_coords(speed=1), key)
+    with pytest.raises(ValueError, match="Polar"):
+        prun.get_graph_dataset(center="Center", polar=True, **kwargs)
     assert np.nanmax(np.abs(tab[[("B_Center", "x"), ("B_Center", "y"), ("B_Spine_1", "x")]].to_numpy())) == 0
     parts = sorted({c[0] for c in raw.columns if c[1] == "x"})
 
@@ -1061,25 +775,17 @@ def test_get_graph_dataset_window_alignment_and_frame_mask():
     # align_per_window: every window shifted and rotated as a whole onto its centre frame (B_Center at 0, B_Spine_1 on
     # the y-axis there): distances within a frame and the movement between frames are those of the scaled positions;
     # one global standardization (no per-video one); body lengths only from the frames of frame_mask
-    path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
-    prun = deepof.data.Project(
-        project_path=path, video_path=os.path.join(path, "Videos"), table_path=os.path.join(path, "Tables"),
-        project_name="deepof_project_window", arena="circular-autodetect", video_scale="380 mm",
-        video_format=".mp4", animal_ids=["B", "W"], table_format=".h5",
-    ).create(force=True, test=True)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"])
     get_dt = deepof.data_loading.get_dt
-    try:
-        lengths = prun.get_table_lengths()
-        mask = {k: np.arange(n) < n // 2 for k, n in lengths.items()}
-        kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0, frame_mask=mask,
-                      dist_standardize="groupwise", speed_standardize="groupwise", coord_standardize="groupwise")
-        windows, meta, _, tabs, scaler = prun.get_graph_dataset(align_per_window=True, **kwargs)
-        with pytest.raises(ValueError, match="frame_mask"):
-            prun.get_graph_dataset(**{**kwargs, "frame_mask": {}})
-        with pytest.raises(ValueError, match="align_per_window"):
-            prun.get_graph_dataset(**{**kwargs, "coord_standardize": "per_column"}, align_per_window=True)
-    finally:
-        rmtree(os.path.join(path, "deepof_project_window"))
+    lengths = prun.get_table_lengths()
+    mask = {k: np.arange(n) < n // 2 for k, n in lengths.items()}
+    kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=0, frame_mask=mask,
+                  dist_standardize="groupwise", speed_standardize="groupwise", coord_standardize="groupwise")
+    windows, meta, _, tabs, scaler = prun.get_graph_dataset(align_per_window=True, **kwargs)
+    with pytest.raises(ValueError, match="frame_mask"):
+        prun.get_graph_dataset(**{**kwargs, "frame_mask": {}})
+    with pytest.raises(ValueError, match="align_per_window"):
+        prun.get_graph_dataset(**{**kwargs, "coord_standardize": "per_column"}, align_per_window=True)
     key = sorted(windows[0].keys())[0]
     tab = get_dt(tabs, key)
     assert scaler["body_length"][key] == deepof.utils.table_body_lengths(tab, ["B", "W"], rows=mask[key])
@@ -1190,26 +896,7 @@ def test_sample_windows_from_data(use_bin_info, N_windows_tab, return_edges, no_
 )
 def test_deep_unsupervised_embedding(table_type):
 
-    tables_path = "Tables"
-
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_multi_topview", tables_path
-        ),
-        project_name=f"test_{table_type[1:]}",
-        animal_ids=["B","W"],
-        bodypart_graph="deepof_11",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=table_type,
-    )
-
-    prun = prun.create(test=True, force=True)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"], bodypart_graph="deepof_11", table_format=table_type)
 
     (
     graph_preprocessed_coords, meta_info, adj_matrix, to_preprocess, global_scaler
@@ -1260,3 +947,91 @@ def test_rebase_duckdb_paths():
     assert (rebased, unmatched) == (1, 1)
     assert tables["A1"]["duckdb_file"] == os.path.join("/ptmp/u/proj", "Tables", "A1", "database.duckdb")
     assert tables["B"][0]["duckdb_file"] == "D:/other/database.duckdb"
+
+
+def test_subset_experiments():
+    # Keeps exactly the selected experiments in every per-experiment table, in the original order; conditions match
+    # ANY constraint (or ALL with match_all_conditions), at the video level or at the level of the animals of a video;
+    # unknown keys / condition names are ignored with a warning; the original project is unchanged
+    coords = create_project(exp_conditions={"test": pd.DataFrame({"CSDS": ["A"], "sex": ["F"]}),
+                                            "test2": pd.DataFrame({"CSDS": ["B"], "sex": ["F"]})})
+    keys = lambda c: list(c._tables.keys())
+    every = keys(coords)
+    assert keys(coords.subset_experiments()) == every
+
+    sub = coords.subset_experiments(keys=["test2"])
+    assert keys(sub) == ["test2"] and keys(coords) == every
+    for attr in ("_quality", "_scales", "_arena_params", "_distances", "_angles", "_areas", "_videos", "_exp_conditions"):
+        assert list(getattr(sub, attr).keys()) == ["test2"]
+    assert list(sub.get_coords().keys()) == ["test2"]
+    assert np.array_equal(sub.get_coords()["test2"].to_numpy(), coords.get_coords()["test2"].to_numpy(), equal_nan=True)
+
+    with pytest.warns(UserWarning, match="do not exist"):
+        assert keys(coords.subset_experiments(keys=["test", "missing"])) == ["test"]
+    assert keys(coords.subset_experiments(conditions={"CSDS": "B"})) == ["test2"]
+    assert keys(coords.subset_experiments(conditions={"CSDS": ["A"], "sex": ["F"]})) == every  # any constraint
+    assert keys(coords.subset_experiments(conditions={"CSDS": ["A"], "sex": ["F"]}, match_all_conditions=True)) == ["test"]
+    assert keys(coords.subset_experiments(keys=["test2"], conditions={"CSDS": "A"})) == every  # union with the keys
+    with pytest.warns(UserWarning, match="condition names do not exist"):
+        assert keys(coords.subset_experiments(keys=["test"], conditions={"strain": "C57"})) == ["test"]
+    with pytest.raises(ValueError, match="0 experiments"):
+        coords.subset_experiments(conditions={"CSDS": "C"})
+
+    # Animal level: a video is kept if any of its animals has an allowed value (video values are compositions)
+    coords._exp_conditions = {"test": pd.DataFrame({"CSDS": ["A+B"]}), "test2": pd.DataFrame({"CSDS": ["B"]})}
+    coords._animal_conditions = {"test": pd.DataFrame({"CSDS": ["A", "B"]}, index=["M1", "M2"]),
+                                 "test2": pd.DataFrame({"CSDS": ["B", "B"]}, index=["M1", "M2"])}
+    assert keys(coords.subset_experiments(conditions={"CSDS": "A"}, level="animal")) == ["test"]
+    assert keys(coords.subset_experiments(conditions={"CSDS": "B"}, level="animal")) == every
+    with pytest.raises(ValueError, match="0 experiments"):
+        coords.subset_experiments(conditions={"CSDS": "A"})  # video level: "A+B" is not "A"
+
+    # Without conditions only the keys count; missing condition tables are reported
+    coords._exp_conditions = {"test": pd.DataFrame({"CSDS": ["A"]})}
+    with pytest.warns(UserWarning, match="no condition table"):
+        assert keys(coords.subset_experiments(conditions={"CSDS": "A"})) == ["test"]
+    coords._exp_conditions = None
+    with pytest.warns(UserWarning, match="No experiment conditions"):
+        assert keys(coords.subset_experiments(keys=["test2"], conditions={"CSDS": "A"})) == ["test2"]
+
+
+def test_load_arena_data_formats_and_rescaling(tmp_path):
+    # Arena files as (rois, arenas, scales, resolutions) tuple or dictionary; surplus ROIs are cut to number_of_rois;
+    # files covering only some videos load those (warning), files without any video of the project are refused;
+    # new arena dimensions rescale the arenas and ROIs (in mm) so that they stay in place in pixels
+    prun = make_project(number_of_rois=1)
+    keys = list(prun.tables.keys())
+    arenas = {k: np.array([[0.0, 0.0], [100.0, 0.0], [100.0, 80.0], [0.0, 80.0]]) for k in keys}
+    scales = {k: [0, 0, 400.0, 380.0] for k in keys}
+    rois = {k: {1: np.array([[10.0, 10.0], [30.0, 10.0], [30.0, 30.0]]), 2: np.array([[5.0, 5.0], [9.0, 5.0], [9.0, 9.0]])}
+            for k in keys}
+    resolutions = {k: (640, 480) for k in keys}
+    path = tmp_path / "arena.pkl"
+    with open(path, "wb") as f:
+        pickle.dump((rois, arenas, scales, resolutions), f)
+    with pytest.warns(UserWarning, match="ROI count mismatch"):
+        loaded_rois, loaded_arenas, loaded_scales, loaded_res = prun.load_arena_data(str(path), load_also_rois=True)
+    assert all(list(loaded_rois[k]) == [1] for k in keys) and loaded_res == resolutions
+    assert prun.load_arena_data(str(path))[0] is None  # arenas only
+
+    one = keys[0]
+    with open(path, "wb") as f:
+        pickle.dump({"roi_dicts": {one: rois[one]}, "arena_params": {one: arenas[one], "other": arenas[one]},
+                     "scales": {one: scales[one], "other": scales[one]},
+                     "video_resolution": {one: (640, 480), "other": (640, 480)}}, f)
+    with pytest.warns(UserWarning, match="do not fully match"):
+        part_rois, part_arenas, part_scales, part_res = prun.load_arena_data(str(path), load_also_rois=True)
+    assert set(part_arenas) == set(keys) and len(part_arenas[keys[1]]) == 0 and part_scales[keys[1]] is None
+    assert part_rois[keys[1]] == {1: []} and part_res[keys[1]] is None
+    with open(path, "wb") as f:
+        pickle.dump({"roi_dicts": {}, "arena_params": {"other": arenas[one]}, "scales": {"other": scales[one]},
+                     "video_resolution": {}}, f)
+    with pytest.raises(KeyError):
+        prun.load_arena_data(str(path))
+
+    same = prun.adjust_scale(arenas, scales, 380.0, rois)
+    assert same[1] is arenas and same[2] is rois
+    new_scales, new_arenas, new_rois = prun.adjust_scale(arenas, {k: list(v) for k, v in scales.items()}, 760.0, rois)
+    assert all(s[-1] == 760.0 for s in new_scales.values())
+    for k in keys:  # twice the arena size in mm, the same pixels (up to rounding to whole pixels)
+        assert np.allclose(new_arenas[k], 2 * arenas[k], atol=2) and np.allclose(new_rois[k][1], 2 * rois[k][1], atol=2)

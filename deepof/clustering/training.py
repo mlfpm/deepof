@@ -145,7 +145,7 @@ def train_one_epoch_indexed(
 
         batch_idx = (x, a, idx)
 
-        if scaler is not None and use_amp and device.type == "cuda":
+        if scaler is not None and use_amp and device.type == "cuda":  # pragma: no cover (CUDA only)
             with autocast(device_type=device.type, dtype=torch.float16):
                 res = step_fn(model, batch_idx, SimpleNamespace(
                     train=True, epoch=epoch, num_epochs=num_epochs, **(ctx.__dict__ if ctx else {})
@@ -1605,7 +1605,7 @@ def _init_codebook_kmeans(
                                usage=usage)
         print(f"Codebook set to k-means centroids of {len(z)} encoder outputs (smallest code: {usage.min():.1%}, "
               f"largest: {usage.max():.1%} of the windows)")
-    if dist.is_available() and dist.is_initialized():
+    if dist.is_available() and dist.is_initialized():  # pragma: no cover (DDP, not run in CI)
         for t in (vq.codebook.data, vq.code_variance, vq.ema_count, vq.ema_sum):
             dist.broadcast(t, src=0)
 
@@ -1625,7 +1625,7 @@ def fit_VQVAE(
 ):
 
     tuning_mode=False
-    if trial is not None:
+    if trial is not None:  # pragma: no cover (optuna tuning, no caller passes trial)
         tuning_mode=True
 
     # Some setup
@@ -1683,7 +1683,7 @@ def fit_VQVAE(
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     is_main = (not is_ddp) or (rank == 0)
 
-    if is_ddp:
+    if is_ddp:  # pragma: no cover (DDP, not run in CI)
         if rank == 0:
             print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
         model = DDP(
@@ -1727,7 +1727,7 @@ def fit_VQVAE(
 
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-    if is_ddp:
+    if is_ddp:  # pragma: no cover (DDP, not run in CI)
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     optimizer = build_optimizer_generic(model, distill_head, base_lr=common_cfg.learning_rate, weight_decay=1e-4)
     scaler = GradScaler(enabled=(device.type == "cuda" and common_cfg.use_amp))
@@ -1848,7 +1848,7 @@ def fit_VQVAE(
             )
         )
         # for tuning
-        if tuning_mode:
+        if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
             max_score = score_value #if score_value>max_score else max_score
             trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
             if trial.should_prune():
@@ -1905,7 +1905,7 @@ def fit_VQVAE(
         writer.flush()
         writer.close()
 
-    if tuning_mode:
+    if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
         return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score
 
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
@@ -2027,7 +2027,7 @@ def build_prototypes(
         centroids, assignments = _kmeans(z, int(k), generator=generator)
         concentration = _prototype_concentration(z, centroids, assignments, contrastive_cfg.temperature)
         prototypes.append((centroids, assignments, concentration))
-    if dist.is_available() and dist.is_initialized():  # all ranks use the clustering of rank 0
+    if dist.is_available() and dist.is_initialized():  # pragma: no cover (DDP, not run in CI)  all ranks use the clustering of rank 0
         for tensors in prototypes:
             for t in tensors:
                 dist.broadcast(t, src=0)
@@ -2051,7 +2051,7 @@ def fit_contrastive(
 ):
     
     tuning_mode=False
-    if trial is not None:
+    if trial is not None:  # pragma: no cover (optuna tuning, no caller passes trial)
         tuning_mode=True
 
     # Some setup
@@ -2137,7 +2137,7 @@ def fit_contrastive(
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     is_main = (not is_ddp) or (rank == 0)
 
-    if is_ddp:
+    if is_ddp:  # pragma: no cover (DDP, not run in CI)
         if rank == 0:
             print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
         model = DDP(
@@ -2226,7 +2226,7 @@ def fit_contrastive(
         )
 
     distill_head = DiscriminativeHead(common_cfg.latent_dim, common_cfg.n_components).to(device)
-    if is_ddp:
+    if is_ddp:  # pragma: no cover (DDP, not run in CI)
         distill_head = DDP(distill_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
         if regression_head is not None:
             regression_head = DDP(regression_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
@@ -2239,7 +2239,7 @@ def fit_contrastive(
             a0 = torch.zeros((2, window_len, *train_loader.dataset.a_shape[1:]), device=device)
             z0, backbone0 = unwrap_dp(model)(x0, a0, return_backbone=True)
         predictive_head = PredictiveHead(backbone0.shape[1], z0.shape[1]).to(device)
-        if is_ddp:
+        if is_ddp:  # pragma: no cover (DDP, not run in CI)
             predictive_head = DDP(predictive_head, device_ids=[local_rank], output_device=local_rank,
                                   broadcast_buffers=False)
     optimizer = build_optimizer_generic(
@@ -2336,7 +2336,7 @@ def fit_contrastive(
         score_value = float("nan")
 
         # for tuning
-        if tuning_mode:
+        if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
             max_score = score_value if score_value>max_score else max_score
             trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
             if trial.should_prune():
@@ -2456,7 +2456,7 @@ def fit_contrastive(
         writer.flush()
         writer.close()
 
-    if tuning_mode:
+    if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
         return unwrap_dp(model_val), unwrap_dp(model_score), log_summary, max_score
 
     return unwrap_dp(model_val), unwrap_dp(model_score), None, log_summary
@@ -2477,7 +2477,7 @@ def fit_VADE(
 ):
     
     tuning_mode=False
-    if trial is not None:
+    if trial is not None:  # pragma: no cover (optuna tuning, no caller passes trial)
         tuning_mode=True
 
     ###############
@@ -2513,7 +2513,7 @@ def fit_VADE(
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     is_main = (not is_ddp) or (rank == 0)
 
-    if is_ddp:
+    if is_ddp:  # pragma: no cover (DDP, not run in CI)
         if rank == 0:
             print(f"Using DDP: world_size={dist.get_world_size()}, local_rank={local_rank}")
         model = DDP(
@@ -2799,7 +2799,7 @@ def fit_VADE(
             )
         )
         # for tuning
-        if tuning_mode:
+        if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
             max_score = score_value #if score_value>max_score else max_score
             trial.report(max_score, step=epoch)  # or trial.report(score_value, step=epoch)
             if trial.should_prune():
@@ -2877,7 +2877,7 @@ def fit_VADE(
         writer.flush()
         writer.close()
 
-    if tuning_mode:
+    if tuning_mode:  # pragma: no cover (optuna tuning, no caller passes trial)
         return unwrap_dp(model_val), unwrap_dp(model_score), teacher_init_model, log_summary, max_score 
 
 
@@ -3503,7 +3503,7 @@ def _augment_mask_drop(x: torch.Tensor, p: float = 0.0) -> torch.Tensor:
     return x_aug
 
 
-def _augment_full_rotation(
+def _augment_full_rotation(  # pragma: no cover (suspected unused, 2026-11)
     x: torch.Tensor,             # (B,T,N,3)
     edge_index: torch.Tensor,    # only used for plotting
     max_rot: float = 30.0,
@@ -3686,7 +3686,7 @@ def _make_augmented_view(
 
 import matplotlib.pyplot as plt
 
-def plot_mined_pairs(
+def plot_mined_pairs(  # pragma: no cover (suspected unused, 2026-11, debug plot)
     x1: torch.Tensor,                  # (B,T,N,3) view1 windows (e.g., center or aug view A)
     x2: torch.Tensor,                  # (B,T,N,3) view2 windows (e.g., aug view B)
     z1: torch.Tensor,                  # (B,D) embeddings for x1 (the same ones used in loss)

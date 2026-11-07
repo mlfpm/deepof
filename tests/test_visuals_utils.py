@@ -12,6 +12,9 @@ import os
 import string
 import random
 
+import cv2
+import pytest
+
 import numpy as np
 import pandas as pd
 from hypothesis import given
@@ -21,10 +24,11 @@ from hypothesis import reproduce_failure
 from hypothesis.extra.numpy import arrays
 from hypothesis.extra.pandas import range_indexes, columns, data_frames
 from types import SimpleNamespace
-from shutil import rmtree
 import warnings
 
 import deepof.data
+import deepof.export_video
+import deepof.utils
 import deepof.visuals_utils
 from deepof.data import TableDict
 from deepof.visuals_utils import (
@@ -47,11 +51,16 @@ from deepof.utils import (
     time_to_seconds,
 )
 from tests.test_objects.test_objects import (
-    get_soft_counts, 
-    get_supervised_tables, 
-    get_embeddings_tab_dict_instance, 
-    get_supervised_tab_dict_instance, 
-    CUSTOM_BEHAVIORS, 
+    ANIMAL_IDS,
+    TEST_CONDITIONS,
+    create_project,
+    make_project,
+    project_dir,
+    random_embeddings,
+    random_soft_counts,
+    random_supervised,
+    get_supervised_tables,
+    CUSTOM_BEHAVIORS,
     CUSTOM_BEHAVIOR_CONTEXT,
 )
 
@@ -104,21 +113,7 @@ def test_get_behavior_colors(experiment_type,named_single_mouse):
     if named_single_mouse and experiment_type == "test_single_topview":
         aid_addon = "mouse1"
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", experiment_type),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", experiment_type, "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", experiment_type, "Tables"
-        ),
-        arena="circular-autodetect",
-        exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        video_scale="380 mm",
-        animal_ids=animal_ids,
-        video_format=".mp4",
-        table_format=".h5",
-    ).create(force=True, test=True)
+    prun = create_project(experiment_type, exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"], animal_ids=animal_ids)
 
     supervised = prun.supervised_annotation(custom_behaviors=CUSTOM_BEHAVIORS, custom_behavior_context=CUSTOM_BEHAVIOR_CONTEXT)
     behaviors=list(supervised['test'].keys())
@@ -209,10 +204,7 @@ def test_filter_embeddings(keys,exp_condition):
 
     # Define a test embedding dictionary
     embeddings = {i: np.random.normal(size=(100, 10)) for i in keys}
-    soft_counts = {}
-    for i in keys:
-        counts = np.abs(np.random.normal(size=(100, 2)))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    soft_counts = random_soft_counts(keys, 100, 2, table_dict=False)
     supervised_annotations= TableDict({i: pd.DataFrame(embeddings[i]) for i in keys}, typ='supervised')
 
     embeddings, soft_counts, supervised_annotations, concat_hue = _filter_embeddings(
@@ -246,45 +238,12 @@ def test_filter_embeddings(keys,exp_condition):
 def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment_mode,minimum_number_of_positives,normalize,exp_type):
 
 
-    animal_ids = [""]
-    animal_pair=''
-    if not exp_type=="test_single_topview":
-        animal_ids=["B","W"]
-        animal_pair=('B','W')
+    prun = create_project(exp_type, animal_ids=ANIMAL_IDS[exp_type], exp_conditions=TEST_CONDITIONS)
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", exp_type),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Tables",
-        ),
-        animal_ids=animal_ids,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
-
-    # Define a test embedding dictionary
-    keys=prun._tables.keys()
-    n=100-window_size+1
-    m=10
-
-    n_behaviors=len(include_behaviors) if include_behaviors is not None else 12
-
-    embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
-    supervised_annotations=get_supervised_tab_dict_instance(keys, col_names=include_behaviors, n_min=100, n_max=100, m_min=n_behaviors, m_max=n_behaviors)
+    # Define test embeddings and supervised annotations (12 unnamed columns if no behaviors are given)
+    keys = prun._tables.keys()
+    embeddings = random_embeddings(keys, 100 - window_size + 1, 10)
+    supervised_annotations = random_supervised(keys, 100, include_behaviors if include_behaviors is not None else 12)
 
     eval=_preprocess_embedding_evaluation(
         coordinates=prun,
@@ -296,12 +255,6 @@ def test_preprocess_embedding_evaluation(include_behaviors,window_size,alignment
         minimum_number_of_positives = minimum_number_of_positives,
         normalize=normalize,
     ) 
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", exp_type, "deepof_project"
-        )
-    )
 
     # empty case: as none of the default behaviors are in our supervised behaviors, we get an empty dataframe back
     if include_behaviors is None:
@@ -355,8 +308,6 @@ def test_get_polygon_coords(template,animal_id):
         assert head.shape[1]==6
         assert body.shape[1]==6
         assert tail.shape[1]==4
-
-test_get_polygon_coords()
 
 
 @settings(max_examples=20, deadline=None)
@@ -589,29 +540,8 @@ def test_apply_rois(mode, bin_size, in_roi_criterion, invert_roi,use_numba):
     if use_numba:
         fast_implementations_threshold = 10
 
-    if mode == "multi":
-        animal_ids = ["B", "W"]
-    else:
-        animal_ids = [""]
-
-    prun = deepof.data.Project(
-        project_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode), "Tables"
-        ),
-        project_name=f"deepof_project_roi_test",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        animal_ids=animal_ids,
-        table_format=".h5",
-        fast_implementations_threshold=fast_implementations_threshold,
-    )
+    example = "test_{}_topview".format(mode)
+    prun = make_project(example, animal_ids=ANIMAL_IDS[example], fast_implementations_threshold=fast_implementations_threshold)
 
     #also use large table handling 
     if use_numba:
@@ -888,19 +818,7 @@ def test_get_square_shape_for_gridlike_plot(n):
 
 
 def test_mouse_roi_interaction():
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
-        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
-        animal_ids=["B","W"],
-        bodypart_graph="deepof_11",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions=None,
-        frame_rate=25,
-    ).create(force=True, test=True)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"], bodypart_graph="deepof_11", exp_conditions=None, frame_rate=25)
 
     roi = np.array([[158.61861862, 154.05405405],
                     [276.15615616, 152.91291291],
@@ -968,23 +886,8 @@ def test_mouse_roi_interaction():
     pd.testing.assert_frame_equal(raw_data_fov, pd.read_csv(ref_raw_e), atol=1e-9, check_like=True, check_dtype=False)
 
 
-    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
-
-
 def test_transitions():
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_multi_topview"),
-        video_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Videos"),
-        table_path=os.path.join(".", "tests", "test_examples", "test_multi_topview", "Tables"),
-        animal_ids=["B","W"],
-        bodypart_graph="deepof_11",
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions=None,
-        frame_rate=25,
-    ).create(force=True, test=True)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"], bodypart_graph="deepof_11", exp_conditions=None, frame_rate=25)
 
     # Create exp_conditions with pandas DataFrames containing "CSDS" column
     prun._exp_conditions = {
@@ -1032,8 +935,6 @@ def test_transitions():
     
     pd.testing.assert_frame_equal(result2, pd.read_csv(ref2, index_col=0), atol=1e-9, check_like=True, check_dtype=False)
 
-    rmtree(os.path.join(".", "tests", "test_examples", "test_multi_topview", "deepof_project"))
-
 
 def test_sample_bouts():
     import deepof.export_video
@@ -1044,3 +945,161 @@ def test_sample_bouts():
     assert picked.max() >= 10000  # not only the beginning of the recording
     assert np.array_equal(picked, deepof.export_video._sample_bouts(frames, 80, random_state=3))  # reproducible
     assert np.array_equal(deepof.export_video._sample_bouts(frames, np.inf), frames)
+
+
+def test_cluster_enrichment_stats():
+    # Animal-level time shares per cluster; a cluster preferred by one condition differs significantly, corrected
+    # p-values are valid probabilities for every cluster
+    rng = np.random.default_rng(0)
+    rows = []
+    for animal in range(12):
+        condition = "wt" if animal < 6 else "ko"
+        shares = [0.25] * 4 if condition == "wt" else [0.7, 0.1, 0.1, 0.1]
+        rows += [(f"m{animal}", c, condition) for c in rng.choice(4, size=300, p=shares)]
+    df = pd.DataFrame(rows, columns=["experiment_id", "Cluster", "genotype"])
+    props = deepof.visuals_utils._compute_animal_proportions(df, "genotype")
+    assert props.shape == (12, 5) and np.allclose(props[[0, 1, 2, 3]].sum(axis=1), 1)
+    p = deepof.visuals_utils.cluster_enrichment_stats(df, "genotype")
+    assert set(p) == {0, 1, 2, 3} and all(0 <= v <= 1 for v in p.values()) and p[0] < 0.05
+
+
+@given(
+    frame_rate=st.sampled_from([10, 25.0]),
+    length=st.integers(50, 2000),
+    bin_size=st.integers(1, 20),
+    step_fraction=st.sampled_from([None, 0.5, 1.0]),
+)
+def test_build_valid_multibins(frame_rate, length, bin_size, step_fraction):
+    # Fixed-size (or sliding) bins of bin_size seconds cover all frames, the last one possibly shorter; time strings
+    # give the same bins; custom bins are converted to frames, overlapping custom bins are warned about
+    coords = SimpleNamespace(_frame_rate=frame_rate)
+    bin_step = None if step_fraction is None else max(1, int(bin_size * step_fraction))
+    bins, hidden = deepof.visuals_utils.build_valid_multibins(coords, 4, length, min_bins_required=1, bin_size=bin_size,
+                                                              bin_step=bin_step)
+    size, step = int(round(bin_size * frame_rate)), int(round((bin_step or bin_size) * frame_rate))
+    assert bins[0][0] == 0 and bins[-1][1] == length - 1 and len(hidden) == len(bins) and not hidden.any()
+    assert all(b - a + 1 <= size for a, b in bins) and all(b[0] - a[0] == step for a, b in zip(bins, bins[1:]))
+    as_strings = deepof.visuals_utils.build_valid_multibins(
+        coords, 4, length, min_bins_required=1, bin_size=deepof.utils.seconds_to_time(bin_size),
+        bin_step=None if bin_step is None else deepof.utils.seconds_to_time(bin_step))[0]
+    assert as_strings == bins
+
+
+def test_build_valid_multibins_custom():
+    coords = SimpleNamespace(_frame_rate=10)
+    bins, hidden = deepof.visuals_utils.build_valid_multibins(
+        coords, 4, 1000, custom_time_bins=[[0, 9], ["00:00:01", "00:00:02"]], hide_time_bins=[False, True],
+        min_bins_required=1)
+    assert bins == [[0, 9], [10, 20]] and hidden.tolist() == [False, True]
+    with pytest.warns(UserWarning, match="overlapping"):
+        deepof.visuals_utils.build_valid_multibins(coords, 4, 1000, custom_time_bins=[[0, 20], [10, 30]],
+                                                   min_bins_required=1)
+
+
+def test_animal_level_roi_units():
+    # Pooled body parts measure every animal with the condition value, prefixed ones only their animal; fov uses the
+    # head of every animal (or of the given one); prefixed and pooled body parts can not be mixed
+    coords = SimpleNamespace(_animal_ids=["B", "W"], get_animal_conditions={
+        "v1": pd.DataFrame({"genotype": ["wt", "ko"]}, index=["B", "W"]),
+        "v2": pd.DataFrame({"genotype": ["wt", "wt"]}, index=["B", "W"]),
+    })
+    units = lambda mode, bodyparts=None, animal_id=None: deepof.visuals_utils._animal_level_roi_units(
+        coords, "genotype", ["wt", "ko"], mode, bodyparts, animal_id)
+    assert units("distance", ["Nose"]) == {
+        "wt": {"v1": [("B", ["B_Nose"])], "v2": [("B", ["B_Nose"]), ("W", ["W_Nose"])]},
+        "ko": {"v1": [("W", ["W_Nose"])]}}
+    assert units("distance", ["W_Nose", "W_Center"]) == {
+        "wt": {"v2": [("W", ["W_Nose", "W_Center"])]}, "ko": {"v1": [("W", ["W_Nose", "W_Center"])]}}
+    head = lambda a: [f"{a}_Left_ear", f"{a}_Nose", f"{a}_Right_ear"]
+    assert units("fov")["ko"] == {"v1": [("W", head("W"))]}
+    assert units("fov", animal_id="B") == {"wt": {"v1": [("B", head("B"))], "v2": [("B", head("B"))]}, "ko": {}}
+    with pytest.raises(ValueError, match="all with animal prefix"):
+        units("distance", ["B_Nose", "Nose"])
+
+
+def test_return_supervised_summary():
+    # One row per video and time bin; binary behaviors as time or as share of the bin (the same counts), continuous
+    # ones as mean and std; inside a ROI never more than overall; the table is saved in the project
+    coords = create_project("test_multi_topview", animal_ids=["B", "W"], exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
+                            exp_conditions={"test": pd.DataFrame({"CSDS": ["a"]}),
+                                            "test2": pd.DataFrame({"CSDS": ["b"]})})
+    supervised = coords.supervised_annotation()
+    summary = lambda **kw: deepof.visuals_utils._return_supervised_summary(coords, supervised, **kw)
+    frames = summary(N_time_bins=3, unit_time="frames", save_table=True)
+    shares = summary(N_time_bins=3, binary_units="fraction", save_table=False)
+    assert len(frames) == 6 and sorted(frames["bin_number"].unique()) == [0, 1, 2]
+    assert os.listdir(os.path.join(project_dir(coords), "Out_tables"))
+    behaviors = [c for c in shares.columns if c.startswith("B_") and "[" not in c]
+    timed = [f"{b} [frames]" for b in behaviors]
+    assert behaviors and ((shares[behaviors] >= 0) & (shares[behaviors] <= 1)).all().all()
+    ratio = frames[timed].to_numpy() / np.maximum(shares[behaviors].to_numpy(), 1e-12)
+    lengths = ratio[shares[behaviors].to_numpy() > 0]
+    assert np.allclose(lengths, np.round(lengths))  # frames / share = number of frames of the bin
+    assert any("_mean [" in c for c in frames.columns) and any("_std [" in c for c in frames.columns)
+    in_roi = summary(N_time_bins=3, unit_time="frames", roi_number=1, animals_in_roi=["B"], save_table=False)
+    assert (in_roi[timed].to_numpy() <= frames[timed].to_numpy() + 1e-9).all()
+
+
+def _frame_counts(folder):
+    """{file name: number of frames} of the videos in folder."""
+    counts = {}
+    for name in os.listdir(folder):
+        cap = cv2.VideoCapture(os.path.join(folder, name))
+        counts[name] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+    return counts
+
+
+def test_output_videos_per_cluster(tmp_path):
+    # Artificial soft counts with known clusters (frames 0-29: cluster 0, 30-59: cluster 1, 60-99: cluster 2): every
+    # cluster video holds exactly the frames of its cluster from the selected videos, also with a condition filter, a
+    # confidence threshold, time bins, a frame limit per video and a minimum bout duration
+    coords = create_project(exp_conditions={"test": pd.DataFrame({"CSDS": ["a"]}), "test2": pd.DataFrame({"CSDS": ["b"]})})
+    n = min(coords.get_table_lengths().values())
+    labels = np.minimum(np.arange(n) // 30, 2)
+    confidence = {"test": 0.8, "test2": 0.4}
+    soft_counts = {}
+    for key, conf in confidence.items():
+        sc = np.full((n, 3), (1 - conf) / 2, dtype=np.float32)
+        sc[np.arange(n), labels] = conf
+        soft_counts[key] = sc
+    soft_counts = deepof.data.TableDict(soft_counts, typ="soft_counts")
+    expected = np.bincount(labels, minlength=3)
+
+    def export(name, **kwargs):
+        folder = str(tmp_path / name)
+        deepof.export_video.output_videos_per_cluster(
+            coords, exp_conditions=kwargs.pop("exp_conditions", None), behavior_dict=soft_counts, behaviors=None,
+            behaviors_renamed=None, single_output_resolution=(160, 120), out_path=folder,
+            min_bout_duration=kwargs.pop("min_bout_duration", 1),
+            video_export_config=deepof.export_video.VideoExportConfig(supervised_export=False), **kwargs)
+        counts = _frame_counts(folder)
+        return [next(v for k, v in counts.items() if k.startswith(f"Behavior=Cluster_{c}_")) for c in range(3)]
+
+    assert export("all") == list(2 * expected)
+    assert export("condition", exp_conditions={"CSDS": "a"}) == list(expected)
+    assert export("confident", min_confidence=0.5) == list(expected)  # test2 is below the threshold
+    bins = {key: {"time": np.arange(40, n)} for key in confidence}
+    assert export("bins", bin_info=bins) == list(2 * np.bincount(labels[40:], minlength=3))
+    assert export("limit", frame_limit_per_video=10) == [20, 20, 20]
+    assert export("long_bouts", min_bout_duration=35) == [0, 0, 2 * expected[2]]  # only the 40 frame bouts
+
+
+def test_output_annotated_video(tmp_path):
+    # All overlays (arena, ROI, body parts, animal labels, time, counter, binary and continuous behaviors) on selected
+    # frames, written in the requested size
+    coords = create_project("test_multi_topview", animal_ids=["B", "W"], exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"])
+    supervised = coords.supervised_annotation()
+    tab = supervised["test"]
+    behaviors = [c for c in tab.columns if c.startswith("B_")][:3] + ["B_speed"]
+    config = deepof.export_video.VideoExportConfig(
+        display_video_name=True, display_time=True, display_counter=True, display_arena=True, display_markers=True,
+        display_mouse_labels=True, display_roi=1, display_loading_bar=False)
+    deepof.export_video.output_annotated_video(
+        coords, "test", tab, behaviors, video_export_config=config, frames=np.arange(5, 25), v_width=200, v_height=150,
+        out_path=str(tmp_path), behaviors_renamed=[b.upper() for b in behaviors])
+    (name, count), = _frame_counts(str(tmp_path)).items()
+    cap = cv2.VideoCapture(str(tmp_path / name))
+    size = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+    assert count == 20 and size == (200, 150)

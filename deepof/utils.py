@@ -3196,7 +3196,7 @@ def _pp_pass2_scale_and_save(
     return table_temp
     
 
-def kleinberg(
+def kleinberg(  # pragma: no cover (suspected unused, 2026-11, only used by smooth_boolean_array)
     offsets: list, s: float = 2.0, gamma: float = 1.0, n=None, T=None, k=None
 ):
     """Apply Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
@@ -3309,7 +3309,7 @@ def kleinberg(
 
 
 @nb.njit()
-def kleinberg_core_numba(
+def kleinberg_core_numba(  # pragma: no cover (suspected unused, 2026-11)
     gaps: np.array, s: np.float64, gamma: np.float64, n: int, T: np.float64, k: int
 ) -> np.array:  # pragma: no cover
     """Computation intensive core part of Kleinberg's algorithm (described in 'Bursty and Hierarchical Structure in Streams').
@@ -3381,7 +3381,7 @@ def kleinberg_core_numba(
     return q
 
 
-def smooth_boolean_array(
+def smooth_boolean_array(  # pragma: no cover (suspected unused, 2026-11, replaced by multi_step_paired_smoothing)
     a: np.array, scale: int = 1, sigma = 2.0, batch_size: int = 50000
 ) -> np.array:
     """LEGACY FILTER FOR BEHAVIORAL ANALYSIS. REPLACED BY multi_step_paired_smoothing 

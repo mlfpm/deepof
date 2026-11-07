@@ -8,9 +8,9 @@ Testing module for deepof.utils
 
 """
 
+import math
 import os
 from itertools import combinations
-from shutil import rmtree
 
 import pytest
 
@@ -30,7 +30,10 @@ from typing import Any, List, NewType, Tuple, Union
 import deepof.data
 import deepof.utils
 import deepof.arena_utils
-from tests.test_objects.test_objects import get_soft_counts, get_supervised_tables
+import deepof.conditions
+from tests.test_objects.test_objects import (
+    TEST_CONDITIONS, create_project, get_soft_counts, get_supervised_tables, make_project
+)
 
 # AUXILIARY FUNCTIONS #
 
@@ -625,21 +628,7 @@ def test_smooth_mult_trajectory(alpha, series):
 @given(mode=st.one_of(st.just("or")))
 def test_remove_outliers(mode):
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "Tables"
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".csv",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-        iterative_imputation="full",
-    ).create(force=True, test=True)
+    prun = create_project(table_format=".csv", exp_conditions=TEST_CONDITIONS, iterative_imputation="full")
 
     coords = prun.get_coords()
     lkhood = prun.get_quality()
@@ -665,41 +654,14 @@ def test_remove_outliers(mode):
                     mode=mode,
                     ).sum().sum()
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
-
     assert (high_std_sum < low_std_sum)
 
 
-def test_exp_cond_and_start_marker_loading():
-    base_path = os.path.join(".", "tests", "test_examples", "test_single_topview")
-    video_path = os.path.join(base_path, "Videos")
-    table_path = os.path.join(base_path, "Tables")
+def test_exp_cond_and_start_marker_loading(tmp_path):
+    tmp_dir = str(tmp_path)
 
-    project_name = "test_conditions_and_markers"
-    project_dir = os.path.join(base_path, project_name)
-    tmp_dir = os.path.join(base_path, "_tmp_conditions_and_markers")
-
-    if os.path.exists(project_dir):
-        rmtree(project_dir)
-    if os.path.exists(tmp_dir):
-        rmtree(tmp_dir)
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    # Create a project 
-    pr = deepof.data.Project(
-        project_path=base_path,
-        project_name=project_name,
-        video_path=video_path,
-        table_path=table_path,
-        arena="polygonal-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-    )
+    # Create a project
+    pr = make_project(arena="polygonal-autodetect")
     keys = list(pr.tables.keys())
     assert len(keys) > 0
 
@@ -756,10 +718,6 @@ def test_exp_cond_and_start_marker_loading():
     for k in keys:
         assert int(np.round(deepof.utils.time_to_seconds(start_times[k])*fps)) == expected_frame2
 
-    if os.path.exists(tmp_dir):
-        rmtree(tmp_dir)
-    if os.path.exists(project_dir):
-        rmtree(project_dir)
 
 
 def test_animal_level_exp_conditions(tmp_path):
@@ -937,21 +895,7 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
 
     path = os.path.join(".", "tests", "test_examples", arena_type, "Videos")
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", arena_type),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Tables"
-        ),
-        arena=detection_mode,
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-        iterative_imputation="partial",
-    )
+    prun = make_project(arena_type, arena=detection_mode, exp_conditions=TEST_CONDITIONS, iterative_imputation="partial")
     #get pre-defined arenas with test-setting
     coords = prun.create(force=True, test=True)
 
@@ -974,11 +918,6 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
         arena_parameters=deepof.arena_utils.extract_corners_from_arena(arena_parameters)
     arena_parameters=np.array(arena_parameters)*scaling_ratio
     
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", arena_type, "deepof_project"
-        )
-    )
     #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
     tolerance=0.1
     assert prun.video_resolution[video_key][0]<(h*(1+tolerance))
@@ -1013,30 +952,61 @@ def test_recognize_arena_and_subfunctions(detection_mode,video_key):
                     dist_min=dist
             assert dist_min<25
 
-"""
+@settings(deadline=None, max_examples=30)
 @given(
-    points=arrays(
-        dtype=int,
-        shape=st.tuples(
-            st.integers(min_value=1, max_value=1000),
-            st.just(2),
-        )
-    ),
-    pixel_len=st.integers(min_value=1, max_value=10000),
-    mm_len=st.floats(min_value=1, max_value=10000, allow_nan=False,allow_infinity=False),
+    center=st.tuples(st.floats(0, 1000), st.floats(0, 1000)),
+    radii=st.tuples(st.floats(20, 300), st.floats(20, 300)),
+    angle=st.floats(0, 180),
+    ratio=st.floats(0.1, 0.9),
+)
+def test_arena_corners_and_inner_polygon(center, radii, angle, ratio):
+    # An ellipse becomes points on the ellipse, polygons pass through; the inner polygon lies inside the outer one
+    # with the requested share of its area, the ring variant is the outer boundary followed by the inner one
+    arena_utils = deepof.arena_utils
+    corners = arena_utils.extract_corners_from_arena((center, radii, angle), num_points=50)
+    a = np.deg2rad(angle)
+    rel = corners - np.array(center)
+    x, y = rel[:, 0] * np.cos(a) + rel[:, 1] * np.sin(a), -rel[:, 0] * np.sin(a) + rel[:, 1] * np.cos(a)
+    assert corners.shape == (50, 2) and np.allclose((x / radii[0]) ** 2 + (y / radii[1]) ** 2, 1)
+    assert arena_utils.extract_corners_from_arena(corners) is corners
+    assert np.array_equal(arena_utils.extract_corners_from_arena(corners.tolist()), corners)
+    for wrong in (np.zeros((3, 3)), ((1, 2), 3, 0), "arena"):
+        with pytest.raises(TypeError):
+            arena_utils.extract_corners_from_arena(wrong)
+    assert np.isclose(arena_utils.get_first_length(corners, 2, 2), 2 * math.dist(corners[0], corners[1]))
+
+    outer = Polygon(corners)
+    inner = arena_utils.create_inner_polygon(corners, ratio)
+    assert outer.buffer(1e-6).contains(Polygon(inner)) and abs(Polygon(inner).area / outer.area - ratio) < 0.02
+    ring = arena_utils.create_inner_polygon(corners, ratio, return_inner=False)
+    boundary = np.array(outer.exterior.coords[:-1])
+    assert np.array_equal(ring[:len(boundary)], boundary) and len(ring) == len(boundary) + len(inner) + 2
+    assert arena_utils.create_inner_polygon(corners, 0.0).size == 0
+    assert arena_utils.create_inner_polygon(corners, 0.0, return_inner=False) is corners
+
+
+@given(
+    points=arrays(np.int64, st.tuples(st.integers(3, 20), st.just(2)), elements=st.integers(0, 2000)),
+    pixel_len=st.integers(100, 2000),
+    mm_len=st.floats(100, 1000),
 )
 def test_arena_scale_conversions(points, pixel_len, mm_len):
-
-    arena_params={'key1':points,'key2':2*points}
-    roi_dicts={'key1':{1:points},'key2':{1:2*points}}
-    scales={'key1':(None,None,pixel_len,mm_len),'key2':(None,None,pixel_len,mm_len)}
-    arena_params_vgl=deepof.arena_utils._scale_arenas_to_pixel(deepof.arena_utils._scale_arenas_to_mm(arena_params, scales), scales)
-    roi_dicts_vgl=deepof.arena_utils._scale_rois_to_pixel(deepof.arena_utils._scale_rois_to_mm(roi_dicts, scales), scales)
-    for key in arena_params.keys():
-        assert (arena_params[key]==arena_params_vgl[key]).all()
-    for key in roi_dicts_vgl.keys():
-        assert (roi_dicts[key][1]==roi_dicts_vgl[key][1]).all()
-"""
+    # pixel -> mm -> pixel gives the original pixels; ellipses come back as polygons, empty arenas / ROIs stay empty
+    arena_utils = deepof.arena_utils
+    scales = {key: (0, 0, pixel_len, mm_len) for key in ("a", "b", "c")}
+    arenas = {"a": points, "b": ((100.0, 120.0), (50.0, 40.0), 30.0), "c": []}
+    in_mm = arena_utils._scale_arenas_to_mm(arenas, scales)
+    assert np.allclose(in_mm["a"], points * mm_len / pixel_len) and in_mm["c"] == []
+    back = arena_utils._scale_arenas_to_pixel(in_mm, scales)
+    assert np.array_equal(back["a"], points) and back["b"].shape == (100, 2) and back["c"] == []
+    rois = {"a": {1: points, 2: points[:3]}, "b": {1: []}}
+    rois_back = arena_utils._scale_rois_to_pixel(arena_utils._scale_rois_to_mm(rois, scales), scales)
+    assert np.array_equal(rois_back["a"][1], points) and np.array_equal(rois_back["a"][2], points[:3])
+    assert rois_back["b"] == {1: []}
+    with pytest.raises(ValueError):
+        arena_utils._scale_arenas_to_mm({"a": "polygon"}, scales)
+    with pytest.raises(ValueError):
+        arena_utils._scale_arenas_to_pixel({"a": [1, 2]}, scales)
 
 @settings(deadline=None, max_examples=3)
 @given(
@@ -1053,30 +1023,10 @@ def test_detection_modes(detection_mode):
 
     path = os.path.join(".", "tests", "test_examples", arena_type, "Videos")
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", arena_type),
-        video_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Videos"
-        ),
-        table_path=os.path.join(
-            ".", "tests", "test_examples", arena_type, "Tables"
-        ),
-        arena=detection_mode,
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-        iterative_imputation="partial",
-    )
+    prun = make_project(arena_type, arena=detection_mode, exp_conditions=TEST_CONDITIONS, iterative_imputation="partial")
     #get arenas with actual detection
     coords = prun.create(force=True, test="detect_arena")
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", arena_type, "deepof_project"
-        )
-    )
-    
     #check if height and width of detected arenas are identical to expected arenas within 10% tolarance
     assert len(coords._arena_params)==2
     assert isinstance(coords._arena_params['test'], np.ndarray)
@@ -1431,3 +1381,74 @@ def test_kinematics_features():
     c, s = np.cos(np.pi / 4), np.sin(np.pi / 4)
     turned = deepof.utils.kinematics_features({"A": a @ np.array([[c, s], [-s, c]])}, {"A": parts}, fps)[0]
     assert np.allclose(turned, deepof.utils.kinematics_features({"A": a}, {"A": parts}, fps)[0], atol=1e-6)
+
+
+def test_scale_table_standardize_and_inter_scale():
+    # Distances between two mice are divided by the mean, geometric mean or overall body length (inter_scale); on its
+    # own (standardize=True) a table is standardized per column or per group (one scaler for all columns of the group)
+    rng = np.random.default_rng(0)
+    tab = {}
+    for aid, size in (("B", 1.0), ("W", 4.0)):
+        nose = rng.normal(0, 5, (60, 2))
+        for bp, pos in (("Nose", nose), ("Tail_base", nose + [0, size])):
+            tab[(f"{aid}_{bp}", "x")], tab[(f"{aid}_{bp}", "y")] = pos[:, 0], pos[:, 1]
+            tab[f"{aid}_{bp}"] = np.abs(rng.normal(0, 3 if aid == "B" else 30, 60))  # speed
+    tab[("B_Nose", "B_Tail_base")] = np.full(60, 1.0)
+    tab[("B_Nose", "W_Nose")] = rng.uniform(5, 50, 60)
+    tab = pd.DataFrame(np.column_stack(list(tab.values())), columns=pd.Index(list(tab), tupleize_cols=False))
+    scale = lambda **kw: deepof.utils.scale_table(tab, animal_ids=["B", "W"], log_distances=False, **kw)
+    between = tab[("B_Nose", "W_Nose")]
+    for inter_scale, length in (("mean", 2.5), ("geom", 2.0), ("global", 2.5)):
+        assert np.allclose(scale(standardize=False, inter_scale=inter_scale)[("B_Nose", "W_Nose")], between / length)
+
+    speeds = [c for c in tab.columns if isinstance(c, str)]
+    out = scale(standardize=True)
+    assert np.allclose(out[speeds].mean(), 0) and np.allclose(out[speeds].std(ddof=0), 1)
+    group = scale(standardize=True, speed_standardize="groupwise")[speeds].to_numpy()
+    assert np.isclose(group.mean(), 0) and np.isclose(group.std(), 1) and not np.allclose(group.std(axis=0), 1)
+    minmax = scale(scale="minmax", standardize=True, dist_standardize="groupwise", coord_standardize=None)
+    assert np.allclose(minmax[speeds].min(), 0) and np.allclose(minmax[speeds].max(), 1)
+    assert np.allclose(minmax[("B_Nose", "x")], scale(standardize=False)[("B_Nose", "x")])  # coordinates untouched
+
+    assert scale(scale=False).equals(tab)
+    for wrong in ({"scale": "zscore"}, {"dist_standardize": "all"}, {"speed_standardize": "all"},
+                  {"coord_standardize": "all"}, {"inter_scale": "max"}):
+        with pytest.raises(ValueError):
+            scale(**wrong)
+
+
+def test_animal_condition_checks_and_labels():
+    # Malformed condition tables are refused with all problems listed; a directed pair column takes the actor's
+    # condition, an undirected one the composition; condition labels over all videos; pooled behavior names; the
+    # comparison design of two groups
+    cond = deepof.conditions
+    table = pd.DataFrame({"experiment_id": ["v1", "v1", "v2", "v2"], "Animal_ID": ["B", "W", "B", "W"],
+                          "genotype": ["wt", "ko", "wt", "wt"]})
+    animal_conditions = cond.animal_conditions_from_table(table, ["B", "W"])
+    assert list(animal_conditions["v1"]["genotype"]) == ["wt", "ko"]
+    with pytest.raises(ValueError, match="animal_id"):
+        cond.animal_conditions_from_table(table.drop(columns="Animal_ID"))
+    with pytest.raises(ValueError, match="No condition columns"):
+        cond.animal_conditions_from_table(table[["experiment_id", "Animal_ID"]])
+    bad = table.copy()
+    bad.loc[1, "Animal_ID"] = "B"
+    bad.loc[2, "genotype"] = " "
+    with pytest.raises(ValueError) as error:
+        cond.animal_conditions_from_table(bad)
+    assert "more than once" in str(error.value) and "non-empty strings" in str(error.value)
+
+    columns = ["B_W_nose2nose", "B_W_nose2body", "W_B_nose2body", "B_climb-arena", "W_climb-arena", "huddle"]
+    labels = lambda cols: cond.condition_labels_of_columns(cols, columns, animal_conditions, "genotype", ["B", "W"])
+    assert labels(["B_W_nose2body"]) == ["wt"] and labels(["W_B_nose2body"]) == ["ko", "wt"]
+    assert labels(["B_W_nose2nose"]) == ["ko+wt", "wt"] and labels(["huddle"]) == ["ko+wt", "wt"]
+    with pytest.raises(ValueError, match="pair_policy"):
+        cond.column_condition_labels("B_W_nose2nose", columns, animal_conditions["v1"]["genotype"], ["B", "W"],
+                                     pair_policy="any")
+    assert cond.pooled_behavior_names(columns, ["B", "W"]) == ["nose2nose", "nose2body", "climb-arena", "huddle"]
+
+    video = {k: pd.DataFrame({"genotype": [cond.compose_condition(df["genotype"])]}) for k, df in animal_conditions.items()}
+    assert cond.video_conditions(video) == {"v1": "ko+wt", "v2": "wt"}
+    assert cond.video_conditions(video, animal_conditions=animal_conditions, condition_source="W") == {"v1": "ko", "v2": "wt"}
+    groups = pd.DataFrame({"exp_id": ["v1", "v2", "v1", "v3"], "exp condition": ["a", "a", "b", "b"]})
+    assert cond.comparison_design(groups, "a", "b") == "mixed"
+    assert cond.comparison_design(groups[groups["exp_id"] != "v1"], "a", "b") == "independent"

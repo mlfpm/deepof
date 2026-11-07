@@ -302,7 +302,7 @@ class ContrastiveCfg:
 # MULTIPROCESSING
 #################
 
-def ddp_init_if_needed(use_ddp: bool = True, backend: str = "nccl"):
+def ddp_init_if_needed(use_ddp: bool = True, backend: str = "nccl"):  # pragma: no cover (DDP, not run in CI)
     import os
     import torch
     import torch.distributed as dist

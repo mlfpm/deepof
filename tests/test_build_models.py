@@ -10,7 +10,8 @@ Testing module for deepof.clustering
 
 import os
 import random
-from shutil import rmtree
+
+import h5py
 
 import networkx as nx
 import deepof.clustering.dataset
@@ -31,8 +32,10 @@ from types import SimpleNamespace
 from typing import Optional
 
 import deepof.clustering
+import deepof.clustering.censNetConv_pt
 import deepof.clustering.models_new
 import deepof.clustering.model_utils_new
+from tests.test_objects.test_objects import output_dir, patched
 
 
 ###################
@@ -67,8 +70,9 @@ class TinyIndexedDataset(Dataset):
         seed: Optional[int] = None,
         block_shuffle: bool = False,
         permute_within_block: bool = False,
+        ddp_shard: bool = True,
     ) -> DataLoader:
-        """Minimal loader compatible with extract_latents / fit_nodes_pca."""
+        """Minimal loader compatible with extract_latents / fit_nodes_pca / build_prototypes."""
         if persistent_workers is None:
             persistent_workers = num_workers > 0
 
@@ -156,10 +160,7 @@ def test_embedding_model_fittingPT(model_name):
     - dispatches to the correct fit function based on model_name
     Does not actually run training (fit functions are mocked, separate tests are used for that)
     """
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "embedding_model_fittingPT_test")
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("embedding_model_fittingPT_test")
 
     # Build minimal preprocessed_object that BatchDictDataset can consume
     # We'll mock BatchDictDataset to avoid actual HDF5 creation
@@ -171,11 +172,6 @@ def test_embedding_model_fittingPT(model_name):
     # Dummy return values (model_val, model_score, extra, log_summary)
     dummy_model = torch.nn.Linear(4, 4)
     dummy_return = (dummy_model, dummy_model, None, {"dummy": True})
-
-    orig_fit_vade = deepof.clustering.training.fit_VADE
-    orig_fit_vqvae = deepof.clustering.training.fit_VQVAE
-    orig_fit_contrastive = deepof.clustering.training.fit_contrastive
-    orig_batch_dataset = deepof.clustering.dataset.BatchDictDataset
 
     def fake_fit_vade(train_loader, val_loader, preprocessed_train, adjacency_matrix,
                         common_cfg, teacher_cfg, vade_cfg, writer, device):
@@ -237,29 +233,28 @@ def test_embedding_model_fittingPT(model_name):
 
     FakeBatchDictDataset._instance_count = 0
 
-    deepof.clustering.training.fit_VADE = fake_fit_vade
-    deepof.clustering.training.fit_VQVAE = fake_fit_vqvae
-    deepof.clustering.training.fit_contrastive = fake_fit_contrastive
-    deepof.clustering.dataset.BatchDictDataset = FakeBatchDictDataset
-
-    # Call the outer function
-    result = deepof.clustering.training.train_deepof_model(
-        preprocessed_object=({}, {}),  # empty dicts, mocked anyway
-        adjacency_matrix=adjacency,
-        meta_info=meta_info,
-        encoder_type="recurrent",
-        batch_size=2,
-        latent_dim=4,
-        epochs=1,
-        n_clusters=4,
-        output_path=out_path,
-        log_history=True,
-        save_weights=False,
-        model_name=model_name,
-        use_turtle_teacher=False,
-        num_workers=0,
-        use_amp=False,
-    )
+    # Call the outer function, with the fit functions and the dataset faked
+    with patched((deepof.clustering.training, "fit_VADE", fake_fit_vade),
+                 (deepof.clustering.training, "fit_VQVAE", fake_fit_vqvae),
+                 (deepof.clustering.training, "fit_contrastive", fake_fit_contrastive),
+                 (deepof.clustering.dataset, "BatchDictDataset", FakeBatchDictDataset)):
+        result = deepof.clustering.training.train_deepof_model(
+            preprocessed_object=({}, {}),  # empty dicts, mocked anyway
+            adjacency_matrix=adjacency,
+            meta_info=meta_info,
+            encoder_type="recurrent",
+            batch_size=2,
+            latent_dim=4,
+            epochs=1,
+            n_clusters=4,
+            output_path=out_path,
+            log_history=True,
+            save_weights=False,
+            model_name=model_name,
+            use_turtle_teacher=False,
+            num_workers=0,
+            use_amp=False,
+        )
 
     # Should return the dummy tuple
     assert result == dummy_return
@@ -271,17 +266,6 @@ def test_embedding_model_fittingPT(model_name):
             assert len(fit_calls[other_name]) == 0
 
     # Verify the call received properly constructed objects
-    call = fit_calls[model_name][0]
-
-    # Loaders should be DataLoader instances
-    assert isinstance(call["train_loader"], DataLoader)
-    assert isinstance(call["val_loader"], DataLoader)
-
-    # Adjacency should be passed through
-    assert call["adjacency_matrix"] is adjacency
-
-    # Configs should be properly typed
-   # Verify the call received properly constructed objects
     call = fit_calls[model_name][0]
 
     # Loaders should be DataLoader instances
@@ -332,15 +316,6 @@ def test_embedding_model_fittingPT(model_name):
 
     # Clean up writer
     call["writer"].close()
-
-
-    deepof.clustering.training.fit_VADE = orig_fit_vade
-    deepof.clustering.training.fit_VQVAE = orig_fit_vqvae
-    deepof.clustering.training.fit_contrastive = orig_fit_contrastive
-    deepof.clustering.dataset.BatchDictDataset = orig_batch_dataset
-
-    if os.path.exists(out_path):
-        rmtree(out_path)
 
 
 @settings(deadline=None)
@@ -476,11 +451,7 @@ def test_compute_vade_specific_diagnostics():
     include_angles_view=st.booleans(),
 )  
 def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,include_angles_view):
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "test_maybe_build_turtle_teacher")
-   
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("test_maybe_build_turtle_teacher")
     #include_angles_view=False
 
     #train_loader, val_loader, adjacency, _ = _tiny_setup(return_angles=include_angles_view)
@@ -535,18 +506,12 @@ def test_maybe_build_turtle_teacher(include_nodes_view,include_edges_view,includ
     assert tau_star.shape == (4,6)
     # Turtle teacher is actualyl a Turtle teacher
     assert type(teacher)==deepof.clustering.teacher_model.TurtleTeacher
-   
-    if os.path.exists(out_path):
-        rmtree(out_path)
 
 
 @settings(deadline=None)
 @given(model_name=st.sampled_from(["vade", "vqvae", "contrastive"]))
 def test_save_and_load_model(model_name):
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "save_load_model_test")
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("save_load_model_test")
 
     device = torch.device("cpu")
     ckpt_path = os.path.join(out_path, f"model_{model_name}.pt")
@@ -748,18 +713,11 @@ def test_save_and_load_model(model_name):
     assert "ckpt_contains: bundle" in info_text
 
 
-    if os.path.exists(out_path):
-        rmtree(out_path)
-
 
 @settings(deadline=None)
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
 def test_fit_vade_smoke(use_teacher,encoder_type):
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
-
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("fit_contrastive_smoke")
 
     train_loader, val_loader, adjacency, _ = _tiny_setup()
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
@@ -792,19 +750,18 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
         seen_apply_distill.append(bool(getattr(ctx.criterion, "lambda_scheduler", False)))
         return orig_step(model, batch, ctx)
 
-    deepof.clustering.training.step_vade = wrapped_step_vade
-
-    model_val, model_score, _, _ = deepof.clustering.training.fit_VADE(
-        train_loader=train_loader,
-        val_loader=val_loader,
-        preprocessed_train={},
-        adjacency_matrix=adjacency,
-        common_cfg=common_cfg,
-        teacher_cfg=teacher_cfg,
-        vade_cfg=vade_cfg,
-        writer=writer,
-        device=torch.device("cpu"),
-    )
+    with patched((deepof.clustering.training, "step_vade", wrapped_step_vade)):
+        model_val, model_score, _, _ = deepof.clustering.training.fit_VADE(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            preprocessed_train={},
+            adjacency_matrix=adjacency,
+            common_cfg=common_cfg,
+            teacher_cfg=teacher_cfg,
+            vade_cfg=vade_cfg,
+            writer=writer,
+            device=torch.device("cpu"),
+        )
 
     assert isinstance(model_val, deepof.clustering.models_new.VaDEPT)
     assert isinstance(model_score, deepof.clustering.models_new.VaDEPT)
@@ -817,11 +774,6 @@ def test_fit_vade_smoke(use_teacher,encoder_type):
     else:
         assert not any(seen_apply_distill)
     assert (True in seen_apply_distill) == use_teacher
-
-
-    deepof.clustering.training.step_vade = orig_step
-    if os.path.exists(out_path):
-        rmtree(out_path)
 
 
 @settings(deadline=None)
@@ -999,11 +951,7 @@ def test_vade_backward_step_with_teacher(use_gnn, encoder_type, latent_dim, n_co
 @settings(deadline=None)
 @given(use_teacher=st.booleans(), encoder_type=st.sampled_from(["recurrent", "TCN", "transformer"]))
 def test_fit_vqvae_smoke(use_teacher, encoder_type):
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
-   
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("fit_contrastive_smoke")
 
     train_loader, val_loader, adjacency, _ = _tiny_setup()
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
@@ -1021,7 +969,6 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
 
 
     seen_apply_distill = []
-    diag_calls = {"n": 0}
 
     orig_step = deepof.clustering.training.step_vqvae_distill
     orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
@@ -1038,23 +985,18 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
         tau_star = torch.softmax(torch.randn(n, k), dim=-1)
         return object(), tau_star, None
 
-    def fake_diag(**kwargs):
-        diag_calls["n"] += 1
-        return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
-
-    deepof.clustering.training.step_vqvae_distill = wrapped_step_vqvae
-    deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
-
-    model_val, model_score, _, logs = deepof.clustering.training.fit_VQVAE(
-        train_loader=train_loader,
-        val_loader=val_loader,
-        preprocessed_train={},
-        adjacency_matrix=adjacency,
-        common_cfg=common_cfg,
-        teacher_cfg=teacher_cfg,
-        writer=writer,
-        device=torch.device("cpu"),
-    )
+    with patched((deepof.clustering.training, "step_vqvae_distill", wrapped_step_vqvae),
+                 (deepof.clustering.teacher_model, "maybe_build_turtle_teacher", fake_teacher)):
+        model_val, model_score, _, logs = deepof.clustering.training.fit_VQVAE(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            preprocessed_train={},
+            adjacency_matrix=adjacency,
+            common_cfg=common_cfg,
+            teacher_cfg=teacher_cfg,
+            writer=writer,
+            device=torch.device("cpu"),
+        )
 
     assert isinstance(model_val, deepof.clustering.models_new.VQVAEPT)
     assert isinstance(model_score, deepof.clustering.models_new.VQVAEPT)
@@ -1065,11 +1007,6 @@ def test_fit_vqvae_smoke(use_teacher, encoder_type):
     if use_teacher:
         assert len(logs["train"]['total_loss']) == n_epochs
 
-
-    deepof.clustering.training.step_vqvae_distill = orig_step
-    deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
-    if os.path.exists(out_path):
-        rmtree(out_path)
 
 
 @settings(deadline=None)
@@ -1349,11 +1286,7 @@ def test_vade_log_var_bound_keeps_gradient():
     contrastive_window=st.sampled_from([12, 20]),
 )
 def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "fit_contrastive_smoke")
-
-    if os.path.exists(out_path):
-        rmtree(out_path)
-    os.makedirs(out_path, exist_ok=True)
+    out_path = output_dir("fit_contrastive_smoke")
 
     train_loader, val_loader, adjacency, meta_info = _tiny_setup()
     common_cfg = deepof.clustering.model_utils_new.CommonFitCfg()
@@ -1372,7 +1305,6 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
     contrastive_cfg.contrastive_window = contrastive_window
 
     seen_apply_distill = []
-    diag_calls = {"n": 0}
 
     orig_step = deepof.clustering.training.step_contrastive_distill
     orig_teacher = deepof.clustering.teacher_model.maybe_build_turtle_teacher
@@ -1389,25 +1321,20 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
         tau_star = torch.softmax(torch.randn(n, k), dim=-1)
         return object(), tau_star, None
 
-    def fake_diag(**kwargs):
-        diag_calls["n"] += 1
-        return {"alignment_score": 0.7, "conf_norm": 0.4, "bal_norm": 0.6}
-
-    deepof.clustering.training.step_contrastive_distill = wrapped_step_contrastive
-    deepof.clustering.teacher_model.maybe_build_turtle_teacher = fake_teacher
-
-    model_val, model_score, _, logs = deepof.clustering.training.fit_contrastive(
-        train_loader=train_loader,
-        val_loader=val_loader,
-        preprocessed_train={},
-        adjacency_matrix=adjacency,
-        meta_info=meta_info,
-        common_cfg=common_cfg,
-        teacher_cfg=teacher_cfg,
-        contrastive_cfg=contrastive_cfg,
-        writer=writer,
-        device=torch.device("cpu"),
-    )
+    with patched((deepof.clustering.training, "step_contrastive_distill", wrapped_step_contrastive),
+                 (deepof.clustering.teacher_model, "maybe_build_turtle_teacher", fake_teacher)):
+        model_val, model_score, _, logs = deepof.clustering.training.fit_contrastive(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            preprocessed_train={},
+            adjacency_matrix=adjacency,
+            meta_info=meta_info,
+            common_cfg=common_cfg,
+            teacher_cfg=teacher_cfg,
+            contrastive_cfg=contrastive_cfg,
+            writer=writer,
+            device=torch.device("cpu"),
+        )
 
     assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
     assert isinstance(model_score, deepof.clustering.models_new.ContrastivePT)
@@ -1420,11 +1347,6 @@ def test_fit_contrastive_smoke(use_teacher, encoder_type, contrastive_window):
         assert len(logs["train"]['total_loss']) == n_epochs
 
 
-    deepof.clustering.training.step_contrastive_distill = orig_step
-    deepof.clustering.teacher_model.maybe_build_turtle_teacher = orig_teacher
-    if os.path.exists(out_path):
-        rmtree(out_path)
-
 
 @pytest.mark.parametrize("model_name", ["contrastive", "vqvae"])
 def test_continue_training(model_name, monkeypatch):
@@ -1432,9 +1354,7 @@ def test_continue_training(model_name, monkeypatch):
     # the checkpoint
     training = deepof.clustering.training
     utils = deepof.clustering.model_utils_new
-    out_path = os.path.join(".", "tests", "test_examples", "test_data", "continue_training_test")
-    if os.path.exists(out_path):
-        rmtree(out_path)
+    out_path = output_dir("continue_training_test")
     step_name = "step_contrastive_distill" if model_name == "contrastive" else "step_vqvae_distill"
     orig_step = getattr(training, step_name)
 
@@ -1485,8 +1405,6 @@ def test_continue_training(model_name, monkeypatch):
     )
     assert state is None and common_cfg.latent_dim == 4 and common_cfg.model_name == model_name
     assert model_name == "vqvae" or contrastive_cfg.contrastive_window == 12
-    if os.path.exists(out_path):
-        rmtree(out_path)
 
 
 @settings(deadline=None)
@@ -2176,3 +2094,213 @@ def test_build_prototypes(tmp_path):
     backbone_dim = model(x[:, 6:18], a[:, 6:18], return_backbone=True)[1].shape[1]  # default proto_space
     assert [tuple(p[0].shape) for p in prototypes] == [(2, backbone_dim), (4, backbone_dim)]
     assert all(p[1].shape == (12,) and p[1].max() < p[0].shape[0] and p[2].shape == (p[0].shape[0],) for p in prototypes)
+
+
+def _fit_contrastive(out_path, epochs=2, teacher=None, **contrastive):
+    utils = deepof.clustering.model_utils_new
+    train_loader, val_loader, adjacency, meta_info = _tiny_setup()
+    common_cfg = utils.CommonFitCfg(output_path=out_path, epochs=epochs, latent_dim=4, n_components=4, diag_max_batches=1,
+                                    encoder_type="TCN")
+    return deepof.clustering.training.fit_contrastive(
+        train_loader=train_loader, val_loader=val_loader, preprocessed_train={}, adjacency_matrix=adjacency,
+        meta_info=meta_info, common_cfg=common_cfg, teacher_cfg=teacher or utils.TurtleTeacherCfg(),
+        contrastive_cfg=utils.ContrastiveCfg(contrastive_window=12, **contrastive), writer=DummyWriter(),
+        device=torch.device("cpu"),
+    )
+
+
+def test_fit_contrastive_options(tmp_path):
+    # All optional parts of the contrastive training at once: regression teacher (nodes view), predictive loss,
+    # prototypes from the first epoch and negative augmentations (single animal: block shuffle only)
+    teacher = deepof.clustering.model_utils_new.TurtleTeacherCfg(
+        use_turtle_teacher=True, teacher_mode="regression", pca_nodes_dim=2)
+    model_val, _, _, logs = _fit_contrastive(
+        str(tmp_path), teacher=teacher, predictive_weight=1.0, proto_weight=0.5, proto_clusters=(2,),
+        proto_warmup_epochs=0, shift_view_mode="neg_aug", neg_aug_types=("shuffle",), neg_aug_block_len=(3, 4))
+    assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
+    assert len(logs["train"]["total_loss"]) == 2 and all(torch.isfinite(torch.tensor(logs["train"]["total_loss"])))
+
+    # Negative augmentations that can not work are refused before the training
+    with pytest.raises(ValueError, match="two or more animals"):
+        _fit_contrastive(str(tmp_path), shift_view_mode="neg_aug", neg_aug_types=("offset",))
+    with pytest.raises(ValueError, match="shorter than"):
+        _fit_contrastive(str(tmp_path), shift_view_mode="neg_aug", neg_aug_types=("shuffle",), neg_aug_block_len=(12, 14))
+    with pytest.warns(UserWarning, match="Single animal"):
+        _fit_contrastive(str(tmp_path), epochs=1, shift_view_mode="neg_aug", neg_aug_types=("shuffle", "rotation"),
+                         neg_aug_block_len=(3, 4))
+
+
+def test_vicreg_loss():
+    # Invariance: mean squared difference of the views; variance: hinge on the per-dimension standard deviation (a
+    # collapsed batch costs about gamma per view); covariance: off-diagonal covariances (correlated dimensions)
+    torch.manual_seed(0)
+    vicreg = deepof.clustering.losses.vicreg_loss_pt
+    z = torch.randn(256, 4) * 2
+    total, inv, var, cov = vicreg(z, z + 1, lambda_inv=2.0, lambda_var=3.0, lambda_cov=0.5)
+    assert np.isclose(inv.item(), 1.0) and var.item() == 0
+    assert np.isclose(total.item(), 2.0 * inv.item() + 3.0 * var.item() + 0.5 * cov.item())
+    collapsed = torch.ones(8, 4)
+    assert np.isclose(vicreg(collapsed, collapsed)[2].item(), 2 * (1 - 1e-2), atol=1e-4)
+    correlated = torch.cat([z[:, :1], z[:, :1], z[:, 2:]], dim=1)
+    assert vicreg(correlated, correlated)[3] > 10 * cov
+
+    # In the training step its terms are logged instead of the similarities
+    T, N, window_len = 24, 11, 12
+    model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
+    model.loss_function = "vicreg"
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len,
+                                                                         contrastive_loss_function="vicreg"),
+        rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1,
+    )
+    result = deepof.clustering.training.step_contrastive_distill(
+        model, (torch.randn(4, T, N, 3), torch.randn(4, T, N, 1), torch.arange(4)), ctx)
+    result.loss.backward()
+    assert torch.isfinite(result.loss) and result.logs["pos_similarity"] is None
+    assert all(result.logs[k] >= 0 for k in ("invariance_loss", "variance_loss", "covariance_loss"))
+
+
+def test_continue_training_errors(tmp_path):
+    # Unknown modes, missing checkpoints, checkpoints without the needed content and VaDE are refused before training
+    training, utils = deepof.clustering.training, deepof.clustering.model_utils_new
+    assert training._continue_mode(None) is False and training._continue_mode("Resume") == "resume"
+    with pytest.raises(ValueError, match="continue_training"):
+        training._continue_mode("restart")
+    with pytest.raises(ValueError, match="existing checkpoint"):
+        training.train_deepof_model(preprocessed_object=({}, {}), adjacency_matrix=np.eye(4), meta_info={},
+                                    model_name="contrastive", continue_training="resume",
+                                    pretrained=str(tmp_path / "missing.pth"))
+    path = str(tmp_path / "checkpoint.pth")
+    for content, mode, error, match in [
+        ({}, "distill", ValueError, "rebuild_spec"),
+        ({"rebuild_spec": {"model_name": "VaDE"}}, "distill", NotImplementedError, "VaDE"),
+        ({"rebuild_spec": {"model_name": "contrastive"}}, "resume", ValueError, "last_model.pth"),
+    ]:
+        torch.save(content, path)
+        with pytest.raises(error, match=match):
+            training._load_continue_checkpoint(mode, utils.CommonFitCfg(pretrained=path), utils.TurtleTeacherCfg(),
+                                               utils.VaDECfg(), utils.ContrastiveCfg(), torch.device("cpu"))
+
+
+def test_dataset_labels_angles_bootstrap_and_rebuild_reasons(tmp_path, capsys, monkeypatch):
+    # Labels and angles are stored and returned with their windows (also permuted within a batch); the block bootstrap
+    # draws full batches from within one video (i.i.d. batches after a global shuffle); workers get disjoint batches;
+    # every stored setting that changed is a reason to rebuild
+    dataset = deepof.clustering.dataset
+    rng = np.random.default_rng(0)
+    T, N, lengths = 5, 2, [12, 9]
+    pre = {f"v{i}": (rng.normal(size=(n, T, 3 * N)).astype(np.float32), rng.normal(size=(n, T, N)).astype(np.float32),
+                     rng.uniform(size=(n, T, 3)).astype(np.float32)) for i, n in enumerate(lengths)}
+    labels = {k: (np.arange(len(v[0]))[:, None] + 100 * i).astype(np.float32) for i, (k, v) in enumerate(pre.items())}
+    build = lambda folder, **kw: dataset.BatchDictDataset(pre, str(tmp_path / folder), "train_", return_angles=True,
+                                                         supervised_dict=labels, h5_chunk_len=4, **kw)
+    ds = build("plain")
+    x, a, ang, y, idx, vid = ds[13]  # second video, second window
+    assert y.item() == 101 and vid == 1 and idx.item() == 13
+    assert np.allclose(ang.numpy().squeeze(-1), pre["v1"][2][1])
+
+    loader = ds.make_loader(batch_size=4, shuffle=True, block_shuffle=True, permute_within_block=True, seed=1)
+    seen = []
+    for x, a, ang, y, idx, vid in loader:
+        rows = [ds[int(i)] for i in idx]
+        assert torch.equal(x, torch.stack([r[0] for r in rows])) and torch.equal(y, torch.stack([r[3] for r in rows]))
+        assert torch.equal(ang, torch.stack([r[2] for r in rows]))
+        seen += idx.tolist()
+    assert sorted(seen) == list(range(sum(lengths)))
+
+    bootstrap = list(ds.make_loader(batch_size=4, shuffle=True, seed=0, bootstrap_training=True, bootstrap_block_len=8))
+    assert len(bootstrap) == len(loader) and all(len(b[0]) == 4 and len(set(b[-1].tolist())) == 1 for b in bootstrap)
+    shuffled = build("shuffled", global_shuffle=True)
+    iid = list(shuffled.make_loader(batch_size=4, shuffle=True, seed=0, bootstrap_training=True, bootstrap_block_len=8))
+    assert len(iid) == len(loader) and "i.i.d. batch bootstrap" in capsys.readouterr().out
+
+    iterable = ds.make_loader(batch_size=4, shuffle=False).dataset
+    monkeypatch.setattr(dataset, "get_worker_info", lambda: SimpleNamespace(id=1, num_workers=2))
+    assert [b[-2][0].item() for b in iterable] == [4, 12, 20]  # every second batch
+    monkeypatch.undo()
+
+    reason = lambda d: d._does_need_build(pre)[1]
+    ds = build("reasons")  # never read through __getitem__ (memory-mapped files can not be changed on Windows)
+    assert reason(ds) == "Dataset up-to-date"
+    changed = build("reasons", read_only=True)  # read_only takes the stored settings: change them afterwards
+    changed.global_shuffle = True
+    assert reason(changed) == "global_shuffle setting changed"
+    shuffled.shuffle_seed = 3
+    assert reason(shuffled) == "shuffle_seed changed"
+    np.save(ds.idx_path, np.zeros(sum(lengths), dtype=np.int64))
+    assert reason(ds) == "Video count mismatch"
+    with h5py.File(ds.y_path, "a") as f:
+        del f["y"]
+        f.create_dataset("y", data=np.zeros((sum(lengths), 2), np.float32))
+    assert reason(ds) == "Y shape mismatch"
+    with h5py.File(ds.X_path, "a") as f:
+        f.attrs["build_complete"] = False
+    assert reason(ds) == "Previous build incomplete"
+    open(ds.a_path, "wb").write(b"not an hdf5 file")
+    with h5py.File(ds.X_path, "a") as f:
+        f.attrs["build_complete"] = True
+    assert reason(ds).startswith("Error reading files")
+    with h5py.File(ds.X_path, "w"):
+        pass
+    assert reason(ds) == "Corrupted X_data.h5"
+    os.remove(ds.y_path)
+    assert reason(ds) == "Missing: train_y_data.h5"
+
+
+def test_censnet_graph_ops():
+    # D^-1 (A + I) has rows summing to 1, the symmetric filter is symmetric with eigenvalues in [-1, 1]; a batch gives
+    # the graphs' own filters; dense and sparse transposes agree; a single unbatched graph propagates as well;
+    # unsupported inputs are refused
+    cn = deepof.clustering.censNetConv_pt
+    torch.manual_seed(0)
+    A = torch.triu((torch.rand(6, 6) > 0.4).float(), 1)
+    A = A + A.T
+    walk = cn.gcn_filter_pt(A, symmetric=False)
+    sym = cn.gcn_filter_pt(A)
+    assert torch.allclose(walk.sum(dim=1), torch.ones(6)) and torch.allclose(sym, sym.T)
+    assert torch.linalg.eigvalsh(sym).abs().max() <= 1 + 1e-5
+    other = torch.ones(6, 6) - torch.eye(6)
+    batch = cn.gcn_filter_pt(torch.stack([A, other]), symmetric=False)
+    assert torch.allclose(batch[0], walk) and torch.allclose(batch[1], cn.gcn_filter_pt(other, symmetric=False))
+    with pytest.raises(ValueError):
+        cn.gcn_filter_pt(torch.zeros(2, 2, 2, 2))
+
+    x = torch.randn(3, 4)
+    assert torch.equal(cn.transpose_pt(x), x.T) and torch.equal(cn.transpose_pt(x.to_sparse()).to_dense(), x.T)
+    assert torch.equal(cn.reshape_pt(x, (2, 6)), x.reshape(2, 6))
+    with pytest.raises(NotImplementedError):
+        cn.transpose_pt(torch.randn(2, 3, 4).to_sparse(), (0, 2, 1))
+    with pytest.raises(NotImplementedError):
+        cn.reshape_pt(x.to_sparse(), (2, 6))
+    with pytest.raises(ValueError):
+        cn.modal_dot_pt(torch.randn(2, 2, 2, 2), torch.randn(2, 2))
+    with pytest.raises(NotImplementedError):
+        cn.CensNetConvPT(4, 2, activation="tanh")
+
+    layer = cn.CensNetConvPT(4, 2, activation=None, use_bias=False)
+    ops = cn.CensNetConvPT.preprocess(A)
+    n_edges = ops[2].shape[-1]
+    nodes, edges = layer((torch.randn(6, 3), ops, torch.randn(n_edges, 5)))
+    assert nodes.shape == (6, 4) and edges.shape == (n_edges, 2) and layer.node_bias is None
+    kernel = layer.node_kernel
+    layer._build((6, 3), (n_edges, 5))  # built once, the parameters stay
+    assert layer.node_kernel is kernel
+
+
+def test_norm_and_activation_choices():
+    # Every supported normalization keeps the shape (group norm: 8 groups if possible), every activation name maps to
+    # its module; unknown normalizations are refused
+    models = deepof.clustering.models_new
+    x = torch.randn(4, 16, 10)
+    for kind, cls in [(None, torch.nn.Identity), ("bn", torch.nn.BatchNorm1d), ("ln", models.ChannelLayerNorm1d),
+                      ("gn", torch.nn.GroupNorm)]:
+        norm = models._make_norm(kind, 16)
+        assert isinstance(norm, cls) and norm(x).shape == x.shape
+    assert models._make_norm("gn", 16).num_groups == 8 and models._make_norm("gn", 12).num_groups == 1
+    with pytest.raises(ValueError):
+        models._make_norm("instance", 16)
+    for name, cls in [(None, torch.nn.ReLU), ("GELU", torch.nn.GELU), ("tanh", torch.nn.Tanh), ("leaky_relu", torch.nn.LeakyReLU),
+                      ("linear", torch.nn.Identity)]:
+        assert isinstance(models._act(name), cls)

@@ -69,7 +69,7 @@ def display_message(message: List[str]): # pragma: no cover
         cv2.destroyWindow(window_name)
 
 
-def confirm_action(message: str, window_name: str = "Confirm"):
+def confirm_action(message: str, window_name: str = "Confirm"):  # pragma: no cover (opens an OpenCV window)
     """
     Displays a confirmation dialog using OpenCV with multi-line support.
     
@@ -136,7 +136,7 @@ class DropdownConfig:
     text_color: Tuple[int, int, int] = (0, 0, 0)
     main_box_color: Tuple[int, int, int] = (220, 220, 220)  # Light gray background
 
-class DropdownUI:
+class DropdownUI:  # pragma: no cover (opens an OpenCV window)
     def __init__(self, window_name: str, options: List[str], window_width: int, hidden: bool = False, config: DropdownConfig = None):
         self.window_name = window_name
         self.options = options
@@ -369,8 +369,9 @@ class SkeletonEditor:
         elif key in (ord("d"), 8):  # d or Backspace: undo
             self._undo()
         elif self.mode == "place" and key == ord("s") and self.current is not None:
-            self.skipped.add(self.current)
-            self.history.append(("skip", self.current))
+            name = self.current  # current moves on to the next body part once this one is skipped
+            self.skipped.add(name)
+            self.history.append(("skip", name))
             if self.current is None:
                 self._finish_placement()
         elif self.mode == "center" and key in (ord("y"), ord("n")):

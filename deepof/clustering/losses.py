@@ -199,7 +199,7 @@ def nce_loss_pt_old2(
     mean_neg = neg.mean()
     return loss, mean_sim, mean_neg, None
 
-def nce_loss_pt_old(history, future, similarity, temperature=0.1):
+def nce_loss_pt_old(history, future, similarity, temperature=0.1):  # pragma: no cover (suspected unused, 2026-11)
     """
     Standard NCE loss 
     """
@@ -213,7 +213,7 @@ def nce_loss_pt_old(history, future, similarity, temperature=0.1):
     return loss, mean_pos, mean_neg, None
 
 
-def nce_loss_pt_alt(
+def nce_loss_pt_alt(  # pragma: no cover (suspected unused, 2026-11)
     history: torch.Tensor,
     future: torch.Tensor,
     similarity: callable,
@@ -377,7 +377,7 @@ def nce_loss_pt(
     return loss, mean_pos, mean_neg, debug
 
 
-def nce_loss_pt_alt2(
+def nce_loss_pt_alt2(  # pragma: no cover (suspected unused, 2026-11)
     history: torch.Tensor,
     future: torch.Tensor,
     shift: torch.Tensor,

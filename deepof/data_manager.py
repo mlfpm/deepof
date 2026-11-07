@@ -27,7 +27,7 @@ def sanitize_table_name(table_name: str) -> str:
         table_name = f"t_{table_name}"
     return re.sub(r"[^a-zA-Z0-9_]", "_", table_name)
 
-def suppress_warnings(warn_messages):
+def suppress_warnings(warn_messages):  # pragma: no cover (suspected unused, 2026-11)
     def decorator(fn):
         def wrapper(*args, **kwargs):
             with warnings.catch_warnings(record=True) as caught_warnings:
@@ -364,7 +364,7 @@ class DataManager:
             values = ", ".join(map(str, load_range))
             return f'SELECT {quoted_cols} FROM "{table_name}" WHERE rowid IN ({values})'
 
-    def _restore_index(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _restore_index(self, df: pd.DataFrame) -> pd.DataFrame:  # pragma: no cover (suspected unused, 2026-11)
         for col in df.columns:
             if col == "index" or (isinstance(col, tuple) and "index" in col):
                 try:

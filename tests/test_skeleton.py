@@ -1,7 +1,6 @@
 """Testing module for deepof.skeleton (custom labelling schemes)."""
 
 import os
-from shutil import rmtree
 
 import networkx as nx
 import numpy as np
@@ -13,6 +12,7 @@ import deepof.data
 import deepof.skeleton
 import deepof.utils
 from deepof.config import SCHEMA_POSITIONS
+from tests.test_objects.test_objects import example_path, make_project, project_dir
 
 # CalMS21-like labelling scheme: neck lies between the deepOF ears and Spine_1, hips on the deepOF back hips
 CALMS = {"nose": [425, 80], "left_ear": [372, 191], "right_ear": [467, 190], "neck": [421, 210],
@@ -71,37 +71,27 @@ def test_rename_track_bps_exact():
 
 
 def test_custom_skeleton_project():
-    base_path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
+    base_path = example_path("test_multi_topview")
     # deepOF tables relabelled: Spine_1 / Spine_2 become unknown points, the tables' Center is not used but derived
     positions = {n: list(p) for n, p in SCHEMA_POSITIONS.items() if n != "Center"}
     positions.update({"Spine_1": [440, 260], "Spine_2": [440, 360]})
     skeleton = {"positions": positions, "derive": {"Center": ["Spine_1", "Spine_2", "Left_bhip", "Right_bhip"]}}
     source_tables = {f: open(os.path.join(base_path, "Tables", f), "rb").read() for f in os.listdir(os.path.join(base_path, "Tables"))}
-    project_name = "test_custom_skeleton"
-    rmtree(os.path.join(base_path, project_name), ignore_errors=True)
-    prun = deepof.data.Project(
-        project_path=base_path, project_name=project_name,
-        video_path=os.path.join(base_path, "Videos"), table_path=os.path.join(base_path, "Tables"),
-        arena="circular-autodetect", video_scale="380 mm", video_format=".mp4", table_format=".h5",
-        animal_ids=["B", "W"], bodypart_graph=skeleton, exclude_bodyparts=[],
-    )
+    prun = make_project("test_multi_topview", animal_ids=["B", "W"], bodypart_graph=skeleton, exclude_bodyparts=[])
     with pytest.warns(UserWarning, match="replaced by the derived points"):
         coords = prun.create(force=True, test=True)
-    try:
-        tab = coords.get_coords()[list(coords._tables)[0]]
-        bodyparts = [c[0] for c in tab.columns]
-        assert {"B_Spine_1_extra", "B_Spine_2_extra", "B_Center", "W_Center"} <= set(bodyparts)
-        assert bodyparts.count("B_Center") == 2  # x and y, the tables' own Center was replaced
-        # mean of the body parts, apart from frames changed by outlier removal / imputation of single points
-        mean = tab[[(f"B_{p}", "x") for p in ["Spine_1_extra", "Spine_2_extra", "Left_bhip", "Right_bhip"]]].mean(axis=1)
-        assert (tab[("B_Center", "x")] - mean).abs().median() < 1e-3
-        assert all(open(os.path.join(base_path, "Tables", f), "rb").read() == content for f, content in source_tables.items())
-        assert os.path.exists(os.path.join(base_path, project_name, "skeleton.json"))
-        with pytest.raises(NotImplementedError):
-            coords.supervised_annotation()
-        coords.get_graph_dataset(center="Center", align="Nose", window_size=5, window_step=5, test_videos=0)
-    finally:
-        rmtree(os.path.join(base_path, project_name), ignore_errors=True)
+    tab = coords.get_coords()[list(coords._tables)[0]]
+    bodyparts = [c[0] for c in tab.columns]
+    assert {"B_Spine_1_extra", "B_Spine_2_extra", "B_Center", "W_Center"} <= set(bodyparts)
+    assert bodyparts.count("B_Center") == 2  # x and y, the tables' own Center was replaced
+    # mean of the body parts, apart from frames changed by outlier removal / imputation of single points
+    mean = tab[[(f"B_{p}", "x") for p in ["Spine_1_extra", "Spine_2_extra", "Left_bhip", "Right_bhip"]]].mean(axis=1)
+    assert (tab[("B_Center", "x")] - mean).abs().median() < 1e-3
+    assert all(open(os.path.join(base_path, "Tables", f), "rb").read() == content for f, content in source_tables.items())
+    assert os.path.exists(os.path.join(project_dir(coords), "skeleton.json"))
+    with pytest.raises(NotImplementedError):
+        coords.supervised_annotation()
+    coords.get_graph_dataset(center="Center", align="Nose", window_size=5, window_step=5, test_videos=0)
 
 
 def test_skeleton_editor():
@@ -133,17 +123,86 @@ def test_skeleton_editor():
 
 
 def test_graph_bodyparts_missing_in_tables():
-    base_path = os.path.join(".", "tests", "test_examples", "test_multi_topview")
-    project_name = "test_graph_missing_bodypart"
-    prun = deepof.data.Project(
-        project_path=base_path, project_name=project_name,
-        video_path=os.path.join(base_path, "Videos"), table_path=os.path.join(base_path, "Tables"),
-        arena="circular-autodetect", video_scale="380 mm", video_format=".mp4", table_format=".h5",
-        animal_ids=["B", "W"], bodypart_graph={"Nose": ["Left_ear", "Paw"], "Left_ear": ["Center"]},
+    prun = make_project(
+        "test_multi_topview", animal_ids=["B", "W"], bodypart_graph={"Nose": ["Left_ear", "Paw"], "Left_ear": ["Center"]}
     )
-    try:
-        # raised while loading the first table, before arena detection
-        with pytest.raises(ValueError, match="B_Paw"):
-            prun.create(force=True, test=True)
-    finally:
-        rmtree(os.path.join(base_path, project_name), ignore_errors=True)
+    # raised while loading the first table, before arena detection
+    with pytest.raises(ValueError, match="B_Paw"):
+        prun.create(force=True, test=True)
+
+
+def test_skeleton_editor_states():
+    # Clicks into the panel are ignored; "n" answers the Center question, undo returns to it and then to the placement;
+    # a body part away from the mouse is an extra one; removing all edges of a body part gives a graph that can not be
+    # saved (undo restores the last edge); a click far from all body parts deselects; every mode renders; a complete
+    # skeleton with a Center starts in the review
+    editor = deepof.custom_gui.SkeletonEditor(list(CALMS) + ["pole"])
+    click = lambda pos: editor.handle_click(int(pos[0] * editor.scale), int(pos[1] * editor.scale))
+    width = editor.schema.shape[1] + editor.PANEL_WIDTH
+    editor.handle_key(ord("d"))  # nothing to undo
+    editor.handle_click(editor.schema.shape[1] + 5, 10)
+    assert editor.positions == {} and editor.render().shape[1] == width
+    editor.handle_key(ord("h"))
+    assert not editor.show_help and editor.handle_key(27) == "cancel"
+    for name in CALMS:
+        click(CALMS[name])
+    editor.handle_key(ord("s"))
+    assert editor.mode == "center" and editor.render().shape[1] == width
+    editor.handle_key(ord("n"))
+    assert editor.mode == "review" and editor.derive == {}
+    editor.handle_key(ord("d"))
+    assert editor.mode == "center"
+    editor.handle_key(ord("d"))
+    assert editor.mode == "place" and editor.current == "pole"
+    click((150, 300))
+    assert editor.mode == "center" and editor.to_skeleton()["graph"] is None
+    editor.handle_key(ord("y"))
+    assert editor.mode == "review" and "pole" in editor.graph
+
+    positions = editor._resolve()["positions"]
+    neighbours = list(editor.graph["pole"])
+    for other in neighbours:
+        click(positions["pole"])
+        assert editor.selected == "pole" and editor.render().shape[1] == width
+        click(positions[other])
+    assert editor.graph.degree("pole") == 0 and editor.handle_key(ord("q")) is None
+    assert editor.render().shape[1] == width
+    editor.handle_key(ord("d"))
+    assert editor.graph.has_edge("pole", neighbours[-1]) and editor.handle_key(ord("q")) == "done"
+    click(positions["pole"])
+    click((positions["pole"][0], positions["pole"][1] + 300))
+    assert editor.selected is None
+
+    full = deepof.custom_gui.SkeletonEditor(
+        ["a", "b", "c"], {"positions": {"a": SCHEMA_POSITIONS["Nose"], "b": SCHEMA_POSITIONS["Center"],
+                                        "c": SCHEMA_POSITIONS["Tail_base"]}})
+    assert full.mode == "review" and full.render().shape[1] == full.schema.shape[1] + full.PANEL_WIDTH
+
+
+def test_skeleton_files_and_invalid_skeletons(tmp_path):
+    # Skeletons are loaded from JSON files (presets and plain graphs are no skeletons); invalid entries, body parts,
+    # derived points and graphs are refused; a table without derived points stays as it is
+    skeleton = {"positions": CALMS, "derive": {"Center": ["neck", "left_hip", "right_hip", "tail_base"]}}
+    path = str(tmp_path / "skeleton.json")
+    deepof.skeleton.save_skeleton(skeleton, path)
+    assert deepof.skeleton.load_skeleton(path) == skeleton and deepof.skeleton.load_skeleton("deepof_14") is None
+    assert deepof.skeleton.match_to_deepof({}) == {}
+
+    resolve = deepof.skeleton.resolve_skeleton
+    for wrong, names, match in [
+        ({"positions": CALMS, "edges": {}}, None, "Unknown skeleton entries"),
+        ({"positions": CALMS}, ["nose"], "not part of the tracking body parts"),
+        ({"positions": CALMS, "derive": {"Nose": ["neck", "tail_base"]}}, None, "already exists"),
+        ({"positions": CALMS, "derive": {"Center": ["neck", "paw"]}}, None, "unknown body parts"),
+        ({"positions": CALMS, "graph": {"nose": ["paw"]}}, None, "not part of the skeleton"),
+        ({"positions": {"nose": CALMS["nose"]}, "rename": {"tail": "tail"}}, ["nose", "tail"], "no position"),
+    ]:
+        with pytest.raises(ValueError, match=match):
+            resolve(wrong, names)
+    # a table body part named like a derived point, but not placed, is replaced by it
+    resolved = resolve({"positions": {n: list(p) for n, p in SCHEMA_POSITIONS.items() if n != "Center"},
+                        "derive": {"Center": ["Spine_1", "Spine_2"]}}, list(SCHEMA_POSITIONS))
+    assert resolved["derive"] == {"Center": ["Spine_1", "Spine_2"]} and "Center" in resolved["graph"]
+    table = pd.DataFrame([[1.0, 2.0]], columns=pd.MultiIndex.from_tuples([("Nose", "x"), ("Nose", "y")],
+                                                                        names=["bodyparts", "coords"]))
+    assert deepof.skeleton.add_derived_points(table, {}, [""]) == (table, [])

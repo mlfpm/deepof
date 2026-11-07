@@ -3703,7 +3703,7 @@ def cluster_enrichment_stats_animal_level(
     return {cl: p_corr for cl, p_corr in zip(tested_clusters, p_corrected)}
 
 
-def chi_square_cluster_composition(df_no_outliers: pd.DataFrame, factor: str) -> None:
+def chi_square_cluster_composition(df_no_outliers: pd.DataFrame, factor: str) -> None:  # pragma: no cover (suspected unused, 2026-11)
     """
     Chi-square test + Cramér's V for overall cluster × factor association,
     then per-cluster tests of in-cluster vs. out-of-cluster proportions.
@@ -3727,7 +3727,7 @@ def chi_square_cluster_composition(df_no_outliers: pd.DataFrame, factor: str) ->
     return p_dict
 
 #"""
-def permanova_cluster_factor(
+def permanova_cluster_factor(  # pragma: no cover (suspected unused, 2026-11, its skbio import is commented out)
     df_no_outliers: pd.DataFrame,
     behaviour_cols: list,
     factor: str,

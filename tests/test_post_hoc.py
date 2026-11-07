@@ -8,7 +8,6 @@ Testing module for deepof.post_hoc
 
 """
 import os
-from shutil import rmtree
 from typing import Optional, Any, Dict, NewType, Union, Tuple, List
 
 import numpy as np
@@ -22,82 +21,10 @@ from hypothesis.extra import numpy as hnp
 import deepof.data
 import deepof.post_hoc
 from deepof.data import TableDict
-from tests.test_objects.test_objects import get_embeddings_tab_dict_instance, get_soft_counts_tab_dict_instance
+from tests.test_objects.test_objects import (
+    ANIMAL_IDS, TEST_CONDITIONS, create_project, random_embeddings, random_soft_counts
+)
 
-
-''' test for old implementation
-@settings(deadline=None, max_examples=25)
-@given(states=st.sampled_from([3, 2, "aic", "bic"]))
-def test_get_contrastive_soft_counts(states):
-
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_single_topview",
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_single_topview",
-            "Tables",
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        animal_ids=[""],
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
-
-    # Define a test embedding dictionary
-    embeddings = {i: np.random.normal(size=(100, 10)) for i in range(10)}
-
-    embeddings=deepof.data.TableDict(
-        embeddings,
-        typ="unsupervised_embedding",
-        table_path=None, 
-        exp_conditions=None,
-    )
-    
-    if isinstance(states, int):
-        # Define a test matrix of soft counts
-        soft_counts = {}
-        for i in range(10):
-            counts = np.abs(np.random.normal(size=(100, states)))
-            soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-    else:
-        soft_counts = None
-
-    soft_counts_out = deepof.post_hoc.get_contrastive_soft_counts(
-        prun,
-        embeddings,
-        states=states,
-        min_states=2,
-        max_states=3,
-        soft_counts=soft_counts,
-    )
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
-    
-    # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
-    assert all([np.sum(soft_counts_out[key])==100.0 for key in soft_counts_out.keys()])
-
-    # Check if Ideal states determined based on different modes stay consistent 
-    # (i.e. this is what the tests currently return, if these results based on the same inputs change, we have an issue)
-    if states != "bic" and states != 2:
-        assert all([np.shape(soft_counts_out[key])[1]==3 for key in soft_counts_out.keys()])
-    else:
-        assert all([np.shape(soft_counts_out[key])[1]==2 for key in soft_counts_out.keys()])
-'''
 
 
 @settings(deadline=None, max_examples=25)
@@ -113,47 +40,17 @@ def test_get_contrastive_soft_counts(states):
 def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates):
 
 
-    animal_ids = [""]
-    animal_pair=''
-    if not exp_type=="test_single_topview":
-        animal_ids=["B","W"]
-        animal_pair=('B','W')
+    animal_ids = ANIMAL_IDS[exp_type]
+    animal_pair = "" if exp_type == "test_single_topview" else ("B", "W")
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", exp_type),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Tables",
-        ),
-        animal_ids=animal_ids,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-        frame_rate=25,
-    ).create(force=True, test=True)
+    prun = create_project(exp_type, animal_ids=animal_ids, exp_conditions=TEST_CONDITIONS, frame_rate=25)
 
     supervised_annotations= None
     if use_supervised_gates:
         supervised_annotations = prun.supervised_annotation()
 
     # Define a test embedding dictionary
-    keys=prun._tables.keys()
-    n=100-window_size+1
-    m=10
-
-    embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
+    embeddings = random_embeddings(prun._tables.keys(), 100 - window_size + 1, 10)
 
     if use_supervised_gates:
         gate_edges = None
@@ -185,12 +82,6 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
         sample_size=sample_size,
     )
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", exp_type, "deepof_project"
-        )
-    )
-    
     # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
     assert all([np.round(np.sum(soft_counts_out[animal_pair][key]))==100-window_size+1 for key in soft_counts_out[animal_pair].keys()])
 
@@ -212,51 +103,24 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     use_supervised_gates=st.booleans(),
     macro_method=st.sampled_from(["pcca", "kmeans"]),
     split_factor=st.sampled_from([None, 1.0]),
+    decode_method=st.sampled_from(["viterbi_macro", "forward_backward_macro", "viterbi_micro",
+                                   "forward_backward_micro", "lookup"]),
+    temporal_smooth_win=st.sampled_from([None, 3]),
     )
-def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates, macro_method, split_factor):
+def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window_size,distance_bp,sample_size,exp_type, use_supervised_gates, macro_method, split_factor, decode_method, temporal_smooth_win):
 
 
-    animal_ids = [""]
-    animal_pair=''
-    if not exp_type=="test_single_topview":
-        animal_ids=["B","W"]
-        animal_pair=('B','W')
+    animal_ids = ANIMAL_IDS[exp_type]
+    animal_pair = "" if exp_type == "test_single_topview" else ("B", "W")
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", exp_type),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Tables",
-        ),
-        animal_ids=animal_ids,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-        frame_rate=25,
-    ).create(force=True, test=True)
+    prun = create_project(exp_type, animal_ids=animal_ids, exp_conditions=TEST_CONDITIONS, frame_rate=25)
 
     supervised_annotations= None
     if use_supervised_gates:
         supervised_annotations = prun.supervised_annotation()
 
     # Define a test embedding dictionary
-    keys=prun._tables.keys()
-    n=100-window_size+1
-    m=10
-
-    embeddings=get_embeddings_tab_dict_instance(keys, n_min=n, n_max=n, m_min=m, m_max=m)
+    embeddings = random_embeddings(prun._tables.keys(), 100 - window_size + 1, 10)
 
     if use_supervised_gates:
         gate_edges = None
@@ -289,14 +153,10 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         sample_size=sample_size,
         macro_method=macro_method,
         split_factor=split_factor,
+        decode_method=decode_method,
+        temporal_smooth_win=temporal_smooth_win,
     )
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", exp_type, "deepof_project"
-        )
-    )
-    
     # For each key, soft_counts have 100 rows (since embeddings have 100 rows), rows should sum to 1 each, so 100 rows sum to 100
     assert all([np.round(np.sum(soft_counts_out[animal_pair][key]))==100-window_size+1 for key in soft_counts_out[animal_pair].keys()])
 
@@ -351,58 +211,24 @@ def test_regroup_macrostates_crisp_share():
 @settings(deadline=None, max_examples=25)
 @given(
     m_soft_counts=st.integers(5,10),
-    n_rows=st.integers(50,100),
     quality_threshold=st.floats(0,1,allow_nan=False),
     frac_bps_below=st.floats(0,1,allow_nan=False),
     window_size=st.integers(5,10),
     exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
     )
-def test_add_chaos_gates(m_soft_counts,n_rows,quality_threshold,frac_bps_below,window_size,exp_type):
+def test_add_chaos_gates(m_soft_counts,quality_threshold,frac_bps_below,window_size,exp_type):
 
-    animal_ids = [""]
-    animal_pair=''
-    if not exp_type=="test_single_topview":
-        animal_ids=["B","W"]
-        animal_pair=('B','W')
+    prun = create_project(exp_type, animal_ids=ANIMAL_IDS[exp_type], exp_conditions=TEST_CONDITIONS)
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", exp_type),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            exp_type,
-            "Tables",
-        ),
-        animal_ids=animal_ids,
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
-
-    # Define a test embedding dictionary
-    keys=prun._tables.keys()
-    m_soft_counts
-    n_rows=100-window_size+1
-    soft_counts={}
-    soft_counts_chaos={}
-
-    soft_counts['behavior_combinations']=get_soft_counts_tab_dict_instance(keys, n_min=n_rows, n_max=n_rows, m_min=m_soft_counts, m_max=m_soft_counts)
+    keys = prun._tables.keys()
+    n_rows = 100 - window_size + 1
+    soft_counts = {"behavior_combinations": random_soft_counts(keys, n_rows, m_soft_counts)}
 
     supervised_chaos=deepof.post_hoc.get_supervised_chaos(coordinates=prun,quality_threshold=quality_threshold,frac_bps_below=frac_bps_below)
     m_soft_counts_chaos=supervised_chaos[list(keys)[0]].shape[1]
-    #double dict length to similate no-chaos/chaos gating split
-    soft_counts_chaos['behavior_combinations']=get_soft_counts_tab_dict_instance(keys, n_min=n_rows, n_max=n_rows, m_min=m_soft_counts_chaos, m_max=m_soft_counts_chaos) 
-    soft_counts_chaos['behavior_combinations']={key: np.concatenate([tab,tab],axis=1) for key, tab in soft_counts_chaos['behavior_combinations'].items()}
+    # doubled columns to simulate the no-chaos / chaos gating split
+    chaos = random_soft_counts(keys, n_rows, m_soft_counts_chaos)
+    soft_counts_chaos = {"behavior_combinations": {key: np.concatenate([tab, tab], axis=1) for key, tab in chaos.items()}}
 
     combined_soft_counts=deepof.post_hoc.add_chaos_gates(
         coordinates=prun,
@@ -411,12 +237,6 @@ def test_add_chaos_gates(m_soft_counts,n_rows,quality_threshold,frac_bps_below,w
         supervised_chaos=supervised_chaos,
         window_size=window_size,
     ) 
-
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", exp_type, "deepof_project"
-        )
-    )
 
     # All behaviors occur in evaluation data (only anychaos gets added)
     assert all(
@@ -435,41 +255,12 @@ def test_add_chaos_gates(m_soft_counts,n_rows,quality_threshold,frac_bps_below,w
 @given(states=st.sampled_from([3, "aic", "bic", "priors"]))
 def test_recluster(states):
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(".", "tests", "test_examples", "test_single_topview"),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_single_topview",
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_single_topview",
-            "Tables",
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
-        animal_ids=[""],
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
+    prun = create_project(animal_ids=[""], exp_conditions=TEST_CONDITIONS)
 
     # Define a test embedding dictionary
     embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
 
-    if states == "priors":
-        # Define a test matrix of soft counts
-        soft_counts = {}
-        for i in range(10):
-            counts = np.abs(np.random.normal(size=(100, 2)))
-            soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-    else:
-        soft_counts = None
+    soft_counts = random_soft_counts(range(10), 100, 2, table_dict=False) if states == "priors" else None
 
     deepof.post_hoc.recluster(
         prun,
@@ -481,24 +272,11 @@ def test_recluster(states):
         save=False,
     )
 
-    rmtree(
-        os.path.join(
-            ".", "tests", "test_examples", "test_single_topview", "deepof_project"
-        )
-    )
-
 
 def test_get_time_on_cluster():
 
-    # Define a test matrix of soft counts
-    soft_counts = {}
-    bin_info = {}
-    for i in range(10):
-        counts = np.random.normal(size=(100, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-        bin_info[i] = {}
-        bin_info[i]["time"]=np.array([0,1,2,3,4,5,6,7,8]) 
-        bin_info[i][""]=np.array([True]*5+[False]*4)
+    soft_counts = random_soft_counts(range(10), 100, 10, table_dict=False)
+    bin_info = {i: {"time": np.arange(9), "": np.array([True] * 5 + [False] * 4)} for i in range(10)}
 
     roi_number=1
 
@@ -565,11 +343,7 @@ def test_condition_distance_binning(scan_mode, agg, metric):
     embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
-    # Define a test matrix of soft counts
-    soft_counts = {}
-    for i in range(10):
-        counts = np.random.normal(size=(100, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    soft_counts = random_soft_counts(range(10), 100, 10, table_dict=False)
 
     # fallback for not defined scan mode
     precomputed_bins=(np.ones(9)*11).astype(int)
@@ -623,13 +397,7 @@ def test_cluster_enrichment_across_conditions(bin_size, normalize, supervised):
         supervised_annotations[key].columns=pd.Index(["speed","1","2","3","4","5","6","7","8","9"])
 
 
-    # Define a test matrix of soft counts
-    soft_counts = {}
-    for i in range(10):
-        counts = np.random.normal(size=(100, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
-
-    soft_counts=TableDict(soft_counts, typ='soft_counts')
+    soft_counts = random_soft_counts(range(10), 100, 10)
 
     bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
@@ -680,17 +448,10 @@ def test_compute_transition_matrix_per_condition(
     embedding = {i: np.random.normal(size=(100, 10)) for i in range(10)}
     assert np.all(np.isfinite(embedding[0]))
 
-    # Define a test matrix of soft counts
-    soft_counts = {}
-    for i in range(10):
-        counts = np.random.normal(size=(100, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    soft_counts = random_soft_counts(range(10), 100, 10)
 
     # Create test experimental conditions
     exp_conditions = {i: i > 4 for i in range(10)}
-
-    #convert into used formats
-    soft_counts=TableDict(soft_counts, typ='soft_counts')
     bin_info={i: {"time": np.arange(0, bin_size)} for i in range(10)}
 
     
@@ -729,32 +490,12 @@ def test_compute_transition_matrix_per_condition(
 )
 def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler):
 
-    prun = deepof.data.Project(
-        project_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "Tables",
-        ),
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
+    prun = create_project(
+        "test_{}_topview".format(mode),
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
-        table_format=".h5",
         exclude_bodyparts=exclude,
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
+        exp_conditions=TEST_CONDITIONS,
+    )
 
     # extract kinematic features
     kinematics = deepof.post_hoc.align_deepof_kinematics_with_unsupervised_labels(
@@ -767,16 +508,6 @@ def test_align_deepof_kinematics_with_unsupervised_labels(mode, exclude, sampler
         ),
     )
 
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "deepof_project",
-        )
-    )
-
     # check that the output is a DataFrame
     assert isinstance(kinematics, dict)
 
@@ -785,13 +516,6 @@ def test_chunk_summary_statistics():
 
     # Set up testing names for our random features
     body_part_names = ["test_name_{}".format(i) for i in range(4)]
-
-    # Define a matrix of soft counts
-    counts = np.random.normal(size=(100, 10))
-    soft_counts = counts / counts.sum(axis=1)[:, None]
-
-    # And extract hard counts from them
-    hard_counts = np.argmax(soft_counts, axis=1)
 
     # Define a table with chunk data
     chunked_dataset = np.random.uniform(size=(100, 25, 4))
@@ -810,45 +534,18 @@ def test_chunk_summary_statistics():
 )
 def test_shap_pipeline(mode, sampler):
 
-    # np.random.seed(42)
-    prun = deepof.data.Project(
-        project_path=os.path.join(
-            ".", "tests", "test_examples", "test_{}_topview".format(mode)
-        ),
-        video_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "Videos",
-        ),
-        table_path=os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "Tables",
-        ),
+    prun = create_project(
+        "test_{}_topview".format(mode),
         exclude_bodyparts=["Tail_1", "Tail_2", "Tail_tip"],
-        arena="circular-autodetect",
-        video_scale="380 mm",
-        video_format=".mp4",
         animal_ids=(["B", "W"] if mode == "multi" else [""]),
-        table_format=".h5",
-        exp_conditions={"test": "test_cond", "test2": "test_cond"},
-    ).create(force=True, test=True)
+        exp_conditions=TEST_CONDITIONS,
+    )
 
-    # get breaks and soft_counts
-    soft_counts = {}
-    for i in ["test", "test2"]:
-        counts = np.random.normal(size=(100 - 5 + 1, 10))
-        soft_counts[i] = counts / counts.sum(axis=1)[:, None]
+    # get soft counts
+    soft_counts = random_soft_counts(["test", "test2"], 100 - 5 + 1, 10)
 
     # get supervised annotations from project
     supervised_annotations = prun.supervised_annotation()
-
-    #convert into used formats
-    soft_counts=TableDict(soft_counts, typ='soft_counts')
 
     # annotate time chunks
     time_chunks, hard_counts, breaks = deepof.post_hoc.annotate_time_chunks(
@@ -863,16 +560,6 @@ def test_shap_pipeline(mode, sampler):
         include_distances=sampler.draw(st.booleans()),
         include_angles=sampler.draw(st.booleans()),
         aggregate=sampler.draw(st.one_of(st.just("mean"), st.just("seglearn"))),
-    )
-
-    rmtree(
-        os.path.join(
-            ".",
-            "tests",
-            "test_examples",
-            "test_{}_topview".format(mode),
-            "deepof_project",
-        )
     )
 
     assert isinstance(time_chunks, pd.DataFrame)
@@ -929,3 +616,30 @@ def test_cluster_number_selection(method):
     assert df.attrs["suggested"]["timescale_gap"] == 3
     with pytest.raises(ValueError):
         deepof.post_hoc.cluster_number_selection(embeddings, method=method, k_range=[1, 2])
+
+
+def test_msm_pcca_restricted_gates():
+    # Restricted to one gate, the frames outside it are dropped (with their embeddings) or set to NaN; invalid gate
+    # indices and settings are refused
+    prun = create_project("test_multi_topview", animal_ids=ANIMAL_IDS["test_multi_topview"],
+                          exp_conditions=TEST_CONDITIONS, frame_rate=25)
+    window_size = 6
+    embeddings = random_embeddings(prun._tables.keys(), 100 - window_size + 1, 10)
+    kwargs = dict(animal_ids=["B", "W"], window_size=window_size, N_clusters_per_gate=[2, 2], M_gates=2,
+                  embedding_gates="Center", sample_size=100)
+    kwargs["gate_edges"] = deepof.post_hoc.compute_gate_edges(prun, ["B", "W"], window_size=window_size, M_gates=2,
+                                                             embedding_gates="Center")
+    full = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(prun, embeddings, **kwargs)[("B", "W")]
+    dropped, kept_embeddings = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
+        prun, embeddings, restrict_return_gates=1, **kwargs)
+    masked = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
+        prun, embeddings, restrict_return_gates=[1], drop_out_of_gate=False, **kwargs)[("B", "W")]
+    for key in embeddings.keys():
+        rows = dropped[("B", "W")][key]
+        nan_rows = np.isnan(masked[key]).all(axis=1)
+        assert len(rows) == (~nan_rows).sum() < len(full[key]) and len(kept_embeddings[("B", "W")][key]) == len(rows)
+        assert np.allclose(masked[key][~nan_rows].sum(axis=1), 1) and np.allclose(rows.sum(axis=1), 1)
+    for wrong, error in [({"restrict_return_gates": 2}, ValueError), ({"restrict_return_gates": 0, "drop_out_of_gate": "yes"}, TypeError),
+                         ({"macro_method": "spectral"}, ValueError), ({"split_factor": 0}, ValueError)]:
+        with pytest.raises(error):
+            deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(prun, embeddings, **kwargs, **wrong)

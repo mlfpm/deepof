@@ -17,6 +17,10 @@ from hypothesis import strategies as st
 from hypothesis import reproduce_failure
 from shutil import rmtree
 
+import pytest
+
+from deepof.data_manager import DataManager
+
 from deepof.data_loading import (
     get_dt, save_dt
 )
@@ -171,3 +175,33 @@ def test_index_bounds_and_ranges_match_full_index(tmp_path):
     pos = np.array([0, 3, 500, n - 1])
     assert list(get_dt(tab, "x", load_index=True, load_range=pos).index) == list(full["index_column"][pos])
     assert list(get_dt(tab, "x", load_index=True, load_range=[0, 9]).index) == list(full["index_column"][:10])
+
+
+def test_data_manager_round_trips(tmp_path):
+    # Small integer / float types are stored as 32 bit, tables without columns can be stored, (body part, axis) columns
+    # come back as MultiIndex, the time index is restored (also from a single row), dropping a table removes its time
+    # metadata, other data types are refused and unreadable blob metadata is reported instead of raised
+    path = os.path.join(tmp_path, "database.duckdb")
+    with DataManager(path) as manager:
+        df = pd.DataFrame({("B_Nose", "x"): np.arange(5, dtype=np.int8), ("B_Nose", "y"): np.ones(5, np.float16)},
+                          index=pd.timedelta_range("00:00:00", periods=5, freq="40ms"))
+        name = manager.save("table", df)
+        loaded = manager.load("table", load_index=True)
+        assert isinstance(loaded.columns, pd.MultiIndex) and loaded.dtypes.tolist() == [np.int32, np.float32]
+        assert list(loaded.index) == ["00:00:00", "00:00:00.040000", "00:00:00.080000", "00:00:00.120000",
+                                      "00:00:00.160000"]
+        assert manager.load("table", only_metainfo=True)["columns"] == [("B_Nose", "x"), ("B_Nose", "y")]
+        manager.save("single", pd.DataFrame({"a": [1.0]}, index=pd.to_timedelta(["00:00:01"])))
+        assert manager._get_time_meta("single") == {"n_rows": 1, "end_ns": 0}
+        manager.save("no_time", pd.DataFrame({"a": [1.0, 2.0]}, index=["first", "second"]))
+        assert manager._get_time_meta("no_time") is None
+        manager.save("empty_table", pd.DataFrame(index=range(3)))
+        assert list(manager.load("empty_table").columns) == ["empty"]
+        manager.drop(name)
+        assert manager._get_time_meta(name) is None
+        assert name not in [r[0] for r in manager.conn.execute("SHOW TABLES").fetchall()]
+        with pytest.raises(TypeError):
+            manager.save("text", "not a table")
+        manager.conn.execute('CREATE TABLE "broken" (data BLOB, metadata TEXT)')
+        manager.conn.execute('INSERT INTO "broken" VALUES (NULL, \'not json\')')
+        assert "error" in manager.load("broken", only_metainfo=True)
