@@ -352,7 +352,7 @@ class TurtleTeacher(nn.Module):
 
 @torch.no_grad()
 def extract_latents(model: nn.Module, dataset: BatchDictDataset, device: torch.device,
-                    batch_size: int = 512, num_workers: int = 0) -> torch.Tensor:
+                    batch_size: int = 512, num_workers: int = 0, return_posterior_var: bool = False):
     loader = dataset.make_loader(
         batch_size=batch_size,
         shuffle=False,
@@ -380,14 +380,19 @@ def extract_latents(model: nn.Module, dataset: BatchDictDataset, device: torch.d
     """
     base = deepof.clustering.model_utils_new.unwrap_dp(model)                                                      
     base.eval()
-    zs = []
+    zs, posterior_var, n = [], 0.0, 0
     for batch in loader:
         x, a, *rest = deepof.clustering.model_utils_new.move_to(batch, device)
         # Use encoder + posterior head to get z_mean in encoder space (latent_dim) 
         enc = base.encoder(x, a)                                                 
-        z_mean, _ = base.latent_space._encode(enc)                             
+        z_mean, z_log_var = base.latent_space._encode(enc)
         zs.append(z_mean.detach().cpu())
+        if return_posterior_var:
+            posterior_var = posterior_var + z_log_var.detach().exp().sum(dim=0).cpu()
+            n += len(z_log_var)
     z_all = torch.cat(zs, dim=0)
+    if return_posterior_var:  # mean posterior variance per latent dimension, for the GMM initialisation
+        return z_all, posterior_var / max(n, 1)
     return z_all  # CPU
 
 
@@ -395,7 +400,7 @@ def initialize_gmm_from_teacher(model: nn.Module,
                                 z_all: torch.Tensor,        # [N, D] z_mean for train set (CPU or device)
                                 tau_star: torch.Tensor,     # [N, C] teacher labels (on same device you ran teacher)
                                 min_var: float = 1e-4,
-                                min_mass: float = 1e-6) -> None:
+                                min_mass: float = 1e-6, posterior_var: torch.Tensor = None) -> None:
     """
     Compute GMM parameters from teacher assignments:
       μ_c = sum_i τ*_ic u_i / sum_i τ*_ic
@@ -410,6 +415,8 @@ def initialize_gmm_from_teacher(model: nn.Module,
         tau_star (torch.Tensor): Teacher soft assignments of shape [N_samples, C], where C is the number of mixture components.
         min_var (float): Minimum variance value used to clamp estimated cluster variances for numerical stability. Defaults to 1e-4.
         min_mass (float): Small constant added to cluster masses to avoid division by zero during estimation. Defaults to 1e-6.
+        posterior_var (torch.Tensor): Mean posterior variance per latent dimension [D], added to the cluster
+            variances (the KL compares the GMM with posterior samples, not with the means). Defaults to None.
 
     Returns:
         None
@@ -434,8 +441,10 @@ def initialize_gmm_from_teacher(model: nn.Module,
     # Variances: weighted per-cluster diag variance (C, D_mix)
     diffs = z.unsqueeze(1) - means.unsqueeze(0)                       # [N, C, D_mix]
     vars_ = (tau.unsqueeze(-1) * (diffs ** 2)).sum(dim=0) / mass.unsqueeze(-1)  # [C, D_mix]
+    if posterior_var is not None:  # variance of the posterior samples the KL compares with the GMM
+        vars_ = vars_ + posterior_var.to(device=device, dtype=vars_.dtype)[None, :]
     vars_ = vars_.clamp(min=min_var)
-    log_vars = vars_.log()
+    log_vars = vars_.log().clamp(min=-8.0, max=8.0)  # within the loss clamp (VadeLoss.gmm_logvar_clamp)
 
     # Edge-case guard
     tiny = (mass <= 1e-4)

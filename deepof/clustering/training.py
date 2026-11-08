@@ -593,10 +593,11 @@ def step_contrastive_distill(
         z_view2, backbone2 = model(x_aug2, a_aug2, return_backbone=True)
     else:
         z_view2 = model(x_aug2, a_aug2)
-    if use_shift_view and neg_aug:
+    if use_shift_view and neg_aug and not bool(is_shift.all()):
         # A batch of only unrealistic windows: with its own batch statistics, the batch as a whole could be told apart
         # from the positives without looking at single windows (and it would shift the running statistics used at
-        # inference), so it is normalized with the running statistics of the real windows instead
+        # inference), so it is normalized with the running statistics of the real windows instead. Only real
+        # time-shifted windows (neg_aug_shift_fraction=1.0): batch statistics as in "schedule"
         with _batchnorm_eval(model):
             z_view3 = model(x_aug_shift, a_aug_shift)
     else:
@@ -2618,10 +2619,11 @@ def fit_VADE(
     log_summary=init_log_summary(model_name)
     if teacher_cfg.use_turtle_teacher:
         print("\n--- Extracting latents for teacher ---")
-        z_all = extract_latents(
+        z_all, posterior_var = extract_latents(
             unwrap_dp(model), train_loader.dataset, device=device,
-            batch_size=2048, num_workers=common_cfg.num_workers
-        ).cpu()
+            batch_size=2048, num_workers=common_cfg.num_workers, return_posterior_var=True,
+        )
+        z_all = z_all.cpu()
 
         # Set up lambda schedule (distillation weight)
         lambda_scheduler = Dynamic_weight_manager(
@@ -2649,7 +2651,7 @@ def fit_VADE(
         pca_angles_train = teacher_views.get("pca_angles", None)
 
         print("\n--- Initializing GMM from teacher τ* ---")
-        initialize_gmm_from_teacher(model, z_all, tau_star, min_var=0.01)
+        initialize_gmm_from_teacher(model, z_all, tau_star, min_var=0.01, posterior_var=posterior_var)
         criterion.set_teacher(tau_star=tau_star.to(device), lambda_distill=teacher_cfg.lambda_distill, lambda_scheduler=lambda_scheduler)
 
         # Save teacher-init checkpoint + info (VaDE only)
