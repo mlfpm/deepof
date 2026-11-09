@@ -634,7 +634,9 @@ def step_contrastive_distill(
     shift_weights = None
     if neg_aug and z_view3 is not None:
         # Mixed hard negatives: time-shifted windows with a decaying weight, negative augmentations with a constant one
-        shift_w = _shift_negative_weight(ctx.epoch, ctx.num_epochs, float(contrastive_cfg.neg_aug_shift_floor))
+        shift_w = _shift_negative_weight(ctx.epoch, ctx.num_epochs, float(contrastive_cfg.neg_aug_shift_floor),
+                                         float(contrastive_cfg.neg_aug_shift_start),
+                                         tuple(contrastive_cfg.neg_aug_decay))
         weighting_level = 1.0  # > 0: hard negative, weighted per sample with shift_weights
         shift_weights = torch.where(is_shift, shift_w, float(contrastive_cfg.neg_aug_weight)).to(z_view3.dtype)
     elif shift_view_mode == "off" or shift_third is None:
@@ -1115,6 +1117,8 @@ def train_deepof_model(
     neg_aug_weight: Optional[float] = None,
     neg_aug_shift_fraction: Optional[float] = None,
     neg_aug_shift_floor: Optional[float] = None,
+    neg_aug_shift_start: Optional[float] = None,
+    neg_aug_decay: Optional[Tuple[float, float]] = None,
     neg_aug_types: Optional[Tuple[str, ...]] = None,
     neg_aug_offset: Optional[Tuple[int, int]] = None,
     neg_aug_rotation: Optional[Tuple[float, float]] = None,
@@ -1313,6 +1317,8 @@ def train_deepof_model(
         neg_aug_weight=neg_aug_weight,
         neg_aug_shift_fraction=neg_aug_shift_fraction,
         neg_aug_shift_floor=neg_aug_shift_floor,
+        neg_aug_shift_start=neg_aug_shift_start,
+        neg_aug_decay=None if neg_aug_decay is None else tuple(neg_aug_decay),
         neg_aug_types=(None if neg_aug_types is None else tuple(
             str(t).lower() for t in ([neg_aug_types] if isinstance(neg_aug_types, str) else neg_aug_types))),
         neg_aug_offset=neg_aug_offset,
@@ -3099,18 +3105,21 @@ def _cosine01(u: float) -> float:
     return 0.5 * (1.0 - math.cos(math.pi * u))
 
 
-def _shift_negative_weight(epoch: int, num_epochs: int, floor: float = 0.0) -> float:
+def _shift_negative_weight(epoch: int, num_epochs: int, floor: float = 0.0, start: float = 1.0,
+                           decay: Tuple[float, float] = (0.05, 0.45)) -> float:
     """
     Weight of the time-shifted hard negative (first phase of the "schedule", decaying part of "neg_aug"), as fraction
-    t = epoch / num_epochs: 1.0 for t < 0.05, then log-cosine decay to floor (at least 1e-3) until t = 0.45, then floor.
+    t = epoch / num_epochs: start for t < decay[0], then log-cosine decay to floor (at least 1e-3) until t = decay[1],
+    then floor.
     """
     t = epoch / max(float(num_epochs), 1.0)
-    t_a, t_b = 0.05, 0.45
+    t_a, t_b = decay
     if t < t_a:
-        return 1.0
+        return float(start)
     if t < t_b:
-        return math.exp(_cosine01((t - t_a) / (t_b - t_a)) * math.log(max(floor, 1e-3)))
-    return floor
+        log_start = math.log(start)
+        return math.exp(log_start + _cosine01((t - t_a) / (t_b - t_a)) * (math.log(max(floor, 1e-3)) - log_start))
+    return float(floor)
 
 
 def _temperature_at(contrastive_cfg, temperature: float, epoch: int, num_epochs: int, train: bool = True) -> float:

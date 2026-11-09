@@ -1758,6 +1758,15 @@ def test_shift_view_weights():
     neg = deepof.clustering.training._shift_negative_weight
     assert [neg(e, 40) for e in range(18)] == sched[:18] and neg(30, 40) == 0.0
     assert neg(0, 40, 0.2) == 1.0 and neg(30, 40, 0.2) == 0.2 and 0.2 < neg(10, 40, 0.2) < 1.0
+    # Start weight and decay window: constant start, decay inside the window, floor after; floor = start: constant
+    late = [neg(e, 40, 0.1, 2.0, (0.5, 0.75)) for e in range(40)]
+    assert late[:20] == [2.0] * 20 and 0.1 < late[25] < 2.0 and late[30:] == [0.1] * 10
+    assert all(a >= b for a, b in zip(late, late[1:])) and {neg(e, 40, 0.5, 0.5) for e in range(40)} == {0.5}
+    utils = deepof.clustering.model_utils_new
+    with pytest.raises(ValueError, match="neg_aug_decay"):
+        utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
+                                 common_cfg=utils.CommonFitCfg(model_name="contrastive"),
+                                 contrastive_cfg=utils.ContrastiveCfg(neg_aug_decay=(0.6, 0.4)))
 
 
 @pytest.mark.parametrize("encoder_type", ["recurrent", "TCN", "transformer"])
@@ -1843,6 +1852,17 @@ def test_predictive_loss():
         utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
                                  common_cfg=utils.CommonFitCfg(model_name="contrastive"),
                                  contrastive_cfg=utils.ContrastiveCfg(predictive_weight=1.0, shift_view_mode="off"))
+    # Without the contrastive and the predictive loss, the regression teacher has to be on
+    for teacher, fails in ((None, True), (utils.TurtleTeacherCfg(use_turtle_teacher=True, teacher_mode="regression",
+                                                                 include_edges_view=True), False)):
+        try:
+            utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
+                                     common_cfg=utils.CommonFitCfg(model_name="contrastive"), teacher_cfg=teacher,
+                                     contrastive_cfg=utils.ContrastiveCfg(contrastive_weight=0.0, shift_view_mode="off"))
+            message = ""
+        except ValueError as error:
+            message = str(error)
+        assert ("\"contrastive_weight\"=0" in message) == fails
 
 
 def test_regression_teacher_angle_view(tmp_path):
@@ -2119,6 +2139,9 @@ def test_fit_contrastive_options(tmp_path):
         proto_warmup_epochs=0, shift_view_mode="neg_aug", neg_aug_types=("shuffle",), neg_aug_block_len=(3, 4))
     assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
     assert len(logs["train"]["total_loss"]) == 2 and all(torch.isfinite(torch.tensor(logs["train"]["total_loss"])))
+    # Regression teacher only: no contrastive or predictive loss, no third view
+    logs = _fit_contrastive(str(tmp_path), epochs=1, teacher=teacher, contrastive_weight=0.0, shift_view_mode="off")[3]
+    assert np.isfinite(logs["train"]["total_loss"]).all() and logs["train"]["total_loss"][0] > 0
 
     # Negative augmentations that can not work are refused before the training
     with pytest.raises(ValueError, match="two or more animals"):

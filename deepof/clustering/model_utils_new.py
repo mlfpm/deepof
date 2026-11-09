@@ -246,6 +246,11 @@ class ContrastiveCfg:
     neg_aug_weight: float = 1.0
     neg_aug_shift_fraction: float = 0.5  # 0: negative augmentations only
     neg_aug_shift_floor: float = 0.0  # 0: the time-shifted negatives are off after 45% of training
+    # Weight of the time-shifted negatives before the decay (1.0 weighs them like all batch negatives together) and the
+    # decay window as fractions of training: constant neg_aug_shift_start until neg_aug_decay[0], log-cosine decay to
+    # neg_aug_shift_floor until neg_aug_decay[1], then the floor (floor = start: constant weight)
+    neg_aug_shift_start: float = 1.0
+    neg_aug_decay: Tuple[float, float] = (0.05, 0.45)
     neg_aug_types: Tuple[str, ...] = ("offset", "rotation", "shuffle")
     neg_aug_offset: Tuple[int, int] = (5, 15)
     neg_aug_rotation: Tuple[float, float] = (90.0, 180.0)
@@ -262,8 +267,8 @@ class ContrastiveCfg:
     # with InfoNCE against the third views of the other windows and both views of the same window, so the prediction
     # has to carry what changes, not what stays constant within a video. Contrastive temperature, whole training
     predictive_weight: float = 0.0
-    # Weight of the contrastive loss itself (0: off, e.g. to train with the predictive loss and the regression teacher
-    # only; the time-shifted view is still computed for the predictive loss)
+    # Weight of the contrastive loss itself (0: off, e.g. to train with the predictive loss and / or the regression
+    # teacher only; the time-shifted view is still computed unless shift_view_mode="off")
     contrastive_weight: float = 1.0
     proto_space: str = "backbone"
     proto_clusters: Tuple[int, ...] = (25, 50, 100)
@@ -637,7 +642,13 @@ def check_model_inputs(
         one_of("shift_view_mode", str(c.shift_view_mode).lower(), ["schedule", "off", "soft_positive", "neg_aug"])
         check(is_number(c.neg_aug_weight, 0, strict_min=True), "\"neg_aug_weight\" needs to be greater than 0")
         check(is_number(c.neg_aug_shift_fraction, 0, 1), "\"neg_aug_shift_fraction\" needs to be between 0 and 1")
-        check(is_number(c.neg_aug_shift_floor, 0, 1), "\"neg_aug_shift_floor\" needs to be between 0 and 1")
+        check(is_number(c.neg_aug_shift_start, 0, strict_min=True), "\"neg_aug_shift_start\" needs to be greater than 0")
+        check(is_number(c.neg_aug_shift_floor, 0) and (not is_number(c.neg_aug_shift_start, 0)
+                                                      or c.neg_aug_shift_floor <= c.neg_aug_shift_start),
+              "\"neg_aug_shift_floor\" needs to be between 0 and \"neg_aug_shift_start\"")
+        d = c.neg_aug_decay
+        check(isinstance(d, (tuple, list)) and len(d) == 2 and all(is_number(v, 0, 1) for v in d) and d[0] <= d[1],
+              "\"neg_aug_decay\" needs to be a (start, end) pair of training fractions with 0 <= start <= end <= 1")
         check(
             isinstance(c.neg_aug_types, (tuple, list)) and len(c.neg_aug_types) > 0
             and all(t in ("offset", "rotation", "shuffle") for t in c.neg_aug_types),
@@ -661,8 +672,12 @@ def check_model_inputs(
         check(is_number(c.predictive_weight, 0), "\"predictive_weight\" needs to be >= 0")
         check(is_number(c.contrastive_weight, 0), "\"contrastive_weight\" needs to be >= 0")
         if c.contrastive_weight == 0:
-            check(is_number(c.predictive_weight, 0, strict_min=True),
-                  "\"contrastive_weight\"=0 needs the predictive loss (\"predictive_weight\" > 0)")
+            regression = (teacher_cfg is not None and teacher_cfg.use_turtle_teacher
+                          and teacher_cfg.teacher_mode == "regression"
+                          and is_number(teacher_cfg.lambda_regression, 0, strict_min=True))
+            check(is_number(c.predictive_weight, 0, strict_min=True) or regression,
+                  "\"contrastive_weight\"=0 needs another loss: the predictive loss (\"predictive_weight\" > 0) or the "
+                  "regression teacher (teacher_mode=\"regression\" with lambda_regression > 0)")
         if is_number(c.predictive_weight, 0, strict_min=True):
             check(str(c.contrastive_loss_function).lower() == "nce" and str(c.shift_view_mode).lower() != "off",
                   "\"predictive_weight\" > 0 needs the time-shifted view: contrastive_loss_function=\"nce\" and "
