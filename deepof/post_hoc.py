@@ -1335,9 +1335,11 @@ def _fit_pcca_memberships(
     dtrajs,
     lagtime: int,
     N_clusters_per_gate: int,
+    pcca: bool = True,
 ):
     """
-    Fit MSM + PCCA.
+    Fit MSM + PCCA. With pcca=False only the MSM is fitted and the memberships are uniform placeholders (for the
+    macro methods of _regroup_macrostates that replace them; PCCA+ takes minutes for many states).
 
     Returns dict with:
       active_syms : (n_active,) microstate ids in k-means label space
@@ -1383,8 +1385,8 @@ def _fit_pcca_memberships(
     pi_micro = np.maximum(pi_micro, 0.0)
     pi_micro = pi_micro / max(pi_micro.sum(), 1e-12)
 
-    pcca = msm.pcca(int(K_request))
-    chi_eff = None
+    pcca = msm.pcca(int(K_request)) if pcca else None
+    chi_eff = None if pcca is not None else np.full((n_active, K_request), 1.0 / K_request, dtype=np.float32)
     for attr in ("memberships", "chi"):
         if hasattr(pcca, attr):
             chi_eff = np.asarray(getattr(pcca, attr), dtype=np.float32)
@@ -1465,6 +1467,51 @@ def _build_micro2macro(
     return micro2macro
 
 
+def _bace_groups(flux: np.ndarray, n_states: int) -> np.ndarray:
+    """
+    Agglomerative lumping of microstates by their transitions (after BACE, Bowman 2012): repeatedly merges the two
+    states whose outgoing transition distributions are statistically most alike, until n_states are left.
+
+    flux[i, j] are the (expected) transition counts i -> j, here the reversible flux pi_i P_ij of the MSM. The cost of
+    a merge is the log likelihood ratio of the two count rows against their pooled row, with the two states counted
+    as one destination (two states that mostly exchange with each other are alike, although each row has its mass on
+    its own diagonal). The cost grows with the counts, so weakly populated states merge first, into the state they
+    behave like. Unlike PCCA no spectral gap after n_states processes is needed, and the states are nested (the
+    grouping into n states is a merge of the one into n + 1).
+
+    Returns the state (0..n_states-1) of each microstate.
+    """
+    from scipy.special import xlogy
+
+    f = lambda x: xlogy(x, x)
+    C = (np.asarray(flux, dtype=np.float64) + np.asarray(flux, dtype=np.float64).T) / 2
+    C = C / max(C.sum(), 1e-300)
+    member = np.arange(C.shape[0])
+    row = f(C).sum(1)  # sum_k f(C_ak)
+    pooled = np.stack([f(C[i] + C).sum(1) for i in range(C.shape[0])])  # sum_k f(C_ak + C_bk)
+    while C.shape[0] > max(int(n_states), 1):
+        d, w, x = np.diag(C), C.sum(1), f(C)
+        own = (row - f(w) - f(d))[:, None] - x + f(d[:, None] + C)  # row a, destinations a and b lumped
+        both = pooled + f(d[:, None] + C + C.T + d[None]) - f(d[:, None] + C.T) - f(C + d[None])
+        cost = own + own.T - both + f(w[:, None] + w[None])
+        np.fill_diagonal(cost, np.inf)
+        i, j = sorted(np.unravel_index(np.argmin(cost), cost.shape))
+        for col in (C[:, i].copy(), C[:, j].copy()):  # the two destinations leave the sums over k ...
+            pooled -= f(col[:, None] + col[None])
+            row -= f(col)
+        C[i] += C[j]
+        C[:, i] += C[:, j]
+        keep = np.arange(C.shape[0]) != j
+        C, pooled, row = C[keep][:, keep], pooled[keep][:, keep], row[keep]
+        pooled += f(C[:, i][:, None] + C[:, i][None])  # ... and come back as one
+        row += f(C[:, i])
+        pooled[i] = pooled[:, i] = f(C[i] + C).sum(1)  # the merged row changed in every destination
+        row[i] = f(C[i]).sum()
+        member[member == j] = i
+        member[member > j] -= 1
+    return member
+
+
 def _regroup_macrostates(
     model: dict,
     n_macro: int,
@@ -1489,6 +1536,9 @@ def _regroup_macrostates(
             coarse-grained transitions (per-frame stay probabilities of ~0.3-0.5 instead of ~0.8-0.9).
         "kmeans": no PCCA; the microstates are grouped into n_macro states by population-weighted k-means on their
             centroids (geometric clustering at microstate resolution, about k-means on all samples).
+        "bace": no PCCA; the microstates are merged into n_macro states by the similarity of their transitions (see
+            _bace_groups). Kinetic states without PCCA's need for n_macro well separated slow processes: on CalMS21
+            (2026-11, 90 models) PCCA lost attack / mount states in most models, bace did not.
 
     The transitions of the new states are coarse-grained from the microstate MSM, so the kinetic decoding (Viterbi,
     forward-backward) works unchanged. Returns the model unchanged without split_factor ("pcca").
@@ -1500,9 +1550,12 @@ def _regroup_macrostates(
     pi = np.asarray(model["pi_micro"], dtype=np.float64)
     chi = np.asarray(model["chi"], dtype=np.float64)
 
-    if macro_method == "kmeans":
+    if macro_method in ("kmeans", "bace"):
         k = int(min(n_macro, active.shape[0]))
-        groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
+        if macro_method == "bace":
+            groups = _bace_groups(pi[:, None] * _row_normalize(model["P_micro"]), k)
+        else:
+            groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
         chi_new = np.zeros((active.shape[0], n_macro), dtype=np.float64)
         chi_new[np.arange(active.shape[0]), groups] = 1.0
     elif split_factor:
@@ -1557,9 +1610,10 @@ def _fit_msmpcca_models(
     n_micro: int,
     min_micro_per_macro: int,
     lagtime: int,
+    pcca: bool = True,
 ):
     """
-    Fit MSM/PCCA models per (gate, bin).
+    Fit MSM/PCCA models per (gate, bin). pcca=False: MSM only (see _fit_pcca_memberships).
 
     Returns:
         models: Dict[gate, List[model_or_None]] where list is length M_gates_eff and
@@ -1631,6 +1685,7 @@ def _fit_msmpcca_models(
                         dtrajs=dtrajs,
                         lagtime=lagtime,
                         N_clusters_per_gate=N_clusters_per_gate[b],
+                        pcca=pcca,
                     )
                 except Exception:  # pragma: no cover
                     pcca_fit = None
@@ -1958,19 +2013,21 @@ def get_contrastive_soft_counts_msm_pcca(
     decode_emit_tau: float = 1.0,
     restrict_return_gates: Optional[Union[int, Sequence[int]]] = None,
     drop_out_of_gate: bool = True,
-    macro_method: str = "pcca",
+    macro_method: str = "bace",
     split_factor: Optional[float] = None,
     table_suffix: str = "",
 ):
     """
-    Distance/behavior-gated MSM + PCCA with k-means microstates.
+    Distance/behavior-gated MSM with k-means microstates, grouped into states (macro_method).
 
     table_suffix:
         Appended to the names of the soft count tables saved in the project (very large projects), so that parallel
         runs on the same project (e.g. with different gates) do not overwrite each other's tables.
 
     macro_method:
-        "pcca" (default) — PCCA macrostates (metastable sets).
+        "bace" (default since 2026-11) — microstates merged by the similarity of their transitions (see
+        _bace_groups), with the same kinetic decoding.
+        "pcca" — PCCA macrostates (metastable sets).
         "kmeans" — geometric states instead: population-weighted k-means on the microstate centroids, with the same
         kinetic decoding.
 
@@ -2043,8 +2100,8 @@ def get_contrastive_soft_counts_msm_pcca(
         gate_edges=gate_edges,
     )
 
-    if macro_method not in ("pcca", "kmeans"):
-        raise ValueError(f"macro_method needs to be \"pcca\" or \"kmeans\", got {macro_method!r}")
+    if macro_method not in ("bace", "pcca", "kmeans"):
+        raise ValueError(f"macro_method needs to be \"bace\", \"pcca\" or \"kmeans\", got {macro_method!r}")
     if split_factor is not None and not split_factor > 0:
         raise ValueError(f"split_factor needs to be > 0 or None, got {split_factor!r}")
 
@@ -2082,10 +2139,11 @@ def get_contrastive_soft_counts_msm_pcca(
         n_micro=n_micro,
         min_micro_per_macro=min_micro_per_macro,
         lagtime=lagtime,
+        pcca=macro_method == "pcca",
     )
 
-    # ---- geometric states or split of oversized PCCA states; the number of columns can change per (gate, bin) ----
-    if macro_method == "kmeans" or split_factor:
+    # ---- other states or split of oversized PCCA states; the number of columns can change per (gate, bin) ----
+    if macro_method != "pcca" or split_factor:
         for gate_idx, gate in enumerate(gates):
             for b, model in enumerate(models[gate]):
                 if model is not None:
@@ -2237,7 +2295,7 @@ def _pcca_memberships_fast(P: np.ndarray, pi: np.ndarray, n_macrostates: int) ->
 
 def cluster_number_selection(
     embeddings: table_dict,
-    method: str = "combined",
+    method: str = "bace",
     k_range: Sequence[int] = range(4, 41, 2),
     n_micro: int = 200,
     lagtime: int = 3,
@@ -2269,7 +2327,7 @@ def cluster_number_selection(
 
     Args:
         embeddings (table_dict): Embeddings per experiment (as returned by embedding_per_video).
-        method (str): Soft count extraction method to evaluate: "msm" (PCCA), "kmeans" or "combined" (PCCA with the
+        method (str): Soft count extraction method to evaluate: "bace" (default), "msm" (PCCA), "kmeans" or "combined" (PCCA with the
             split of oversized states; n_clusters then holds the final number of clusters per K).
         k_range (Sequence[int]): Numbers of clusters (for "combined": PCCA states before the split) to evaluate.
         n_micro (int): Number of microstates, at least 3 * max(k_range) are used. Use the same as for embedding_per_video.
@@ -2284,8 +2342,8 @@ def cluster_number_selection(
     """
     from sklearn.metrics import adjusted_rand_score
 
-    if method not in ("msm", "kmeans", "combined"):
-        raise ValueError(f"method needs to be \"msm\", \"kmeans\" or \"combined\", got {method!r}")
+    if method not in ("bace", "msm", "kmeans", "combined"):
+        raise ValueError(f"method needs to be \"bace\", \"msm\", \"kmeans\" or \"combined\", got {method!r}")
     k_values = np.array(sorted(set(int(k) for k in k_range)))
     if k_values.size == 0 or k_values.min() < 2:
         raise ValueError("k_range needs to contain numbers of clusters >= 2")
@@ -2314,8 +2372,8 @@ def cluster_number_selection(
         model = {"active_syms": fit["active"], "kmeans": kmeans, "pi_micro": fit["pi"], "P_micro": fit["P"],
                  "n_micro_eff": n_micro_eff, "chi": np.ones((fit["active"].shape[0], 1), dtype=np.float32)}
         k = int(min(k, fit["active"].shape[0]))
-        if method == "kmeans":
-            return _regroup_macrostates(model, k, macro_method="kmeans", seed=seed)["chi"]
+        if method in ("kmeans", "bace"):
+            return _regroup_macrostates(model, k, macro_method=method, seed=seed)["chi"]
         chi = _pcca_memberships_fast(fit["P"], fit["pi"], k)
         if method == "combined":
             chi = _regroup_macrostates({**model, "chi": chi}, k, split_factor=split_factor, seed=seed)["chi"]

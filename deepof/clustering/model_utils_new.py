@@ -866,7 +866,7 @@ def embedding_per_video(
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
-        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "msm" is used as a default.
+        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "bace" (MSM microstates merged by the similarity of their transitions, see deepof.post_hoc._bace_groups), "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "bace" is used as a default (until 2026-11: "msm").
         split_factor (float): Only for "combined": states holding more than split_factor / states_per_gate of the samples are split into round(share * states_per_gate) sub-states, so the number of clusters can grow. Defaults to 3.
         distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of frames embedded per video; longer videos are cut at this number of frames. None (default) embeds all frames.
@@ -880,7 +880,7 @@ def embedding_per_video(
     """
 
     extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
-    methods = {"gmm", "msm", "kmeans", "combined", "msm_chaos"}
+    methods = {"gmm", "bace", "msm", "kmeans", "combined", "msm_chaos"}
     if softcounts_extraction_method is not None and softcounts_extraction_method not in methods: # pragma: no cover
         raise ValueError(f"\"softcounts_extraction_method\" needs to be None or one of {sorted(methods)}!")
     if softcounts_extraction_method == "msm_chaos":
@@ -903,7 +903,7 @@ def embedding_per_video(
     # The contrastive model only consists out of an encoder and hence needs additional soft_counts extraction
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if contrastive and softcounts_extraction_method is None:
-        softcounts_extraction_method = "msm"
+        softcounts_extraction_method = "bace"
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
     
@@ -1086,7 +1086,7 @@ def soft_counts_from_embeddings(
     coordinates: coordinates,
     embeddings: table_dict,
     window_size: int,
-    softcounts_extraction_method: str = "msm",
+    softcounts_extraction_method: str = "bace",
     supervised_annotations: table_dict = None,
     animal_id: str = None,
     extract_pair: Any = None,
@@ -1138,7 +1138,7 @@ def soft_counts_from_embeddings(
             gate_edges=gate_edges,
             table_suffix=table_suffix,
         )
-    elif softcounts_extraction_method in {"msm", "kmeans", "combined", "msm_chaos"}:
+    elif softcounts_extraction_method in {"bace", "msm", "kmeans", "combined", "msm_chaos"}:
 
         soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
             coordinates=coordinates,
@@ -1156,7 +1156,7 @@ def soft_counts_from_embeddings(
             decode_emit_tau=decode_emit_tau,
             temporal_smooth_win=temporal_smooth_win,
             gate_edges=gate_edges,
-            macro_method="kmeans" if softcounts_extraction_method == "kmeans" else "pcca",
+            macro_method=softcounts_extraction_method if softcounts_extraction_method in ("bace", "kmeans") else "pcca",
             split_factor=split_factor if softcounts_extraction_method == "combined" else None,
             table_suffix=table_suffix,
         )

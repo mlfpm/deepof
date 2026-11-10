@@ -101,7 +101,7 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     sample_size=st.one_of(st.just(100),st.just(200000)),
     exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
     use_supervised_gates=st.booleans(),
-    macro_method=st.sampled_from(["pcca", "kmeans"]),
+    macro_method=st.sampled_from(["bace", "pcca", "kmeans"]),
     split_factor=st.sampled_from([None, 1.0]),
     decode_method=st.sampled_from(["viterbi_macro", "forward_backward_macro", "viterbi_micro",
                                    "forward_backward_micro", "lookup"]),
@@ -172,7 +172,7 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         assert all(w == total_clusters for w in widths)
 
 
-@pytest.mark.parametrize("macro_method,split_factor", [("pcca", 1.0), ("pcca", 3.0), ("kmeans", None)])
+@pytest.mark.parametrize("macro_method,split_factor", [("pcca", 1.0), ("pcca", 3.0), ("kmeans", None), ("bace", None)])
 def test_regroup_macrostates(macro_method, split_factor):
     # 12 microstates on a line: PCCA state 0 owns 10 of them (83%), state 1 the other two
     from types import SimpleNamespace
@@ -188,10 +188,26 @@ def test_regroup_macrostates(macro_method, split_factor):
         return
     if macro_method == "pcca":  # share 0.83 * 2 states -> 2 sub-states, inserted in place of state 0
         assert out["chi"].shape == (12, 3) and np.array_equal(out["chi"][:, 2], chi[:, 1])
-    else:  # geometric halves of the line instead of the PCCA states
+    elif macro_method == "kmeans":  # geometric halves of the line instead of the PCCA states
         assert out["chi"].shape == (12, 2) and sorted(out["chi"].sum(0)) == [6.0, 6.0]
+    else:  # bace: two non-empty states from the transitions
+        assert out["chi"].shape == (12, 2) and out["chi"].sum(0).min() >= 1
     assert np.allclose(out["chi"].sum(1), 1) and np.allclose(out["P_macro"].sum(1), 1)
     assert np.isclose(out["pi_macro"].sum(), 1) and out["micro2macro"].shape == (12, out["chi"].shape[1])
+
+
+def test_bace_groups():
+    # Two blocks of microstates that exchange within and rarely between; the weak state 6 behaves like block 0.
+    # The states are nested: 2 states are a merge of the 3 states
+    flux = np.full((7, 7), 1.0)
+    flux[:3, :3] = flux[3:6, 3:6] = 50.0
+    np.fill_diagonal(flux, 500.0)
+    flux[6], flux[:, 6], flux[6, 6] = 0.01, 0.01, 2.0
+    flux[6, :3] = flux[:3, 6] = 1.0
+    two, three = deepof.post_hoc._bace_groups(flux, 2), deepof.post_hoc._bace_groups(flux, 3)
+    assert len(set(two[:3])) == 1 and len(set(two[3:6])) == 1 and two[0] != two[3] and two[6] == two[0]
+    assert len(set(three)) == 3 and all(len(set(two[three == s])) == 1 for s in range(3))
+    assert np.array_equal(deepof.post_hoc._bace_groups(flux, 9), np.arange(7))
 
 
 def test_regroup_macrostates_crisp_share():
@@ -599,7 +615,7 @@ def test_get_gate_entry_ignores_pair_order():
         deepof.post_hoc.get_gate_entry(gates, ("res", "other"))
 
 
-@pytest.mark.parametrize("method", ["msm", "kmeans", "combined"])
+@pytest.mark.parametrize("method", ["bace", "msm", "kmeans", "combined"])
 def test_cluster_number_selection(method):
     # Three sticky, well separated states: every criterion is computed and the timescale gap finds them
     rng = np.random.default_rng(0)
