@@ -182,7 +182,7 @@ def test_regroup_macrostates(macro_method, split_factor):
     chi[:10, 0], chi[10:, 1] = 1.0, 1.0
     model = {"active_syms": np.arange(12), "kmeans": SimpleNamespace(cluster_centers_=np.arange(12.0)[:, None]),
              "pi_micro": np.full(12, 1 / 12), "P_micro": P / P.sum(1, keepdims=True), "chi": chi, "n_micro_eff": 12,
-             "n_counts": 1000.0}
+             "counts": P * 100}
     out = deepof.post_hoc._regroup_macrostates(model, 2, macro_method=macro_method, split_factor=split_factor)
     if split_factor == 3.0:  # 83% < 3 / 2: nothing to split, only crisp memberships
         assert np.array_equal(out["chi"], chi) and np.allclose(out["P_macro"].sum(1), 1)
@@ -205,11 +205,14 @@ def test_bace_groups():
     np.fill_diagonal(flux, 500.0)
     flux[6], flux[:, 6], flux[6, 6] = 0.01, 0.01, 2.0
     flux[6, :3] = flux[:3, 6] = 1.0
-    bace = lambda k: deepof.post_hoc._bace_groups(flux, k, flux.sum())
+    bace = lambda k: deepof.post_hoc._bace_groups(flux, k)
     two, three = bace(2), bace(3)
     assert len(set(two[:3])) == 1 and len(set(two[3:6])) == 1 and two[0] != two[3] and two[6] == two[0]
     assert len(set(three)) == 3 and all(len(set(two[three == s])) == 1 for s in range(3))
     assert np.array_equal(bace(9), np.arange(7))
+    # Observed counts between the active microstates only (symbol 2 is not active), in their order
+    counts = deepof.post_hoc._transition_counts([np.array([5, 5, 2, 0, 5]), np.array([0, 0])], np.array([0, 5]), 1)
+    assert np.array_equal(counts, [[1, 1], [0, 1]])
 
 
 def test_regroup_macrostates_crisp_share():

@@ -1438,7 +1438,7 @@ def _fit_pcca_memberships(
         "P_macro": P_macro,
         "pi_macro": pi_macro,
         "lagtime": int(lagtime),
-        "n_counts": float(sum(max(len(d) - int(lagtime), 0) for d in dtrajs)),  # sliding transition counts
+        "counts": _transition_counts(dtrajs, active_syms, lagtime),  # observed, for macro_method="bace"
     }
 
 
@@ -1468,17 +1468,34 @@ def _build_micro2macro(
     return micro2macro
 
 
-def _bace_groups(flux: np.ndarray, n_states: int, n_counts: float) -> np.ndarray:
+def _transition_counts(dtrajs: List[np.ndarray], active_syms: np.ndarray, lagtime: int) -> np.ndarray:
+    """Observed transition counts (sliding, lag lagtime) between the active microstates, in the order of active_syms;
+    transitions from or to other microstates are left out."""
+    active_syms = np.asarray(active_syms, dtype=np.int64)
+    size = int(max([active_syms.max()] + [int(d.max()) for d in dtrajs if len(d)])) + 1
+    index = np.full(size, -1, dtype=np.int64)
+    index[active_syms] = np.arange(active_syms.shape[0])
+    counts = np.zeros((active_syms.shape[0], active_syms.shape[0]), dtype=np.float64)
+    for d in dtrajs:
+        a = index[np.asarray(d, dtype=np.int64)]
+        i, j = a[:-int(lagtime)], a[int(lagtime):]
+        keep = (i >= 0) & (j >= 0)
+        np.add.at(counts, (i[keep], j[keep]), 1.0)
+    return counts
+
+
+def _bace_groups(counts: np.ndarray, n_states: int) -> np.ndarray:
     """
     Agglomerative lumping of microstates by their transitions (after BACE, Bowman 2012): repeatedly merges the two
     states whose outgoing transition distributions are statistically most alike, until n_states are left.
 
-    flux[i, j] is the share of the transitions i -> j, here the reversible flux pi_i P_ij of the MSM; n_counts the
-    number of observed transitions. The counts flux * n_counts get the prior of BACE, a pseudocount of 1 / n per
-    entry (one transition per microstate, spread evenly). The prior is essential, not cosmetic: without it (as in the
-    first library version, 2026-11-10) the groupings on CalMS21 lost the rare behaviours as PCCA does (mean F1 0.34
-    instead of 0.70 at ~37 states): with exact zeros, a weakly populated microstate merges into a large state almost
-    for free, whatever that state does. The cost of
+    counts[i, j] are the OBSERVED transition counts i -> j (_transition_counts; symmetrized here), with the prior of
+    BACE, a pseudocount of 1 / n per entry. Not the flux pi_i P_ij of the fitted reversible MSM: on CalMS21 the
+    stationary distribution of the maximum likelihood MSM was up to 20 times above and 100 times below the observed
+    population of single microstates (|flux - counts| / N up to 0.6; weakly connected microstates get their weight
+    from a handful of transitions), and the merging on that flux lost the rare behaviours (mean F1 0.25 instead of
+    0.71 at ~37 states on the same models, 2026-11-11).
+    The cost of
     a merge is the log likelihood ratio of the two count rows against their pooled row, with the two states counted
     as one destination (two states that mostly exchange with each other are alike, although each row has its mass on
     its own diagonal). The cost grows with the counts, so weakly populated states merge first, into the state they
@@ -1490,8 +1507,8 @@ def _bace_groups(flux: np.ndarray, n_states: int, n_counts: float) -> np.ndarray
     from scipy.special import xlogy
 
     f = lambda x: xlogy(x, x)
-    C = (np.asarray(flux, dtype=np.float64) + np.asarray(flux, dtype=np.float64).T) / 2
-    C = C / max(C.sum(), 1e-300) * float(n_counts) + 1.0 / C.shape[0]
+    C = (np.asarray(counts, dtype=np.float64) + np.asarray(counts, dtype=np.float64).T) / 2
+    C = C + 1.0 / C.shape[0]
     member = np.arange(C.shape[0])
     row = f(C).sum(1)  # sum_k f(C_ak)
     pooled = np.stack([f(C[i] + C).sum(1) for i in range(C.shape[0])])  # sum_k f(C_ak + C_bk)
@@ -1559,9 +1576,9 @@ def _regroup_macrostates(
     if macro_method in ("kmeans", "bace"):
         k = int(min(n_macro, active.shape[0]))
         if macro_method == "bace":
-            if model.get("n_counts") is None:
-                raise ValueError("macro_method=\"bace\" needs the number of transitions of the MSM (model[\"n_counts\"])")
-            groups = _bace_groups(pi[:, None] * _row_normalize(model["P_micro"]), k, model["n_counts"])
+            if model.get("counts") is None:
+                raise ValueError("macro_method=\"bace\" needs the observed transition counts (model[\"counts\"])")
+            groups = _bace_groups(model["counts"], k)
         else:
             groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
         chi_new = np.zeros((active.shape[0], n_macro), dtype=np.float64)
@@ -1724,7 +1741,7 @@ def _fit_msmpcca_models(
                         "P_macro": pcca_fit["P_macro"],
                         "pi_macro": pcca_fit["pi_macro"],
                         "lagtime": pcca_fit["lagtime"],
-                        "n_counts": pcca_fit["n_counts"],
+                        "counts": pcca_fit["counts"],
                         "n_micro_eff": int(n_micro_eff),
                     }
                 )
@@ -2282,7 +2299,7 @@ def _fit_msm_on_dtrajs(dtrajs: List[np.ndarray], lagtime: int) -> Optional[dict]
         return None
     pi = np.maximum(np.asarray(msm.stationary_distribution, dtype=np.float64).reshape(-1), 0.0)
     return {"msm": msm, "active": active, "P": _row_normalize(np.asarray(msm.transition_matrix, dtype=np.float64)),
-            "pi": pi / max(pi.sum(), 1e-12), "n_counts": float(sum(max(len(d) - int(lagtime), 0) for d in dtrajs))}
+            "pi": pi / max(pi.sum(), 1e-12), "counts": _transition_counts(dtrajs, active, lagtime)}
 
 
 def _pcca_memberships_fast(P: np.ndarray, pi: np.ndarray, n_macrostates: int) -> np.ndarray:
@@ -2380,7 +2397,7 @@ def cluster_number_selection(
         """Cluster memberships (n_active, n_clusters) of the active microstates of an MSM fit."""
         model = {"active_syms": fit["active"], "kmeans": kmeans, "pi_micro": fit["pi"], "P_micro": fit["P"],
                  "n_micro_eff": n_micro_eff, "chi": np.ones((fit["active"].shape[0], 1), dtype=np.float32),
-                 "n_counts": fit["n_counts"]}
+                 "counts": fit["counts"]}
         k = int(min(k, fit["active"].shape[0]))
         if method in ("kmeans", "bace"):
             return _regroup_macrostates(model, k, macro_method=method, seed=seed)["chi"]
