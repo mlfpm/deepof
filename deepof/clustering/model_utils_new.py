@@ -133,6 +133,11 @@ class TurtleTeacherCfg:
     teacher_mode: Optional[str] = None
     lambda_regression: float = 1.0
     angle_segments: int = 1  # regression angle view: mean angle per segment of the centre window (1: whole window)
+    # Frames the regression targets are computed from. None: angles and kinematics from the contrastive view, the PCA
+    # views (nodes, edges) from the whole stored window (longer than the view, e.g. 2 s for a 1 s view). n: every view
+    # from the n centre frames (n = contrastive_window: all targets describe the view; smaller: its centre only, the
+    # embedding then describes the centre frames with the rest of the view as context)
+    regression_target_frames: Optional[int] = None
     # Regression kinematics view (get_graph_dataset(..., include_kinematics=True)): speed and acceleration per animal,
     # mean of log1p(x / median) per segment of the centre window, segments_per_second segments per second of the window
     include_kinematics_view: bool = False
@@ -748,6 +753,12 @@ def check_model_inputs(
             check(model_name == "contrastive", "teacher_mode=\"regression\" is only available for the contrastive model")
             check(is_number(teacher_cfg.lambda_regression, 0), "\"lambda_regression\" needs to be >= 0")
             check(is_int(teacher_cfg.angle_segments, 1), "\"angle_segments\" needs to be an integer greater than 0")
+            frames = teacher_cfg.regression_target_frames
+            check(frames is None or is_int(frames, 1),
+                  "\"regression_target_frames\" needs to be None or an integer greater than 0")
+            if frames is not None and is_int(frames, 1) and is_int(teacher_cfg.angle_segments, 1):
+                check(teacher_cfg.angle_segments <= frames,
+                      "\"angle_segments\" can not exceed \"regression_target_frames\"")
             weights = teacher_cfg.regression_view_weights
             if weights is not None:
                 included = [f"nodes_{p}" for p in parts if teacher_cfg.include_nodes_view] + [

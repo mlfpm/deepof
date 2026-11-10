@@ -469,6 +469,18 @@ def initialize_gmm_from_teacher(model: nn.Module,
           f"entropy(π)={-(prior*prior.clamp_min(1e-9).log()).sum().item():.3f}")
     
 
+def _centre_frames(x: torch.Tensor, window_len: Optional[int]) -> torch.Tensor:
+    """The window_len centre frames of x (B, T, ...), as the contrastive view is cut from the stored window; None: all
+    frames."""
+    if window_len is None:
+        return x
+    if not 1 <= window_len <= x.shape[1]:
+        raise ValueError(f"{window_len} centre frames requested (\"contrastive_window\" / \"regression_target_frames\"), "
+                         f"but the preprocessed windows have {x.shape[1]} frames")
+    start = (x.shape[1] - window_len) // 2
+    return x[:, start:start + window_len]
+
+
 @torch.no_grad()
 def fit_nodes_pca(
     dataset: BatchDictDataset,
@@ -477,6 +489,7 @@ def fit_nodes_pca(
     batch_size: int = 4096,
     num_workers: int = 0,
     max_samples: Optional[int] = None,
+    window_len: Optional[int] = None,
 ):
     """
     Fits two IncrementalPCAs:
@@ -522,6 +535,7 @@ def fit_nodes_pca(
     seen = 0
     for batch in loader:
         x, a, *rest = batch
+        x = _centre_frames(x, window_len)  # None: the whole stored window
         B, T, N, F = x.shape
 
         if F < 3: # pragma: no cover
@@ -531,7 +545,7 @@ def fit_nodes_pca(
         spd = x[..., 2:3]  # [B,T,N,1]
 
         X_pos = pos.reshape(B, -1).float().numpy()  # (B, T*N*2)
-        X_spd = spd.view(B, -1).float().numpy()  # (B, T*N*1)
+        X_spd = spd.reshape(B, -1).float().numpy()  # (B, T*N*1)
 
         if (max_samples is not None) and (seen >= max_samples):
             break
@@ -562,13 +576,14 @@ def fit_nodes_pca(
     feats_pos, feats_spd = [], []
     for batch in loader:
         x, a, *rest = batch
+        x = _centre_frames(x, window_len)  # None: the whole stored window
         B, T, N, F = x.shape
 
         pos = x[..., :2]   # [B,T,N,2]
         spd = x[..., 2:3]  # [B,T,N,1]
 
         X_pos = pos.reshape(B, -1).float().numpy()
-        X_spd = spd.view(B, -1).float().numpy()
+        X_spd = spd.reshape(B, -1).float().numpy()
 
         Z_pos = ipca_pos.transform(X_pos)  # (B, n_components_pos)
         Z_spd = ipca_spd.transform(X_spd)  # (B, n_components_spd)
@@ -648,10 +663,12 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
                            n_components: int = 16,
                            batch_size: int = 8192,
                            num_workers: int = 0,
-                           max_samples: Optional[int] = None) -> torch.Tensor:
+                           max_samples: Optional[int] = None,
+                           window_len: Optional[int] = None) -> torch.Tensor:
     """
     Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
-    in order (shuffle=False), using two passes: partial_fit, then transform.
+    in order (shuffle=False), using two passes: partial_fit, then transform. window_len: only the centre frames
+    (None: the whole stored window, which is longer than the contrastive view).
    
     Args:
         dataset (BatchDictDataset): Dataset providing node and edge features.
@@ -682,8 +699,9 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     seen = 0
     for batch in loader:
         x, a, *rest = batch  # keep on CPU for PCA
+        a = _centre_frames(a, window_len)
         B, T, E, F_edge = a.shape
-        A = a.view(B, T * E * F_edge).float().numpy()  # (B, D_edges)
+        A = a.reshape(B, T * E * F_edge).float().numpy()  # (B, D_edges)
         if (max_samples is not None) and (seen >= max_samples):
             break
         if (max_samples is not None) and (seen + B > max_samples):
@@ -708,8 +726,9 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     feats = []
     for batch in loader:
         x, a, *rest = batch
+        a = _centre_frames(a, window_len)
         B, T, E, F_edge = a.shape
-        A = a.view(B, T * E * F_edge).float().numpy()
+        A = a.reshape(B, T * E * F_edge).float().numpy()
         Z = ipca.transform(A)  # (B, n_components)
         feats.append(torch.from_numpy(Z).float())
     feats_all = torch.cat(feats, dim=0)  # CPU [N, n_components]
@@ -956,8 +975,7 @@ def extract_angle_segments_view(
     feats = []
     for batch in loader:
         ang = batch[2][..., 0][..., :n_angles]  # (B, T, n_angles)
-        start = (ang.shape[1] - window_len) // 2
-        segments = torch.tensor_split(ang[:, start:start + window_len], n_segments, dim=1)
+        segments = torch.tensor_split(_centre_frames(ang, window_len), n_segments, dim=1)
         feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
     return torch.cat(feats, dim=0)
 
@@ -1005,9 +1023,7 @@ def extract_kinematics_segments_view(
             pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
         )
         for batch in loader:
-            kin = batch[2][..., 0][..., n_angles:].float()  # (B, T, n_kinematics)
-            start = (kin.shape[1] - window_len) // 2
-            yield kin[:, start:start + window_len]
+            yield _centre_frames(batch[2][..., 0][..., n_angles:].float(), window_len)  # (B, frames, n_kinematics)
 
     centre = torch.cat([k[:, window_len // 2] for k in centre_windows()], dim=0).abs()
     if centre.shape[1] == 0:
@@ -1046,6 +1062,11 @@ def build_regression_targets(
     their overall RMS (components keep their relative variance, so low-variance components do not get inflated). The
     nodes view contributes one view per part (positions, speeds) in teacher_cfg.nodes_view_parts.
 
+    Frames the targets describe: by default the angle and kinematics views use the contrastive view (window_len centre
+    frames) and the PCA views (nodes, edges) the WHOLE stored window (e.g. 60 frames for a 30-frame view). With
+    teacher_cfg.regression_target_frames = n every view uses the n centre frames (n = window_len: PCA views cut to
+    the contrastive view; smaller n: targets about the centre of the window, the rest of the view is context).
+
     Args:
         teacher_cfg (TurtleTeacherCfg): Teacher settings (included views, PCA sizes, segments).
         train_dataset (BatchDictDataset): Training dataset.
@@ -1060,19 +1081,26 @@ def build_regression_targets(
     # The third array holds the angles, then the kinematics (if included)
     n_angles = len(meta_info["angle_columns"]) if meta_info is not None and len(
         meta_info.get("kinematics_columns", [])) else None
+    pca_frames = teacher_cfg.regression_target_frames  # None: whole stored window
+    if pca_frames is not None:
+        window_len = int(pca_frames)
+        if teacher_cfg.include_angles_view and teacher_cfg.angle_segments > window_len:
+            raise ValueError(f"\"angle_segments\"={teacher_cfg.angle_segments} exceeds "
+                             f"\"regression_target_frames\"={window_len}")
     views = []
     if teacher_cfg.include_nodes_view:
         print("\n--- Building PCA views for the regression teacher (nodes) ---")
         _, pca_pos, _, pca_spd = fit_nodes_pca(
             train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
-            batch_size=teacher_cfg.batch_size_nodes, num_workers=0,
+            batch_size=teacher_cfg.batch_size_nodes, num_workers=0, window_len=pca_frames,
         )
         views += [(f"nodes_{part}", v) for v, part in ((pca_pos, "positions"), (pca_spd, "speeds"))
                   if part in teacher_cfg.nodes_view_parts]
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for the regression teacher (edges) ---")
         views.append(("edges", extract_pca_edges_view(
-            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0
+            train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0,
+            window_len=pca_frames,
         )))
     scaled, names = [], []
     for name, view in views:

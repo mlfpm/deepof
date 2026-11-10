@@ -1883,6 +1883,21 @@ def test_regression_teacher_angle_view(tmp_path):
     assert targets.shape == (12, 2 * K) and views == [("angles", 2 * K)]
     assert np.isclose(targets.pow(2).sum(1).mean().item(), 1.0, atol=0.1)
 
+    # regression_target_frames: every view from the centre frames (edges: no longer the whole stored window)
+    teacher = deepof.clustering.teacher_model
+    whole = teacher.extract_pca_edges_view(ds, n_components=2, batch_size=6)
+    assert not np.allclose(whole.numpy(), teacher.extract_pca_edges_view(ds, n_components=2, batch_size=6, window_len=4).numpy())
+    centred = deepof.clustering.model_utils_new.TurtleTeacherCfg(
+        include_nodes_view=False, include_edges_view=True, pca_edges_dim=2, include_angles_view=True,
+        regression_target_frames=4)
+    targets, views = teacher.build_regression_targets(centred, ds, window_len)
+    centre = torch.as_tensor(np.concatenate([v[2] for v in pre.values()])[:, 3:7].mean(1))
+    assert views == [("edges", 2), ("angles", K)]
+    assert np.allclose(targets[:, 2:].numpy(), ((centre - centre.mean(0)) / centre.std(0) / K ** 0.5).numpy(), atol=1e-5)
+    centred.regression_target_frames = T + 1
+    with pytest.raises(ValueError, match="regression_target_frames"):
+        teacher.build_regression_targets(centred, ds, window_len)
+
     no_angles = {k: (v[0], v[1], np.empty((0,))) for k, v in pre.items()}
     ds = deepof.clustering.dataset.BatchDictDataset(no_angles, str(tmp_path), "other_", h5_chunk_len=4)
     with pytest.raises(ValueError, match="include_angles=True"):
@@ -2140,6 +2155,7 @@ def test_fit_contrastive_options(tmp_path):
     assert isinstance(model_val, deepof.clustering.models_new.ContrastivePT)
     assert len(logs["train"]["total_loss"]) == 2 and all(torch.isfinite(torch.tensor(logs["train"]["total_loss"])))
     # Regression teacher only: no contrastive or predictive loss, no third view
+    teacher.regression_target_frames = 4  # targets from the centre frames of the 12-frame view
     logs = _fit_contrastive(str(tmp_path), epochs=1, teacher=teacher, contrastive_weight=0.0, shift_view_mode="off")[3]
     assert np.isfinite(logs["train"]["total_loss"]).all() and logs["train"]["total_loss"][0] > 0
 

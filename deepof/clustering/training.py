@@ -1070,6 +1070,7 @@ def train_deepof_model(
     teacher_mode: Optional[str] = None,
     lambda_regression: Optional[float] = None,
     angle_segments: Optional[int] = None,
+    regression_target_frames: Optional[int] = None,  # centre frames of the regression targets (None: see TurtleTeacherCfg)
     include_kinematics_view: Optional[bool] = None,  # needs get_graph_dataset(..., include_kinematics=True)
     kinematics_segments_per_second: Optional[float] = None,
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
@@ -1243,6 +1244,7 @@ def train_deepof_model(
         teacher_mode=_lower(teacher_mode),
         lambda_regression=lambda_regression,
         angle_segments=angle_segments,
+        regression_target_frames=regression_target_frames,
         include_kinematics_view=include_kinematics_view,
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
