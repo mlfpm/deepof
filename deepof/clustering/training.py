@@ -530,6 +530,7 @@ def step_contrastive_distill(
         node_drop_max = contrastive_cfg.aug_node_drop_max,
         p_node_drop = contrastive_cfg.aug_p_node_drop,          
         p_mask_drop = contrastive_cfg.aug_p_mask_drop,
+        n_social = int(getattr(base, "social_nodes", 0)),
     )
 
     # Only the NCE loss uses the time-shifted third view; skip its augmentation and encoder pass otherwise
@@ -573,6 +574,7 @@ def step_contrastive_distill(
             node_drop_max = contrastive_cfg.aug_node_drop_max,
             p_node_drop = contrastive_cfg.aug_p_node_drop,          
             p_mask_drop = contrastive_cfg.aug_p_mask_drop,
+        n_social = int(getattr(base, "social_nodes", 0)),
         )
 
     # Split back into two views
@@ -742,8 +744,17 @@ def step_contrastive_distill(
         err = (ctx.regression_head(backbone1.float()) - target).pow(2)
         weighted, weight_sum = 0.0, 0.0
         for name, start, end, weight in ctx.regression_views:
-            view_loss = err[:, start:end].sum(dim=1).mean()
+            view_err = err[:, start:end].sum(dim=1)
+            view_loss = view_err.mean()
             view_losses[f"view_{name}"] = float(view_loss.detach().item())
+            if name == "social" and getattr(ctx, "social_split", None) is not None:
+                # partner near / far: error relative to the variance of the targets within the group (None: no such
+                # sample in the batch, skipped in the epoch mean)
+                near_all, var_near, var_far = ctx.social_split
+                near = near_all[idx.to(device).long()]
+                for tag, group, var in (("near", near, var_near), ("far", ~near, var_far)):
+                    view_losses[f"view_social_{tag}"] = (
+                        float(view_err[group].mean().detach().item()) / var if bool(group.any()) else None)
             weighted, weight_sum = weighted + weight * view_loss, weight_sum + weight
         distill_loss = ctx.lambda_regression * weighted / weight_sum
         total = total + distill_loss
@@ -1073,6 +1084,8 @@ def train_deepof_model(
     regression_target_frames: Optional[int] = None,  # centre frames of the regression targets (None: see TurtleTeacherCfg)
     include_kinematics_view: Optional[bool] = None,  # needs get_graph_dataset(..., include_kinematics=True)
     kinematics_segments_per_second: Optional[float] = None,
+    include_social_view: Optional[bool] = None,  # regression target from the social context nodes (per-animal data)
+    social_dim: Optional[int] = None,  # size of the social part of the embedding (per-animal data), see ContrastiveCfg
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
     # Diagnostics
@@ -1246,6 +1259,7 @@ def train_deepof_model(
         angle_segments=angle_segments,
         regression_target_frames=regression_target_frames,
         include_kinematics_view=include_kinematics_view,
+        include_social_view=include_social_view,
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
         regression_view_weights=regression_view_weights,
@@ -1329,6 +1343,7 @@ def train_deepof_model(
         proto_weight=proto_weight,
         proto_space=_lower(proto_space),
         predictive_weight=predictive_weight,
+        social_dim=social_dim,
         contrastive_weight=contrastive_weight,
         proto_clusters=proto_clusters,
         proto_warmup_epochs=proto_warmup_epochs,
@@ -2109,11 +2124,17 @@ def fit_contrastive(
         "tcn_kernel_size": common_cfg.tcn_kernel_size,
         "tcn_conv_stacks": common_cfg.tcn_conv_stacks,
         "tcn_conv_dilations": common_cfg.tcn_conv_dilations,        
+        "social_nodes": int(meta_info.get("social_nodes", 0)),
+        "social_partners": int(meta_info.get("social_partners", 1)),
+        "social_dim": int(contrastive_cfg.social_dim),
     }
 
     # Create model
     if model is None:
         model = ContrastivePT(
+            social_nodes=rebuild_spec["social_nodes"],
+            social_partners=rebuild_spec["social_partners"],
+            social_dim=rebuild_spec["social_dim"],
             input_shape=train_loader.dataset.x_shape,
             edge_feature_shape=train_loader.dataset.a_shape,
             adjacency_matrix=adjacency_matrix,
@@ -2158,7 +2179,7 @@ def fit_contrastive(
         )
 
 
-    n_nodes = train_loader.dataset.x_shape[1]
+    n_nodes = train_loader.dataset.x_shape[1] - int(meta_info.get("social_nodes", 0))  # body parts
     edge_index_global, edge_index_local, _ = _build_edge_from_metainfo(
     meta_info=meta_info,
     device=device,
@@ -2191,12 +2212,16 @@ def fit_contrastive(
     # Create teacher
     teacher_cfg.include_latent_view=False
     tau_star, regression_targets, regression_head, regression_views = None, None, None, None
+    regression_extras = {}
     if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
         # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
         regression_targets, views = deepof.clustering.teacher_model.build_regression_targets(
-            teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info
+            teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info, extras=regression_extras
         )
         regression_targets = regression_targets.to(device)
+        if "social_split" in regression_extras:
+            near, var_near, var_far = regression_extras["social_split"]
+            regression_extras["social_split"] = (near.to(device), var_near, var_far)
         regression_views = _regression_view_layout(views, teacher_cfg.regression_view_weights)
         with torch.no_grad():
             x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
@@ -2317,6 +2342,7 @@ def fit_contrastive(
             regression_targets=regression_targets,
             regression_head=regression_head,
             regression_views=regression_views,
+            social_split=regression_extras.get("social_split"),
             predictive_head=predictive_head,
             predictive_weight=contrastive_cfg.predictive_weight,
             lambda_regression=teacher_cfg.lambda_regression,
@@ -3673,10 +3699,13 @@ def _make_augmented_view(
     p_node_drop: float = 0.4,
     p_mask_drop: float = 0.0,
     return_shift: bool = False,
+    n_social: int = 0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
     With return_shift, also returns the time shift per sample (frames, relative to the window center).
+    n_social: the last n_social nodes are social context nodes (per-animal datasets); they are shifted in time and
+    interpolated with the body parts, but not rotated, jittered or displaced (they are no positions).
     """
     x_aug_raw = x
 
@@ -3684,10 +3713,15 @@ def _make_augmented_view(
         x_aug_raw, edge_index, window_len, min_shift=min_shift, max_shift=max_shift, p=p_shift, plot=False, return_shift=True
     )
     #x_aug = _augment_full_rotation(x_aug, edge_index, max_rot=180, p=0.5, plot=False)
-    x_aug = _augment_angle_rotations(x_aug, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
+    n_body = x_aug.shape[2] - n_social
+    x_body, x_social = x_aug[:, :, :n_body], x_aug[:, :, n_body:]
+    x_body = _augment_angle_rotations(x_body, edge_index, rot_precomp, n_rot=n_rot, max_rot=max_rot, p=p_rot, plot=False)
+    x_aug = torch.cat([x_body, x_social], dim=2) if n_social else x_body
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
-    x_aug = _augment_noise_xys(x_aug, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
-    x_aug = _augment_node_drop(x_aug, edge_index, min_drop=node_drop_min, max_drop=node_drop_max, p=p_node_drop, plot=False)
+    x_body, x_social = x_aug[:, :, :n_body], x_aug[:, :, n_body:]
+    x_body = _augment_noise_xys(x_body, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+    x_body = _augment_node_drop(x_body, edge_index, min_drop=node_drop_min, max_drop=node_drop_max, p=p_node_drop, plot=False)
+    x_aug = torch.cat([x_body, x_social], dim=2) if n_social else x_body
     x_aug = _augment_mask_drop(x_aug, p=p_mask_drop)
 
     a_aug = recompute_edges(x_aug, edge_index) 

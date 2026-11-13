@@ -2076,6 +2076,12 @@ class ContrastivePT(nn.Module):
       - forward(x_win, a_win) returns embeddings (B, D) for a window of that length (the backbone output with
         cluster_mode=True).
       - The model has no loss of its own: views and loss are built in training.step_contrastive_distill.
+      - social_nodes > 0 (per-animal datasets with social context, get_graph_dataset(per_animal=True)): the last
+        social_nodes nodes of x are the context nodes of the social_partners other animals (partner-major). The encoder
+        only sees the body parts of the animal itself; the context nodes of every partner go through one shared TCN,
+        are summed over the partners (any number and order) and mapped to social_dim values, which are appended to the
+        backbone output: [own behavior | social context]. The social part is not normalized per sample, so that a
+        partner far away (inputs near 0) gives a nearly constant vector. The projection head works on both parts.
     """
 
     def __init__(
@@ -2099,11 +2105,19 @@ class ContrastivePT(nn.Module):
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
         legacy_tcn: bool = False,
         cluster_mode: bool = False,
+        social_nodes: int = 0,
+        social_partners: int = 1,
+        social_dim: int = 32,
     ):
         super().__init__()
 
         T, N, F_in = input_shape
         Te, E, Fe = edge_feature_shape
+        self.social_nodes, self.social_partners, self.social_dim = int(social_nodes), int(social_partners), int(social_dim)
+        if self.social_nodes and (self.social_nodes % self.social_partners or not 0 < self.social_nodes < N):
+            raise ValueError(f"social_nodes={social_nodes} must be a multiple of social_partners={social_partners} "
+                             f"and smaller than the number of nodes ({N})")
+        N = N - self.social_nodes  # body parts of the animal itself
         
         if T != Te: # pragma: no cover
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
@@ -2163,8 +2177,32 @@ class ContrastivePT(nn.Module):
         else: # pragma: no cover
             raise ValueError(f"Unknown encoder_type: {encoder_type}")
 
+        if self.social_nodes:
+            per_partner = self.social_nodes // self.social_partners
+            # Without normalization layers (legacy_tcn with use_batch_norm=False): a LayerNorm would scale the near-zero
+            # inputs of a partner far away up to unit size, so that its movements there would shape the embedding
+            self.social_tcn = TCN1DPT(
+                in_channels=per_partner * F_in, conv_filters=tcn_conv_filters, kernel_size=tcn_kernel_size,
+                conv_stacks=tcn_conv_stacks, conv_dilations=tuple(tcn_conv_dilations), return_sequences=False,
+                use_batch_norm=False, legacy_tcn=True,
+            )
+            for module in self.social_tcn.modules():  # without normalization the small default init would mute it
+                if isinstance(module, nn.Conv1d):
+                    nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+            self.social_out = nn.Linear(tcn_conv_filters, self.social_dim)
+            # One projection head on [own | social] instead of the encoder's own one
+            self.head = _encoder_head(self.encoder.head[0].in_features + self.social_dim, latent_dim)
+            self.encoder.head = nn.Identity()
+
         # Debug cache
         self._last_debug: Dict[str, Any] = {}
+
+    def split_nodes(self, x: torch.Tensor) -> Tuple[torch.Tensor, Any]:
+        """(body parts of the animal, social context nodes or None) of node features (B, T, N, F)."""
+        if not self.social_nodes:
+            return x, None
+        n = x.shape[2] - self.social_nodes
+        return x[:, :, :n], x[:, :, n:]
 
     def forward(self, x: torch.Tensor, a: torch.Tensor, return_backbone: bool = False) -> torch.Tensor:
         """
@@ -2172,5 +2210,17 @@ class ContrastivePT(nn.Module):
           x: (B, T_half, N, F), a: (B, T_half, E, Fe) -> (B, D)
         With return_backbone, returns (projection, backbone output) (used by the regression teacher).
         """
-        return self.encoder(x, a, self.cluster_mode, return_backbone=return_backbone)
+        if not self.social_nodes:
+            return self.encoder(x, a, self.cluster_mode, return_backbone=return_backbone)
+        x_self, x_social = self.split_nodes(x)
+        _, own = self.encoder(x_self, a, False, return_backbone=True)
+        B, T, _, F_in = x_social.shape
+        partners = x_social.reshape(B, T, self.social_partners, -1).permute(0, 2, 1, 3).reshape(
+            B * self.social_partners, T, -1)
+        social = self.social_out(self.social_tcn(partners.float()).view(B, self.social_partners, -1).sum(dim=1))
+        backbone = torch.cat([own, social.to(own.dtype)], dim=1)
+        projection = self.head(backbone)
+        if return_backbone:
+            return projection, backbone
+        return backbone if self.cluster_mode else projection
  

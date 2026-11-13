@@ -101,7 +101,7 @@ def test_get_contrastive_soft_counts_gmm(N_clusters_per_gate,M_gates,window_size
     sample_size=st.one_of(st.just(100),st.just(200000)),
     exp_type=st.sampled_from(["test_single_topview", "test_multi_topview"]),
     use_supervised_gates=st.booleans(),
-    macro_method=st.sampled_from(["bace", "pcca", "kmeans"]),
+    macro_method=st.sampled_from(["bace", "pcca", "kmeans", "modularity", "pcca_counts"]),
     split_factor=st.sampled_from([None, 1.0]),
     decode_method=st.sampled_from(["viterbi_macro", "forward_backward_macro", "viterbi_micro",
                                    "forward_backward_micro", "lookup"]),
@@ -172,7 +172,8 @@ def test_get_contrastive_soft_counts_msm_pcca(N_clusters_per_gate,M_gates,window
         assert all(w == total_clusters for w in widths)
 
 
-@pytest.mark.parametrize("macro_method,split_factor", [("pcca", 1.0), ("pcca", 3.0), ("kmeans", None), ("bace", None)])
+@pytest.mark.parametrize("macro_method,split_factor", [("pcca", 1.0), ("pcca", 3.0), ("kmeans", None), ("bace", None), ("modularity", None),
+                                                       ("pcca_counts", None)])
 def test_regroup_macrostates(macro_method, split_factor):
     # 12 microstates on a line: PCCA state 0 owns 10 of them (83%), state 1 the other two
     from types import SimpleNamespace
@@ -191,10 +192,29 @@ def test_regroup_macrostates(macro_method, split_factor):
         assert out["chi"].shape == (12, 3) and np.array_equal(out["chi"][:, 2], chi[:, 1])
     elif macro_method == "kmeans":  # geometric halves of the line instead of the PCCA states
         assert out["chi"].shape == (12, 2) and sorted(out["chi"].sum(0)) == [6.0, 6.0]
-    else:  # bace: two non-empty states from the transitions
-        assert out["chi"].shape == (12, 2) and out["chi"].sum(0).min() >= 1
+    else:  # bace, modularity, pcca_counts: two non-empty states from the transitions
+        assert out["chi"].shape == (12, 2) and np.bincount(out["chi"].argmax(1), minlength=2).min() >= 1
     assert np.allclose(out["chi"].sum(1), 1) and np.allclose(out["P_macro"].sum(1), 1)
     assert np.isclose(out["pi_macro"].sum(), 1) and out["micro2macro"].shape == (12, out["chi"].shape[1])
+
+
+def test_social_share_column_weights():
+    # 8 own columns separate the rows in two groups, 2 social columns in two other groups: the microstates follow the
+    # own columns when all columns count equally and the social columns when these get most of the distance
+    import deepof.clustering.model_utils_new as mu
+    rng = np.random.default_rng(0)
+    own, social = np.repeat([0, 1], 200), np.tile([0, 1], 200)
+    X = np.concatenate([own[:, None] + 0.05 * rng.normal(size=(400, 8)), 0.01 * social[:, None] + 0.0005 * rng.normal(size=(400, 2))], axis=1)
+    def micro(weights):
+        scaler, kmeans, _ = deepof.post_hoc._fit_microstates_on_sample(
+            X, seed=0, n_micro=2, min_micro_per_macro=1, N_clusters_per_gate=2, column_weights=weights)
+        return kmeans.predict(scaler.transform(X))
+    agree = lambda a, b: max(np.mean(a == b), np.mean(a != b))
+    assert mu._social_column_weights(None, 2, 10) is None and agree(micro(None), own) == 1
+    weights = mu._social_column_weights(0.9, 2, 10)
+    assert np.isclose(2 * weights[-1] ** 2 / (weights ** 2).sum(), 0.9) and agree(micro(weights), social) == 1
+    with pytest.raises(ValueError):
+        mu._social_column_weights(0.5, 0, 10)
 
 
 def test_bace_groups():
@@ -210,6 +230,12 @@ def test_bace_groups():
     assert len(set(two[:3])) == 1 and len(set(two[3:6])) == 1 and two[0] != two[3] and two[6] == two[0]
     assert len(set(three)) == 3 and all(len(set(two[three == s])) == 1 for s in range(3))
     assert np.array_equal(bace(9), np.arange(7))
+    # Modularity: three blocks of four microstates that exchange within and rarely between
+    blocks = np.full((12, 12), 1.0)
+    for s in range(0, 12, 4):
+        blocks[s:s + 4, s:s + 4] = 50.0
+    np.fill_diagonal(blocks, 100.0)
+    assert np.array_equal(deepof.post_hoc._modularity_groups(blocks, 3), np.repeat([0, 1, 2], 4))
     # Observed counts between the active microstates only (symbol 2 is not active), in their order
     counts = deepof.post_hoc._transition_counts([np.array([5, 5, 2, 0, 5]), np.array([0, 0])], np.array([0, 5]), 1)
     assert np.array_equal(counts, [[1, 1], [0, 1]])
@@ -620,7 +646,7 @@ def test_get_gate_entry_ignores_pair_order():
         deepof.post_hoc.get_gate_entry(gates, ("res", "other"))
 
 
-@pytest.mark.parametrize("method", ["bace", "msm", "kmeans", "combined"])
+@pytest.mark.parametrize("method", ["bace", "msm", "kmeans", "combined", "modularity", "pcca_counts"])
 def test_cluster_number_selection(method):
     # Three sticky, well separated states: every criterion is computed and the timescale gap finds them
     rng = np.random.default_rng(0)

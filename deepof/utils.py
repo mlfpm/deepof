@@ -4643,3 +4643,92 @@ def kinematics_features(
                 columns += [(f"{a}_{b}_kinematics", f"dist_rate_{pa}-{pb}"),
                             (f"{a}_{b}_kinematics", f"dist_acc_{pa}-{pb}")]
     return np.stack(values, axis=1), columns
+
+
+# Social context of a focal animal (get_graph_dataset(per_animal=True)): what a partner does relative to the focal
+# animal, in the focal animal's own frame per frame, in units of its body length and faded with the distance, so that a
+# partner far away (or missing) gives zeros whatever it does there
+SOCIAL_SOFT_RADIUS = 0.25  # body lengths; directions shrink smoothly to 0 below this distance (no jumps at contact)
+SOCIAL_CONTACT_SCALE = 1 / 3  # contact proximities fade with social_range * this
+
+
+def social_context_features(
+    focal: np.ndarray, partner: np.ndarray, part_names: List[str], partner_names: List[str], center: str, align: str,
+    body_length: float, frame_rate: float, social_range: float = 0.75,
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Context "nodes" of one partner for a focal animal: per frame three values (x, y, s) per node, all in [-1, 1] or
+    log-squashed, all 0 for a partner far away. With f(d) = exp(-d / social_range) (d in focal body lengths):
+
+      <part> (Nose, the center part, Tail_base of the partner, as far as they exist): direction of the part from the
+          focal center in the focal frame (y = forward, shrinking to 0 within SOCIAL_SOFT_RADIUS) * f, and f itself
+      heading: (cos, sin) of the partner's body direction relative to the focal one * f, and the partner's speed
+          towards the focal animal * f
+      motion: the partner's velocity in the focal frame * f, and the focal animal's speed towards the partner * f
+      contact (with Nose and Tail_base): proximities focal nose - partner nose, focal nose - partner tail base,
+          partner nose - focal tail base (who sniffs whom)
+
+    Speeds are in body lengths per second, as sign(v) * log1p(|v|). Missing positions are interpolated linearly.
+
+    Args:
+        focal, partner (np.ndarray): positions (frames, parts, 2) in a common frame (e.g. the arena).
+        part_names, partner_names (list): body part names without animal prefix, in the order of the positions.
+        center, align (str): body parts that define the focal frame (origin, forward direction), as in the dataset.
+        body_length (float): body length of the focal animal (same unit as the positions).
+        frame_rate (float): frames per second.
+        social_range (float): distance (focal body lengths) at which the context has faded to 1 / e.
+
+    Returns:
+        (values (frames, nodes, 3), node names).
+    """
+    def clean(P):
+        flat = pd.DataFrame(P.reshape(len(P), -1)).interpolate(limit_direction="both").fillna(0.0).to_numpy(float)
+        return flat.reshape(P.shape)
+
+    def index(names):
+        return {n.lower(): j for j, n in enumerate(names)}
+
+    present = np.isfinite(partner).any(axis=(0, 1)).all() and np.isfinite(focal).any(axis=(0, 1)).all()
+    F, P = clean(focal) / body_length, clean(partner) / body_length
+    fi, pi = index(part_names), index(partner_names)
+    c_f, c_p = F[:, fi[center.lower()]], P[:, pi[center.lower()]]
+    eps = 1e-9
+
+    def unit(v):
+        return v / (np.linalg.norm(v, axis=-1, keepdims=True) + eps)
+
+    forward = unit(F[:, fi[align.lower()]] - c_f)
+    right = np.stack([forward[:, 1], -forward[:, 0]], axis=-1)
+    ego = lambda v: np.stack([(v * right).sum(-1), (v * forward).sum(-1)], axis=-1)  # into the focal frame
+    fade = lambda d, scale=1.0: np.exp(-d / (social_range * scale))
+    squash = lambda v: np.sign(v) * np.log1p(np.abs(v))
+
+    nodes, names = [], []
+    for part in dict.fromkeys(["Nose", center, "Tail_base"]):
+        if part.lower() not in pi:
+            continue
+        r = ego(P[:, pi[part.lower()]] - c_f)
+        d = np.linalg.norm(r, axis=-1)
+        f = fade(d)
+        nodes.append(np.column_stack([r / np.sqrt(d ** 2 + SOCIAL_SOFT_RADIUS ** 2)[:, None] * f[:, None], f]))
+        names.append(part)
+    f = fade(np.linalg.norm(c_p - c_f, axis=-1))
+    to_partner = unit(c_p - c_f)
+    v_f = _savgol_derivative(c_f, KINEMATICS_SMOOTHING_S, frame_rate, 1)
+    v_p = _savgol_derivative(c_p, KINEMATICS_SMOOTHING_S, frame_rate, 1)
+    heading = ego(unit(P[:, pi[align.lower()]] - c_p)) if align.lower() in pi else np.zeros_like(c_p)
+    nodes.append(np.column_stack([heading * f[:, None], squash(-(v_p * to_partner).sum(-1)) * f]))
+    nodes.append(np.column_stack([squash(ego(v_p)) * f[:, None], squash((v_f * to_partner).sum(-1)) * f]))
+    names += ["heading", "motion"]
+    if all(p in fi and p in pi for p in ("nose", "tail_base")):
+        dist = lambda a, b: np.linalg.norm(a - b, axis=-1)
+        nodes.append(np.column_stack([
+            fade(dist(F[:, fi["nose"]], P[:, pi["nose"]]), SOCIAL_CONTACT_SCALE),
+            fade(dist(F[:, fi["nose"]], P[:, pi["tail_base"]]), SOCIAL_CONTACT_SCALE),
+            fade(dist(P[:, pi["nose"]], F[:, fi["tail_base"]]), SOCIAL_CONTACT_SCALE),
+        ]))
+        names.append("contact")
+    values = np.stack(nodes, axis=1)
+    if not present:  # an animal without any position in this video
+        values[:] = 0.0
+    return values, names

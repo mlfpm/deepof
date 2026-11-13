@@ -312,6 +312,25 @@ def load_project(
     return coordinates
 
 
+# Per-animal datasets (get_graph_dataset(per_animal=True)): keys of the pooled windows are "<video>::<animal>"
+PER_ANIMAL_SEP = "::"
+
+
+def _strip_animal_prefix(name, animal: str):
+    """Column name (string or tuple of strings) without the id prefix "<animal>_" of its parts."""
+    prefix = f"{animal}_"
+    strip = lambda s: s[len(prefix):] if isinstance(s, str) and s.startswith(prefix) else s
+    return tuple(strip(s) for s in name) if isinstance(name, tuple) else strip(name)
+
+
+def animal_scaler(global_scaler: Optional[dict], animal: str) -> Optional[dict]:
+    """The global scaler of a per_animal dataset for one animal: the same standardization, with the body lengths of
+    this animal ({video: {"": length}}). Scalers of other datasets are returned unchanged."""
+    if not global_scaler or not global_scaler.get("per_animal"):
+        return global_scaler
+    return dict(global_scaler, body_length=(global_scaler.get("body_length") or {}).get(animal) or {})
+
+
 def _save_replacing_table(data, table_path, return_path: bool):
     """Save data as a replacement for a table loaded with get_dt(..., return_path=True).
 
@@ -3277,6 +3296,11 @@ class Coordinates:
         include_kinematics: bool = False,
         align_per_window: bool = False,
         frame_mask: dict = None,
+        per_animal: bool = False,
+        social_context: bool = True,
+        social_range: float = 0.75,
+        _focal: bool = False,
+        _fit_only: bool = False,
         **kwargs,
     ) -> table_dict:
         """Generate a dataset with all specified features.
@@ -3302,6 +3326,10 @@ class Coordinates:
             include_kinematics (bool): If True, the third array additionally contains (after the angles, if included) the unscaled kinematics of get_kinematics (speed, acceleration and posture wavelet bands per animal, change of the distances between animals), computed from the positions before alignment (meta_info["kinematics_columns"]). Not a model input, but the targets of the kinematics view of the regression teacher (include_kinematics_view in train_deepof_model). Not available with precomputed_tab_dict. Defaults to False.
             align_per_window (bool): Only with body parts as center and align, and coord_standardize="groupwise" or None. If True, every window is aligned on its centre frame (window_size // 2, the centre of the crop the models take): all frames are shifted and rotated together so that in that frame the center body part (of the first animal) is at 0 and the align body part on the y-axis. Movement and turning within the window stay in the coordinates, the position and direction in the arena do not. If False (default), every frame is centered and rotated on its own (posture only). Speeds are the true speeds of the body parts in both cases.
             frame_mask (dict): {video: boolean array over all frames of its table}. Only the frames that are True enter the statistics of the scaling (body length per video, global scalers) and the kinematics (the other frames are interpolated there, see get_kinematics); all frames are scaled and windowed. E.g. the frames without tracking errors. None (default): all frames. Statistics are global in any case (one standardization of all videos; the body length per video is the median Nose - Tail_base distance of the frames in which the animal moves).
+            per_animal (bool): Only for projects with several animals (ignored otherwise, single-animal datasets do not change). If True, every animal gets its own windows: its own body parts (without the id prefix, so one model with shared weights sees all animals) centered and aligned on itself and divided by its own body length, with one standardization fitted on all animals. The windows have the keys "<video>::<animal>"; meta_info["per_animal"] is True, the fourth return value is a dictionary {animal: table_dict} and global_scaler["body_length"] is {animal: {video: ...}} (embedding_per_video handles both). Needs body parts as center and align and is not available for very large projects. Defaults to False.
+            social_context (bool): Only with per_animal. If True (default), the windows of an animal additionally contain what each other animal does relative to it (deepof.utils.social_context_features: position of its nose, center and tail base, body direction, movement and nose contacts, in the animal's own frame and faded with the distance, so that an animal far away gives zeros whatever it does). They are stored as additional nodes after the body parts (meta_info["social_nodes"], ["social_partners"], ["social_columns"]), which only the contrastive model can use (own stream, see ContrastivePT).
+            social_range (float): Distance in body lengths at which the social context has faded to 1 / e. Defaults to 0.75.
+            _focal, _fit_only: internal (one animal of a per_animal dataset: body part names without id prefix; only the samples for the shared scaler).
 
         Returns:
             merged_features: A graph-based dataset.
@@ -3323,13 +3351,32 @@ class Coordinates:
             if missing or wrong:
                 raise ValueError(f"frame_mask needs one boolean array per video with one entry per frame; missing: "
                                  f"{missing}, wrong length: {wrong}.")
-        # The reference body parts (first selected animal) of the centering, the outlier test and the window alignment
-        ids = ([animal_id] if isinstance(animal_id, str) else list(animal_id)) if animal_id else list(self._animal_ids)
-        prefix = f"{ids[0]}_" if ids[0] else ""
-        reference = None if center == "arena" else prefix + center
-
         if return_as_paths is None:
             return_as_paths = self._very_large_project
+        several_animals = bool(self._animal_ids) and len(self._animal_ids) > 1 and bool(self._animal_ids[0])
+        if (per_animal and several_animals) or _focal:
+            if ((animal_id is not None and not _focal) or not preprocess or center == "arena" or return_as_paths
+                    or (social_context and not align)):
+                raise ValueError("per_animal=True needs animal_id=None, preprocess=True, a body part as center (e.g. "
+                                 "center='Center'; with social_context also align, e.g. 'Spine_1') and is not "
+                                 "available for very large projects (return_as_paths).")
+        if per_animal and several_animals and not _focal:
+            return self._get_graph_dataset_per_animal(
+                dict(window_size=window_size, bin_size=bin_size, bin_index=bin_index, precomputed_bins=precomputed_bins,
+                     samples_max=samples_max, align_video_lengths=align_video_lengths, center=center, polar=polar,
+                     align=align, scale=scale, dist_standardize=dist_standardize, speed_standardize=speed_standardize,
+                     coord_standardize=coord_standardize, include_angles=include_angles,
+                     mouse_size_normalization=mouse_size_normalization,
+                     include_imputation_mask=include_imputation_mask, include_kinematics=include_kinematics,
+                     align_per_window=align_per_window, frame_mask=frame_mask, social_context=social_context,
+                     social_range=social_range),
+                kwargs, precomputed_tab_dict,
+            )
+        # The reference body parts (first selected animal) of the centering, the outlier test and the window alignment
+        ids = ([animal_id] if isinstance(animal_id, str) else list(animal_id)) if animal_id else list(self._animal_ids)
+        prefix = f"{ids[0]}_" if ids[0] and not _focal else ""  # _focal: body part names without the id prefix
+        reference = None if center == "arena" else prefix + center
+
         # Defaults to 1 second windows if no window size is given
         if window_size is None:
             window_size= int(np.round(self._frame_rate))
@@ -3351,6 +3398,9 @@ class Coordinates:
                 # Same for angles
                 angles = self.get_angles_at_key(key=list(tab_dict.keys())[0], selected_id=animal_id)
                 angle_feature_names = list(angles.keys())
+                if _focal:  # the columns of the given tables have no id prefix already
+                    edge_feature_names = [_strip_animal_prefix(c, animal_id) for c in edge_feature_names]
+                    angle_feature_names = [_strip_animal_prefix(c, animal_id) for c in angle_feature_names]
 
                 pbar.update()
             else:  
@@ -3406,13 +3456,32 @@ class Coordinates:
                     dists,
                     save_as_paths=return_as_paths
                     )
-                                
+                if _focal:
+                    # Body part names without the id prefix (the same columns for every animal); the kinematics of the
+                    # other animals and of the pairs are dropped
+                    own = f"{animal_id}_kinematics"
+                    arena_coords = self.get_coords(center="arena") if social_context else None
+                    for key in tab_dict.keys():
+                        tab = tab_dict[key]
+                        if social_context:  # appended after the distances (the column order above is kept)
+                            rows = None if frame_mask is None else frame_mask[key]
+                            length = deepof.utils.table_body_lengths(tab, [animal_id], rows=rows)[animal_id]
+                            tab = pd.concat([tab, self._social_context_table(
+                                get_dt(arena_coords, key), animal_id, center, align, length, social_range)], axis=1)
+                        tab = tab.loc[:, [not (isinstance(c, tuple) and str(c[0]).endswith("kinematics") and c[0] != own)
+                                          for c in tab.columns]]
+                        tab.columns = pd.Index([_strip_animal_prefix(c, animal_id) for c in tab.columns],
+                                               tupleize_cols=False)
+                        tab_dict[key] = tab
+                    edge_feature_names = [_strip_animal_prefix(c, animal_id) for c in edge_feature_names]
+                    angle_feature_names = [_strip_animal_prefix(c, animal_id) for c in angle_feature_names]
+
                 pbar.update()
             pbar.set_postfix(step="Get graph info")
 
             # Get corresponding feature graph
             graph = deepof.utils.connect_mouse(
-                animal_ids=(self._animal_ids if animal_id is None else animal_id),
+                animal_ids=(None if _focal else self._animal_ids if animal_id is None else animal_id),
                 exclude_bodyparts=(
                     list(
                         set(
@@ -3437,6 +3506,9 @@ class Coordinates:
             table_metadata = get_dt(self._tables, list(self._tables.keys())[0], only_metainfo=True)
             table_columns = table_metadata["columns"]
             table_column_names = [column[0] for column in table_columns]
+            if _focal:
+                table_column_names = [_strip_animal_prefix(name, animal_id) for name in table_column_names
+                                      if str(name).startswith(f"{animal_id}_")]
             nodes_to_remove=list(set(list(graph.nodes)) - set(table_column_names))
             for node in nodes_to_remove:
                 graph.remove_node(node)
@@ -3530,8 +3602,12 @@ class Coordinates:
                 mouse_size_normalization=mouse_size_normalization,
                 frame_mask=frame_mask,
                 coord_reference=reference,
+                animal_ids=[""] if _focal else None,
+                fit_only=_fit_only,
                 **kwargs,
                 )
+            if _fit_only:  # (tables without id prefix, (valid keys, scaler samples, body lengths))
+                return tab_dict, (to_preprocess, metainfo, global_scaler)
             # Centering and alignment, also for a later preprocessing of the same data (embedding_per_video)
             metainfo['center'], metainfo['align'], metainfo['align_per_window'] = center, align, bool(align_per_window)
             metainfo['node_columns']=feature_names[node_sorting_indices]
@@ -3540,6 +3616,15 @@ class Coordinates:
             metainfo['kinematics_columns']=feature_names[kinematics_sorting_indices]
             metainfo['node_channels']=4 if has_mask else 3  # x, y, speed, (imputation mask)
             metainfo['frame_rate']=self._frame_rate
+            # Social context nodes (per_animal): after the body parts in every channel block, the same layout
+            social_names = list(dict.fromkeys(f[0] for f in feature_names if isinstance(f, tuple) and len(f) == 2
+                                              and f[1] == "sx"))
+            social_sorting_indices = [[list(feature_names).index((name, channel)) for name in social_names]
+                                      for channel in ("sx", "sy", "ss")]
+            if social_names:
+                metainfo['social_nodes'] = len(social_names)
+                metainfo['social_partners'] = len({name.split("_", 1)[0] for name in social_names})
+                metainfo['social_columns'] = social_names
 
             with tqdm(total=len(to_preprocess),desc=f"{'Reshaping':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table") as pbar:
                 for k in range(0,len(to_preprocess)):
@@ -3556,6 +3641,11 @@ class Coordinates:
                         if align_per_window:
                             deepof.utils.align_windows(tab_nodes, len(nodes), nodes.index(reference),
                                                        nodes.index(prefix + align))
+                        if social_names:
+                            blocks = np.split(tab_nodes, metainfo['node_channels'], axis=2)
+                            social = [tab[:, :, idx] for idx in social_sorting_indices]
+                            social += [np.zeros_like(social[0])] * (len(blocks) - 3)  # imputation mask channel: 0
+                            tab_nodes = np.concatenate([part for pair in zip(blocks, social) for part in pair], axis=2)
                         tab_edges = tab[:, :, edge_sorting_indices] 
                         tab_angles = tab[:, :, angle_sorting_indices + kinematics_sorting_indices]
                         dataset = (tab_nodes, tab_edges, tab_angles)
@@ -3627,6 +3717,79 @@ class Coordinates:
             metainfo['coord_standardize'] = coord_standardize
             return to_preprocess, metainfo, adj_matrix, tab_dict, None
                 
+    def _social_context_table(self, coords: pd.DataFrame, animal: str, center: str, align: str, body_length: float,
+                              social_range: float) -> pd.DataFrame:
+        """Social context of one animal in one video (deepof.utils.social_context_features for every other animal, in
+        the order of the animal ids) with the columns ("social<i>_<node>", "sx" / "sy" / "ss")."""
+        def positions(aid):
+            parts = sorted({c[0] for c in coords.columns if c[1] == "x" and c[0].startswith(aid + "_")})
+            xy = np.stack([coords[[(p, "x") for p in parts]].to_numpy(float),
+                           coords[[(p, "y") for p in parts]].to_numpy(float)], axis=-1)
+            return xy, [p[len(aid) + 1:] for p in parts]
+
+        focal, names = positions(animal)
+        if not np.isfinite(body_length) or body_length <= 0:  # animal (almost) never tracked in this video
+            body_length = 1.0
+            focal = np.full_like(focal, np.nan)
+        values, columns = [], []
+        for i, other in enumerate([a for a in self._animal_ids if a != animal], start=1):
+            partner, partner_names = positions(other)
+            nodes, node_names = deepof.utils.social_context_features(
+                focal, partner, names, partner_names, center, align, body_length, self._frame_rate, social_range)
+            for j, node in enumerate(node_names):
+                values.append(nodes[:, j])
+                columns += [(f"social{i}_{node}", channel) for channel in ("sx", "sy", "ss")]
+        return pd.DataFrame(np.concatenate(values, axis=1).astype(self._bit_precision.dtype), index=coords.index,
+                            columns=pd.Index(columns, tupleize_cols=False))
+
+    def _get_graph_dataset_per_animal(self, args: dict, kwargs: dict, precomputed_tab_dict=None) -> tuple:
+        """get_graph_dataset(per_animal=True): one dataset per animal (own body parts without id prefix, centered and
+        aligned on itself, own body length), standardized with one scaler fitted on all animals, pooled under the keys
+        "<video>::<animal>". precomputed_tab_dict: {animal: table_dict}, the fourth return value of an earlier call."""
+        ids = list(self._animal_ids)
+        kwargs = dict(kwargs)
+        scaler = kwargs.pop("pretrained_scaler", None)
+        tabs, samples, lengths = {}, {}, {}
+        if precomputed_tab_dict is not None:
+            tabs = {a: precomputed_tab_dict[a] for a in ids}
+        if scaler is None or not tabs:
+            for a in ids:  # tables of every animal and the samples for the shared scaler
+                tab_dict, (_, s, lengths[a]) = self.get_graph_dataset(
+                    animal_id=a, _focal=True, _fit_only=True, precomputed_tab_dict=tabs.get(a),
+                    pretrained_scaler=animal_scaler(scaler, a),
+                    **dict(args, include_kinematics=args["include_kinematics"] and a not in tabs), **kwargs)
+                tabs[a] = tab_dict
+                for name, values in s.items():
+                    samples.setdefault(name, []).extend(values)
+        if scaler is None:
+            scaler = deepof.utils._pp_fit_global_scaler(
+                scale=args["scale"], pretrained_scaler=None, samples=samples,
+                dist_standardize=args["dist_standardize"], speed_standardize=args["speed_standardize"],
+                coord_standardize=args["coord_standardize"], log_distances=kwargs.get("log_distances", True),
+                body_lengths=lengths,
+            )
+            if scaler is not None:
+                scaler["per_animal"] = True
+
+        train, test, meta_info, adjacency = {}, {}, None, None
+        for a in ids:
+            (tr, te), meta, adjacency, _, _ = self.get_graph_dataset(
+                animal_id=a, _focal=True, precomputed_tab_dict=tabs[a], pretrained_scaler=animal_scaler(scaler, a),
+                **dict(args, include_kinematics=False), **kwargs)
+            train.update({f"{key}{PER_ANIMAL_SEP}{a}": value for key, value in tr.items()})
+            test.update({f"{key}{PER_ANIMAL_SEP}{a}": value for key, value in te.items()})
+            if meta_info is None:
+                meta_info, header = dict(meta), (tr, te)
+            else:
+                for name in ("shape_train", "shape_test"):
+                    if name in meta and name in meta_info:
+                        meta_info[name] = [(m[0] + s[0],) + tuple(s[1:]) for m, s in zip(meta[name], meta_info[name])]
+        # Windows of one video stay together (all its animals; important when splitting or shuffling by video)
+        order = lambda d: {k: d[k] for k in sorted(d, key=lambda k: k.rsplit(PER_ANIMAL_SEP, 1))}
+        meta_info.update(per_animal=True, animal_ids=ids)
+        return ((header[0].new_dict_same_header(order(train)), header[1].new_dict_same_header(order(test))),
+                meta_info, adjacency, tabs, scaler)
+
     # noinspection PyDefaultArgument
     def get_supervised_parameters(self) -> dict:
         """Return the most frequent behaviour in a window of window_size frames.
@@ -4472,9 +4635,15 @@ class TableDict(dict):
         mouse_size_normalization: bool = False,
         frame_mask: Optional[dict] = None,
         coord_reference: Optional[str] = None,
+        animal_ids: Optional[list] = None,
+        fit_only: bool = False,
     ) -> tuple:
         """
         Preprocess pose tables for model training (refactor of preprocess).
+
+        animal_ids: animal ids of the body part names in the tables (None: those of the project; [""] for tables of
+        one animal without id prefix, as built by get_graph_dataset(per_animal=True)). fit_only: stop after step 1 and
+        return (valid keys, samples for the global scalers, body lengths), to fit one scaler on several table dicts.
 
         Pipeline:
         1. Filter by time bins, drop all-NaN tables
@@ -4498,7 +4667,8 @@ class TableDict(dict):
             save_as_paths = bool(coordinates._very_large_project)
 
         keys_list = sorted(self.keys())
-        animal_ids = coordinates._animal_ids
+        if animal_ids is None:
+            animal_ids = coordinates._animal_ids
 
         # Time bins. Videos longer than samples_max are cut (not downsampled), so that windows stay consecutive
         bin_kwargs = dict(
@@ -4550,6 +4720,8 @@ class TableDict(dict):
             raise ValueError(
                 "No data left to preprocess: the selected frames (time bins) of all videos contain only NaNs."
             )
+        if fit_only:
+            return valid_keys, samples, body_lengths
         if isinstance(test_videos, int) and test_videos > len(valid_keys):
             raise ValueError(
                 f"test_videos={test_videos} exceeds the number of videos with data ({len(valid_keys)}); videos whose "

@@ -939,6 +939,65 @@ def test_deep_unsupervised_embedding(table_type):
     assert embeddings['test2'].shape==(76,8)
 
 
+def test_get_graph_dataset_per_animal():
+    # Every animal on its own (body parts without id prefix, own body length) under one shared scaler, pooled as
+    # "<video>::<animal>": identical to the single-animal dataset of that animal with the same scaler
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"])
+    kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=5, test_videos=1, include_angles=True,
+                  include_kinematics=True, align_per_window=True, coord_standardize="groupwise")
+    (train, test), meta_info, adj, tabs, scaler = prun.get_graph_dataset(per_animal=True, social_context=False, **kwargs)
+    get_dt = deepof.data_loading.get_dt
+    assert meta_info["per_animal"] and meta_info["animal_ids"] == ["B", "W"] and set(tabs) == {"B", "W"}
+    assert list(train.keys()) == ["test::B", "test::W"] and list(test.keys()) == ["test2::B", "test2::W"]
+    assert ("Center", "x") in list(meta_info["node_columns"]) and adj.shape == (14, 14)
+    assert {c[0] for c in meta_info["kinematics_columns"]} == {"kinematics"}
+    assert meta_info["shape_train"][0][0] == sum(len(get_dt(train, k)[0]) for k in train.keys())
+    for animal in ("B", "W"):
+        lengths = {video: {animal: length[""]} for video, length in scaler["body_length"][animal].items()}
+        (single, single_test), _, single_adj, _, _ = prun.get_graph_dataset(
+            animal_id=animal, pretrained_scaler=dict(scaler, body_length=lengths), **kwargs)
+        assert np.array_equal(adj, single_adj)
+        for pooled, own in ((train, single), (test, single_test)):
+            for key in own.keys():
+                for a, b in zip(get_dt(pooled, f"{key}::{animal}"), get_dt(own, key)):
+                    assert np.array_equal(a, b)
+    # From the returned tables and scaler (as embedding_per_video does): the same windows
+    again = prun.get_graph_dataset(per_animal=True, precomputed_tab_dict=tabs, pretrained_scaler=scaler,
+                                   social_context=False, **dict(kwargs, include_kinematics=False))[0][0]
+    assert all(np.array_equal(a, b) for k in train.keys() for a, b in zip(get_dt(train, k), get_dt(again, k)))
+    with pytest.raises(ValueError, match="per_animal"):
+        prun.get_graph_dataset(per_animal=True, window_size=10)  # arena-centred
+    # Social context (default): additional nodes after the unchanged body parts, bounded, per partner
+    social, social_info = prun.get_graph_dataset(per_animal=True, **kwargs)[:2]
+    n_social = social_info["social_nodes"]
+    assert n_social == len(social_info["social_columns"]) == 6 and social_info["social_partners"] == 1
+    nodes = deepof.clustering.dataset.reorder_and_reshape(get_dt(social[0], "test::W")[0], 3)
+    plain_nodes = deepof.clustering.dataset.reorder_and_reshape(get_dt(train, "test::W")[0], 3)
+    assert np.array_equal(nodes[:, :, :-n_social], plain_nodes)
+    assert np.abs(nodes[:, :, -n_social:]).max() <= 1 and nodes[:, :, -n_social:-3, 2].min() >= 0
+    # The features themselves: a partner in front that walks towards the focal animal; nothing from far away; the
+    # roles (who approaches whom) swap with the point of view
+    parts = ["Center", "Nose", "Spine_1", "Tail_base"]
+    focal = np.tile(np.array([[0, 0], [0, 50], [0, 20], [0, -50]], float), (50, 1, 1))
+    def partner(distance):
+        centre = np.stack([np.zeros(50), distance - np.arange(50.0)], -1)
+        return centre[:, None] + np.array([[0, 0], [0, -50], [0, -20], [0, 50]], float)[None]
+    features = lambda a, b: deepof.utils.social_context_features(a, b, parts, parts, "Center", "Spine_1", 100.0, 25.0)
+    near, names = features(focal, partner(150.0))
+    assert names == ["Nose", "Center", "Tail_base", "heading", "motion", "contact"]
+    assert abs(near[25, 1, 0]) < 1e-6 and near[25, 1, 1] > 0 and near[25, 0, 2] > near[25, 2, 2] > 0  # in front, nose first
+    assert near[25, 3, 2] > 0.01 and abs(near[25, 4, 2]) < 1e-6  # the partner approaches, the focal animal stands
+    swapped = features(partner(150.0), focal)[0]
+    assert abs(swapped[25, 3, 2]) < 1e-6 and swapped[25, 4, 2] > 0.01
+    assert np.abs(features(focal, partner(3000.0))[0]).max() < 1e-6
+    # Single-animal projects: per_animal changes nothing
+    single_project = create_project("test_single_topview")
+    kwargs["test_videos"] = 0
+    plain = single_project.get_graph_dataset(**kwargs)[0][0]
+    flagged = single_project.get_graph_dataset(per_animal=True, **kwargs)[0][0]
+    assert all(np.array_equal(a, b) for k in plain.keys() for a, b in zip(get_dt(plain, k), get_dt(flagged, k)))
+
+
 def test_rebase_duckdb_paths():
     # project created on Windows from its parent folder, then loaded elsewhere (e.g. on a Linux cluster)
     tables = {"A1": {"duckdb_file": ".\proj\Tables\A1\database.duckdb", "table": "A1"},

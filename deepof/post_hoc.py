@@ -633,8 +633,10 @@ def _get_gating_series_and_gates(
     window_size: int,
     supervised_annotations=None,
     embedding_gates: Any = "Center",
-) -> Tuple[Dict[str, Dict], list]:  
-    """Return per-key gating series and the gate labels used downstream."""
+    keys: Optional[list] = None,
+) -> Tuple[Dict[str, Dict], list]:
+    """Return per-key gating series and the gate labels used downstream. keys: keys of the embeddings; those of
+    per-animal embeddings ("<video>::<animal>") get the gating series of their video."""
     dist_series_dict = get_pairwise_distances(
         coordinates,
         window_size,
@@ -642,6 +644,11 @@ def _get_gating_series_and_gates(
         embedding_gates=embedding_gates,
         behavior_combinations=True,
     )
+    if keys is not None:
+        sep = deepof.data.PER_ANIMAL_SEP
+        for key in keys:
+            if key not in dist_series_dict and sep in str(key):
+                dist_series_dict[key] = dist_series_dict[str(key).rsplit(sep, 1)[0]]
 
     first_key = list(dist_series_dict.keys())[0]
     gates = list(dist_series_dict[first_key].keys())
@@ -683,6 +690,7 @@ def compute_gate_edges(
         window_size=window_size,
         supervised_annotations=supervised_annotations,
         embedding_gates=embedding_gates,
+        keys=keys,
     )
 
     if keys is None:
@@ -1058,6 +1066,7 @@ def _preprocess_gates(
         window_size=window_size,
         supervised_annotations=supervised_annotations,
         embedding_gates=embedding_gates,
+        keys=keys,
     )
 
     gate_masks = _build_gate_masks(
@@ -1245,6 +1254,19 @@ def get_contrastive_soft_counts_gmm(
     }
 
 
+class _WeightedScaler(StandardScaler):
+    """StandardScaler followed by fixed column weights: the columns keep unequal shares of the distances used for the
+    microstates and the decoding (e.g. the social part of per-animal embeddings, see soft_counts_from_embeddings)."""
+
+    def __init__(self, column_weights=None):
+        super().__init__()
+        self.column_weights = column_weights
+
+    def transform(self, X, copy=None):
+        Xs = super().transform(X, copy=copy)
+        return Xs * np.asarray(self.column_weights, dtype=Xs.dtype)[None, :]  # dtype kept (kmeans)
+
+
 def _fit_microstates_kmeans(
     *,
     seg_spatial: List[np.ndarray],
@@ -1263,9 +1285,10 @@ def _fit_microstates_kmeans(
 
 
 def _fit_microstates_on_sample(X_fit: np.ndarray, *, seed: int, n_micro: int, min_micro_per_macro: int,
-                               N_clusters_per_gate: int):
-    """Fit scaler + kmeans microstates on already sampled frames."""
-    scaler = StandardScaler()
+                               N_clusters_per_gate: int, column_weights: Optional[np.ndarray] = None):
+    """Fit scaler + kmeans microstates on already sampled frames. column_weights: weights of the standardized
+    columns (None: all columns count equally)."""
+    scaler = StandardScaler() if column_weights is None else _WeightedScaler(column_weights)
     X_fit = scaler.fit_transform(X_fit)
 
     n_micro_eff = int(
@@ -1535,6 +1558,37 @@ def _bace_groups(counts: np.ndarray, n_states: int) -> np.ndarray:
     return member
 
 
+def _modularity_groups(counts: np.ndarray, n_states: int) -> np.ndarray:
+    """
+    Greedy agglomeration of microstates maximizing the modularity of the graph of observed transitions: repeatedly
+    merges the two states with the largest share of transitions between them beyond the product of their populations
+    (e_ij - a_i a_j), until n_states are left. counts as for _bace_groups (symmetrized here).
+
+    The gain is relative to the populations, so a rare state is only merged with states it exchanges with (bace
+    merges weakly populated states first, whatever they do: rare but persistent behaviours such as grooming were
+    lost), and no fitted MSM is involved (PCCA depends on it). On a synthetic chain with one rare persistent and one
+    fast-exchanging behaviour it kept both from 20 states on, PCCA only the first, bace neither (2026-11-12);
+    experimental, not yet validated on real data. The states are nested.
+
+    Returns the state (0..n_states-1) of each microstate.
+    """
+    E = (np.asarray(counts, dtype=np.float64) + np.asarray(counts, dtype=np.float64).T) / 2
+    E = E / max(E.sum(), 1e-300)
+    member = np.arange(E.shape[0])
+    while E.shape[0] > max(int(n_states), 1):
+        a = E.sum(1)
+        gain = E - np.outer(a, a)
+        np.fill_diagonal(gain, -np.inf)
+        i, j = sorted(np.unravel_index(np.argmax(gain), gain.shape))
+        E[i] += E[j]
+        E[:, i] += E[:, j]
+        keep = np.arange(E.shape[0]) != j
+        E = E[keep][:, keep]
+        member[member == j] = i
+        member[member > j] -= 1
+    return member
+
+
 def _regroup_macrostates(
     model: dict,
     n_macro: int,
@@ -1561,7 +1615,13 @@ def _regroup_macrostates(
             centroids (geometric clustering at microstate resolution, about k-means on all samples).
         "bace": no PCCA; the microstates are merged into n_macro states by the similarity of their transitions (see
             _bace_groups). Kinetic states without PCCA's need for n_macro well separated slow processes: on CalMS21
-            (2026-11, 90 models) PCCA lost attack / mount states in most models, bace did not.
+            (2026-11, 90 models) PCCA lost attack / mount states in most models, bace did not. It merges rare
+            microstates first, whatever they do: rare but persistent behaviours (grooming) can lose their state.
+        "modularity" (experimental): no PCCA; microstates merged by their exchange beyond what their populations
+            predict (see _modularity_groups), on the observed transition counts.
+        "pcca_counts" (experimental): PCCA (inner simplex solution, soft memberships) on the transition matrix of the
+            symmetrized observed counts instead of the fitted MSM, whose stationary distribution can be far from
+            the observed populations.
 
     The transitions of the new states are coarse-grained from the microstate MSM, so the kinetic decoding (Viterbi,
     forward-backward) works unchanged. Returns the model unchanged without split_factor ("pcca").
@@ -1573,16 +1633,23 @@ def _regroup_macrostates(
     pi = np.asarray(model["pi_micro"], dtype=np.float64)
     chi = np.asarray(model["chi"], dtype=np.float64)
 
-    if macro_method in ("kmeans", "bace"):
+    if macro_method in ("kmeans", "bace", "modularity", "pcca_counts"):
         k = int(min(n_macro, active.shape[0]))
-        if macro_method == "bace":
-            if model.get("counts") is None:
-                raise ValueError("macro_method=\"bace\" needs the observed transition counts (model[\"counts\"])")
-            groups = _bace_groups(model["counts"], k)
-        else:
-            groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
+        if macro_method != "kmeans" and model.get("counts") is None:
+            raise ValueError(f"macro_method=\"{macro_method}\" needs the observed transition counts (model[\"counts\"])")
         chi_new = np.zeros((active.shape[0], n_macro), dtype=np.float64)
-        chi_new[np.arange(active.shape[0]), groups] = 1.0
+        if macro_method == "pcca_counts":
+            sym = (np.asarray(model["counts"], dtype=np.float64) + np.asarray(model["counts"], dtype=np.float64).T) / 2
+            sym = sym + 1e-9  # microstates without transitions keep a defined row
+            chi_new[:, :k] = _pcca_memberships_fast(sym / sym.sum(1, keepdims=True), sym.sum(1) / sym.sum(), k)
+        else:
+            if macro_method == "bace":
+                groups = _bace_groups(model["counts"], k)
+            elif macro_method == "modularity":
+                groups = _modularity_groups(model["counts"], k)
+            else:
+                groups = KMeans(n_clusters=k, n_init=10, random_state=seed).fit_predict(centers, sample_weight=pi + 1e-12)
+            chi_new[np.arange(active.shape[0]), groups] = 1.0
     elif split_factor:
         owner = np.argmax(chi, axis=1)
         share = np.bincount(owner, weights=pi, minlength=chi.shape[1]) / max(pi.sum(), 1e-12)
@@ -1636,6 +1703,7 @@ def _fit_msmpcca_models(
     min_micro_per_macro: int,
     lagtime: int,
     pcca: bool = True,
+    column_weights: Optional[np.ndarray] = None,
 ):
     """
     Fit MSM/PCCA models per (gate, bin). pcca=False: MSM only (see _fit_pcca_memberships).
@@ -1676,6 +1744,7 @@ def _fit_msmpcca_models(
             n_micro=n_micro,
             min_micro_per_macro=min_micro_per_macro,
             N_clusters_per_gate=N_clusters_per_gate[b],
+            column_weights=column_weights,
         )
 
     # ---- 3) build dtrajs (runs long enough for the lag time) ----
@@ -2042,9 +2111,14 @@ def get_contrastive_soft_counts_msm_pcca(
     macro_method: str = "bace",
     split_factor: Optional[float] = None,
     table_suffix: str = "",
+    column_weights: Optional[np.ndarray] = None,
 ):
     """
     Distance/behavior-gated MSM with k-means microstates, grouped into states (macro_method).
+
+    column_weights:
+        Weights of the embedding columns after their standardization (one per column). None: all columns count
+        equally.
 
     table_suffix:
         Appended to the names of the soft count tables saved in the project (very large projects), so that parallel
@@ -2054,6 +2128,7 @@ def get_contrastive_soft_counts_msm_pcca(
         "bace" (default since 2026-11) — microstates merged by the similarity of their transitions (see
         _bace_groups), with the same kinetic decoding.
         "pcca" — PCCA macrostates (metastable sets).
+        "modularity", "pcca_counts" — experimental, on the observed transition counts (see _regroup_macrostates).
         "kmeans" — geometric states instead: population-weighted k-means on the microstate centroids, with the same
         kinetic decoding.
 
@@ -2126,8 +2201,9 @@ def get_contrastive_soft_counts_msm_pcca(
         gate_edges=gate_edges,
     )
 
-    if macro_method not in ("bace", "pcca", "kmeans"):
-        raise ValueError(f"macro_method needs to be \"bace\", \"pcca\" or \"kmeans\", got {macro_method!r}")
+    if macro_method not in ("bace", "pcca", "kmeans", "modularity", "pcca_counts"):
+        raise ValueError("macro_method needs to be \"bace\", \"pcca\", \"kmeans\", \"modularity\" or \"pcca_counts\", "
+                         f"got {macro_method!r}")
     if split_factor is not None and not split_factor > 0:
         raise ValueError(f"split_factor needs to be > 0 or None, got {split_factor!r}")
 
@@ -2166,6 +2242,7 @@ def get_contrastive_soft_counts_msm_pcca(
         min_micro_per_macro=min_micro_per_macro,
         lagtime=lagtime,
         pcca=macro_method == "pcca",
+        column_weights=column_weights,
     )
 
     # ---- other states or split of oversized PCCA states; the number of columns can change per (gate, bin) ----
@@ -2368,8 +2445,9 @@ def cluster_number_selection(
     """
     from sklearn.metrics import adjusted_rand_score
 
-    if method not in ("bace", "msm", "kmeans", "combined"):
-        raise ValueError(f"method needs to be \"bace\", \"msm\", \"kmeans\" or \"combined\", got {method!r}")
+    if method not in ("bace", "msm", "kmeans", "combined", "modularity", "pcca_counts"):
+        raise ValueError("method needs to be \"bace\", \"msm\", \"kmeans\", \"combined\", \"modularity\" or "
+                         f"\"pcca_counts\", got {method!r}")
     k_values = np.array(sorted(set(int(k) for k in k_range)))
     if k_values.size == 0 or k_values.min() < 2:
         raise ValueError("k_range needs to contain numbers of clusters >= 2")
@@ -2399,7 +2477,7 @@ def cluster_number_selection(
                  "n_micro_eff": n_micro_eff, "chi": np.ones((fit["active"].shape[0], 1), dtype=np.float32),
                  "counts": fit["counts"]}
         k = int(min(k, fit["active"].shape[0]))
-        if method in ("kmeans", "bace"):
+        if method in ("kmeans", "bace", "modularity", "pcca_counts"):
             return _regroup_macrostates(model, k, macro_method=method, seed=seed)["chi"]
         chi = _pcca_memberships_fast(fit["P"], fit["pi"], k)
         if method == "combined":

@@ -142,6 +142,10 @@ class TurtleTeacherCfg:
     # mean of log1p(x / median) per segment of the centre window, segments_per_second segments per second of the window
     include_kinematics_view: bool = False
     kinematics_segments_per_second: float = 3.0
+    # Regression social view (only for per-animal datasets with social context, get_graph_dataset(per_animal=True)):
+    # the social context nodes of the centre window, mean per segment (segments as for the kinematics view). Without
+    # it nothing asks the embedding to keep what the other animals do
+    include_social_view: bool = True
     # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
     nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
     # Relative weights of the regression views in the loss, {view: weight} with the views "nodes_positions",
@@ -272,6 +276,9 @@ class ContrastiveCfg:
     # with InfoNCE against the third views of the other windows and both views of the same window, so the prediction
     # has to carry what changes, not what stays constant within a video. Contrastive temperature, whole training
     predictive_weight: float = 0.0
+    # Per-animal datasets with social context: size of the social part of the backbone output (the embedding used for
+    # clustering is [own behavior | social context], see ContrastivePT)
+    social_dim: int = 32
     # Weight of the contrastive loss itself (0: off, e.g. to train with the predictive loss and / or the regression
     # teacher only; the time-shifted view is still computed unless shift_view_mode="off")
     contrastive_weight: float = 1.0
@@ -600,6 +607,11 @@ def check_model_inputs(
                 "The imputation mask (get_graph_dataset(include_imputation_mask=True)) is only supported by the "
                 "contrastive model so far; preprocess the data without it",
             )
+            check(
+                meta_info is None or not meta_info.get("social_nodes"),
+                "The social context of per-animal datasets is only supported by the contrastive model so far; use "
+                "get_graph_dataset(per_animal=True, social_context=False)",
+            )
         if model_name == "vqvae":
             check(is_number(common_cfg.vq_beta, 0), "\"vq_beta\" needs to be >= 0")
             check(is_int(common_cfg.vq_warmup_epochs, 0), "\"vq_warmup_epochs\" needs to be an integer >= 0")
@@ -864,6 +876,7 @@ def embedding_per_video(
     split_factor: float = 3.0,
     embedding_path: Optional[str] = None,
     table_suffix: str = "",
+    social_share: Optional[float] = None,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -877,12 +890,13 @@ def embedding_per_video(
         scale (str): The type of scaler to use within animals. Defaults to 'standard', but can be changed to 'minmax', 'robust', or False. Use the same that was used when training the original model.
         animal_id (str): if more than one animal is present, provide the ID(s) of the animal(s) to include.
         global_scaler (Any): trained global scaler produced when processing the original dataset.
-        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "bace" (MSM microstates merged by the similarity of their transitions, see deepof.post_hoc._bace_groups), "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "bace" is used as a default (until 2026-11: "msm").
+        softcounts_extraction_method (str): Method used for softcounts extraction, can be None, "gmm", "bace" (MSM microstates merged by the similarity of their transitions, see deepof.post_hoc._bace_groups), "modularity" / "pcca_counts" (experimental groupings on the observed transition counts, see deepof.post_hoc._regroup_macrostates), "msm" (MSM-PCCA: metastable states), "kmeans" (geometric states: k-means on the MSM microstates, with the same kinetic decoding), "combined" (MSM-PCCA, then oversized states are split geometrically, see split_factor) or "msm_chaos" (deprecated: MSM-PCCA plus separate GMM clusters for samples with high tracking uncertainty, formerly "combined"). If None, decoder of model is used. If model has no decoder, "bace" is used as a default (until 2026-11: "msm").
         split_factor (float): Only for "combined": states holding more than split_factor / states_per_gate of the samples are split into round(share * states_per_gate) sub-states, so the number of clusters can grow. Defaults to 3.
         distance_bp (str): The mosue bodypart that will be used for distance binning during softcounts extraction. Only relevant for experiments with 2+ mice that use a not-none softcounts_extraction_method.
         samples_max (int): Maximum number of frames embedded per video; longer videos are cut at this number of frames. None (default) embeds all frames.
         embedding_path (str): Very large projects: folder for the embedding tables of the model (one DuckDB file per video, <embedding_path>/<video>/database.duckdb), e.g. in the model's folder, so that the embeddings of several models can coexist and deleting the folder frees the space. None (default): the project's Tables folder.
         table_suffix (str): Appended to the names of the soft count tables saved in the project (see soft_counts_from_embeddings), so that readouts of several models can run in parallel.
+        social_share (float): Only for per-animal models with social context: share (between 0 and 1) of the social part of the embedding in the distances used for clustering. None (default): every embedding column counts equally, i.e. the share is social_dim / number of columns. The saved embeddings are not changed, see soft_counts_from_embeddings to recluster with another share.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -891,7 +905,7 @@ def embedding_per_video(
     """
 
     extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
-    methods = {"gmm", "bace", "msm", "kmeans", "combined", "msm_chaos"}
+    methods = {"gmm", "bace", "msm", "kmeans", "combined", "msm_chaos", "modularity", "pcca_counts"}
     if softcounts_extraction_method is not None and softcounts_extraction_method not in methods: # pragma: no cover
         raise ValueError(f"\"softcounts_extraction_method\" needs to be None or one of {sorted(methods)}!")
     if softcounts_extraction_method == "msm_chaos":
@@ -915,6 +929,8 @@ def embedding_per_video(
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if contrastive and softcounts_extraction_method is None:
         softcounts_extraction_method = "bace"
+    social_dim = int(getattr(model, "social_dim", 0)) if getattr(model, "social_nodes", 0) else 0
+    _social_column_weights(social_share, social_dim, social_dim + 1, softcounts_extraction_method)  # input check
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
         graph = True 
     
@@ -924,13 +940,22 @@ def embedding_per_video(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # The caller's model keeps its device, train/eval mode and cluster_mode
     with _inference_state(model, device, cluster_mode=cluster_mode if contrastive else None):
-        for key in tqdm.tqdm(to_preprocess.keys(), desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+        # Per-animal datasets (get_graph_dataset(per_animal=True)): to_preprocess is {animal: table_dict}; every animal
+        # of a video is embedded on its own and stored under "<video>::<animal>" until the soft counts are extracted
+        # (one clustering for all animals)
+        per_animal = bool(meta_info.get("per_animal")) and graph
+        if per_animal and animal_id is not None:
+            raise ValueError("animal_id can not be combined with a per-animal dataset (all animals are embedded).")
+        sources = ({a: to_preprocess[a] for a in meta_info["animal_ids"]} if per_animal else {None: to_preprocess})
+        pairs = [(animal, key) for animal, source in sources.items() for key in source.keys()]
+        for animal, key in tqdm.tqdm(pairs, desc=f"{'Computing embeddings':<{PROGRESS_BAR_FIXED_WIDTH}}", unit="table"):
+            out_key = f"{key}{deepof.data.PER_ANIMAL_SEP}{animal}" if per_animal else key
 
-            dict_to_preprocess = to_preprocess.filter_videos([key])
+            dict_to_preprocess = sources[animal].filter_videos([key])
             #preload datatable in case it is not already, as this will only contain a single table and hence avoid double loading in get_graph_dataset
             dict_to_preprocess[key]=get_dt(dict_to_preprocess,key)
             if dict_to_preprocess[key].isna().all().all():
-                keys_to_drop.append(key)
+                keys_to_drop.append(out_key)
                 continue
 
             #creates a new line to ensure that the outer loading bar does not get overwritten by the inner ones
@@ -939,13 +964,14 @@ def embedding_per_video(
             n_channels = 3
             if graph:
                 processed_exp, processed_meta, _, _, _ = coordinates.get_graph_dataset(
-                    animal_id=animal_id,
+                    animal_id=animal if per_animal else animal_id,
+                    _focal=per_animal,
                     precomputed_tab_dict=dict_to_preprocess,
                     preprocess=True,
                     scale=scale,
                     window_size=window_size,
                     window_step=1,
-                    pretrained_scaler=global_scaler,
+                    pretrained_scaler=deepof.data.animal_scaler(global_scaler, animal) if per_animal else global_scaler,
                     samples_max=samples_max,
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
@@ -1027,20 +1053,24 @@ def embedding_per_video(
                 sc = sc_raw.cpu().numpy()
                 # save paths for modified tables
                 table_path = os.path.join(model_tables, key, key + '_' + file_name + '_softc')
-                soft_counts[key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
+                soft_counts[out_key] = deepof.utils.save_dt(sc,table_path,coordinates._very_large_project)
 
             # save paths for modified tables
             table_path = os.path.join(model_tables, key, key + '_' + file_name + '_embed')
-            embeddings[key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project) 
+            embeddings[out_key] = deepof.utils.save_dt(emb,table_path,coordinates._very_large_project)
 
             #to not flood the output with loading bars
             clear_output()
 
-    # Notify user about key removal, if applicable 
+    # Notify user about key removal, if applicable
     exp_conds=copy.copy(coordinates.get_exp_conditions)
+    if per_animal and exp_conds is not None:  # conditions of the video for each of its animals
+        exp_conds = {f"{key}{deepof.data.PER_ANIMAL_SEP}{animal}": exp_conds[key] for animal, key in pairs
+                     if key in exp_conds}
     if len(keys_to_drop) > 0:
         for key in keys_to_drop:
-            del exp_conds[key]
+            if exp_conds is not None:
+                del exp_conds[key]
         print(
             f'\033[33mInfo! Removed keys {str(keys_to_drop)} As table segments contained only NaNs!\033[0m'
         )
@@ -1078,6 +1108,8 @@ def embedding_per_video(
             decode_emit_tau=decode_emit_tau,
             split_factor=split_factor,
             table_suffix=table_suffix,
+            social_share=social_share,
+            social_dim=social_dim,
         )
     else:
         soft_counts=deepof.data.TableDict(
@@ -1087,10 +1119,65 @@ def embedding_per_video(
             exp_conditions=exp_conds,
         )
 
+    if per_animal:  # {animal: table_dict with the videos as keys}; the clusters are the same for all animals
+        embeddings, soft_counts = split_per_animal(coordinates, embeddings), split_per_animal(coordinates, soft_counts)
+
     return (
         embeddings,
         soft_counts,
     )
+
+
+def split_per_animal(coordinates: coordinates, tables: table_dict) -> Dict[str, table_dict]:
+    """Table dict with the keys "<video>::<animal>" (embeddings or soft counts of a per-animal dataset) as one table
+    dict per animal with the videos as keys, so that every function working on a table dict can be used per animal."""
+    sep = deepof.data.PER_ANIMAL_SEP
+    conditions = coordinates.get_exp_conditions
+    out = {}
+    for pooled_key in tables.keys():
+        key, animal = pooled_key.rsplit(sep, 1)
+        out.setdefault(animal, {})[key] = dict.__getitem__(tables, pooled_key)
+    return {
+        animal: deepof.data.TableDict(
+            entries, typ=tables._type, table_path=tables._table_path,
+            exp_conditions=None if conditions is None else {k: conditions[k] for k in entries if k in conditions},
+        )
+        for animal, entries in out.items()
+    }
+
+
+def pool_per_animal(tables: Dict[str, table_dict]) -> table_dict:
+    """Inverse of split_per_animal: {animal: table_dict} as one table dict with the keys "<video>::<animal>"
+    (animal by animal, the order used by embedding_per_video, so that reclustering reproduces its result)."""
+    sep = deepof.data.PER_ANIMAL_SEP
+    first = next(iter(tables.values()))
+    entries, conditions = {}, {}
+    for animal, tab in tables.items():
+        for key in tab.keys():
+            entries[f"{key}{sep}{animal}"] = dict.__getitem__(tab, key)
+            if tab._exp_conditions is not None and key in tab._exp_conditions:
+                conditions[f"{key}{sep}{animal}"] = tab._exp_conditions[key]
+    return deepof.data.TableDict(
+        entries, typ=first._type, table_path=first._table_path,
+        exp_conditions=None if first._exp_conditions is None else conditions,
+    )
+
+
+def _social_column_weights(social_share, social_dim: int, n_columns: int, method: str = "bace"):
+    """Column weights (after standardization) that give the last social_dim embedding columns the share social_share
+    of the squared distances; None without social_share."""
+    if social_share is None:
+        return None
+    if not social_dim:
+        raise ValueError("social_share needs a per-animal model with social context (and its social_dim).")
+    if not 0.0 < social_share < 1.0:
+        raise ValueError("social_share needs to be between 0 and 1 (both excluded).")
+    if method in ("gmm", "msm_chaos"):
+        raise ValueError(f"social_share is not supported for softcounts_extraction_method=\"{method}\".")
+    n_own = n_columns - social_dim
+    weights = np.ones(n_columns)
+    weights[n_own:] = np.sqrt(social_share * n_own / ((1.0 - social_share) * social_dim))
+    return weights
 
 
 def soft_counts_from_embeddings(
@@ -1114,12 +1201,25 @@ def soft_counts_from_embeddings(
     decode_emit_tau: float = 1.0,
     split_factor: float = 3.0,
     table_suffix: str = "",
+    social_share: Optional[float] = None,
+    social_dim: int = 0,
 ):  # pragma: no cover
     """Soft counts of existing embeddings (the clustering part of embedding_per_video, see there for the arguments), e.g.
     to recluster without embedding again. window_size is the model's window size; extract_pair as in
     embedding_per_video (list of two animal ids, [""] or None) or an already converted gate key. table_suffix is
     appended to the names of the soft count tables saved in the project (very large projects), so that parallel runs
-    on the same project do not overwrite each other's tables."""
+    on the same project do not overwrite each other's tables.
+
+    Per-animal models: embeddings can be the {animal: table_dict} returned by embedding_per_video (clustered together,
+    returned as {animal: table_dict} again). social_share (with social_dim=model.social_dim) sets the share of the
+    social part of the embedding (its last social_dim columns) in the clustering distances, see embedding_per_video."""
+    by_animal = not isinstance(embeddings, deepof.data.TableDict)
+    if by_animal:
+        embeddings = pool_per_animal(embeddings)
+    column_weights = None
+    if social_share is not None:
+        n_columns = np.asarray(get_dt(embeddings, next(iter(embeddings.keys())))).shape[1]
+        column_weights = _social_column_weights(social_share, int(social_dim), n_columns, softcounts_extraction_method)
     if extract_pair is None or isinstance(extract_pair, list):
         extract_pair = _extract_pair_to_gate_key(coordinates, extract_pair)
     if isinstance(animal_id,str):
@@ -1149,7 +1249,7 @@ def soft_counts_from_embeddings(
             gate_edges=gate_edges,
             table_suffix=table_suffix,
         )
-    elif softcounts_extraction_method in {"bace", "msm", "kmeans", "combined", "msm_chaos"}:
+    elif softcounts_extraction_method in {"bace", "msm", "kmeans", "combined", "msm_chaos", "modularity", "pcca_counts"}:
 
         soft_counts_dict = deepof.post_hoc.get_contrastive_soft_counts_msm_pcca(
             coordinates=coordinates,
@@ -1167,9 +1267,11 @@ def soft_counts_from_embeddings(
             decode_emit_tau=decode_emit_tau,
             temporal_smooth_win=temporal_smooth_win,
             gate_edges=gate_edges,
-            macro_method=softcounts_extraction_method if softcounts_extraction_method in ("bace", "kmeans") else "pcca",
+            macro_method=(softcounts_extraction_method
+                          if softcounts_extraction_method in ("bace", "kmeans", "modularity", "pcca_counts") else "pcca"),
             split_factor=split_factor if softcounts_extraction_method == "combined" else None,
             table_suffix=table_suffix,
+            column_weights=column_weights,
         )
         if softcounts_extraction_method == "msm_chaos":
 
@@ -1198,8 +1300,10 @@ def soft_counts_from_embeddings(
 
     # Gates by supervised behaviors give a single entry for all animals, distance gates one entry per animal pair
     if set(soft_counts_dict) == {"behavior_combinations"}:
-        return soft_counts_dict["behavior_combinations"]
-    return deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
+        soft_counts = soft_counts_dict["behavior_combinations"]
+    else:
+        soft_counts = deepof.post_hoc.get_gate_entry(soft_counts_dict, extract_pair)
+    return split_per_animal(coordinates, soft_counts) if by_animal else soft_counts
 
 
 def contrastive_edges(x: torch.Tensor, meta_info: dict) -> torch.Tensor:
@@ -1216,7 +1320,8 @@ def contrastive_edges(x: torch.Tensor, meta_info: dict) -> torch.Tensor:
     """
     from deepof.clustering.training import _build_edge_from_metainfo  # training imports this module
 
-    edge_index, _, _ = _build_edge_from_metainfo(meta_info, device=x.device, n_nodes=x.shape[2], return_local=False)
+    n_nodes = x.shape[2] - int(meta_info.get("social_nodes", 0))  # edges only between the body parts
+    edge_index, _, _ = _build_edge_from_metainfo(meta_info, device=x.device, n_nodes=n_nodes, return_local=False)
     return recompute_edges(x, edge_index)
 
 
@@ -1254,7 +1359,8 @@ def _materialize_encoder(model, x_shape, a_shape, device):
     x[:, 0, 0, 0] = 1.0
     a[:, 0, 0, 0] = 1.0
 
-    _ = model.encoder(x, a)   # sufficient to build encoder.spatial_gnn_block params
+    # sufficient to build encoder.spatial_gnn_block params (the encoder does not see social context nodes)
+    _ = model.encoder(x[:, :, :N - int(getattr(model, "social_nodes", 0))], a)
 
 
 def print_model_info(ckpt_path: str) -> None:
@@ -1360,6 +1466,9 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
             legacy_tcn=legacy_tcn,
+            social_nodes=int(spec.get("social_nodes", 0)),
+            social_partners=int(spec.get("social_partners", 1)),
+            social_dim=int(spec.get("social_dim", 32)),
         )
 
     elif model_name == "vade":

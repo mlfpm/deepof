@@ -1048,14 +1048,49 @@ def extract_kinematics_segments_view(
     return torch.cat(feats, dim=0)
 
 
+@torch.no_grad()
+def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_social: int, n_segments: int = 1,
+                                 batch_size: int = 8192, fade_nodes: Optional[List[int]] = None):
+    """Social view of the centre window (the unaugmented contrastive view) for all samples in dataset order: the three
+    values of each of the last n_social nodes (social context of per-animal datasets, see
+    deepof.utils.social_context_features), mean per segment. Shape [N_samples, n_segments * n_social * 3].
+
+    fade_nodes: indices (within the social nodes) of the partners' centre nodes. If given, also returns the proximity
+    of the nearest partner per sample [N_samples]: its distance fade (third value of the node), mean over the window."""
+    loader = getattr(dataset, "base_dataset", dataset).make_loader(
+        batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
+        pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
+    )
+    feats, proximity = [], []
+    for batch in loader:
+        social = _centre_frames(batch[0], window_len)[:, :, -n_social:, :3].float()
+        if fade_nodes:
+            proximity.append(social[:, :, fade_nodes, 2].mean(dim=1).amax(dim=1))
+        segments = torch.tensor_split(social.reshape(social.shape[0], social.shape[1], -1), n_segments, dim=1)
+        feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
+    if fade_nodes:
+        return torch.cat(feats, dim=0), torch.cat(proximity, dim=0)
+    return torch.cat(feats, dim=0)
+
+
+SOCIAL_NEAR_FADE = 0.25  # windows count as "partner near" above this distance fade of the nearest partner's centre
+# (centres about one body length apart with the default social_range of 0.75)
+
+
 def build_regression_targets(
     teacher_cfg: TurtleTeacherCfg,
     train_dataset: BatchDictDataset,
     window_len: int,
     meta_info: Optional[dict] = None,
+    extras: Optional[dict] = None,
 ) -> Tuple[torch.Tensor, List[Tuple[str, int]]]:
     """
     Targets of the regression teacher: the included views per training sample (dataset order), concatenated.
+
+    extras: dict that receives, for the social view, "social_split" = (near, var_near, var_far): which samples have a
+    partner near (bool [N_samples], see SOCIAL_NEAR_FADE) and the variance of the social targets within the near and
+    within the far samples, so that the error of the social view can be reported for both groups (a view that is only
+    predicted well because the partner is mostly far away shows a high unexplained fraction for the near samples).
 
     Every view is scaled to a mean squared norm of 1, so each view weighs the same in the loss independent of its size:
     angles and kinematics are standardized per column (each one counts the same), PCA views are centred and divided by
@@ -1132,6 +1167,27 @@ def build_regression_targets(
         kinematics = (kinematics - kinematics.mean(dim=0)) / kinematics.std(dim=0).clamp_min(1e-8)
         scaled.append(kinematics / kinematics.shape[1] ** 0.5)
         names.append("kinematics")
+    n_social = int((meta_info or {}).get("social_nodes", 0))
+    if n_social and teacher_cfg.include_social_view:
+        print("\n--- Building the social view for the regression teacher ---")
+        n_segments = kinematics_segments(window_len, meta_info["frame_rate"], teacher_cfg.kinematics_segments_per_second)
+        centre = str(meta_info.get("center", "")).lower()
+        fade_nodes = [j for j, name in enumerate(meta_info.get("social_columns", []))
+                      if str(name).split("_", 1)[-1].lower() == centre]
+        social = extract_social_segments_view(train_dataset, window_len, n_social, n_segments=n_segments,
+                                              batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes)
+        proximity = None
+        if fade_nodes:
+            social, proximity = social
+        social = (social - social.mean(dim=0)) / social.std(dim=0).clamp_min(1e-8)
+        scaled.append(social / social.shape[1] ** 0.5)
+        names.append("social")
+        if proximity is not None:
+            near = proximity >= SOCIAL_NEAR_FADE
+            print(f"Partner near in {100 * near.float().mean().item():.1f} % of the windows")
+            if extras is not None and 1 < int(near.sum()) < len(near) - 1:
+                spread = lambda t: (t - t.mean(dim=0)).pow(2).sum(dim=1).mean().clamp_min(1e-12).item()
+                extras["social_split"] = (near, spread(scaled[-1][near]), spread(scaled[-1][~near]))
     if not scaled:
         raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
     return torch.cat(scaled, dim=1), [(name, view.shape[1]) for name, view in zip(names, scaled)]
