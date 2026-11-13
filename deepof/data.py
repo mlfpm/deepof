@@ -3616,6 +3616,7 @@ class Coordinates:
             metainfo['kinematics_columns']=feature_names[kinematics_sorting_indices]
             metainfo['node_channels']=4 if has_mask else 3  # x, y, speed, (imputation mask)
             metainfo['frame_rate']=self._frame_rate
+            metainfo['window_step']=kwargs.get('window_step', 1)
             # Social context nodes (per_animal): after the body parts in every channel block, the same layout
             social_names = list(dict.fromkeys(f[0] for f in feature_names if isinstance(f, tuple) and len(f) == 2
                                               and f[1] == "sx"))

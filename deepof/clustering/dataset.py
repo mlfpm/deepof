@@ -86,6 +86,23 @@ class BatchDictDataset:
     def _effective_shuffle_seed(self) -> int:
         return _DEFAULT_SHUFFLE_SEED if self.shuffle_seed is None else int(self.shuffle_seed)
 
+    def later_sample(self, offset: int) -> np.ndarray:
+        """Per stored sample the stored index of the window that follows `offset` windows later in the same video
+        (-1: the video ends before). Undoes the global shuffle (the permutation of the build, from its seed)."""
+        vid = np.asarray(np.load(self.idx_path))
+        n = len(vid)
+        perm = np.arange(n, dtype=np.int64)  # stored sample s is window perm[s] of the concatenated videos
+        if self.global_shuffle and n > 1:
+            perm = np.random.default_rng(self._effective_shuffle_seed()).permutation(n).astype(np.int64, copy=False)
+        stored_of_window = np.empty(n, dtype=np.int64)
+        stored_of_window[perm] = np.arange(n, dtype=np.int64)
+        later = perm + int(offset)
+        out = np.full(n, -1, dtype=np.int64)
+        ok = (later >= 0) & (later < n)
+        out[ok] = stored_of_window[later[ok]]
+        out[ok] = np.where(vid[out[ok]] == vid[ok], out[ok], -1)
+        return out
+
     def _does_need_build(self, preprocessed_dict: Dict) -> Tuple[bool, str]:
         """Check if HDF5 dataset needs rebuild by comparing metadata."""
         # Quick file existence checks

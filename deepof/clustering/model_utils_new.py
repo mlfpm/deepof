@@ -146,6 +146,14 @@ class TurtleTeacherCfg:
     # the social context nodes of the centre window, mean per segment (segments as for the kinematics view). Without
     # it nothing asks the embedding to keep what the other animals do
     include_social_view: bool = True
+    # Social view: frames by which its target lies ahead of the window (0: the window itself). The social context of
+    # the window is an input of the model, so its own summary is an easy target; the one ahead asks where the
+    # interaction is going. Taken from the window social_target_shift frames later in the same video (the last
+    # windows of a video keep their own).
+    social_target_shift: int = 0
+    # Social view: weight of the windows with a partner near (see teacher_model.SOCIAL_NEAR_FADE) against the others
+    # in its loss (mean weight 1). Above 1, the view is not dominated by the many windows with the partner far away.
+    social_near_weight: float = 1.0
     # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
     nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
     # Relative weights of the regression views in the loss, {view: weight} with the views "nodes_positions",

@@ -1179,6 +1179,17 @@ def build_regression_targets(
         proximity = None
         if fade_nodes:
             social, proximity = social
+        shift = int(teacher_cfg.social_target_shift or 0)
+        if shift < 0:
+            raise ValueError("\"social_target_shift\" needs to be >= 0")
+        if shift:
+            step = int(meta_info.get("window_step", 1) or 1)
+            later = torch.as_tensor(getattr(train_dataset, "base_dataset", train_dataset).later_sample(
+                max(1, round(shift / step))))
+            has = later >= 0
+            social = torch.where(has[:, None], social[later.clamp_min(0)], social)
+            print(f"Social view {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows at "
+                  "the end of a video keep their own)")
         social = (social - social.mean(dim=0)) / social.std(dim=0).clamp_min(1e-8)
         scaled.append(social / social.shape[1] ** 0.5)
         names.append("social")
@@ -1188,6 +1199,12 @@ def build_regression_targets(
             if extras is not None and 1 < int(near.sum()) < len(near) - 1:
                 spread = lambda t: (t - t.mean(dim=0)).pow(2).sum(dim=1).mean().clamp_min(1e-12).item()
                 extras["social_split"] = (near, spread(scaled[-1][near]), spread(scaled[-1][~near]))
+            near_weight = float(teacher_cfg.social_near_weight)
+            if near_weight <= 0:
+                raise ValueError("\"social_near_weight\" needs to be > 0")
+            if extras is not None and near_weight != 1.0:
+                weights = torch.where(near, near_weight, 1.0)
+                extras["social_weights"] = weights / weights.mean()
     if not scaled:
         raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
     return torch.cat(scaled, dim=1), [(name, view.shape[1]) for name, view in zip(names, scaled)]

@@ -746,7 +746,9 @@ def step_contrastive_distill(
         for name, start, end, weight in ctx.regression_views:
             view_err = err[:, start:end].sum(dim=1)
             view_loss = view_err.mean()
-            view_losses[f"view_{name}"] = float(view_loss.detach().item())
+            view_losses[f"view_{name}"] = float(view_loss.detach().item())  # unweighted
+            if name == "social" and getattr(ctx, "social_weights", None) is not None:
+                view_loss = (view_err * ctx.social_weights[idx.to(device).long()]).mean()  # social_near_weight
             if name == "social" and getattr(ctx, "social_split", None) is not None:
                 # partner near / far: error relative to the variance of the targets within the group (None: no such
                 # sample in the batch, skipped in the epoch mean)
@@ -1085,6 +1087,8 @@ def train_deepof_model(
     include_kinematics_view: Optional[bool] = None,  # needs get_graph_dataset(..., include_kinematics=True)
     kinematics_segments_per_second: Optional[float] = None,
     include_social_view: Optional[bool] = None,  # regression target from the social context nodes (per-animal data)
+    social_target_shift: Optional[int] = None,  # frames the social target lies ahead of the window, see TurtleTeacherCfg
+    social_near_weight: Optional[float] = None,  # weight of windows with a partner near in the social view
     social_dim: Optional[int] = None,  # size of the social part of the embedding (per-animal data), see ContrastiveCfg
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
@@ -1260,6 +1264,8 @@ def train_deepof_model(
         regression_target_frames=regression_target_frames,
         include_kinematics_view=include_kinematics_view,
         include_social_view=include_social_view,
+        social_target_shift=social_target_shift,
+        social_near_weight=social_near_weight,
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
         regression_view_weights=regression_view_weights,
@@ -2222,6 +2228,8 @@ def fit_contrastive(
         if "social_split" in regression_extras:
             near, var_near, var_far = regression_extras["social_split"]
             regression_extras["social_split"] = (near.to(device), var_near, var_far)
+        if "social_weights" in regression_extras:
+            regression_extras["social_weights"] = regression_extras["social_weights"].to(device)
         regression_views = _regression_view_layout(views, teacher_cfg.regression_view_weights)
         with torch.no_grad():
             x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
@@ -2343,6 +2351,7 @@ def fit_contrastive(
             regression_head=regression_head,
             regression_views=regression_views,
             social_split=regression_extras.get("social_split"),
+            social_weights=regression_extras.get("social_weights"),
             predictive_head=predictive_head,
             predictive_weight=contrastive_cfg.predictive_weight,
             lambda_regression=teacher_cfg.lambda_regression,
