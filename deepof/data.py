@@ -320,6 +320,9 @@ def _strip_animal_prefix(name, animal: str):
     """Column name (string or tuple of strings) without the id prefix "<animal>_" of its parts."""
     prefix = f"{animal}_"
     strip = lambda s: s[len(prefix):] if isinstance(s, str) and s.startswith(prefix) else s
+    if isinstance(name, str) and name.startswith("('") and name.endswith(")"):  # tuple name stored as text
+        parts = [part.strip(" '\"") for part in name[1:-1].split(",") if part.strip()]
+        return str(tuple(strip(part) for part in parts))
     return tuple(strip(s) for s in name) if isinstance(name, tuple) else strip(name)
 
 
@@ -3756,7 +3759,7 @@ class Coordinates:
         if scaler is None or not tabs:
             for a in ids:  # tables of every animal and the samples for the shared scaler
                 tab_dict, (_, s, lengths[a]) = self.get_graph_dataset(
-                    animal_id=a, _focal=True, _fit_only=True, precomputed_tab_dict=tabs.get(a),
+                    animal_id=a, _focal=True, _fit_only=True, precomputed_tab_dict=tabs.get(a), return_as_paths=False,
                     pretrained_scaler=animal_scaler(scaler, a),
                     **dict(args, include_kinematics=args["include_kinematics"] and a not in tabs), **kwargs)
                 tabs[a] = tab_dict
@@ -3776,6 +3779,7 @@ class Coordinates:
         for a in ids:
             (tr, te), meta, adjacency, _, _ = self.get_graph_dataset(
                 animal_id=a, _focal=True, precomputed_tab_dict=tabs[a], pretrained_scaler=animal_scaler(scaler, a),
+                return_as_paths=False,
                 **dict(args, include_kinematics=False), **kwargs)
             train.update({f"{key}{PER_ANIMAL_SEP}{a}": value for key, value in tr.items()})
             test.update({f"{key}{PER_ANIMAL_SEP}{a}": value for key, value in te.items()})
@@ -3784,7 +3788,9 @@ class Coordinates:
             else:
                 for name in ("shape_train", "shape_test"):
                     if name in meta and name in meta_info:
-                        meta_info[name] = [(m[0] + s[0],) + tuple(s[1:]) for m, s in zip(meta[name], meta_info[name])]
+                        # (entries are plain numbers for an empty split, e.g. test_videos=0)
+                        meta_info[name] = [(m[0] + s[0],) + tuple(s[1:]) if np.ndim(m) and np.ndim(s) else s
+                                           for m, s in zip(meta[name], meta_info[name])]
         # Windows of one video stay together (all its animals; important when splitting or shuffling by video)
         order = lambda d: {k: d[k] for k in sorted(d, key=lambda k: k.rsplit(PER_ANIMAL_SEP, 1))}
         meta_info.update(per_animal=True, animal_ids=ids)

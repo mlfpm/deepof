@@ -7,6 +7,7 @@
 """Utility functions for training autoencoder models for functionality within deepof.clustering."""
 
 import os
+import re
 import time
 from typing import Any, NewType, Tuple, Dict, Optional, Mapping, Union
 import copy
@@ -154,6 +155,15 @@ class TurtleTeacherCfg:
     # Social view: weight of the windows with a partner near (see teacher_model.SOCIAL_NEAR_FADE) against the others
     # in its loss (mean weight 1). Above 1, the view is not dominated by the many windows with the partner far away.
     social_near_weight: float = 1.0
+    # Width of a bottleneck between the backbone and the predicted views (None: the views are a linear map of the
+    # backbone, as before). With n, the views are predicted through Linear -> GELU -> Linear(n) -> Linear(views): the
+    # model has to find a common code of n dimensions for all views; embedding_per_video(embedding_space="bottleneck")
+    # clusters that code, "views" the views predicted from it.
+    regression_bottleneck_dim: Optional[int] = None
+    # Future targets: for every shift s (frames) all views of the window s frames later in the same video as extra
+    # targets, named "<view>+<s>" (the last windows of a video keep their own). Asks the embedding for where the
+    # behaviour is going, which its present targets do not contain.
+    regression_future_shifts: Tuple[int, ...] = ()
     # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
     nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
     # Relative weights of the regression views in the loss, {view: weight} with the views "nodes_positions",
@@ -779,10 +789,20 @@ def check_model_inputs(
             if frames is not None and is_int(frames, 1) and is_int(teacher_cfg.angle_segments, 1):
                 check(teacher_cfg.angle_segments <= frames,
                       "\"angle_segments\" can not exceed \"regression_target_frames\"")
+            bottleneck = teacher_cfg.regression_bottleneck_dim
+            check(bottleneck is None or is_int(bottleneck, 1),
+                  "\"regression_bottleneck_dim\" needs to be None or an integer greater than 0")
+            shifts = teacher_cfg.regression_future_shifts
+            check(isinstance(shifts, (tuple, list)) and all(is_int(s, 1) for s in shifts) and len(set(shifts)) == len(shifts),
+                  f"\"regression_future_shifts\" needs to be a tuple of different integers > 0 (frames), got {shifts!r}")
             weights = teacher_cfg.regression_view_weights
             if weights is not None:
                 included = [f"nodes_{p}" for p in parts if teacher_cfg.include_nodes_view] + [
                     v for v in ("edges", "angles", "kinematics") if getattr(teacher_cfg, f"include_{v}_view")]
+                if teacher_cfg.include_social_view and (meta_info or {}).get("social_nodes"):
+                    included.append("social")
+                if isinstance(shifts, (tuple, list)):
+                    included += [f"{v}+{s}" for s in shifts for v in list(included)]
                 check(isinstance(weights, Mapping) and set(weights) <= set(included),
                       f"\"regression_view_weights\" needs to be a dict with keys of the included views {included}, "
                       f"got {weights!r}")
@@ -885,6 +905,8 @@ def embedding_per_video(
     embedding_path: Optional[str] = None,
     table_suffix: str = "",
     social_share: Optional[float] = None,
+    embedding_space: Optional[str] = None,
+    view_weights: Optional[Dict[str, float]] = None,
 ):  # pragma: no cover
     """Use a previously trained model to produce embeddings and soft_counts per experiment in table_dict format.
 
@@ -904,7 +926,9 @@ def embedding_per_video(
         samples_max (int): Maximum number of frames embedded per video; longer videos are cut at this number of frames. None (default) embeds all frames.
         embedding_path (str): Very large projects: folder for the embedding tables of the model (one DuckDB file per video, <embedding_path>/<video>/database.duckdb), e.g. in the model's folder, so that the embeddings of several models can coexist and deleting the folder frees the space. None (default): the project's Tables folder.
         table_suffix (str): Appended to the names of the soft count tables saved in the project (see soft_counts_from_embeddings), so that readouts of several models can run in parallel.
-        social_share (float): Only for per-animal models with social context: share (between 0 and 1) of the social part of the embedding in the distances used for clustering. None (default): every embedding column counts equally, i.e. the share is social_dim / number of columns. The saved embeddings are not changed, see soft_counts_from_embeddings to recluster with another share.
+        embedding_space (str): Contrastive models trained with the regression teacher: "views" returns and clusters the embedding in the view space (project_to_views: the predictions of the regression head, every view with about the same weight, columns not standardized in the clustering), "backbone" the backbone output (columns standardized), "bottleneck" the code of a regression bottleneck (models trained with regression_bottleneck_dim; columns not standardized). None (default): "views" for per-animal models with social context (CalMS21: clearly better clusters), "backbone" for all others (paired models have no social view and lose the interactions in the view space; single-animal models are untested). Models without a stored regression head use the backbone (one info line).
+        view_weights (dict): Only for embedding_space="views": {view: weight} on the squared distances of single views (e.g. {"social": 2.0}), missing views weigh 1; the views of a model are in model.view_projection["layout"].
+        social_share (float): Only for embedding_space="backbone" and per-animal models with social context: share (between 0 and 1) of the social part of the embedding in the distances used for clustering. None (default): every embedding column counts equally, i.e. the share is social_dim / number of columns. The saved embeddings are not changed, see soft_counts_from_embeddings to recluster with another share.
 
     Returns:
         embeddings (table_dict): embeddings per experiment.
@@ -937,6 +961,26 @@ def embedding_per_video(
     contrastive = isinstance(model, deepof.clustering.models_new.ContrastivePT)
     if contrastive and softcounts_extraction_method is None:
         softcounts_extraction_method = "bace"
+    if embedding_space is None:
+        embedding_space = "views" if contrastive and getattr(model, "social_nodes", 0) else "backbone"
+    if embedding_space not in ("views", "backbone", "bottleneck"):
+        raise ValueError(f"\"embedding_space\" needs to be \"views\", \"backbone\" or \"bottleneck\", got "
+                         f"{embedding_space!r}.")
+    projection = (getattr(model, "view_projection", None) if contrastive and embedding_space != "backbone" else None)
+    if embedding_space == "bottleneck" and not (projection or {}).get("bottleneck"):
+        raise ValueError("embedding_space=\"bottleneck\" needs a model trained with regression_bottleneck_dim.")
+    if view_weights and embedding_space == "bottleneck":
+        raise ValueError("view_weights are weights of the views: use embedding_space=\"views\".")
+    if embedding_space == "views" and projection is None:
+        print("\033[33mInfo! No regression head is stored with this model: the embedding stays in the backbone space "
+              "(embedding_space=\"backbone\").\033[0m")
+    if view_weights and projection is None:
+        raise ValueError("view_weights need embedding_space=\"views\" and a model with a stored regression head.")
+    if social_share is not None and projection is not None:
+        raise ValueError("social_share rescales backbone columns: use view_weights={\"social\": ...} in the view space "
+                         "or embedding_space=\"backbone\".")
+    if projection is not None:
+        project_to_views(np.zeros((1, projection_input_dim(projection)), dtype=np.float32), projection, view_weights)  # input check
     social_dim = int(getattr(model, "social_dim", 0)) if getattr(model, "social_nodes", 0) else 0
     _social_column_weights(social_share, social_dim, social_dim + 1, softcounts_extraction_method)  # input check
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
@@ -1053,6 +1097,9 @@ def embedding_per_video(
             emb_raw = torch.cat(emb_list, dim=0) if emb_list else None
             print('completed')
             emb = emb_raw.cpu().numpy()
+            if projection is not None:
+                emb = (project_to_bottleneck(emb, projection) if embedding_space == "bottleneck"
+                       else project_to_views(emb, projection, view_weights))
             if coordinates._very_large_project:
                 os.makedirs(os.path.join(model_tables, key), exist_ok=True)
 
@@ -1093,6 +1140,7 @@ def embedding_per_video(
         table_path=table_path, 
         exp_conditions=exp_conds,
     )
+    embeddings._view_space = projection is not None  # soft_counts_from_embeddings: columns are not standardized
 
     if softcounts_extraction_method in methods:
         soft_counts = soft_counts_from_embeddings(
@@ -1118,6 +1166,7 @@ def embedding_per_video(
             table_suffix=table_suffix,
             social_share=social_share,
             social_dim=social_dim,
+            standardize=projection is None,
         )
     else:
         soft_counts=deepof.data.TableDict(
@@ -1145,13 +1194,16 @@ def split_per_animal(coordinates: coordinates, tables: table_dict) -> Dict[str, 
     for pooled_key in tables.keys():
         key, animal = pooled_key.rsplit(sep, 1)
         out.setdefault(animal, {})[key] = dict.__getitem__(tables, pooled_key)
-    return {
+    split = {
         animal: deepof.data.TableDict(
             entries, typ=tables._type, table_path=tables._table_path,
             exp_conditions=None if conditions is None else {k: conditions[k] for k in entries if k in conditions},
         )
         for animal, entries in out.items()
     }
+    for table_dict in split.values():
+        table_dict._view_space = getattr(tables, "_view_space", False)
+    return split
 
 
 def pool_per_animal(tables: Dict[str, table_dict]) -> table_dict:
@@ -1165,10 +1217,12 @@ def pool_per_animal(tables: Dict[str, table_dict]) -> table_dict:
             entries[f"{key}{sep}{animal}"] = dict.__getitem__(tab, key)
             if tab._exp_conditions is not None and key in tab._exp_conditions:
                 conditions[f"{key}{sep}{animal}"] = tab._exp_conditions[key]
-    return deepof.data.TableDict(
+    pooled = deepof.data.TableDict(
         entries, typ=first._type, table_path=first._table_path,
         exp_conditions=None if first._exp_conditions is None else conditions,
     )
+    pooled._view_space = getattr(first, "_view_space", False)
+    return pooled
 
 
 def _social_column_weights(social_share, social_dim: int, n_columns: int, method: str = "bace"):
@@ -1211,6 +1265,7 @@ def soft_counts_from_embeddings(
     table_suffix: str = "",
     social_share: Optional[float] = None,
     social_dim: int = 0,
+    standardize: Optional[bool] = None,
 ):  # pragma: no cover
     """Soft counts of existing embeddings (the clustering part of embedding_per_video, see there for the arguments), e.g.
     to recluster without embedding again. window_size is the model's window size; extract_pair as in
@@ -1224,6 +1279,13 @@ def soft_counts_from_embeddings(
     by_animal = not isinstance(embeddings, deepof.data.TableDict)
     if by_animal:
         embeddings = pool_per_animal(embeddings)
+    # Embeddings in the view space (embedding_per_video, embedding_space="views") keep the scale of their columns;
+    # standardize=None follows the embeddings, True / False sets it
+    if standardize is None:
+        standardize = not getattr(embeddings, "_view_space", False)
+    if not standardize and softcounts_extraction_method in ("gmm", "msm_chaos"):
+        raise ValueError(f"softcounts_extraction_method=\"{softcounts_extraction_method}\" is not available for "
+                         "embeddings in the view space: use embedding_space=\"backbone\".")
     column_weights = None
     if social_share is not None:
         n_columns = np.asarray(get_dt(embeddings, next(iter(embeddings.keys())))).shape[1]
@@ -1280,6 +1342,7 @@ def soft_counts_from_embeddings(
             split_factor=split_factor if softcounts_extraction_method == "combined" else None,
             table_suffix=table_suffix,
             column_weights=column_weights,
+            standardize=standardize,
         )
         if softcounts_extraction_method == "msm_chaos":
 
@@ -1508,9 +1571,104 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
     rep = model.load_state_dict(state, strict=strict)
     model.eval()
     model.train_batch_size = spec.get("batch_size")  # None for checkpoints saved before this was stored
+    model.view_projection = _stored_view_projection(ckpt, path)
 
     load_report = {"missing": rep.missing_keys, "unexpected": rep.unexpected_keys}
     return model, log_summary, spec, load_report
+
+
+class BottleneckRegressionHead(nn.Module):
+    """Regression head through a bottleneck: backbone -> Linear -> GELU -> Linear(bottleneck_dim) = code -> Linear =
+    predicted views. The last layer is linear, so distances in the code stay tied to the views; it starts at zero
+    (the loss starts at about lambda_regression, as with the linear head)."""
+
+    def __init__(self, in_dim: int, bottleneck_dim: int, out_dim: int, hidden_dim: Optional[int] = None):
+        super().__init__()
+        hidden_dim = int(hidden_dim or max(128, 2 * bottleneck_dim))
+        self.encoder = nn.Sequential(nn.Linear(in_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, bottleneck_dim))
+        self.out = nn.Linear(bottleneck_dim, out_dim)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        return self.encoder(x)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.out(self.encoder(x))
+
+
+def view_projection_of(regression_head: nn.Module, regression_views) -> dict:
+    """The regression head of the regression teacher as stored with a model: weight, bias of the (last) linear layer,
+    the layout of the views [(name, first column, end column), ...] (regression_views of the training) and, for a
+    bottleneck head, the state of the layers before (backbone -> code)."""
+    head = getattr(regression_head, "module", regression_head)
+    last = head.out if isinstance(head, BottleneckRegressionHead) else head
+    projection = {"weight": last.weight.detach().float().cpu().clone(), "bias": last.bias.detach().float().cpu().clone(),
+                  "layout": [(str(v[0]), int(v[1]), int(v[2])) for v in (regression_views or [])] or None}
+    if isinstance(head, BottleneckRegressionHead):
+        projection["bottleneck"] = {k: v.detach().float().cpu().clone() for k, v in head.encoder.state_dict().items()}
+    return projection
+
+
+def projection_input_dim(projection: dict) -> int:
+    """Embedding (backbone) columns the view projection expects."""
+    bottleneck = projection.get("bottleneck")
+    return int((bottleneck["0.weight"] if bottleneck else projection["weight"]).shape[1])
+
+
+def project_to_bottleneck(embedding: np.ndarray, projection: dict) -> np.ndarray:
+    """Embedding (backbone output) -> code of the regression bottleneck (models trained with
+    regression_bottleneck_dim); without a bottleneck the embedding itself."""
+    bottleneck = projection.get("bottleneck")
+    if not bottleneck:
+        return np.asarray(embedding, dtype=np.float32)
+    x = torch.as_tensor(np.asarray(embedding, dtype=np.float32))
+    h = torch.nn.functional.gelu(x @ bottleneck["0.weight"].T + bottleneck["0.bias"])
+    return (h @ bottleneck["2.weight"].T + bottleneck["2.bias"]).numpy()
+
+
+def _stored_view_projection(ckpt: dict, path: str) -> Optional[dict]:
+    """View projection of a checkpoint (see project_to_views): stored with it (rebuild_spec, checkpoints from
+    2026-11-14 on), else the regression head of the training state in last_model.pth of the same folder if that is
+    the state of the same epoch (older checkpoints; the layout of the views is then unknown), else None."""
+    stored = ckpt.get("rebuild_spec", {}).get("view_projection")
+    if stored is not None:
+        return stored
+    last = path if os.path.basename(path) == "last_model.pth" else os.path.join(os.path.dirname(path), "last_model.pth")
+    if not os.path.exists(last):
+        return None
+    resume = (ckpt if last == path else torch.load(last, map_location="cpu", weights_only=False)).get("resume") or {}
+    head = (resume.get("heads") or {}).get("regression_head")
+    epoch = re.search(r"_(\d+)\.pth$", os.path.basename(path))
+    if head is None or (last != path and (epoch is None or int(epoch.group(1)) != resume.get("epoch"))):
+        return None
+    return {"weight": head["weight"].detach().float().cpu(), "bias": head["bias"].detach().float().cpu(), "layout": None}
+
+
+def project_to_views(embedding: np.ndarray, projection: dict, view_weights: Optional[Dict[str, float]] = None) -> np.ndarray:
+    """Embedding (backbone output) in the view space: the predictions of the regression head, i.e. what the model
+    reads from a window about each regression view (e.g. edges, angles, kinematics, social context). Every view has
+    about the same overall size there (the targets are scaled that way), so the views weigh about the same in a
+    clustering, whereas the standardized backbone columns are dominated by the pose. Information of the backbone
+    that no view asks for is dropped.
+
+    view_weights: {view: weight} multiplies the squared distances of single views (missing views weigh 1), e.g.
+    {"social": 2.0, "kinematics": 0.5}; needs the layout of the views stored with the model."""
+    weight = np.asarray(projection["weight"], dtype=np.float32)
+    code = project_to_bottleneck(embedding, projection)  # the embedding itself without a bottleneck
+    views = code @ weight.T + np.asarray(projection["bias"], dtype=np.float32)
+    if view_weights:
+        layout = projection.get("layout")
+        if not layout:
+            raise ValueError("view_weights need the layout of the views, which is stored with models trained from "
+                             "2026-11-14 on.")
+        unknown = sorted(set(view_weights) - {name for name, _, _ in layout})
+        if unknown or any(not np.isfinite(w) or w < 0 for w in view_weights.values()):
+            raise ValueError(f"view_weights need weights >= 0 for views of the model {[n for n, _, _ in layout]}, "
+                             f"got {view_weights}.")
+        for name, start, end in layout:
+            views[:, start:end] *= np.sqrt(float(view_weights.get(name, 1.0)))
+    return views
 
 
 def load_best_checkpoints(

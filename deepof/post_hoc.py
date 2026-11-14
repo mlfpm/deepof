@@ -1258,8 +1258,8 @@ class _WeightedScaler(StandardScaler):
     """StandardScaler followed by fixed column weights: the columns keep unequal shares of the distances used for the
     microstates and the decoding (e.g. the social part of per-animal embeddings, see soft_counts_from_embeddings)."""
 
-    def __init__(self, column_weights=None):
-        super().__init__()
+    def __init__(self, column_weights=None, with_std=True):
+        super().__init__(with_std=with_std)
         self.column_weights = column_weights
 
     def transform(self, X, copy=None):
@@ -1285,10 +1285,13 @@ def _fit_microstates_kmeans(
 
 
 def _fit_microstates_on_sample(X_fit: np.ndarray, *, seed: int, n_micro: int, min_micro_per_macro: int,
-                               N_clusters_per_gate: int, column_weights: Optional[np.ndarray] = None):
+                               N_clusters_per_gate: int, column_weights: Optional[np.ndarray] = None,
+                               standardize: bool = True):
     """Fit scaler + kmeans microstates on already sampled frames. column_weights: weights of the standardized
-    columns (None: all columns count equally)."""
-    scaler = StandardScaler() if column_weights is None else _WeightedScaler(column_weights)
+    columns (None: all columns count equally). standardize=False: the columns are only centred and keep their scale
+    (embeddings in the view space, whose scale is meaningful)."""
+    scaler = (StandardScaler(with_std=standardize) if column_weights is None
+              else _WeightedScaler(column_weights, with_std=standardize))
     X_fit = scaler.fit_transform(X_fit)
 
     n_micro_eff = int(
@@ -1704,6 +1707,7 @@ def _fit_msmpcca_models(
     lagtime: int,
     pcca: bool = True,
     column_weights: Optional[np.ndarray] = None,
+    standardize: bool = True,
 ):
     """
     Fit MSM/PCCA models per (gate, bin). pcca=False: MSM only (see _fit_pcca_memberships).
@@ -1745,6 +1749,7 @@ def _fit_msmpcca_models(
             min_micro_per_macro=min_micro_per_macro,
             N_clusters_per_gate=N_clusters_per_gate[b],
             column_weights=column_weights,
+            standardize=standardize,
         )
 
     # ---- 3) build dtrajs (runs long enough for the lag time) ----
@@ -2112,9 +2117,13 @@ def get_contrastive_soft_counts_msm_pcca(
     split_factor: Optional[float] = None,
     table_suffix: str = "",
     column_weights: Optional[np.ndarray] = None,
+    standardize: bool = True,
 ):
     """
     Distance/behavior-gated MSM with k-means microstates, grouped into states (macro_method).
+
+    standardize:
+        False: the embedding columns are only centred, not scaled to unit variance (embeddings in the view space).
 
     column_weights:
         Weights of the embedding columns after their standardization (one per column). None: all columns count
@@ -2243,6 +2252,7 @@ def get_contrastive_soft_counts_msm_pcca(
         lagtime=lagtime,
         pcca=macro_method == "pcca",
         column_weights=column_weights,
+        standardize=standardize,
     )
 
     # ---- other states or split of oversized PCCA states; the number of columns can change per (gate, bin) ----

@@ -1089,6 +1089,8 @@ def train_deepof_model(
     include_social_view: Optional[bool] = None,  # regression target from the social context nodes (per-animal data)
     social_target_shift: Optional[int] = None,  # frames the social target lies ahead of the window, see TurtleTeacherCfg
     social_near_weight: Optional[float] = None,  # weight of windows with a partner near in the social view
+    regression_bottleneck_dim: Optional[int] = None,  # views predicted through a code of this width, see TurtleTeacherCfg
+    regression_future_shifts: Optional[Tuple[int, ...]] = None,  # views of later windows as extra targets (frames)
     social_dim: Optional[int] = None,  # size of the social part of the embedding (per-animal data), see ContrastiveCfg
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
@@ -1266,6 +1268,8 @@ def train_deepof_model(
         include_social_view=include_social_view,
         social_target_shift=social_target_shift,
         social_near_weight=social_near_weight,
+        regression_bottleneck_dim=regression_bottleneck_dim,
+        regression_future_shifts=None if regression_future_shifts is None else tuple(int(s) for s in regression_future_shifts),
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
         regression_view_weights=regression_view_weights,
@@ -2235,9 +2239,13 @@ def fit_contrastive(
             x0 = torch.zeros((2, window_len, *train_loader.dataset.x_shape[1:]), device=device)
             a0 = torch.zeros((2, window_len, *train_loader.dataset.a_shape[1:]), device=device)
             backbone_dim = unwrap_dp(model)(x0, a0, return_backbone=True)[1].shape[1]
-        regression_head = nn.Linear(backbone_dim, regression_targets.shape[1]).to(device)
-        nn.init.zeros_(regression_head.weight)  # starts predicting zeros, so the loss starts at about lambda_regression
-        nn.init.zeros_(regression_head.bias)
+        if teacher_cfg.regression_bottleneck_dim:  # views through a common code (see TurtleTeacherCfg)
+            regression_head = deepof.clustering.model_utils_new.BottleneckRegressionHead(
+                backbone_dim, int(teacher_cfg.regression_bottleneck_dim), regression_targets.shape[1]).to(device)
+        else:
+            regression_head = nn.Linear(backbone_dim, regression_targets.shape[1]).to(device)
+            nn.init.zeros_(regression_head.weight)  # starts predicting zeros, so the loss starts at about lambda_regression
+            nn.init.zeros_(regression_head.bias)
     elif resume_state is not None:
         tau_star = resume_state["tau_star"]  # the TURTLE targets of the interrupted training
     else:
@@ -2415,6 +2423,11 @@ def fit_contrastive(
         log_epoch_to_tensorboard(writer, train_logs, val_logs, epoch, score_value, lam)
 
    
+        # The regression head of this epoch goes into every checkpoint (rebuild_spec): readout in the view space
+        if regression_head is not None:
+            rebuild_spec["view_projection"] = deepof.clustering.model_utils_new.view_projection_of(
+                regression_head, regression_views)
+
         # Save best model based on total validation loss
         if v_total < best_val or (np.mod(epoch+1, 10)==0 and epoch>0):
             if v_total < best_val:
@@ -2495,6 +2508,8 @@ def fit_contrastive(
     model_val, model_score = load_best_checkpoints(
         model, best_path_val, best_path_score, device, common_cfg.save_weights
     )
+    for trained in (model, model_val, model_score):  # contrastive models: all three hold the weights of the last epoch
+        unwrap_dp(trained).view_projection = rebuild_spec.get("view_projection")
 
     if writer:
         writer.flush()

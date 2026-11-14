@@ -3891,6 +3891,12 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
             columns_to_keep.append(column)
         elif type(column) == str and column.startswith(selected_id):
             columns_to_keep.append(column)
+        elif type(column) == str and column.startswith("('") and column.endswith(")"):
+            # tuple names stored as text (tables of very large projects), e.g. "('B_Nose', 'B_Spine_1', 'B_Center')"
+            parts = [part.strip(" '\"") for part in column[1:-1].split(",") if part.strip()]
+            if parts and all(part.startswith(selected_id) for part in parts):
+                columns_to_keep.append(column)
+            continue
         # Raw coordinate columns
         if column[0].startswith(selected_id) and column[1] in ["x", "y", "rho", "phi"]:
             columns_to_keep.append(column)

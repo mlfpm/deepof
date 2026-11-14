@@ -1207,5 +1207,16 @@ def build_regression_targets(
                 extras["social_weights"] = weights / weights.mean()
     if not scaled:
         raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
+    # Future targets: every view of the window `shift` frames later in the same video, as "<view>+<shift>"
+    present = list(zip(names, scaled))
+    for shift in tuple(getattr(teacher_cfg, "regression_future_shifts", ()) or ()):
+        step = int((meta_info or {}).get("window_step", 1) or 1)
+        later = torch.as_tensor(getattr(train_dataset, "base_dataset", train_dataset).later_sample(max(1, round(shift / step))))
+        has = later >= 0
+        print(f"Future targets {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows at the "
+              "end of a video keep their own)")
+        for name, view in present:
+            scaled.append(torch.where(has[:, None], view[later.clamp_min(0)], view))
+            names.append(f"{name}+{shift}")
     return torch.cat(scaled, dim=1), [(name, view.shape[1]) for name, view in zip(names, scaled)]
 
