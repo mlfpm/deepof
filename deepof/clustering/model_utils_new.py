@@ -1610,6 +1610,18 @@ def view_projection_of(regression_head: nn.Module, regression_views) -> dict:
     return projection
 
 
+def _projection_on_cpu(projection: Optional[dict]) -> Optional[dict]:
+    """View projection with all tensors on the CPU as float32 (load_model_from_ckpt maps the whole checkpoint, and with
+    it the stored projection, to the device of the model)."""
+    if projection is None:
+        return None
+    cpu = lambda t: torch.as_tensor(t).detach().float().cpu()
+    out = {**projection, "weight": cpu(projection["weight"]), "bias": cpu(projection["bias"])}
+    if projection.get("bottleneck"):
+        out["bottleneck"] = {k: cpu(v) for k, v in projection["bottleneck"].items()}
+    return out
+
+
 def projection_input_dim(projection: dict) -> int:
     """Embedding (backbone) columns the view projection expects."""
     bottleneck = projection.get("bottleneck")
@@ -1619,7 +1631,7 @@ def projection_input_dim(projection: dict) -> int:
 def project_to_bottleneck(embedding: np.ndarray, projection: dict) -> np.ndarray:
     """Embedding (backbone output) -> code of the regression bottleneck (models trained with
     regression_bottleneck_dim); without a bottleneck the embedding itself."""
-    bottleneck = projection.get("bottleneck")
+    bottleneck = (_projection_on_cpu(projection) or {}).get("bottleneck")
     if not bottleneck:
         return np.asarray(embedding, dtype=np.float32)
     x = torch.as_tensor(np.asarray(embedding, dtype=np.float32))
@@ -1633,7 +1645,7 @@ def _stored_view_projection(ckpt: dict, path: str) -> Optional[dict]:
     the state of the same epoch (older checkpoints; the layout of the views is then unknown), else None."""
     stored = ckpt.get("rebuild_spec", {}).get("view_projection")
     if stored is not None:
-        return stored
+        return _projection_on_cpu(stored)
     last = path if os.path.basename(path) == "last_model.pth" else os.path.join(os.path.dirname(path), "last_model.pth")
     if not os.path.exists(last):
         return None
@@ -1654,6 +1666,7 @@ def project_to_views(embedding: np.ndarray, projection: dict, view_weights: Opti
 
     view_weights: {view: weight} multiplies the squared distances of single views (missing views weigh 1), e.g.
     {"social": 2.0, "kinematics": 0.5}; needs the layout of the views stored with the model."""
+    projection = _projection_on_cpu(projection)  # also for projections set by hand on a model on the GPU
     weight = np.asarray(projection["weight"], dtype=np.float32)
     code = project_to_bottleneck(embedding, projection)  # the embedding itself without a bottleneck
     views = code @ weight.T + np.asarray(projection["bias"], dtype=np.float32)
