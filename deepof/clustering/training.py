@@ -2226,9 +2226,12 @@ def fit_contrastive(
     if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
         # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
         regression_targets, views = deepof.clustering.teacher_model.build_regression_targets(
-            teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info, extras=regression_extras
+            teacher_cfg, train_loader.dataset, window_len, meta_info=meta_info, extras=regression_extras,
+            val_dataset=val_loader.dataset if val_loader is not None else None,
         )
         regression_targets = regression_targets.to(device)
+        if "val_targets" in regression_extras:  # the validation loss is the regression loss on the validation windows
+            regression_extras["val_targets"] = regression_extras["val_targets"].to(device)
         if "social_split" in regression_extras:
             near, var_near, var_far = regression_extras["social_split"]
             regression_extras["social_split"] = (near.to(device), var_near, var_far)
@@ -2382,7 +2385,11 @@ def fit_contrastive(
         val_logs = validate_one_epoch_indexed(
             model=model, dataloader=val_loader, step_fn=step_contrastive_distill,
             device=device, epoch=epoch, num_epochs=common_cfg.epochs,
-            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len, animal_nodes=animal_nodes,), show_progress=True,
+            ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len, animal_nodes=animal_nodes,
+                                # regression teacher on the validation windows (targets with the training fits)
+                                regression_targets=regression_extras.get("val_targets"),
+                                regression_head=regression_head, regression_views=regression_views,
+                                lambda_regression=teacher_cfg.lambda_regression,), show_progress=True,
         )
         v_total = float(val_logs.get("total_loss", float("inf")))
         score_value = float("nan")

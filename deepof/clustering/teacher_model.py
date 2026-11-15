@@ -664,7 +664,8 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
                            batch_size: int = 8192,
                            num_workers: int = 0,
                            max_samples: Optional[int] = None,
-                           window_len: Optional[int] = None) -> torch.Tensor:
+                           window_len: Optional[int] = None,
+                           return_pca: bool = False):
     """
     Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
     in order (shuffle=False), using two passes: partial_fit, then transform. window_len: only the centre frames
@@ -676,9 +677,11 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
         batch_size (int): Batch size used for the two-pass IncrementalPCA fitting and transformation. Defaults to 8192.
         num_workers (int): Number of worker processes used by the dataset loader. Defaults to 0.
         max_samples (Optional[int]): Maximum number of samples to use during PCA fitting. If None, uses all samples. Defaults to None.
+        return_pca (bool): If True, also return the fitted IncrementalPCA (to transform other samples the same way).
 
     Returns:
-       torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed edge features.
+       torch.Tensor: Tensor of shape [N_samples, n_components] containing PCA-transformed edge features (and the
+       fitted IncrementalPCA with return_pca).
     """
 
     # 1) Pass 1: fit IncrementalPCA on flattened edges
@@ -732,7 +735,37 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
         Z = ipca.transform(A)  # (B, n_components)
         feats.append(torch.from_numpy(Z).float())
     feats_all = torch.cat(feats, dim=0)  # CPU [N, n_components]
-    return feats_all
+    return (feats_all, ipca) if return_pca else feats_all
+
+
+def _ordered_loader(dataset: BatchDictDataset, batch_size: int):
+    """All samples of a dataset in order (no shuffling), for transforming them with fitted PCAs."""
+    return dataset.make_loader(batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False,
+                               iterable_for_h5=True, pin_memory=False, prefetch_factor=0, persistent_workers=False,
+                               block_shuffle=False, permute_within_block=False)
+
+
+@torch.no_grad()
+def _transform_edges(ipca: IncrementalPCA, dataset: BatchDictDataset, batch_size: int,
+                     window_len: Optional[int]) -> torch.Tensor:
+    """The edges view of other samples (e.g. the validation set) with a PCA fitted by extract_pca_edges_view."""
+    feats = []
+    for batch in _ordered_loader(dataset, batch_size):
+        a = _centre_frames(batch[1], window_len)
+        feats.append(torch.from_numpy(ipca.transform(a.reshape(a.shape[0], -1).float().numpy())).float())
+    return torch.cat(feats, dim=0)
+
+
+@torch.no_grad()
+def _transform_nodes(ipca_pos: IncrementalPCA, ipca_spd: IncrementalPCA, dataset: BatchDictDataset, batch_size: int,
+                     window_len: Optional[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """The positions / speeds views of other samples with the PCAs fitted by fit_nodes_pca."""
+    pos, spd = [], []
+    for batch in _ordered_loader(dataset, batch_size):
+        x = _centre_frames(batch[0], window_len)
+        pos.append(torch.from_numpy(ipca_pos.transform(x[..., :2].reshape(x.shape[0], -1).float().numpy())).float())
+        spd.append(torch.from_numpy(ipca_spd.transform(x[..., 2:3].reshape(x.shape[0], -1).float().numpy())).float())
+    return torch.cat(pos, dim=0), torch.cat(spd, dim=0)
 
 
 def run_turtle_teacher_on_views(views_dict: dict,
@@ -993,7 +1026,9 @@ def extract_kinematics_segments_view(
     n_segments: int = 1,
     batch_size: int = 8192,
     columns: Optional[List[str]] = None,
-) -> torch.Tensor:
+    scale: Optional[torch.Tensor] = None,
+    return_scale: bool = False,
+):
     """
     Kinematics view of the centre window (the unaugmented contrastive view) for all samples in dataset order, from the
     kinematics columns of get_graph_dataset(..., include_kinematics=True), each scaled as log1p(x / scale) with scale
@@ -1011,10 +1046,14 @@ def extract_kinematics_segments_view(
         batch_size (int): Batch size used to read the data. Defaults to 8192.
         columns (list): Statistic names of the kinematics columns (meta_info["kinematics_columns"][:, 1]). None: every
             column is treated as speed / acceleration.
+        scale (torch.Tensor): Scale per column to use instead of the medians of this dataset (e.g. those of the
+            training samples for validation samples).
+        return_scale (bool): If True, also return the scale per column.
 
     Returns:
         torch.Tensor: Tensor of shape [N_samples, n_features]: segment means (segment-major) and maxima of the speed /
-        acceleration columns, window means of the wavelet columns, segment means of the distance columns.
+        acceleration columns, window means of the wavelet columns, segment means of the distance columns (and the
+        scale per column with return_scale).
     """
     def centre_windows():
         loader = _with_angles(dataset, "The kinematics view needs kinematics in the preprocessed data: "
@@ -1032,8 +1071,9 @@ def extract_kinematics_segments_view(
     columns = [str(c) for c in columns] if columns is not None else ["speed"] * centre.shape[1]
     if len(columns) != centre.shape[1]:
         raise ValueError(f"{len(columns)} kinematics column names for {centre.shape[1]} kinematics columns")
-    scale = centre.median(dim=0).values
-    scale = torch.where(scale > 0, scale, centre.mean(dim=0)).clamp_min(1e-6)  # columns that are mostly zero
+    if scale is None:
+        scale = centre.median(dim=0).values
+        scale = torch.where(scale > 0, scale, centre.mean(dim=0)).clamp_min(1e-6)  # columns that are mostly zero
     peak = torch.tensor([c.startswith(("speed", "acc")) for c in columns])
     wave = torch.tensor([c.startswith("wave") for c in columns])
     signed = torch.tensor([c.startswith("dist_rate") for c in columns])
@@ -1045,7 +1085,7 @@ def extract_kinematics_segments_view(
         feats.append(torch.cat(
             [s[..., peak].mean(dim=1) for s in segments] + [s[..., peak].amax(dim=1) for s in segments]
             + [x[..., wave].mean(dim=1)] + [s[..., rest].mean(dim=1) for s in segments], dim=1))
-    return torch.cat(feats, dim=0)
+    return (torch.cat(feats, dim=0), scale) if return_scale else torch.cat(feats, dim=0)
 
 
 @torch.no_grad()
@@ -1083,6 +1123,7 @@ def build_regression_targets(
     window_len: int,
     meta_info: Optional[dict] = None,
     extras: Optional[dict] = None,
+    val_dataset: Optional[BatchDictDataset] = None,
 ) -> Tuple[torch.Tensor, List[Tuple[str, int]]]:
     """
     Targets of the regression teacher: the included views per training sample (dataset order), concatenated.
@@ -1108,6 +1149,8 @@ def build_regression_targets(
         window_len (int): Length of the contrastive view (for the angle and kinematics views).
         meta_info (dict): meta_info of get_graph_dataset; needed for the kinematics view (columns of the third array,
             frame rate).
+        val_dataset (BatchDictDataset): Validation dataset. Its targets (the same views with the PCA fits and the
+            scaling of the training samples, so that the validation loss is comparable) go into extras["val_targets"].
 
     Returns:
         Tuple[torch.Tensor, List[Tuple[str, int]]]: Targets of shape [N_samples, D] and the views in column order as
@@ -1122,37 +1165,46 @@ def build_regression_targets(
         if teacher_cfg.include_angles_view and teacher_cfg.angle_segments > window_len:
             raise ValueError(f"\"angle_segments\"={teacher_cfg.angle_segments} exceeds "
                              f"\"regression_target_frames\"={window_len}")
-    views = []
+    # Validation targets (val_dataset): the same views, with the PCA fits and the scaling of the training samples
+    others = [val_dataset] if val_dataset is not None and len(val_dataset) else []
+    views = []  # (name, [view of the training samples, view of the validation samples])
     if teacher_cfg.include_nodes_view:
         print("\n--- Building PCA views for the regression teacher (nodes) ---")
-        _, pca_pos, _, pca_spd = fit_nodes_pca(
+        ipca_pos, pca_pos, ipca_spd, pca_spd = fit_nodes_pca(
             train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
             batch_size=teacher_cfg.batch_size_nodes, num_workers=0, window_len=pca_frames,
         )
-        views += [(f"nodes_{part}", v) for v, part in ((pca_pos, "positions"), (pca_spd, "speeds"))
+        other = [_transform_nodes(ipca_pos, ipca_spd, ds, teacher_cfg.batch_size_nodes, pca_frames) for ds in others]
+        views += [(f"nodes_{part}", [v] + [o[i] for o in other])
+                  for i, (v, part) in enumerate(((pca_pos, "positions"), (pca_spd, "speeds")))
                   if part in teacher_cfg.nodes_view_parts]
     if teacher_cfg.include_edges_view:
         print("\n--- Building PCA views for the regression teacher (edges) ---")
-        views.append(("edges", extract_pca_edges_view(
+        edges, ipca = extract_pca_edges_view(
             train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0,
-            window_len=pca_frames,
-        )))
-    scaled, names = [], []
+            window_len=pca_frames, return_pca=True,
+        )
+        views.append(("edges", [edges] + [_transform_edges(ipca, ds, teacher_cfg.batch_size_edges, pca_frames)
+                                          for ds in others]))
+    scaled, names = [], []  # per view: [training samples, validation samples]
     for name, view in views:
-        view = view - view.mean(dim=0)
-        scaled.append(view / view.pow(2).sum(dim=1).mean().sqrt().clamp_min(1e-8))
+        mean = view[0].mean(dim=0)
+        rms = (view[0] - mean).pow(2).sum(dim=1).mean().sqrt().clamp_min(1e-8)
+        scaled.append([(v - mean) / rms for v in view])
         names.append(name)
+
+    def standardized(view):  # per column with the training statistics, then each view to a mean squared norm of 1
+        mean, std = view[0].mean(dim=0), view[0].std(dim=0).clamp_min(1e-8)
+        return [((v - mean) / std) / view[0].shape[1] ** 0.5 for v in view]
+
     if teacher_cfg.include_angles_view:
         print("\n--- Building the angle view for the regression teacher ---")
         if n_angles == 0:
             raise ValueError("The angle view needs angles in the preprocessed data: "
                              "get_graph_dataset(..., include_angles=True)")
-        angles = extract_angle_segments_view(
-            train_dataset, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles,
-            n_angles=n_angles,
-        )
-        angles = (angles - angles.mean(dim=0)) / angles.std(dim=0).clamp_min(1e-8)
-        scaled.append(angles / angles.shape[1] ** 0.5)
+        scaled.append(standardized([extract_angle_segments_view(
+            ds, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles,
+            n_angles=n_angles) for ds in [train_dataset] + others]))
         names.append("angles")
     if teacher_cfg.include_kinematics_view:
         print("\n--- Building the kinematics view for the regression teacher ---")
@@ -1160,12 +1212,13 @@ def build_regression_targets(
             raise ValueError("The kinematics view needs kinematics in the preprocessed data: "
                              "get_graph_dataset(..., include_kinematics=True), and its meta_info")
         n_segments = kinematics_segments(window_len, meta_info["frame_rate"], teacher_cfg.kinematics_segments_per_second)
-        kinematics = extract_kinematics_segments_view(
+        columns = [c[1] for c in meta_info["kinematics_columns"]]
+        kinematics, scale = extract_kinematics_segments_view(
             train_dataset, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles,
-            columns=[c[1] for c in meta_info["kinematics_columns"]],
-        )
-        kinematics = (kinematics - kinematics.mean(dim=0)) / kinematics.std(dim=0).clamp_min(1e-8)
-        scaled.append(kinematics / kinematics.shape[1] ** 0.5)
+            columns=columns, return_scale=True)
+        scaled.append(standardized([kinematics] + [extract_kinematics_segments_view(
+            ds, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles, columns=columns,
+            scale=scale) for ds in others]))
         names.append("kinematics")
     n_social = int((meta_info or {}).get("social_nodes", 0))
     if n_social and teacher_cfg.include_social_view:
@@ -1174,31 +1227,34 @@ def build_regression_targets(
         centre = str(meta_info.get("center", "")).lower()
         fade_nodes = [j for j, name in enumerate(meta_info.get("social_columns", []))
                       if str(name).split("_", 1)[-1].lower() == centre]
-        social = extract_social_segments_view(train_dataset, window_len, n_social, n_segments=n_segments,
-                                              batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes)
-        proximity = None
-        if fade_nodes:
-            social, proximity = social
         shift = int(teacher_cfg.social_target_shift or 0)
         if shift < 0:
             raise ValueError("\"social_target_shift\" needs to be >= 0")
-        if shift:
-            step = int(meta_info.get("window_step", 1) or 1)
-            later = torch.as_tensor(getattr(train_dataset, "base_dataset", train_dataset).later_sample(
-                max(1, round(shift / step))))
-            has = later >= 0
-            social = torch.where(has[:, None], social[later.clamp_min(0)], social)
-            print(f"Social view {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows at "
-                  "the end of a video keep their own)")
-        social = (social - social.mean(dim=0)) / social.std(dim=0).clamp_min(1e-8)
-        scaled.append(social / social.shape[1] ** 0.5)
+        social, proximity = [], None
+        for k, ds in enumerate([train_dataset] + others):
+            view = extract_social_segments_view(ds, window_len, n_social, n_segments=n_segments,
+                                                batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes)
+            if fade_nodes:
+                view, near_fade = view
+                proximity = near_fade if k == 0 else proximity
+            if shift:
+                step = int(meta_info.get("window_step", 1) or 1)
+                later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step))))
+                has = later >= 0
+                view = torch.where(has[:, None], view[later.clamp_min(0)], view)
+                if k == 0:
+                    print(f"Social view {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows "
+                          "at the end of a video keep their own)")
+            social.append(view)
+        mean, std = social[0].mean(dim=0), social[0].std(dim=0).clamp_min(1e-8)
+        scaled.append([((v - mean) / std) / social[0].shape[1] ** 0.5 for v in social])
         names.append("social")
         if proximity is not None:
             near = proximity >= SOCIAL_NEAR_FADE
             print(f"Partner near in {100 * near.float().mean().item():.1f} % of the windows")
             if extras is not None and 1 < int(near.sum()) < len(near) - 1:
                 spread = lambda t: (t - t.mean(dim=0)).pow(2).sum(dim=1).mean().clamp_min(1e-12).item()
-                extras["social_split"] = (near, spread(scaled[-1][near]), spread(scaled[-1][~near]))
+                extras["social_split"] = (near, spread(scaled[-1][0][near]), spread(scaled[-1][0][~near]))
             near_weight = float(teacher_cfg.social_near_weight)
             if near_weight <= 0:
                 raise ValueError("\"social_near_weight\" needs to be > 0")
@@ -1211,12 +1267,19 @@ def build_regression_targets(
     present = list(zip(names, scaled))
     for shift in tuple(getattr(teacher_cfg, "regression_future_shifts", ()) or ()):
         step = int((meta_info or {}).get("window_step", 1) or 1)
-        later = torch.as_tensor(getattr(train_dataset, "base_dataset", train_dataset).later_sample(max(1, round(shift / step))))
-        has = later >= 0
-        print(f"Future targets {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows at the "
-              "end of a video keep their own)")
-        for name, view in present:
-            scaled.append(torch.where(has[:, None], view[later.clamp_min(0)], view))
+        future = [list() for _ in present]
+        for k, ds in enumerate([train_dataset] + others):
+            later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step))))
+            has = later >= 0
+            if k == 0:
+                print(f"Future targets {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows "
+                      "at the end of a video keep their own)")
+            for i, (_, view) in enumerate(present):
+                future[i].append(torch.where(has[:, None], view[k][later.clamp_min(0)], view[k]))
+        for (name, _), view in zip(present, future):
+            scaled.append(view)
             names.append(f"{name}+{shift}")
-    return torch.cat(scaled, dim=1), [(name, view.shape[1]) for name, view in zip(names, scaled)]
+    if others and extras is not None:
+        extras["val_targets"] = torch.cat([view[1] for view in scaled], dim=1)
+    return torch.cat([view[0] for view in scaled], dim=1), [(name, view[0].shape[1]) for name, view in zip(names, scaled)]
 

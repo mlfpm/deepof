@@ -1956,6 +1956,41 @@ def test_regression_teacher_kinematics_view(tmp_path):
                                                                      regression_view_weights={"kinematics": 0.5}))
 
 
+def test_regression_teacher_validation_targets(tmp_path):
+    # Validation targets: the same views with the PCA fits, kinematics scales and standardization of the training
+    # samples (extras["val_targets"]); the training samples given as validation set reproduce the training targets,
+    # other samples are transformed, not refitted
+    rng = np.random.default_rng(1)
+    T, K, window_len, fps = 10, 3, 6, 5.0
+
+    def data(n_videos, offset):
+        return {f"v{i}": (rng.normal(offset, size=(n, T, 6)).astype(np.float32),
+                          rng.normal(offset, size=(n, T, 4)).astype(np.float32),
+                          np.concatenate([rng.uniform(0, np.pi, size=(n, T, K)), rng.gamma(2, 50, size=(n, T, 2))],
+                                         axis=2).astype(np.float32)) for i, n in enumerate([7, 5, 6][:n_videos])}
+
+    names = ["speed_median", "wave1hz_median"]
+    meta_info = {"angle_columns": list(range(K)), "kinematics_columns": [("kinematics", c) for c in names],
+                 "frame_rate": fps}
+    teacher = deepof.clustering.teacher_model
+    train = deepof.clustering.dataset.BatchDictDataset(data(2, 0.0), str(tmp_path), "train_", h5_chunk_len=4)
+    other = deepof.clustering.dataset.BatchDictDataset(data(3, 1.0), str(tmp_path), "val_", h5_chunk_len=4)
+    cfg = deepof.clustering.model_utils_new.TurtleTeacherCfg(
+        include_nodes_view=True, pca_nodes_dim=2, include_edges_view=True, pca_edges_dim=2, include_angles_view=True,
+        angle_segments=2, include_kinematics_view=True, regression_future_shifts=(1,))
+    extras = {}
+    targets, views = teacher.build_regression_targets(cfg, train, window_len, meta_info=meta_info, extras=extras,
+                                                      val_dataset=train)
+    assert extras["val_targets"].shape == targets.shape and np.allclose(extras["val_targets"].numpy(), targets.numpy(),
+                                                                         atol=1e-5)
+    plain, plain_views = teacher.build_regression_targets(cfg, train, window_len, meta_info=meta_info)
+    assert plain_views == views and np.allclose(plain.numpy(), targets.numpy(), atol=1e-6)  # training targets unchanged
+    extras = {}
+    teacher.build_regression_targets(cfg, train, window_len, meta_info=meta_info, extras=extras, val_dataset=other)
+    val = extras["val_targets"].numpy()
+    assert val.shape == (18, targets.shape[1]) and not np.allclose(val.mean(axis=0), 0, atol=0.05)  # not refitted
+
+
 def _contrastive_test_setup(T=24, N=11, window_len=12):
     model = deepof.clustering.models_new.ContrastivePT(
         input_shape=(T, N, 3), edge_feature_shape=(T, N, 1), adjacency_matrix=np.eye(N, dtype=np.float32),
