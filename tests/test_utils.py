@@ -1452,3 +1452,34 @@ def test_animal_condition_checks_and_labels():
     groups = pd.DataFrame({"exp_id": ["v1", "v2", "v1", "v3"], "exp condition": ["a", "a", "b", "b"]})
     assert cond.comparison_design(groups, "a", "b") == "mixed"
     assert cond.comparison_design(groups[groups["exp_id"] != "v1"], "a", "b") == "independent"
+
+
+def test_imputer_linear_limit_and_no_default_smoothing():
+    # The linear gap filling fills lin_interp_limit frames from each end of a gap (the project's interpolation_limit,
+    # passed through by iterative_imputation); smooth_alpha=0 (default) leaves the tables untouched, while the filter
+    # of smooth_alpha=1 hardly changes the data and filters every tracked stretch on its own
+    from deepof.config import BitPrecision
+
+    data = pd.DataFrame({("A_Nose", "x"): np.arange(40, dtype=float), ("A_Nose", "y"): np.arange(40, dtype=float)})
+    data.iloc[10:20] = np.nan  # a gap of 10 frames
+    for limit, still_missing in ((3, 4), (5, 0)):
+        imputer = deepof.utils.MouseTrackingImputer(bit_precision=BitPrecision.parse(64), lin_interp_limit=limit)
+        filled = pd.DataFrame(np.asarray(imputer.fit_transform(data.copy())), columns=data.columns)
+        assert filled.iloc[:, 0].isna().sum() == still_missing
+    assert "lin_interp_limit=getattr(self, \"interpolation_limit\", 3)" in open(deepof.data.__file__).read()
+    import inspect
+    assert inspect.signature(deepof.data.Project.__init__).parameters["smooth_alpha"].default == 0
+    series = np.cumsum(np.random.default_rng(0).normal(size=(60, 2)), axis=0)
+    assert np.allclose(deepof.utils.smooth_mult_trajectory(series, alpha=1, w_length=15), series, atol=1e-3)
+    # Missing values stay where they are (one stretch per side of the gap is filtered on its own); stretches shorter
+    # than the window are kept; a low polynomial degree removes noise
+    series = np.stack([np.sin(np.arange(60) / 6), np.cos(np.arange(60) / 9)], axis=1)  # smooth movement
+    noisy = series + np.random.default_rng(1).normal(scale=0.1, size=series.shape)
+    noisy[30, 0] = np.nan
+    smoothed = deepof.utils.smooth_mult_trajectory(noisy, alpha=12, w_length=15)
+    assert np.flatnonzero(np.isnan(smoothed[:, 0])).tolist() == [30] and np.isfinite(smoothed[:, 1]).all()
+    assert np.abs(smoothed[:, 1] - series[:, 1]).mean() < 0.8 * np.abs(noisy[:, 1] - series[:, 1]).mean()
+    short = noisy.copy()
+    short[10, 1] = np.nan
+    kept = deepof.utils.smooth_mult_trajectory(short, alpha=12, w_length=15)
+    assert np.array_equal(kept[:10, 1], short[:10, 1]) and not np.array_equal(kept[:30, 0], noisy[:30, 0])

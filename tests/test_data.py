@@ -771,6 +771,28 @@ def test_get_graph_dataset_center_and_speeds():
     assert np.allclose(tab[parts].to_numpy(float), speeds[parts].to_numpy(float), equal_nan=True)
 
 
+def test_get_graph_dataset_window_downsampling():
+    # samples_max does not cut the videos: if the longest video has more windows, the window step of all videos is
+    # raised (every k-th of the same windows, whole videos), and meta_info["window_step"] gives the step used, also per
+    # animal; every video keeps its own length (align_video_lengths=False by default)
+    prun = create_project("test_multi_topview", animal_ids=["B", "W"])
+    get_dt = deepof.data_loading.get_dt
+    kwargs = dict(center="Center", align="Spine_1", window_size=10, window_step=2, test_videos=0)
+    full, full_info = prun.get_graph_dataset(samples_max=None, **kwargs)[:2]
+    n = {key: len(get_dt(full[0], key)[0]) for key in full[0].keys()}
+    cap = max(n.values()) // 3
+    factor = int(np.ceil(max(n.values()) / cap))
+    thin, thin_info = prun.get_graph_dataset(samples_max=cap, **kwargs)[:2]
+    assert factor > 1 and full_info["window_step"] == 2 and thin_info["window_step"] == 2 * factor
+    for key in full[0].keys():
+        for a, b in zip(get_dt(full[0], key)[:2], get_dt(thin[0], key)[:2]):
+            assert np.array_equal(b, a[::factor])
+    lengths = prun.get_table_lengths()
+    assert all(n[key] == (lengths[key] - 10) // 2 + 1 for key in n)
+    per_animal_info = prun.get_graph_dataset(per_animal=True, samples_max=cap, **kwargs)[1]
+    assert per_animal_info["window_step"] == 2 * factor
+
+
 def test_get_graph_dataset_window_alignment_and_frame_mask():
     # align_per_window: every window shifted and rotated as a whole onto its centre frame (B_Center at 0, B_Spine_1 on
     # the y-axis there): distances within a frame and the movement between frames are those of the scaled positions;

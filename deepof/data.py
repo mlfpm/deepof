@@ -177,7 +177,7 @@ def load_project(
         table_path: str = None,
         rename_bodyparts: list = None,
         sam_checkpoint_path: str = None,
-        smooth_alpha: float = 1,
+        smooth_alpha: float = 0,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: int = 1,
@@ -197,7 +197,7 @@ def load_project(
         exp_conditions (dict): dictionary with experiment IDs as keys and experimental conditions as values.
         start_markers (dict): dictionary with experiment IDs as keys and start markers as values.
         remove_outliers (bool): whether outliers should be removed during project creation.
-        interpolation_limit (int): maximum number of missing frames to interpolate.
+        interpolation_limit (int): linear interpolation fills up to this many missing frames from each end of a gap (gaps of up to twice this length are closed).
         interpolation_std (int): maximum number of standard deviations to interpolate.
         likelihood_tol (float): likelihood threshold for outlier detection.
         animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
@@ -208,7 +208,7 @@ def load_project(
         table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
         rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files.
         sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
-        smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
+        smooth_alpha (float): smoothing intensity (Savitzky-Golay filter of degree 15 - smooth_alpha over 15 frames). The higher the value, the more smoothing. 0 (default): no smoothing (1 hardly changes the data and spreads every missing value to +-7 frames).
         table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
         video_format (str): video format. Defaults to '.mp4'.
         video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).            
@@ -398,7 +398,7 @@ class Project:
         table_path: str = None,
         rename_bodyparts: list = None,
         sam_checkpoint_path: str = None,
-        smooth_alpha: float = 1,
+        smooth_alpha: float = 0,
         table_format: str = "autodetect",
         video_format: str = ".mp4",
         video_scale: str = None,
@@ -418,7 +418,7 @@ class Project:
             exp_conditions Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and experimental conditions as values.
             start_markers Union[str, dict]: path to .csv-file or dictionary with experiment IDs as keys and start markers as values
             remove_outliers (bool): whether outliers should be removed during project creation.
-            interpolation_limit (int): maximum number of missing frames to interpolate.
+            interpolation_limit (int): linear interpolation fills up to this many missing frames from each end of a gap (gaps of up to twice this length are closed).
             interpolation_std (int): maximum number of standard deviations to interpolate.
             likelihood_tol (float): likelihood threshold for outlier detection.
             animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
@@ -429,7 +429,7 @@ class Project:
             table_path (str): path where to find the tracks to use. If not specified, deepof, assumes they are in your project path.
             rename_bodyparts (list): list of names to use for the body parts in the provided tracking files. The order should match that of the columns in your DLC tables or the node dimensions on your (S)LEAP .npy files. With a custom skeleton, this is only used to name the body parts of .npy files (the renaming is part of the skeleton).
             sam_checkpoint_path (str): path to the checkpoint file for the SAM model. If not specified, the model will be saved in the installation folder.
-            smooth_alpha (float): smoothing intensity. The higher the value, the more smoothing.
+            smooth_alpha (float): smoothing intensity (Savitzky-Golay filter of degree 15 - smooth_alpha over 15 frames). The higher the value, the more smoothing. 0 (default): no smoothing (1 hardly changes the data and spreads every missing value to +-7 frames).
             table_format (str): format of the table. Defaults to 'autodetect', but can be set to "csv" or "h5" for DLC output, and "npy", "slp" or "analysis.h5" for (S)LEAP.
             video_format (str): video format. Defaults to '.mp4'.
             video_scale (int): diameter of the arena in mm (if the arena is round) or length of the first specified arena side (if the arena is polygonal).            
@@ -1161,15 +1161,8 @@ class Project:
                         table_path=os.path.join(self.project_path, self.project_name, "Tables"), 
                         animal_ids=self.animal_ids)
 
-        # 1. Smoothing
-        if self.smooth_alpha:
-            self._update_progress(pbar, "Smoothing trajectories", key)
-            smoothed_data = deepof.utils.smooth_mult_trajectory(
-                table.values, alpha=self.smooth_alpha, w_length=15
-            )
-            table = pd.DataFrame(smoothed_data, index=table.index, columns=table.columns)
-
-        # 2. Outlier Removal
+        # 1. Outlier Removal (on the measured positions: smoothing first would smear an outlier into its neighbours and
+        # hide it from the test)
         if self.remove_outliers:
             self._update_progress(pbar, "Removing outliers", key)
             table, warn_nans = deepof.utils.remove_outliers(
@@ -1182,13 +1175,23 @@ class Project:
         # Update table_dict with potentially modified table
         table_dict[key] = table
 
-        # 3. Imputation
+        # 2. Imputation
         if self.iterative_imputation:
             self._update_progress(pbar, "Iterative imputation of ocluded bodyparts", key)
             full_imputation = self.iterative_imputation == "full"
             table_dict = deepof.utils.iterative_imputation(
                 self, table_dict, lik_dict, full_imputation=full_imputation,
+                lin_interp_limit=getattr(self, "interpolation_limit", 3),
             )
+
+        # 3. Smoothing of every tracked stretch (missing positions stay missing, see smooth_mult_trajectory)
+        if self.smooth_alpha:
+            self._update_progress(pbar, "Smoothing trajectories", key)
+            table = table_dict[key]
+            smoothed_data = deepof.utils.smooth_mult_trajectory(
+                table.values, alpha=self.smooth_alpha, w_length=15
+            )
+            table_dict[key] = pd.DataFrame(smoothed_data, index=table.index, columns=table.columns)
 
         # 4. Set missing animals
         table_dict = deepof.utils.set_missing_animals(self, table_dict, lik_dict, animal_presence_threshold= self.animal_presence_threshold)
@@ -3280,8 +3283,8 @@ class Coordinates:
         bin_size=None,
         bin_index=None,
         precomputed_bins=None,
-        samples_max: int = 227272,  #corresponds to 1GB of memory when using default settings
-        align_video_lengths: bool = True,
+        samples_max: int = 227272,  # windows per video (~1 GB with default settings); more -> larger window step
+        align_video_lengths: bool = False,
         #other info
         precomputed_tab_dict: table_dict = None,
         center: str = False,
@@ -3289,9 +3292,9 @@ class Coordinates:
         align: str = None,
         preprocess: bool = True,
         scale: str = "standard",
-        dist_standardize: str = "per_column",
-        speed_standardize: str = "per_column",
-        coord_standardize: str = "per_column",
+        dist_standardize: str = "groupwise",
+        speed_standardize: str = "groupwise",
+        coord_standardize: str = "groupwise",
         return_as_paths: bool = None,
         include_angles: bool = False,
         mouse_size_normalization: bool = False,
@@ -3310,18 +3313,18 @@ class Coordinates:
 
         Args:
             animal_id (str): Name of the animal to process. If None (default) all animals are included in a multi-animal graph.
-            bin_size (Union[int,str]): bin size for time filtering. Will select (up to) the first 2.5 hours of data per default
+            bin_size (Union[int,str]): bin size for time filtering. None (default, with bin_index None): the whole videos.
             bin_index (Union[int,str]): index of the bin of size bin_size to select along the time dimension. Denotes exact start position in the time domain if given as string.
             precomputed_bins (np.ndarray): precomputed time bins. If provided, bin_size and bin_index are ignored.
-            samples_max (int): Maximum number of frames used per video. Longer videos are cut at this number of frames. None uses all frames.
-            align_video_lengths (bool): If True (default), all videos are cut to the length of the shortest one, so that every video has the same weight in training. If False, all frames of all videos are used.
+            samples_max (int): Maximum number of windows per video. If the longest video has more windows at window_step, the window step of ALL videos is raised to the smallest multiple of window_step that keeps it within samples_max (every k-th window: whole videos are used, the frames within a window stay consecutive); meta_info["window_step"] gives the step used. None: window_step as given (all windows, more memory).
+            align_video_lengths (bool): If True, all videos are cut to the length of the shortest one, so that every video has the same weight in training. If False (default), all frames of all videos are used.
             precomputed_tab_dict (table_dict): table_dict object for further graph processing. None (default) builds it on the spot.
             center (str): Name of the body part on which the coordinates are centered: all animals on this body part of the first animal, so that the distances within and between the animals are kept, and the position in the arena is not part of the input. 'arena' or False (default): centered on the arena, the position in the arena stays in the coordinates.
             polar (bool) States whether the coordinates should be converted to polar values.
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation). The frames are rotated around the center, so with a body part as center (e.g. "Center" and align="Spine_1") the coordinates are the posture relative to the body axis of the first animal.
             preprocess (bool): whether to preprocess the data to pass to autoencoders. If False, node features and distance-weighted adjacency matrices on the raw data are returned.
-            dist_standardize (str): standardize distance columns individually (per_column) or as a group (groupwise)
-            speed_standardize (str): standardize speed columns individually (per_column) or as a group (groupwise)
+            dist_standardize (str): standardize distance columns as a group (groupwise, default) or individually (per_column)
+            speed_standardize (str): standardize speed columns as a group (groupwise, default) or individually (per_column)
             return_as_paths (bool): wheter the preprocessed data should only returned as a path to the data storage location or loaded in the RAM in full
             include_angles (bool): If True, the windows additionally contain the (unsigned, unscaled) angles between three connected body parts as a third array next to nodes and edges. They are not used as model input, but as targets of the regression teacher (include_angles_view in train_deepof_model). Defaults to False.
             mouse_size_normalization (bool): If True, the coordinates of each animal are divided by its own body length, which removes size differences between animals but distorts the positions of the animals relative to each other. If False (default), the coordinates of all animals are divided by one shared body length, so that distances between animals are preserved. Speeds and distances are normalized per animal in both cases.
@@ -3596,6 +3599,7 @@ class Coordinates:
                 precomputed_bins=precomputed_bins,
                 samples_max=samples_max,
                 align_video_lengths=align_video_lengths,
+                downsample_windows=True,  # samples_max raises the window step instead of cutting the videos
                 save_as_paths=return_as_paths,
                 dist_standardize=dist_standardize,
                 speed_standardize=speed_standardize,
@@ -3619,7 +3623,7 @@ class Coordinates:
             metainfo['kinematics_columns']=feature_names[kinematics_sorting_indices]
             metainfo['node_channels']=4 if has_mask else 3  # x, y, speed, (imputation mask)
             metainfo['frame_rate']=self._frame_rate
-            metainfo['window_step']=kwargs.get('window_step', 1)
+            metainfo['window_step']=metainfo.get('window_step', kwargs.get('window_step', 1))  # the step used
             # Social context nodes (per_animal): after the body parts in every channel block, the same layout
             social_names = list(dict.fromkeys(f[0] for f in feature_names if isinstance(f, tuple) and len(f) == 2
                                               and f[1] == "sx"))
@@ -4626,7 +4630,8 @@ class TableDict(dict):
         bin_index=None,
         precomputed_bins=None,
         samples_max: int = 227272,
-        align_video_lengths: bool = True,
+        align_video_lengths: bool = False,
+        downsample_windows: bool = False,
         scale: str = "standard",
         pretrained_scaler=None,
         test_videos: int = 0,
@@ -4661,6 +4666,13 @@ class TableDict(dict):
         frame_mask ({video: boolean array over all frames of its table}): only these frames enter the statistics (body
         length per video, global scalers); all frames are scaled. coord_reference (body part column name, e.g.
         "Center"): the coordinate scaler is fitted on, and outliers are tested with, the positions relative to it.
+
+        samples_max: without downsample_windows, videos longer than samples_max frames are cut at that length (callers
+        that map window i to frame i, e.g. post_hoc.annotate_time_chunks). With downsample_windows (get_graph_dataset),
+        whole videos are used and, if the longest one has more than samples_max windows at window_step, the window step
+        of all videos is raised to the smallest multiple of window_step that keeps it within samples_max (uniform
+        downsampling of the window starts; the frames within a window stay consecutive). The step used is returned as
+        metainfo["window_step"].
         """
         SCALERS = {"standard", "minmax", "robust"}
 
@@ -4677,14 +4689,15 @@ class TableDict(dict):
         if animal_ids is None:
             animal_ids = coordinates._animal_ids
 
-        # Time bins. Videos longer than samples_max are cut (not downsampled), so that windows stay consecutive
+        # Time bins. Without downsample_windows, videos longer than samples_max are cut (not downsampled, so that the
+        # frames within a window stay consecutive); with it, whole videos and a larger window step (below)
         bin_kwargs = dict(
             coordinates=coordinates,
             bin_size=bin_size,
             bin_index=bin_index,
             precomputed_bins=precomputed_bins,
             tab_dict_for_binning=self,
-            samples_max=samples_max,
+            samples_max=None if downsample_windows else samples_max,
             down_sample=False,
             table_lengths=coordinates.get_table_lengths(tab_dict_for_binning=self),
             warned=set(),
@@ -4702,6 +4715,20 @@ class TableDict(dict):
                     "Set align_video_lengths=False to use all frames."
                     "\033[0m"
                 )
+        if downsample_windows and samples_max is not None and bin_info:
+            longest = max(len(b) for b in bin_info.values())
+            n_windows = (longest - window_size) // window_step + 1 if longest >= window_size else 0
+            if n_windows > samples_max:
+                factor = int(np.ceil(n_windows / samples_max))
+                print(
+                    "\033[33m\n"
+                    f"Info! The longest video has {n_windows} windows at window_step={window_step}, more than "
+                    f"samples_max={samples_max}: every video is downsampled to every {factor}. window "
+                    f"(window_step={window_step * factor}), so that whole videos are used. Set samples_max=None to keep "
+                    f"window_step={window_step} (more memory)."
+                    "\033[0m"
+                )
+                window_step = window_step * factor
 
         # ========== Step 1: Collect samples for global scaler fitting ==========
 
@@ -4710,7 +4737,7 @@ class TableDict(dict):
             keys_list=keys_list,
             animal_ids=animal_ids,
             bin_info=bin_info,
-            samples_max=samples_max,
+            samples_max=None if downsample_windows else samples_max,  # scaler sample: at most 227272 rows per video
             scale=scale,
             pretrained_scaler=pretrained_scaler,
             filter_low_variance=filter_low_variance,
@@ -4801,6 +4828,7 @@ class TableDict(dict):
         metainfo = {
             "shape_train": train_shape,
             "shape_test": test_shape,
+            "window_step": window_step,  # the step used (downsample_windows may have raised it)
             "dist_standardize": dist_standardize,
             "speed_standardize": speed_standardize,
             "coord_standardize": coord_standardize,

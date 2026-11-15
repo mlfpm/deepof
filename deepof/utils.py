@@ -210,11 +210,12 @@ class MouseTrackingImputer:
         body_part_indices (OrderedDict): Mapping of body part names to indices.
         skeleton_constraints (list): List of skeleton constraints.
         mouse_body_estimation_samples (int): Number of sample frames with non-nan data to estimate valid mouse shapes (default: 100).
-        lin_interp_limit (int): Limit for linear interpolation (default: 3).
+        lin_interp_limit (int): Frames filled by linear interpolation from each end of a gap (default: 3; projects pass
+            their interpolation_limit).
         bit_precision (BitPrecision)
     """
 
-    def __init__(self, bit_precision, n_iterations=10, connectivity=None, full_imputation=False):
+    def __init__(self, bit_precision, n_iterations=10, connectivity=None, full_imputation=False, lin_interp_limit=3):
         self.full_imputation = full_imputation
         self.n_iterations = n_iterations
         self.connectivity = connectivity
@@ -222,7 +223,7 @@ class MouseTrackingImputer:
         self.body_part_indices = None
         self.skeleton_constraints = None
         self.mouse_body_estimation_samples = 100
-        self.lin_interp_limit = 3
+        self.lin_interp_limit = int(lin_interp_limit)
         
 
     def _initialize_constraints(self, data):
@@ -607,7 +608,7 @@ def compute_animal_presence_mask(
 
 
 def iterative_imputation(
-    project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False,
+    project: project, tab_dict: dict, lik_dict: dict, full_imputation: bool = False, lin_interp_limit: int = 3,
 ):
     """Perform iterative imputation on occluded body parts. Run per animal and experiment.
 
@@ -616,6 +617,7 @@ def iterative_imputation(
         tab_dict (dict): Dictionary with the coordinates of the body parts.
         lik_dict (dict): Dictionary with the likelihood of the tracking for each body part and animal.
         full_imputation (bool): Determines if only small gaps get linearily imputed (False) or additionally IterativeImputer and a few other steps are executed to close all gaps (True)
+        lin_interp_limit (int): Frames filled by linear interpolation from each end of a gap (the project's interpolation_limit).
 
     Returns:
         tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
@@ -650,6 +652,7 @@ def iterative_imputation(
                     connectivity=project.connectivity[animal_id],
                     full_imputation=full_imputation,
                     bit_precision=project.bit_precision,
+                    lin_interp_limit=lin_interp_limit,
                 )
                 imputed = imputer.fit_transform(sub_table)
 
@@ -3653,17 +3656,32 @@ def smooth_mult_trajectory(
         alpha (int): 0 <= alpha < w_length; indicates the difference between the degree of the polynomial and the window length for the Savitzky-Golay filter used for smoothing. Higher values produce a worse fit, hence more smoothing.
         w_length (int): Length of the sliding window to which the filter fit. Higher values yield a coarser fit, hence more smoothing.
 
+    Every column is filtered per stretch of consecutive finite values: missing values (NaN) stay missing and do not
+    spread (a filter over the whole column would turn every NaN into w_length NaNs); stretches shorter than w_length
+    are kept as they are.
+
     Returns:
         smoothed_series (np.ndarray): smoothed version of the input, with equal shape
 
     """
-    if alpha is None:
+    if alpha is None or alpha == 0:
         return series
+    polyorder = w_length - alpha
+    if not 0 <= polyorder < w_length:
+        raise ValueError(f"smooth_alpha needs to be between 1 and {w_length} (window {w_length}), got {alpha}")
 
-    # apply filter
-    smoothed_series = savgol_filter(
-        series, polyorder=(w_length - alpha), window_length=w_length, axis=0
-    )
+    series = np.asarray(series)
+    smoothed_series = np.array(series, dtype=float, copy=True)
+    flat = smoothed_series.reshape(len(smoothed_series), -1)
+    finite = np.isfinite(flat)
+    complete = finite.all(axis=0)
+    if len(flat) >= w_length and complete.any():  # columns without gaps: one filter call
+        flat[:, complete] = savgol_filter(flat[:, complete], window_length=w_length, polyorder=polyorder, axis=0)
+    for j in np.flatnonzero(~complete):
+        edges = np.diff(np.concatenate([[0], finite[:, j].astype(np.int8), [0]]))
+        for start, stop in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)):
+            if stop - start >= w_length:
+                flat[start:stop, j] = savgol_filter(flat[start:stop, j], window_length=w_length, polyorder=polyorder)
 
     assert smoothed_series.shape == series.shape
 
