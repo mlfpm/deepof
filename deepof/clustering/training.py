@@ -528,9 +528,10 @@ def step_contrastive_distill(
         p_rot = contrastive_cfg.aug_p_rot, 
         node_drop_min = contrastive_cfg.aug_node_drop_min,
         node_drop_max = contrastive_cfg.aug_node_drop_max,
-        p_node_drop = contrastive_cfg.aug_p_node_drop,          
+        p_node_drop = contrastive_cfg.aug_p_node_drop,
         p_mask_drop = contrastive_cfg.aug_p_mask_drop,
         n_social = int(getattr(base, "social_nodes", 0)),
+        **_tracking_noise_kwargs(contrastive_cfg),
     )
 
     # Only the NCE loss uses the time-shifted third view; skip its augmentation and encoder pass otherwise
@@ -572,9 +573,10 @@ def step_contrastive_distill(
             p_rot = contrastive_cfg.aug_p_rot, 
             node_drop_min = contrastive_cfg.aug_node_drop_min,
             node_drop_max = contrastive_cfg.aug_node_drop_max,
-            p_node_drop = contrastive_cfg.aug_p_node_drop,          
+            p_node_drop = contrastive_cfg.aug_p_node_drop,
             p_mask_drop = contrastive_cfg.aug_p_mask_drop,
         n_social = int(getattr(base, "social_nodes", 0)),
+            **_tracking_noise_kwargs(contrastive_cfg),
         )
 
     # Split back into two views
@@ -741,20 +743,29 @@ def step_contrastive_distill(
     view_losses = {}
     if regression_targets is not None:
         target = regression_targets[idx.to(device).long()]
+        valid = None
+        if getattr(ctx, "regression_missing", False):  # NaN targets: shifted views without a later window, left out
+            valid = ~torch.isnan(target)
+            target = torch.nan_to_num(target)  # (NaN in the difference would give NaN gradients despite the mask)
         err = (ctx.regression_head(backbone1.float()) - target).pow(2)
+        if valid is not None:
+            err = torch.where(valid, err, torch.zeros_like(err))
         weighted, weight_sum = 0.0, 0.0
         for name, start, end, weight in ctx.regression_views:
             view_err = err[:, start:end].sum(dim=1)
-            view_loss = view_err.mean()
+            has = None if valid is None else valid[:, start]  # a view is missing as a whole
+            view_loss = view_err.mean() if has is None else view_err.sum() / has.sum().clamp_min(1)
             view_losses[f"view_{name}"] = float(view_loss.detach().item())  # unweighted
             if name == "social" and getattr(ctx, "social_weights", None) is not None:
-                view_loss = (view_err * ctx.social_weights[idx.to(device).long()]).mean()  # social_near_weight
+                w = ctx.social_weights[idx.to(device).long()]  # social_near_weight
+                view_loss = (view_err * w).mean() if has is None else (view_err * w).sum() / (w * has).sum().clamp_min(1e-12)
             if name == "social" and getattr(ctx, "social_split", None) is not None:
                 # partner near / far: error relative to the variance of the targets within the group (None: no such
                 # sample in the batch, skipped in the epoch mean)
                 near_all, var_near, var_far = ctx.social_split
                 near = near_all[idx.to(device).long()]
                 for tag, group, var in (("near", near, var_near), ("far", ~near, var_far)):
+                    group = group if has is None else group & has
                     view_losses[f"view_social_{tag}"] = (
                         float(view_err[group].mean().detach().item()) / var if bool(group.any()) else None)
             weighted, weight_sum = weighted + weight * view_loss, weight_sum + weight
@@ -1091,6 +1102,10 @@ def train_deepof_model(
     social_near_weight: Optional[float] = None,  # weight of windows with a partner near in the social view
     regression_bottleneck_dim: Optional[int] = None,  # views predicted through a code of this width, see TurtleTeacherCfg
     regression_future_shifts: Optional[Tuple[int, ...]] = None,  # views of later windows as extra targets (frames)
+    shifted_target_missing: Optional[str] = None,  # "own" / "skip": shifted targets without a later window, see TurtleTeacherCfg
+    regression_clean_median: Optional[int] = None,  # cleaner targets: running median (frames), see TurtleTeacherCfg
+    regression_clean_smooth: Optional[int] = None,  # cleaner targets: Savitzky-Golay (frames), see TurtleTeacherCfg
+    regression_clean_clip: Optional[float] = None,  # cleaner targets: quantile clipping, see TurtleTeacherCfg
     social_dim: Optional[int] = None,  # size of the social part of the embedding (per-animal data), see ContrastiveCfg
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
@@ -1162,7 +1177,15 @@ def train_deepof_model(
     aug_node_drop_max: Optional[int] = None,
     aug_p_node_drop: Optional[float] = None,
     aug_p_mask_drop: Optional[float] = None,
-    # Dataset management 
+    # Pose-tracking errors as augmentations (gaps, jitter, spikes), see ContrastiveCfg
+    aug_p_gap: Optional[float] = None,
+    aug_gap_min: Optional[int] = None,
+    aug_gap_max: Optional[int] = None,
+    aug_p_jitter: Optional[float] = None,
+    aug_jitter_sigma: Optional[float] = None,
+    aug_p_spike: Optional[float] = None,
+    aug_spike_size: Optional[Tuple[float, float]] = None,
+    # Dataset management
     device: str = None,
     h5_dataset_folder: Optional[str] = None,
     bootstrap_training: Optional[bool]=False,
@@ -1270,6 +1293,10 @@ def train_deepof_model(
         social_near_weight=social_near_weight,
         regression_bottleneck_dim=regression_bottleneck_dim,
         regression_future_shifts=None if regression_future_shifts is None else tuple(int(s) for s in regression_future_shifts),
+        shifted_target_missing=_lower(shifted_target_missing),
+        regression_clean_median=regression_clean_median,
+        regression_clean_smooth=regression_clean_smooth,
+        regression_clean_clip=regression_clean_clip,
         kinematics_segments_per_second=kinematics_segments_per_second,
         nodes_view_parts=None if nodes_view_parts is None else tuple(nodes_view_parts),
         regression_view_weights=regression_view_weights,
@@ -1368,7 +1395,14 @@ def train_deepof_model(
         aug_node_drop_min = aug_node_drop_min,
         aug_node_drop_max = aug_node_drop_max,
         aug_p_node_drop = aug_p_node_drop,
-        aug_p_mask_drop = aug_p_mask_drop,  
+        aug_p_mask_drop = aug_p_mask_drop,
+        aug_p_gap=aug_p_gap,
+        aug_gap_min=aug_gap_min,
+        aug_gap_max=aug_gap_max,
+        aug_p_jitter=aug_p_jitter,
+        aug_jitter_sigma=aug_jitter_sigma,
+        aug_p_spike=aug_p_spike,
+        aug_spike_size=None if aug_spike_size is None else tuple(float(v) for v in aug_spike_size),
         # info nce
         sim_threshold = sim_threshold,
         # vicereg
@@ -2222,7 +2256,7 @@ def fit_contrastive(
     # Create teacher
     teacher_cfg.include_latent_view=False
     tau_star, regression_targets, regression_head, regression_views = None, None, None, None
-    regression_extras = {}
+    regression_extras, regression_missing = {}, False
     if teacher_cfg.use_turtle_teacher and teacher_cfg.teacher_mode == "regression":
         # Views as continuous targets of a linear head on the backbone output (the embedding used for clustering)
         regression_targets, views = deepof.clustering.teacher_model.build_regression_targets(
@@ -2230,8 +2264,11 @@ def fit_contrastive(
             val_dataset=val_loader.dataset if val_loader is not None else None,
         )
         regression_targets = regression_targets.to(device)
+        # targets left out (NaN, shifted_target_missing="skip") are masked in the loss
+        regression_missing = bool(torch.isnan(regression_targets).any())
         if "val_targets" in regression_extras:  # the validation loss is the regression loss on the validation windows
             regression_extras["val_targets"] = regression_extras["val_targets"].to(device)
+            regression_extras["val_missing"] = bool(torch.isnan(regression_extras["val_targets"]).any())
         if "social_split" in regression_extras:
             near, var_near, var_far = regression_extras["social_split"]
             regression_extras["social_split"] = (near.to(device), var_near, var_far)
@@ -2359,6 +2396,7 @@ def fit_contrastive(
             distill_conf_thresh=teacher_cfg.generic_distill_conf_thresh,
             apply_distill=apply_distill,
             regression_targets=regression_targets,
+            regression_missing=regression_missing,
             regression_head=regression_head,
             regression_views=regression_views,
             social_split=regression_extras.get("social_split"),
@@ -2388,6 +2426,7 @@ def fit_contrastive(
             ctx=SimpleNamespace(apply_distill=False,edge_index=edge_index_global,edge_index_local=edge_index_local,contrastive_cfg=contrastive_cfg, rot_precomp=rot_precomp, window_len=window_len, animal_nodes=animal_nodes,
                                 # regression teacher on the validation windows (targets with the training fits)
                                 regression_targets=regression_extras.get("val_targets"),
+                                regression_missing=regression_extras.get("val_missing", False),
                                 regression_head=regression_head, regression_views=regression_views,
                                 lambda_regression=teacher_cfg.lambda_regression,), show_progress=True,
         )
@@ -3563,6 +3602,93 @@ def _augment_node_drop(
     return x_aug
 
 
+def _augment_tracking_noise(
+    x: torch.Tensor,
+    p_gap: float = 0.0,
+    gap_min: int = 3,
+    gap_max: int = 15,
+    p_jitter: float = 0.0,
+    jitter_sigma: float = 0.03,
+    p_spike: float = 0.0,
+    spike_size: Tuple[float, float] = (0.25, 1.5),
+) -> torch.Tensor:
+    """Pose-tracking errors on body parts (B, T, N, F >= 3: x, y, speed, (imputation mask)), each per window with its
+    probability; sizes in body lengths (twice the mean largest distance of a body part from the window's centroid):
+      - gaps (p_gap): one body part follows a straight line over gap_min-gap_max frames (what the imputation makes of an
+        untracked stretch; marked in the imputation mask if there is one)
+      - jitter (p_jitter): independent Gaussian noise per frame and body part, sd jitter_sigma
+      - spikes (p_spike): 1-3 body parts jump by spike_size (min, max) for 1-2 frames and come back
+    The speed channel follows the moved positions: it changes by c * (new - old frame-to-frame distance), c the slope
+    of the speed channel on the frame-to-frame distance in the batch (both are scaled versions of the same movement)."""
+    B, T, N = x.shape[:3]
+    if T < 3 or N < 1 or not (p_gap > 0 or p_jitter > 0 or p_spike > 0):
+        return x
+    device, dtype = x.device, x.dtype
+    out = x.clone()
+    pos = out[..., :2]  # view: changed in place
+    old = x[..., :2]
+    centroid = old.mean(dim=2, keepdim=True)
+    body = (2 * (old - centroid).norm(dim=-1).amax(dim=2).mean(dim=1)).clamp_min(1e-6)  # (B,) body length
+    b_idx, tt = torch.arange(B, device=device), torch.arange(T, device=device)
+
+    def move(part, frames, values):  # set pos[b, t, part[b]] = values (B, T, 2) where frames (B, T)
+        rows, cols, parts = b_idx[:, None].expand(B, T), tt[None, :].expand(B, T), part[:, None].expand(B, T)
+        current = pos[rows, cols, parts]
+        pos[rows, cols, parts] = torch.where(frames[..., None], values, current)
+
+    if p_gap > 0 and gap_max >= 1:
+        apply = torch.rand(B, device=device) < p_gap
+        length = torch.randint(int(gap_min), int(gap_max) + 1, (B,), device=device).clamp(1, T - 2)
+        start = 1 + (torch.rand(B, device=device) * (T - length - 1).to(dtype)).long()  # frames start..start+length-1
+        part = torch.randint(0, N, (B,), device=device)
+        before, after = pos[b_idx, start - 1, part], pos[b_idx, start + length, part]  # (B, 2)
+        alpha = ((tt[None, :] - (start[:, None] - 1)).to(dtype) / (length[:, None] + 1).to(dtype)).clamp(0, 1)
+        line = before[:, None, :] + alpha[..., None] * (after - before)[:, None, :]
+        frames = apply[:, None] & (tt[None, :] >= start[:, None]) & (tt[None, :] < (start + length)[:, None])
+        move(part, frames, line)
+        if out.shape[-1] > 3:  # imputation mask: these frames count as imputed
+            mask = out[..., 3]
+            rows, cols, parts = b_idx[:, None].expand(B, T), tt[None, :].expand(B, T), part[:, None].expand(B, T)
+            mask[rows, cols, parts] = torch.where(frames, torch.ones_like(mask[rows, cols, parts]), mask[rows, cols, parts])
+    if p_jitter > 0 and jitter_sigma > 0:
+        apply = (torch.rand(B, device=device) < p_jitter).to(dtype)
+        pos += torch.randn_like(pos) * (jitter_sigma * body * apply)[:, None, None, None]
+    if p_spike > 0:
+        apply = torch.rand(B, device=device) < p_spike
+        for k in range(3):  # one spike per chosen window, a second and a third with probability 0.5 each
+            use = apply & ((k == 0) | (torch.rand(B, device=device) < 0.5))
+            part = torch.randint(0, N, (B,), device=device)
+            first = torch.randint(0, T, (B,), device=device)
+            length = torch.randint(1, 3, (B,), device=device)
+            size = (spike_size[0] + (spike_size[1] - spike_size[0]) * torch.rand(B, device=device, dtype=dtype)) * body
+            angle = 2 * math.pi * torch.rand(B, device=device, dtype=dtype)
+            jump = torch.stack([size * torch.cos(angle), size * torch.sin(angle)], dim=1)  # (B, 2)
+            frames = use[:, None] & (tt[None, :] >= first[:, None]) & (tt[None, :] < (first + length)[:, None])
+            current = pos[b_idx[:, None].expand(B, T), tt[None, :].expand(B, T), part[:, None].expand(B, T)]
+            move(part, frames, current + jump[:, None, :])
+    # speed channel: slope of the stored speed on the frame-to-frame distance, applied to the changed distances
+    d_old = (old[:, 1:] - old[:, :-1]).norm(dim=-1)  # (B, T-1, N)
+    d_new = (pos[:, 1:] - pos[:, :-1]).norm(dim=-1)
+    speed = x[:, 1:, :, 2]
+    dc, sc = d_old - d_old.mean(), speed - speed.mean()
+    slope = ((dc * sc).sum() / dc.pow(2).sum().clamp_min(1e-12)).clamp_min(0)
+    out[:, 1:, :, 2] = speed + slope * (d_new - d_old)
+    return out
+
+
+def _tracking_noise_kwargs(contrastive_cfg) -> dict:
+    """The pose-tracking error settings of a ContrastiveCfg for _make_augmented_view (off for configs without them)."""
+    return dict(
+        p_gap=float(getattr(contrastive_cfg, "aug_p_gap", 0.0) or 0.0),
+        gap_min=int(getattr(contrastive_cfg, "aug_gap_min", 3)),
+        gap_max=int(getattr(contrastive_cfg, "aug_gap_max", 15)),
+        p_jitter=float(getattr(contrastive_cfg, "aug_p_jitter", 0.0) or 0.0),
+        jitter_sigma=float(getattr(contrastive_cfg, "aug_jitter_sigma", 0.03)),
+        p_spike=float(getattr(contrastive_cfg, "aug_p_spike", 0.0) or 0.0),
+        spike_size=tuple(getattr(contrastive_cfg, "aug_spike_size", (0.25, 1.5))),
+    )
+
+
 def _augment_mask_drop(x: torch.Tensor, p: float = 0.0) -> torch.Tensor:
     """Zero the imputation mask (fourth node channel) of whole windows with probability p per sample, i.e. "all
     positions tracked", so that the embedding cannot rely on the mask alone. No-op without a mask."""
@@ -3731,12 +3857,20 @@ def _make_augmented_view(
     p_mask_drop: float = 0.0,
     return_shift: bool = False,
     n_social: int = 0,
+    p_gap: float = 0.0,
+    gap_min: int = 3,
+    gap_max: int = 15,
+    p_jitter: float = 0.0,
+    jitter_sigma: float = 0.03,
+    p_spike: float = 0.0,
+    spike_size: Tuple[float, float] = (0.25, 1.5),
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Produce augmented (x_aug, a_aug). a_aug is recomputed from x_aug, then affine-matched to a.
     With return_shift, also returns the time shift per sample (frames, relative to the window center).
     n_social: the last n_social nodes are social context nodes (per-animal datasets); they are shifted in time and
     interpolated with the body parts, but not rotated, jittered or displaced (they are no positions).
+    p_gap ... spike_size: pose-tracking errors on the body parts (_augment_tracking_noise), off by default.
     """
     x_aug_raw = x
 
@@ -3751,6 +3885,8 @@ def _make_augmented_view(
     x_aug = _augment_linear_interpolate_segments(x_aug, edge_index, min_len=min_interp, max_len=max_interp, p=p_interp, plot=False)
     x_body, x_social = x_aug[:, :, :n_body], x_aug[:, :, n_body:]
     x_body = _augment_noise_xys(x_body, edge_index, sigma=noise_sigma, p=p_noise, plot=False)
+    x_body = _augment_tracking_noise(x_body, p_gap=p_gap, gap_min=gap_min, gap_max=gap_max, p_jitter=p_jitter,
+                                     jitter_sigma=jitter_sigma, p_spike=p_spike, spike_size=spike_size)
     x_body = _augment_node_drop(x_body, edge_index, min_drop=node_drop_min, max_drop=node_drop_max, p=p_node_drop, plot=False)
     x_aug = torch.cat([x_body, x_social], dim=2) if n_social else x_body
     x_aug = _augment_mask_drop(x_aug, p=p_mask_drop)

@@ -1991,6 +1991,204 @@ def test_regression_teacher_validation_targets(tmp_path):
     assert val.shape == (18, targets.shape[1]) and not np.allclose(val.mean(axis=0), 0, atol=0.05)  # not refitted
 
 
+def _framed_windows(frames, T=8, K=2, seed=0):
+    """Windows per key whose X encodes (key, first frame) in every value; angles + one kinematics column random."""
+    rng = np.random.default_rng(seed)
+    data = {}
+    for i, (key, first) in enumerate(frames.items()):
+        n = len(first)
+        code = (1000 * (i + 1) + np.asarray(first, dtype=np.float32))[:, None, None]
+        data[key] = (np.broadcast_to(code, (n, T, 6)).astype(np.float32).copy(),
+                     rng.normal(size=(n, T, 4)).astype(np.float32),
+                     rng.normal(size=(n, T, K + 1)).astype(np.float32))
+    return data
+
+
+@pytest.mark.parametrize("shuffle", [False, True])
+def test_later_sample_window_frames(tmp_path, shuffle):
+    # With window frames the window exactly offset * step frames later is found, also across removed windows (-1 where
+    # it was removed or the video ends); without them the windows are taken as consecutive; stale frames are an error
+    frames = {"v1::m1": [0, 1, 2, 5, 6, 7], "v1::m2": [0, 2, 4, 6], "v2::m1": [3, 4, 5]}
+    data = _framed_windows(frames)
+    Dataset = deepof.clustering.dataset.BatchDictDataset
+    ds = Dataset(data, str(tmp_path), "train_", h5_chunk_len=4, global_shuffle=shuffle, window_frames=frames)
+    with h5py.File(ds.X_path, "r") as f:
+        code = f["X"][:, 0, 0, 0]  # stored order: 1000 * (key + 1) + first frame
+    key_of, frame_of = (code // 1000).astype(int), (code % 1000).astype(int)
+    stored = {(k, f): s for s, (k, f) in enumerate(zip(key_of, frame_of))}
+    for offset, step in ((1, 1), (2, 1), (1, 2)):
+        later = ds.later_sample(offset, step)
+        for s in range(len(code)):
+            target = stored.get((key_of[s], frame_of[s] + offset * step), -1)
+            assert later[s] == target, (offset, step, s)
+    assert (ds.later_sample(1) == -1).sum() == 7  # m1: 2 -> 3, 7 -> 8; m2: all four (step 2); v2: 5 -> 6
+    # Without window frames: consecutive windows (2 -> 5 counts as one window later)
+    plain = Dataset(data, str(tmp_path), "plain_", h5_chunk_len=4, global_shuffle=shuffle)
+    later = plain.later_sample(1)
+    s = stored[(1, 2)]
+    with h5py.File(plain.X_path, "r") as f:
+        plain_code = f["X"][:, 0, 0, 0]
+    assert plain_code[later[list(plain_code).index(code[s])]] == 1005
+    # Stale window frames: other data in the same files
+    Dataset.write_window_frames(str(tmp_path), "plain_", _framed_windows({"v9::m1": [0, 1]}), {"v9::m1": [0, 1]})
+    with pytest.raises(ValueError, match="does not belong"):
+        plain.later_sample(1)
+    for bad in ({"v1::m1": [0, 1, 2], "v1::m2": [0, 2, 4, 6], "v2::m1": [3, 4, 5]},
+                {"v1::m1": [0, 2, 1, 5, 6, 7], "v1::m2": [0, 2, 4, 6], "v2::m1": [3, 4, 5]}):
+        with pytest.raises(ValueError, match="window_frames of"):
+            Dataset.write_window_frames(str(tmp_path), "x_", data, bad)
+
+
+def test_target_cleaner():
+    # Running median: a one-frame spike disappears, a ramp stays; Savitzky-Golay: a quadratic stays (inside the
+    # window), jitter shrinks; any trailing shape; off without both
+    teacher = deepof.clustering.teacher_model
+    assert teacher.target_cleaner(0, 0) is None
+    t = torch.arange(20, dtype=torch.float32)
+    ramp = torch.stack([t, 2 * t], dim=-1)[None].repeat(3, 1, 1)  # (3, 20, 2)
+    spiky = ramp.clone()
+    spiky[:, 7, 0] += 50.0
+    median = teacher.target_cleaner(3, 0)
+    assert torch.allclose(median(ramp), ramp)  # a ramp stays; the spike goes (its frame takes a neighbour's value)
+    assert (median(spiky) - ramp).abs().max() <= 1.0 and (spiky - ramp).abs().max() == 50.0
+    quad = (0.1 * t ** 2 - t)[None, :, None, None].repeat(2, 1, 3, 2)  # (2, 20, 3, 2)
+    smooth = teacher.target_cleaner(0, 7)
+    assert smooth(quad).shape == quad.shape and torch.allclose(smooth(quad)[:, 3:-3], quad[:, 3:-3], atol=1e-4)
+    torch.manual_seed(0)
+    noisy = quad + 0.5 * torch.randn_like(quad)
+    assert (smooth(noisy) - quad)[:, 3:-3].abs().mean() < 0.6 * (noisy - quad)[:, 3:-3].abs().mean()
+    both = teacher.target_cleaner(3, 5, chunk=1)  # chunks of single windows give the same result
+    assert torch.allclose(both(noisy), teacher.target_cleaner(3, 5)(noisy), atol=1e-6)
+
+
+def test_regression_targets_cleaned_and_skipped(tmp_path):
+    # Cleaner targets differ from the raw ones and are clipped to their quantiles; future targets of windows without a
+    # window that much later are NaN with "skip" (left out of the loss) and the own view with "own"
+    frames = {"v1::m1": [0, 1, 2, 5, 6, 7], "v1::m2": [0, 1, 2, 3], "v2::m1": [3, 4, 5]}
+    K, window_len = 2, 6
+    data = _framed_windows(frames, K=K)
+    rng = np.random.default_rng(3)
+    for key, (x, a, ang) in data.items():
+        data[key] = (rng.normal(size=x.shape).astype(np.float32), a, ang)
+    ds = deepof.clustering.dataset.BatchDictDataset(data, str(tmp_path), "train_", h5_chunk_len=4, window_frames=frames)
+    meta_info = {"angle_columns": list(range(K)), "kinematics_columns": [("kinematics", "speed_median")],
+                 "frame_rate": 5.0}
+    teacher, utils = deepof.clustering.teacher_model, deepof.clustering.model_utils_new
+    base = dict(include_nodes_view=False, include_edges_view=True, pca_edges_dim=2, include_angles_view=True,
+                include_kinematics_view=True)
+    raw = teacher.build_regression_targets(utils.TurtleTeacherCfg(**base), ds, window_len, meta_info=meta_info)[0]
+    clean = teacher.build_regression_targets(
+        utils.TurtleTeacherCfg(**base, regression_clean_median=3, regression_clean_smooth=5), ds, window_len,
+        meta_info=meta_info)[0]
+    assert clean.shape == raw.shape and not torch.allclose(clean, raw, atol=1e-3)
+    clipped = teacher.build_regression_targets(utils.TurtleTeacherCfg(**base, regression_clean_clip=0.2), ds,
+                                               window_len, meta_info=meta_info)[0].numpy()
+    raw_np = raw.numpy()
+    assert np.all(clipped >= np.quantile(raw_np, 0.2, axis=0) - 1e-5)
+    assert np.all(clipped <= np.quantile(raw_np, 0.8, axis=0) + 1e-5)
+    targets = {}
+    for missing in ("own", "skip"):
+        targets[missing], views = teacher.build_regression_targets(
+            utils.TurtleTeacherCfg(**base, regression_future_shifts=(1,), shifted_target_missing=missing), ds,
+            window_len, meta_info=meta_info)
+    n_present = sum(d for name, d in views if "+" not in name)
+    later = ds.later_sample(1)
+    none = torch.as_tensor(later < 0)
+    assert int(none.sum()) == 4  # 2 -> 3 and 7 -> 8 (m1), 3 -> 4 (m2), 5 -> 6 (v2)
+    skip, own = targets["skip"], targets["own"]
+    assert torch.isnan(skip[none, n_present:]).all() and not torch.isnan(skip[~none]).any()
+    assert not torch.isnan(skip[:, :n_present]).any()
+    assert torch.allclose(own[none, n_present:], own[none, :n_present])  # own view instead
+    assert torch.allclose(skip[~none, n_present:], own[~none, n_present:])
+    for kwargs in (dict(regression_clean_median=2), dict(regression_clean_smooth=3), dict(regression_clean_clip=0.5),
+                   dict(shifted_target_missing="drop")):
+        with pytest.raises(ValueError):
+            utils.check_model_inputs(preprocessed_object=({}, {}), adjacency_matrix=np.eye(6), meta_info={},
+                                     common_cfg=utils.CommonFitCfg(model_name="contrastive"),
+                                     teacher_cfg=utils.TurtleTeacherCfg(use_turtle_teacher=True, teacher_mode="regression",
+                                                                         include_edges_view=True, **kwargs))
+
+
+def test_augment_tracking_noise():
+    # Gaps: one body part per window on a straight line, marked in the imputation mask; jitter: every body part moves
+    # by about sigma body lengths; spikes: 1-3 body parts jump for 1-2 frames; the speed channel follows; off at p 0
+    torch.manual_seed(0)
+    B, T, N = 64, 20, 5
+    t = torch.linspace(0, 1, T)[None, :, None, None]
+    pos = torch.randn(B, 1, N, 2) + torch.randn(B, 1, N, 2) * t  # straight movements: speed = constant per part
+    speed = (pos[:, 1:] - pos[:, :-1]).norm(dim=-1)
+    x = torch.cat([pos, torch.cat([speed[:, :1], speed], dim=1)[..., None] * 3.0 - 1.0,
+                   torch.zeros(B, T, N, 1)], dim=-1)  # speed channel: 3 * distance - 1 (scaled), mask channel
+    noise = deepof.clustering.training._augment_tracking_noise
+    assert noise(x) is x
+    gaps = noise(x, p_gap=1.0, gap_min=3, gap_max=6)
+    moved = (gaps[..., :2] != x[..., :2]).any(dim=-1)  # (B, T, N)
+    assert (moved.any(dim=1).sum(dim=1) <= 1).all() and moved.any()
+    marked = gaps[..., 3] > 0
+    assert not (moved & ~marked).any()  # moved frames are marked as imputed
+    assert marked.sum(dim=(1, 2)).min() >= 3 and (marked.sum(dim=1) > 0).sum(dim=1).max() == 1
+    for b in range(4):  # straight line through the marked frames and their neighbours
+        frames, part = torch.nonzero(marked[b], as_tuple=True)
+        seg = gaps[b, frames.min() - 1:frames.max() + 2, part[0], :2]
+        assert torch.allclose(seg[2:] - 2 * seg[1:-1] + seg[:-2], torch.zeros(1), atol=1e-5)
+    jitter = noise(x, p_jitter=1.0, jitter_sigma=0.05)
+    body = 2 * (x[..., :2] - x[..., :2].mean(dim=2, keepdim=True)).norm(dim=-1).amax(dim=2).mean(dim=1)
+    ratio = ((jitter - x)[..., :2].std(dim=(1, 2, 3)) / body).mean()
+    assert 0.04 < ratio < 0.06 and not torch.equal(jitter[..., 2], x[..., 2])
+    spikes = noise(x, p_spike=1.0, spike_size=(0.5, 0.5))
+    moved = (spikes[..., :2] != x[..., :2]).any(dim=-1)
+    assert (moved.sum(dim=(1, 2)) >= 1).all() and moved.sum(dim=(1, 2)).max() <= 6
+    jump = (spikes - x)[..., :2].norm(dim=-1)
+    single = moved.sum(dim=(1, 2)) == 1  # one moved point (two spikes on the same point add up: rare)
+    ratio = jump[single].amax(dim=(1, 2)) / body[single]
+    assert ((ratio - 0.5).abs() < 1e-4).float().mean() > 0.8 and ratio.max() <= 1.5 + 1e-4
+    # speed channel: 3 * (new - old distance) where the positions moved (the slope of the batch: 3)
+    d_old = (x[:, 1:, :, :2] - x[:, :-1, :, :2]).norm(dim=-1)
+    d_new = (spikes[:, 1:, :, :2] - spikes[:, :-1, :, :2]).norm(dim=-1)
+    assert torch.allclose(spikes[:, 1:, :, 2] - x[:, 1:, :, 2], 3.0 * (d_new - d_old), atol=1e-3)
+    # In the augmented view only the body parts get them, not the social context nodes
+    n_social = 2
+    xs = torch.cat([x[..., :3], torch.randn(B, T, n_social, 3)], dim=2)
+    edge_index = torch.tensor([[0, 1], [1, 2], [2, 3], [3, 4]])
+    rot = deepof.clustering.training.build_rotation_precomp(edge_index=edge_index, n_nodes=N, device="cpu")
+    view, _ = deepof.clustering.training._make_augmented_view(
+        xs, torch.randn(B, T, 4, 1), edge_index, T, rot, p_shift=0.0, p_rot=0.0, p_interp=0.0, p_noise=0.0,
+        p_node_drop=0.0, n_social=n_social, p_gap=1.0, p_jitter=1.0, p_spike=1.0)
+    assert torch.equal(view[:, :, N:], xs[:, :, N:]) and not torch.equal(view[:, :, :N], xs[:, :, :N])
+
+
+def test_contrastive_step_with_missing_targets():
+    # NaN targets (shifted views without a later window, shifted_target_missing="skip") are left out: the view loss is
+    # the mean over the windows that have it, the loss stays finite
+    torch.manual_seed(0)
+    T, N, window_len = 24, 11, 12
+    model, edge_index_global, edge_index_local = _contrastive_test_setup(T, N, window_len)
+    x, a = torch.randn(4, T, N, 3), torch.randn(4, T, N, 1)
+    backbone_dim = model(x[:, :window_len], a[:, :window_len], return_backbone=True)[1].shape[1]
+    head = torch.nn.Linear(backbone_dim, 5)
+    targets = torch.randn(10, 5)
+    targets[[3, 9], 2:] = float("nan")  # the second view is missing for two of the four windows of the batch
+    idx = torch.tensor([0, 3, 5, 9])
+    ctx = SimpleNamespace(
+        edge_index=edge_index_global, edge_index_local=edge_index_local, window_len=window_len,
+        contrastive_cfg=deepof.clustering.model_utils_new.ContrastiveCfg(contrastive_window=window_len),
+        rot_precomp=deepof.clustering.training.build_rotation_precomp(edge_index=edge_index_local, n_nodes=N, device="cpu"),
+        apply_distill=False, epoch=0, num_epochs=1, regression_targets=targets, regression_missing=True,
+        regression_head=head, lambda_regression=1.0,
+        regression_views=deepof.clustering.training._regression_view_layout([("edges", 2), ("edges+3", 3)], None),
+    )
+    result = deepof.clustering.training.step_contrastive_distill(model, (x, a, idx), ctx)
+    result.loss.backward()
+    assert torch.isfinite(result.loss) and np.isfinite(result.logs["view_edges+3"])
+    assert head.weight.grad.abs().sum() > 0 and torch.isfinite(head.weight.grad).all()
+    # A head predicting zeros: each view loss is the mean squared norm of its targets over the windows that have them
+    torch.nn.init.zeros_(head.weight)
+    torch.nn.init.zeros_(head.bias)
+    logs = deepof.clustering.training.step_contrastive_distill(model, (x, a, idx), ctx).logs
+    assert np.isclose(logs["view_edges"], targets[idx, :2].pow(2).sum(dim=1).mean().item(), rtol=1e-5)
+    assert np.isclose(logs["view_edges+3"], targets[[0, 5], 2:].pow(2).sum(dim=1).mean().item(), rtol=1e-5)
+
+
 def _contrastive_test_setup(T=24, N=11, window_len=12):
     model = deepof.clustering.models_new.ContrastivePT(
         input_shape=(T, N, 3), edge_feature_shape=(T, N, 1), adjacency_matrix=np.eye(N, dtype=np.float32),

@@ -164,6 +164,19 @@ class TurtleTeacherCfg:
     # targets, named "<view>+<s>" (the last windows of a video keep their own). Asks the embedding for where the
     # behaviour is going, which its present targets do not contain.
     regression_future_shifts: Tuple[int, ...] = ()
+    # Shifted targets (social_target_shift, regression_future_shifts) of windows without a window that many frames later
+    # in the same video (its end; windows removed from the data, which BatchDictDataset finds with window frames):
+    # "own" uses the window's own view (as before), "skip" leaves them out of the loss.
+    shifted_target_missing: str = "own"
+    # Cleaner regression targets (the model input stays as it is; the model learns to describe a noisy window by its
+    # cleaned version): every view is computed from the stored windows filtered along the frames, per column (node
+    # positions and speeds, edges, angles, kinematics, social context): a running median over regression_clean_median
+    # frames (odd, >= 3: removes spikes of up to (n - 1) / 2 frames), then a Savitzky-Golay filter of degree 2 over
+    # regression_clean_smooth frames (odd, >= 5: frame-wise jitter); 0: off. regression_clean_clip q > 0 clips every
+    # target column to its q / 1 - q quantiles of the training samples (glitches left after the filters).
+    regression_clean_median: int = 0
+    regression_clean_smooth: int = 0
+    regression_clean_clip: float = 0.0
     # Parts of the regression nodes view, one view each: PCA of the positions and / or of the speeds of the window
     nodes_view_parts: Tuple[str, ...] = ("positions", "speeds")
     # Relative weights of the regression views in the loss, {view: weight} with the views "nodes_positions",
@@ -313,7 +326,18 @@ class ContrastiveCfg:
     aug_p_noise: float = 0.4
     aug_node_drop_min: int = 1
     aug_node_drop_max: int = 2
-    aug_p_node_drop: float = 0.4  
+    aug_p_node_drop: float = 0.4
+    # Pose-tracking errors (training._augment_tracking_noise; body parts only, sizes in body lengths, each per window
+    # with its probability): a body part filled with a straight line over aug_gap_min-aug_gap_max frames (what the
+    # imputation makes of an untracked stretch), frame-wise jitter (sd aug_jitter_sigma), and 1-3 spikes (a body part
+    # jumps by aug_spike_size body lengths for 1-2 frames and comes back). The speed channel follows the positions.
+    aug_p_gap: float = 0.0
+    aug_gap_min: int = 3
+    aug_gap_max: int = 15
+    aug_p_jitter: float = 0.0
+    aug_jitter_sigma: float = 0.03
+    aug_p_spike: float = 0.0
+    aug_spike_size: Tuple[float, float] = (0.25, 1.5)
     # Probability per view to zero the imputation mask (fourth node channel, get_graph_dataset(include_imputation_mask=
     # True)), so that the embedding cannot rely on the mask alone; no effect without a mask
     aug_p_mask_drop: float = 0.3
@@ -730,13 +754,19 @@ def check_model_inputs(
             )
         check(is_number(c.elimination_topk, 0, 1), "\"elimination_topk\" needs to be between 0 and 1")
         check(is_int(c.contrastive_window, 1), "\"contrastive_window\" needs to be an integer greater than 0")
-        for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop", "aug_p_mask_drop"):
+        for name in ("aug_p_shift", "aug_p_rot", "aug_p_interp", "aug_p_noise", "aug_p_node_drop", "aug_p_mask_drop",
+                     "aug_p_gap", "aug_p_jitter", "aug_p_spike"):
             check(is_number(getattr(c, name), 0, 1), f"\"{name}\" is a probability and needs to be between 0 and 1")
         check(is_number(c.aug_noise_sigma, 0), "\"aug_noise_sigma\" needs to be >= 0")
+        check(is_number(c.aug_jitter_sigma, 0), "\"aug_jitter_sigma\" needs to be >= 0")
+        size = c.aug_spike_size
+        check(isinstance(size, (tuple, list)) and len(size) == 2 and all(is_number(v, 0, strict_min=True) for v in size)
+              and size[0] <= size[1], "\"aug_spike_size\" needs to be a (min, max) pair with 0 < min <= max (body lengths)")
         for lo, hi, minimum in (
             ("aug_min_shift", "aug_max_shift", 0),
             ("aug_min_interp", "aug_max_interp", 0),
             ("aug_node_drop_min", "aug_node_drop_max", 0),
+            ("aug_gap_min", "aug_gap_max", 1),
         ):
             vlo, vhi = getattr(c, lo), getattr(c, hi)
             check(is_int(vlo, minimum) and is_int(vhi, minimum) and vlo <= vhi,
@@ -795,6 +825,14 @@ def check_model_inputs(
             shifts = teacher_cfg.regression_future_shifts
             check(isinstance(shifts, (tuple, list)) and all(is_int(s, 1) for s in shifts) and len(set(shifts)) == len(shifts),
                   f"\"regression_future_shifts\" needs to be a tuple of different integers > 0 (frames), got {shifts!r}")
+            one_of("shifted_target_missing", str(teacher_cfg.shifted_target_missing).lower(), ["own", "skip"])
+            median, smooth = teacher_cfg.regression_clean_median, teacher_cfg.regression_clean_smooth
+            check(is_int(median, 0) and (median == 0 or (median >= 3 and median % 2 == 1)),
+                  f"\"regression_clean_median\" needs to be 0 (off) or an odd integer >= 3 (frames), got {median!r}")
+            check(is_int(smooth, 0) and (smooth == 0 or (smooth >= 5 and smooth % 2 == 1)),
+                  f"\"regression_clean_smooth\" needs to be 0 (off) or an odd integer >= 5 (frames), got {smooth!r}")
+            check(is_number(teacher_cfg.regression_clean_clip, 0) and teacher_cfg.regression_clean_clip < 0.5,
+                  "\"regression_clean_clip\" needs to be a quantile between 0 (off) and 0.5")
             weights = teacher_cfg.regression_view_weights
             if weights is not None:
                 included = [f"nodes_{p}" for p in parts if teacher_cfg.include_nodes_view] + [

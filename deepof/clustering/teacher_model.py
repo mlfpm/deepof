@@ -5,7 +5,7 @@ Turtle teacher model for training support
 # encoding: utf-8
 # module deepof
 
-from typing import Any, NewType, Tuple, Dict, Optional, List
+from typing import Any, Callable, NewType, Tuple, Dict, Optional, List
 
 import numpy as np
 
@@ -481,6 +481,51 @@ def _centre_frames(x: torch.Tensor, window_len: Optional[int]) -> torch.Tensor:
     return x[:, start:start + window_len]
 
 
+def target_cleaner(median_frames: int = 0, smooth_frames: int = 0, polyorder: int = 2,
+                   chunk: int = 2048) -> Optional[Callable[[torch.Tensor], torch.Tensor]]:
+    """Filter of time series x (B, T, ...) along the frames (dim 1), for cleaner regression targets (the model input
+    stays as it is): a running median over median_frames frames (odd, >= 3: spikes of up to (median_frames - 1) / 2
+    frames disappear, steps and ramps stay), then a Savitzky-Golay filter of degree polyorder over smooth_frames frames
+    (odd, > polyorder + 1: frame-wise jitter; polynomials up to that degree stay). The ends repeat the first / last
+    frame (the stored windows are longer than the frames the targets describe). None if both are 0."""
+    if not median_frames and not smooth_frames:
+        return None
+    median_frames, smooth_frames = int(median_frames), int(smooth_frames)
+    coeffs = None
+    if smooth_frames:
+        from scipy.signal import savgol_coeffs
+
+        coeffs = torch.as_tensor(savgol_coeffs(smooth_frames, int(polyorder)), dtype=torch.float32).flip(0)
+
+    def clean_chunk(y: torch.Tensor) -> torch.Tensor:  # (b, T, C)
+        if median_frames:
+            pad = median_frames // 2
+            padded = torch.cat([y[:, :1].expand(-1, pad, -1), y, y[:, -1:].expand(-1, pad, -1)], dim=1)
+            y = padded.unfold(1, median_frames, 1).median(dim=-1).values
+        if coeffs is not None:
+            b, t, c = y.shape
+            z = y.permute(0, 2, 1).reshape(b * c, 1, t)
+            z = F.conv1d(F.pad(z, (len(coeffs) // 2,) * 2, mode="replicate"), coeffs.to(z).view(1, 1, -1))
+            y = z.reshape(b, c, t).permute(0, 2, 1)
+        return y
+
+    def clean(x: torch.Tensor) -> torch.Tensor:
+        shape = x.shape
+        y = x.float().reshape(shape[0], shape[1], -1)
+        if y.shape[0] == 0 or y.shape[2] == 0:
+            return x.float()
+        return torch.cat([clean_chunk(y[s:s + chunk]) for s in range(0, len(y), chunk)]).reshape(shape)
+
+    return clean
+
+
+def _clean_nodes(x: torch.Tensor, clean) -> torch.Tensor:
+    """Node windows (B, T, N, F) with positions and speed (channels 0-2) cleaned; other channels unchanged."""
+    if clean is None:
+        return x
+    return torch.cat([clean(x[..., :3]), x[..., 3:].float()], dim=-1)
+
+
 @torch.no_grad()
 def fit_nodes_pca(
     dataset: BatchDictDataset,
@@ -490,9 +535,10 @@ def fit_nodes_pca(
     num_workers: int = 0,
     max_samples: Optional[int] = None,
     window_len: Optional[int] = None,
+    clean: Optional[Callable] = None,
 ):
     """
-    Fits two IncrementalPCAs:
+    Fits two IncrementalPCAs (clean: target_cleaner applied to positions and speeds first):
       - one on positions (x,y) only
       - one on speeds (the 3rd channel per node)
 
@@ -535,7 +581,7 @@ def fit_nodes_pca(
     seen = 0
     for batch in loader:
         x, a, *rest = batch
-        x = _centre_frames(x, window_len)  # None: the whole stored window
+        x = _centre_frames(_clean_nodes(x, clean), window_len)  # None: the whole stored window
         B, T, N, F = x.shape
 
         if F < 3: # pragma: no cover
@@ -576,7 +622,7 @@ def fit_nodes_pca(
     feats_pos, feats_spd = [], []
     for batch in loader:
         x, a, *rest = batch
-        x = _centre_frames(x, window_len)  # None: the whole stored window
+        x = _centre_frames(_clean_nodes(x, clean), window_len)  # None: the whole stored window
         B, T, N, F = x.shape
 
         pos = x[..., :2]   # [B,T,N,2]
@@ -665,11 +711,13 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
                            num_workers: int = 0,
                            max_samples: Optional[int] = None,
                            window_len: Optional[int] = None,
-                           return_pca: bool = False):
+                           return_pca: bool = False,
+                           clean: Optional[Callable] = None):
     """
     Returns PCA features [N, n_components] for all samples' edge tensor 'a' (T, E, F_edge),
     in order (shuffle=False), using two passes: partial_fit, then transform. window_len: only the centre frames
-    (None: the whole stored window, which is longer than the contrastive view).
+    (None: the whole stored window, which is longer than the contrastive view). clean: target_cleaner applied to the
+    edges first.
    
     Args:
         dataset (BatchDictDataset): Dataset providing node and edge features.
@@ -702,7 +750,7 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     seen = 0
     for batch in loader:
         x, a, *rest = batch  # keep on CPU for PCA
-        a = _centre_frames(a, window_len)
+        a = _centre_frames(a if clean is None else clean(a), window_len)
         B, T, E, F_edge = a.shape
         A = a.reshape(B, T * E * F_edge).float().numpy()  # (B, D_edges)
         if (max_samples is not None) and (seen >= max_samples):
@@ -729,7 +777,7 @@ def extract_pca_edges_view(dataset: BatchDictDataset,
     feats = []
     for batch in loader:
         x, a, *rest = batch
-        a = _centre_frames(a, window_len)
+        a = _centre_frames(a if clean is None else clean(a), window_len)
         B, T, E, F_edge = a.shape
         A = a.reshape(B, T * E * F_edge).float().numpy()
         Z = ipca.transform(A)  # (B, n_components)
@@ -747,22 +795,22 @@ def _ordered_loader(dataset: BatchDictDataset, batch_size: int):
 
 @torch.no_grad()
 def _transform_edges(ipca: IncrementalPCA, dataset: BatchDictDataset, batch_size: int,
-                     window_len: Optional[int]) -> torch.Tensor:
+                     window_len: Optional[int], clean: Optional[Callable] = None) -> torch.Tensor:
     """The edges view of other samples (e.g. the validation set) with a PCA fitted by extract_pca_edges_view."""
     feats = []
     for batch in _ordered_loader(dataset, batch_size):
-        a = _centre_frames(batch[1], window_len)
+        a = _centre_frames(batch[1] if clean is None else clean(batch[1]), window_len)
         feats.append(torch.from_numpy(ipca.transform(a.reshape(a.shape[0], -1).float().numpy())).float())
     return torch.cat(feats, dim=0)
 
 
 @torch.no_grad()
 def _transform_nodes(ipca_pos: IncrementalPCA, ipca_spd: IncrementalPCA, dataset: BatchDictDataset, batch_size: int,
-                     window_len: Optional[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+                     window_len: Optional[int], clean: Optional[Callable] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     """The positions / speeds views of other samples with the PCAs fitted by fit_nodes_pca."""
     pos, spd = [], []
     for batch in _ordered_loader(dataset, batch_size):
-        x = _centre_frames(batch[0], window_len)
+        x = _centre_frames(_clean_nodes(batch[0], clean), window_len)
         pos.append(torch.from_numpy(ipca_pos.transform(x[..., :2].reshape(x.shape[0], -1).float().numpy())).float())
         spd.append(torch.from_numpy(ipca_spd.transform(x[..., 2:3].reshape(x.shape[0], -1).float().numpy())).float())
     return torch.cat(pos, dim=0), torch.cat(spd, dim=0)
@@ -986,9 +1034,11 @@ def extract_angle_segments_view(
     n_segments: int = 1,
     batch_size: int = 8192,
     n_angles: Optional[int] = None,
+    clean: Optional[Callable] = None,
 ) -> torch.Tensor:
     """
-    Mean angle per segment of the centre window (the unaugmented contrastive view) for all samples, in dataset order.
+    Mean angle per segment of the centre window (the unaugmented contrastive view) for all samples, in dataset order
+    (clean: target_cleaner applied to the angles first).
 
     Args:
         dataset (BatchDictDataset): Training dataset, built from data that contains angles.
@@ -1008,6 +1058,8 @@ def extract_angle_segments_view(
     feats = []
     for batch in loader:
         ang = batch[2][..., 0][..., :n_angles]  # (B, T, n_angles)
+        if clean is not None:
+            ang = clean(ang)
         segments = torch.tensor_split(_centre_frames(ang, window_len), n_segments, dim=1)
         feats.append(torch.cat([s.mean(dim=1) for s in segments], dim=1))
     return torch.cat(feats, dim=0)
@@ -1028,11 +1080,13 @@ def extract_kinematics_segments_view(
     columns: Optional[List[str]] = None,
     scale: Optional[torch.Tensor] = None,
     return_scale: bool = False,
+    clean: Optional[Callable] = None,
 ):
     """
     Kinematics view of the centre window (the unaugmented contrastive view) for all samples in dataset order, from the
-    kinematics columns of get_graph_dataset(..., include_kinematics=True), each scaled as log1p(x / scale) with scale
-    the median of |x| over the centre frames of all samples, by kind (the column's statistic name):
+    kinematics columns of get_graph_dataset(..., include_kinematics=True) (clean: target_cleaner applied to them
+    first), each scaled as log1p(x / scale) with scale the median of |x| over the centre frames of all samples, by kind
+    (the column's statistic name):
       - speed_* / acc_*: mean and max per segment (max: short peaks such as a jump take-off)
       - wave*: mean over the window (the wavelet amplitude is already smoothed over its period)
       - dist_rate_*: signed (sign(x) * log1p(|x| / scale)), mean per segment
@@ -1062,7 +1116,8 @@ def extract_kinematics_segments_view(
             pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
         )
         for batch in loader:
-            yield _centre_frames(batch[2][..., 0][..., n_angles:].float(), window_len)  # (B, frames, n_kinematics)
+            kin = batch[2][..., 0][..., n_angles:].float()
+            yield _centre_frames(kin if clean is None else clean(kin), window_len)  # (B, frames, n_kinematics)
 
     centre = torch.cat([k[:, window_len // 2] for k in centre_windows()], dim=0).abs()
     if centre.shape[1] == 0:
@@ -1090,10 +1145,12 @@ def extract_kinematics_segments_view(
 
 @torch.no_grad()
 def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_social: int, n_segments: int = 1,
-                                 batch_size: int = 8192, fade_nodes: Optional[List[int]] = None):
+                                 batch_size: int = 8192, fade_nodes: Optional[List[int]] = None,
+                                 clean: Optional[Callable] = None):
     """Social view of the centre window (the unaugmented contrastive view) for all samples in dataset order: the three
     values of each of the last n_social nodes (social context of per-animal datasets, see
     deepof.utils.social_context_features), mean per segment. Shape [N_samples, n_segments * n_social * 3].
+    clean: target_cleaner applied to the social context first.
 
     fade_nodes: indices (within the social nodes) of the partners' centre nodes. If given, also returns the proximity
     of the nearest partner per sample [N_samples]: its distance fade (third value of the node), mean over the window."""
@@ -1103,7 +1160,8 @@ def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_s
     )
     feats, proximity = [], []
     for batch in loader:
-        social = _centre_frames(batch[0], window_len)[:, :, -n_social:, :3].float()
+        social = batch[0][:, :, -n_social:, :3].float()
+        social = _centre_frames(social if clean is None else clean(social), window_len)
         if fade_nodes:
             proximity.append(social[:, :, fade_nodes, 2].mean(dim=1).amax(dim=1))
         segments = torch.tensor_split(social.reshape(social.shape[0], social.shape[1], -1), n_segments, dim=1)
@@ -1143,6 +1201,13 @@ def build_regression_targets(
     teacher_cfg.regression_target_frames = n every view uses the n centre frames (n = window_len: PCA views cut to
     the contrastive view; smaller n: targets about the centre of the window, the rest of the view is context).
 
+    Cleaner targets (teacher_cfg.regression_clean_median / _smooth, see target_cleaner): every view is computed from
+    the stored windows filtered along the frames; regression_clean_clip q clips every target column to its q / 1 - q
+    quantiles of the training samples. Shifted targets (social_target_shift, regression_future_shifts) come from the
+    window that many frames later in the same video (exactly, with window frames stored next to the HDF5 data, see
+    BatchDictDataset); windows without one keep their own view (shifted_target_missing="own") or get NaN targets
+    ("skip": left out of the loss).
+
     Args:
         teacher_cfg (TurtleTeacherCfg): Teacher settings (included views, PCA sizes, segments).
         train_dataset (BatchDictDataset): Training dataset.
@@ -1167,14 +1232,29 @@ def build_regression_targets(
                              f"\"regression_target_frames\"={window_len}")
     # Validation targets (val_dataset): the same views, with the PCA fits and the scaling of the training samples
     others = [val_dataset] if val_dataset is not None and len(val_dataset) else []
+    clean = target_cleaner(int(getattr(teacher_cfg, "regression_clean_median", 0) or 0),
+                           int(getattr(teacher_cfg, "regression_clean_smooth", 0) or 0))
+    if clean is not None:
+        print(f"Regression targets from windows cleaned along the frames (running median "
+              f"{getattr(teacher_cfg, 'regression_clean_median', 0)}, Savitzky-Golay "
+              f"{getattr(teacher_cfg, 'regression_clean_smooth', 0)} frames)")
+    step = int((meta_info or {}).get("window_step", 1) or 1)
+    skip_missing = str(getattr(teacher_cfg, "shifted_target_missing", "own") or "own").lower() == "skip"
+
+    def shifted(view, later):  # the view of the later window; without one the own view, or NaN (left out)
+        has = later >= 0
+        fill = torch.full_like(view, float("nan")) if skip_missing else view
+        return torch.where(has[:, None], view[later.clamp_min(0)], fill), has
+
     views = []  # (name, [view of the training samples, view of the validation samples])
     if teacher_cfg.include_nodes_view:
         print("\n--- Building PCA views for the regression teacher (nodes) ---")
         ipca_pos, pca_pos, ipca_spd, pca_spd = fit_nodes_pca(
             train_dataset, n_components_pos=teacher_cfg.pca_nodes_dim, n_components_spd=teacher_cfg.pca_nodes_dim,
-            batch_size=teacher_cfg.batch_size_nodes, num_workers=0, window_len=pca_frames,
+            batch_size=teacher_cfg.batch_size_nodes, num_workers=0, window_len=pca_frames, clean=clean,
         )
-        other = [_transform_nodes(ipca_pos, ipca_spd, ds, teacher_cfg.batch_size_nodes, pca_frames) for ds in others]
+        other = [_transform_nodes(ipca_pos, ipca_spd, ds, teacher_cfg.batch_size_nodes, pca_frames, clean)
+                 for ds in others]
         views += [(f"nodes_{part}", [v] + [o[i] for o in other])
                   for i, (v, part) in enumerate(((pca_pos, "positions"), (pca_spd, "speeds")))
                   if part in teacher_cfg.nodes_view_parts]
@@ -1182,9 +1262,9 @@ def build_regression_targets(
         print("\n--- Building PCA views for the regression teacher (edges) ---")
         edges, ipca = extract_pca_edges_view(
             train_dataset, n_components=teacher_cfg.pca_edges_dim, batch_size=teacher_cfg.batch_size_edges, num_workers=0,
-            window_len=pca_frames, return_pca=True,
+            window_len=pca_frames, return_pca=True, clean=clean,
         )
-        views.append(("edges", [edges] + [_transform_edges(ipca, ds, teacher_cfg.batch_size_edges, pca_frames)
+        views.append(("edges", [edges] + [_transform_edges(ipca, ds, teacher_cfg.batch_size_edges, pca_frames, clean)
                                           for ds in others]))
     scaled, names = [], []  # per view: [training samples, validation samples]
     for name, view in views:
@@ -1204,7 +1284,7 @@ def build_regression_targets(
                              "get_graph_dataset(..., include_angles=True)")
         scaled.append(standardized([extract_angle_segments_view(
             ds, window_len, n_segments=teacher_cfg.angle_segments, batch_size=teacher_cfg.batch_size_angles,
-            n_angles=n_angles) for ds in [train_dataset] + others]))
+            n_angles=n_angles, clean=clean) for ds in [train_dataset] + others]))
         names.append("angles")
     if teacher_cfg.include_kinematics_view:
         print("\n--- Building the kinematics view for the regression teacher ---")
@@ -1215,10 +1295,10 @@ def build_regression_targets(
         columns = [c[1] for c in meta_info["kinematics_columns"]]
         kinematics, scale = extract_kinematics_segments_view(
             train_dataset, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles,
-            columns=columns, return_scale=True)
+            columns=columns, return_scale=True, clean=clean)
         scaled.append(standardized([kinematics] + [extract_kinematics_segments_view(
             ds, window_len, n_angles, n_segments=n_segments, batch_size=teacher_cfg.batch_size_angles, columns=columns,
-            scale=scale) for ds in others]))
+            scale=scale, clean=clean) for ds in others]))
         names.append("kinematics")
     n_social = int((meta_info or {}).get("social_nodes", 0))
     if n_social and teacher_cfg.include_social_view:
@@ -1233,27 +1313,32 @@ def build_regression_targets(
         social, proximity = [], None
         for k, ds in enumerate([train_dataset] + others):
             view = extract_social_segments_view(ds, window_len, n_social, n_segments=n_segments,
-                                                batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes)
+                                                batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes,
+                                                clean=clean)
             if fade_nodes:
                 view, near_fade = view
                 proximity = near_fade if k == 0 else proximity
             if shift:
-                step = int(meta_info.get("window_step", 1) or 1)
-                later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step))))
-                has = later >= 0
-                view = torch.where(has[:, None], view[later.clamp_min(0)], view)
+                later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step)), step))
+                view, has = shifted(view, later)
                 if k == 0:
                     print(f"Social view {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows "
-                          "at the end of a video keep their own)")
+                          f"without a window that much later {'are left out' if skip_missing else 'keep their own'})")
             social.append(view)
-        mean, std = social[0].mean(dim=0), social[0].std(dim=0).clamp_min(1e-8)
+        if torch.isnan(social[0]).any():  # windows left out (shifted_target_missing="skip")
+            mean = torch.nanmean(social[0], dim=0)
+            std = torch.nanmean((social[0] - mean).pow(2), dim=0).sqrt().clamp_min(1e-8)
+        else:
+            mean, std = social[0].mean(dim=0), social[0].std(dim=0).clamp_min(1e-8)
         scaled.append([((v - mean) / std) / social[0].shape[1] ** 0.5 for v in social])
         names.append("social")
         if proximity is not None:
             near = proximity >= SOCIAL_NEAR_FADE
             print(f"Partner near in {100 * near.float().mean().item():.1f} % of the windows")
             if extras is not None and 1 < int(near.sum()) < len(near) - 1:
-                spread = lambda t: (t - t.mean(dim=0)).pow(2).sum(dim=1).mean().clamp_min(1e-12).item()
+                def spread(t):  # windows left out (NaN) do not count
+                    t = t[~torch.isnan(t).any(dim=1)]
+                    return (t - t.mean(dim=0)).pow(2).sum(dim=1).mean().clamp_min(1e-12).item() if len(t) else 1.0
                 extras["social_split"] = (near, spread(scaled[-1][0][near]), spread(scaled[-1][0][~near]))
             near_weight = float(teacher_cfg.social_near_weight)
             if near_weight <= 0:
@@ -1263,19 +1348,28 @@ def build_regression_targets(
                 extras["social_weights"] = weights / weights.mean()
     if not scaled:
         raise ValueError("The regression teacher needs at least one included view (nodes, edges, angles or kinematics)")
+    clip = float(getattr(teacher_cfg, "regression_clean_clip", 0.0) or 0.0)
+    if clip > 0:  # every target column clipped to its clip / 1 - clip quantiles of the training samples
+        rng = np.random.default_rng(0)
+        for i, view in enumerate(scaled):
+            sample = view[0].numpy()
+            if len(sample) > 500_000:
+                sample = sample[np.sort(rng.choice(len(sample), 500_000, replace=False))]
+            lo = torch.as_tensor(np.nanquantile(sample, clip, axis=0), dtype=view[0].dtype)
+            hi = torch.as_tensor(np.nanquantile(sample, 1 - clip, axis=0), dtype=view[0].dtype)
+            scaled[i] = [torch.where(torch.isnan(v), v, torch.minimum(torch.maximum(v, lo), hi)) for v in view]
     # Future targets: every view of the window `shift` frames later in the same video, as "<view>+<shift>"
     present = list(zip(names, scaled))
     for shift in tuple(getattr(teacher_cfg, "regression_future_shifts", ()) or ()):
-        step = int((meta_info or {}).get("window_step", 1) or 1)
         future = [list() for _ in present]
         for k, ds in enumerate([train_dataset] + others):
-            later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step))))
+            later = torch.as_tensor(getattr(ds, "base_dataset", ds).later_sample(max(1, round(shift / step)), step))
             has = later >= 0
             if k == 0:
                 print(f"Future targets {shift} frames ahead ({100 * (~has).float().mean().item():.2f} % of the windows "
-                      "at the end of a video keep their own)")
+                      f"without a window that much later {'are left out' if skip_missing else 'keep their own'})")
             for i, (_, view) in enumerate(present):
-                future[i].append(torch.where(has[:, None], view[k][later.clamp_min(0)], view[k]))
+                future[i].append(shifted(view[k], later)[0])
         for (name, _), view in zip(present, future):
             scaled.append(view)
             names.append(f"{name}+{shift}")

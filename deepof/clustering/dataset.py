@@ -60,7 +60,11 @@ class BatchDictDataset:
         global_shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
         node_channels: int = 3,
+        window_frames: Optional[Dict] = None,
     ):
+        """window_frames: {key: first frame of every window of the key, in window order} for data whose windows are not
+        consecutive (windows removed after get_graph_dataset, e.g. frames without the animal). Stored next to the HDF5
+        files (write_window_frames), so that later_sample finds the window a number of frames later exactly."""
         self.dataset_folder = dataset_folder
         self.node_channels = int(node_channels)  # x, y, speed, (imputation mask)
         self.dataset_name = dataset_name
@@ -80,15 +84,46 @@ class BatchDictDataset:
         self.ang_path = os.path.join(dataset_folder, dataset_name + 'ang_data.h5')
         self.y_path = os.path.join(dataset_folder, dataset_name + 'y_data.h5')
         self.idx_path = os.path.join(dataset_folder, dataset_name + 'video_idx.npy')
+        self.frames_path = self.window_frames_path(dataset_folder, dataset_name)
 
         self._init_hdf5(preprocessed_dict, force_rebuild=force_rebuild, h5_chunk_len=h5_chunk_len, read_only=read_only)
+        if window_frames is not None:
+            self.write_window_frames(dataset_folder, dataset_name, preprocessed_dict, window_frames)
 
     def _effective_shuffle_seed(self) -> int:
         return _DEFAULT_SHUFFLE_SEED if self.shuffle_seed is None else int(self.shuffle_seed)
 
-    def later_sample(self, offset: int) -> np.ndarray:
-        """Per stored sample the stored index of the window that follows `offset` windows later in the same video
-        (-1: the video ends before). Undoes the global shuffle (the permutation of the build, from its seed)."""
+    @staticmethod
+    def window_frames_path(dataset_folder: str, dataset_name: str) -> str:
+        return os.path.join(dataset_folder, dataset_name + 'window_frames.npz')
+
+    @staticmethod
+    def write_window_frames(dataset_folder: str, dataset_name: str, preprocessed_dict: Dict, window_frames: Dict):
+        """Stores the first frame of every window ({key: int array in window order, strictly increasing}) of the data
+        of a dataset, with the fingerprint of the data (checked when used). Written atomically (concurrent jobs may
+        write the same file)."""
+        keys = list(preprocessed_dict.keys())
+        counts = np.array([int(get_dt(preprocessed_dict, k, only_metainfo=True)["num_rows"]) for k in keys], np.int64)
+        frames = []
+        for key, n in zip(keys, counts):
+            if key not in window_frames:
+                raise ValueError(f"window_frames has no entry for {key}")
+            f = np.asarray(window_frames[key], dtype=np.int64).reshape(-1)
+            if len(f) != n or (len(f) > 1 and not np.all(np.diff(f) > 0)):
+                raise ValueError(f"window_frames of {key}: {len(f)} values for {n} windows, or not increasing")
+            frames.append(f)
+        path = BatchDictDataset.window_frames_path(dataset_folder, dataset_name)
+        tmp = f"{path}.{os.getpid()}.tmp.npz"
+        np.savez(tmp, frames=np.concatenate(frames) if frames else np.zeros(0, np.int64), counts=counts,
+                 keys_hash=np.array(_input_fingerprint(preprocessed_dict, keys)))
+        os.replace(tmp, path)
+
+    def later_sample(self, offset: int, step: int = 1) -> np.ndarray:
+        """Per stored sample the stored index of the window that follows `offset` windows (offset * step frames) later
+        in the same video (-1: there is none, e.g. the video ends before). Undoes the global shuffle (the permutation of
+        the build, from its seed). With window frames next to the HDF5 files (window_frames / write_window_frames) the
+        window exactly offset * step frames later is looked up (-1 where it was removed); without them the windows of a
+        video are taken as consecutive, step frames apart."""
         vid = np.asarray(np.load(self.idx_path))
         n = len(vid)
         perm = np.arange(n, dtype=np.int64)  # stored sample s is window perm[s] of the concatenated videos
@@ -96,8 +131,29 @@ class BatchDictDataset:
             perm = np.random.default_rng(self._effective_shuffle_seed()).permutation(n).astype(np.int64, copy=False)
         stored_of_window = np.empty(n, dtype=np.int64)
         stored_of_window[perm] = np.arange(n, dtype=np.int64)
-        later = perm + int(offset)
         out = np.full(n, -1, dtype=np.int64)
+        if n == 0:
+            return out
+        if os.path.exists(self.frames_path):
+            with np.load(self.frames_path) as data:
+                frames, counts, stored_hash = data["frames"], data["counts"], str(data["keys_hash"])
+            with h5py.File(self.X_path, 'r') as f:
+                keys_hash = f.attrs.get('keys_hash', None)
+            if stored_hash != keys_hash or len(frames) != n or not np.array_equal(
+                    np.bincount(vid, minlength=len(counts)), counts):
+                raise ValueError(f"{self.frames_path} does not belong to the data of {self.X_path} (rebuilt or other "
+                                 "windows): write the window frames again (BatchDictDataset.write_window_frames)")
+            video = np.repeat(np.arange(len(counts), dtype=np.int64), counts)  # concatenated window order
+            shift = int(offset) * int(step)
+            scale = int(frames.max(initial=0)) + abs(shift) + 1
+            combined = video * scale + frames  # increasing: videos in key order, frames increasing within a video
+            target = combined + shift
+            pos = np.searchsorted(combined, target)
+            found = (pos < n) & (combined[np.minimum(pos, n - 1)] == target)
+            later = np.full(n, -1, dtype=np.int64)  # per window of the concatenation
+            later[found] = stored_of_window[pos[found]]
+            return later[perm]
+        later = perm + int(offset)
         ok = (later >= 0) & (later < n)
         out[ok] = stored_of_window[later[ok]]
         out[ok] = np.where(vid[out[ok]] == vid[ok], out[ok], -1)
