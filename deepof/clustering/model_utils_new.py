@@ -21,6 +21,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+from deepof.config import DEEPOF_VERSION
 
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH
 from deepof.data_loading import get_dt
@@ -94,6 +95,15 @@ class CommonFitCfg:
     tcn_conv_stacks: Optional[int] = 2
     tcn_conv_dilations: Optional[tuple] = (1, 2, 4, 8)
 
+    # Training windows in memory with a new random batch composition every epoch (True), or read from the HDF5 file in
+    # blocks of consecutive windows (False: the same windows meet in every batch, epoch and seed). None (default): in
+    # memory when they take at most training.IN_MEMORY_MAX_GB and at most half of the available memory.
+    in_memory: Optional[bool] = None
+
+    # Input layout of the graph encoders' per-node / per-edge streams (models_new.INPUT_LAYOUTS): "nodes" (since 0.9.1)
+    # or "legacy" (the layout of the models up to 0.9.0; for comparisons only). Stored with the model.
+    input_layout: str = "nodes"
+
 
 @dataclass
 class TurtleTeacherCfg:
@@ -155,6 +165,11 @@ class TurtleTeacherCfg:
     # Social view: weight of the windows with a partner near (see teacher_model.SOCIAL_NEAR_FADE) against the others
     # in its loss (mean weight 1). Above 1, the view is not dominated by the many windows with the partner far away.
     social_near_weight: float = 1.0
+    # With several partners (>= 3 animals): the social view's partners ordered per window by proximity (mean distance
+    # fade of their centre over the target frames, nearest first) instead of by animal id. The encoder sums over the
+    # partners, so it can not tell their ids apart: id-ordered targets (the only order before 0.9.1) are partly
+    # unpredictable. No effect with one partner.
+    sort_social_partners: bool = True
     # Width of a bottleneck between the backbone and the predicted views (None: the views are a linear map of the
     # backbone, as before). With n, the views are predicted through Linear -> GELU -> Linear(n) -> Linear(views): the
     # model has to find a common code of n dimensions for all views; embedding_per_video(embedding_space="bottleneck")
@@ -318,7 +333,7 @@ class ContrastiveCfg:
     proto_warmup_epochs: int = 5
     aug_max_rot: int = 30
     aug_n_rot: int = 3
-    aug_p_rot: float = 0.8
+    aug_p_rot: float = 0.0  # 0.8 until 0.9.0 (silently off for per-animal data, whose within-animal edges were empty)
     aug_max_interp: int = 8
     aug_min_interp: int = 3        
     aug_p_interp: float = 0.4
@@ -491,6 +506,12 @@ def save_model_info(
         m = unwrap_dp(model)
         payload = {"state_dict": m.state_dict()}
         if rebuild_spec is not None:
+            # A spec without them would load as a model of <= 0.9.0 (legacy encoder input layout): take them from the
+            # model that is saved
+            rebuild_spec = dict(rebuild_spec)
+            if getattr(m, "input_layout", None) is not None:
+                rebuild_spec.setdefault("input_layout", m.input_layout)
+            rebuild_spec.setdefault("deepof_version", DEEPOF_VERSION)
             payload["rebuild_spec"] = rebuild_spec
         if log_summary is not None:
             payload["log_summary"] = log_summary
@@ -637,6 +658,8 @@ def check_model_inputs(
         encoder_type = str(common_cfg.encoder_type).lower()
         one_of("model_name", model_name, ["vade", "vqvae", "contrastive"])
         one_of("encoder_type", encoder_type, ["recurrent", "tcn", "transformer"])
+        from deepof.clustering.models_new import INPUT_LAYOUTS
+        one_of("input_layout", common_cfg.input_layout, list(INPUT_LAYOUTS))
         check(is_int(common_cfg.batch_size, 2), "\"batch_size\" needs to be an integer greater than 1")
         check(is_int(common_cfg.latent_dim, 1), "\"latent_dim\" needs to be an integer greater than 0")
         check(is_int(common_cfg.epochs, 1), "\"epochs\" needs to be an integer greater than 0")
@@ -1019,6 +1042,9 @@ def embedding_per_video(
                          "or embedding_space=\"backbone\".")
     if projection is not None:
         project_to_views(np.zeros((1, projection_input_dim(projection)), dtype=np.float32), projection, view_weights)  # input check
+        # The view space and the bottleneck are computed from the backbone output (with cluster_mode=False the model
+        # returns the projection-head output, which the regression head can not take)
+        cluster_mode = True
     social_dim = int(getattr(model, "social_dim", 0)) if getattr(model, "social_nodes", 0) else 0
     _social_column_weights(social_share, social_dim, social_dim + 1, softcounts_extraction_method)  # input check
     if str(model.encoder.spatial_gnn_block) == "CensNetConvPT()":
@@ -1066,6 +1092,8 @@ def embedding_per_video(
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
                     coord_standardize=meta_info['coord_standardize'],
+                    # coordinates divided by each animal's own body length as in training (False if not stored)
+                    mouse_size_normalization=meta_info.get('mouse_size_normalization', False),
                     # centering and window alignment as in training (meta_info of older versions: neither)
                     center=meta_info.get('center', False),
                     align=meta_info.get('align'),
@@ -1095,6 +1123,7 @@ def embedding_per_video(
                     dist_standardize=meta_info['dist_standardize'],
                     speed_standardize=meta_info['speed_standardize'] ,
                     coord_standardize=meta_info['coord_standardize'],
+                    mouse_size_normalization=meta_info.get('mouse_size_normalization', False),
                     save_as_paths=False,
                 )
 
@@ -1533,6 +1562,10 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
     model_name = spec["model_name"].lower()
     log_summary['model_type']=model_name
     legacy_tcn = not 'tcn_conv_filters' in spec.keys()
+    # Encoder input layout: as stored (deepof >= 0.9.1), else from the stored version; checkpoints without either
+    # (deepof <= 0.9.0) keep the legacy layout they were trained with (models_new.INPUT_LAYOUTS)
+    from deepof.clustering.models_new import input_layout_for_version
+    input_layout = spec.get("input_layout") or input_layout_for_version(spec.get("deepof_version"))
 
     # --- rebuild ---
     if model_name == "vqvae":
@@ -1552,6 +1585,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
         )
 
     elif model_name == "contrastive":
@@ -1575,6 +1609,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
             social_nodes=int(spec.get("social_nodes", 0)),
             social_partners=int(spec.get("social_partners", 1)),
             social_dim=int(spec.get("social_dim", 32)),
@@ -1598,6 +1633,7 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
             tcn_conv_stacks=int(spec.get("tcn_conv_stacks", 2)),
             tcn_conv_dilations=tuple(spec.get("tcn_conv_dilations", (1, 2, 4, 8))),
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
         )
 
     else: # pragma: no cover
@@ -1612,6 +1648,10 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
     model.view_projection = _stored_view_projection(ckpt, path)
 
     load_report = {"missing": rep.missing_keys, "unexpected": rep.unexpected_keys}
+    if not strict and (rep.missing_keys or rep.unexpected_keys):  # strict=False would load such a model silently
+        warnings.warn(f"{path}: the checkpoint does not match the rebuilt model: {len(rep.missing_keys)} missing keys "
+                      f"(e.g. {list(rep.missing_keys)[:3]}), {len(rep.unexpected_keys)} unexpected keys "
+                      f"(e.g. {list(rep.unexpected_keys)[:3]}); these weights are NOT loaded.")
     return model, log_summary, spec, load_report
 
 

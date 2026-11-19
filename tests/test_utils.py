@@ -1483,3 +1483,71 @@ def test_imputer_linear_limit_and_no_default_smoothing():
     short[10, 1] = np.nan
     kept = deepof.utils.smooth_mult_trajectory(short, alpha=12, w_length=15)
     assert np.array_equal(kept[:10, 1], short[:10, 1]) and not np.array_equal(kept[:30, 0], noisy[:30, 0])
+
+
+def test_spike_mask():
+    """The spike test flags positions that jump away and come back within two frames, not fast smooth movement."""
+    rng = np.random.default_rng(0)
+    t = np.arange(400, dtype=float)
+    traj = np.c_[20 * t, 300 * np.sin(t / 60.0)] + rng.normal(0, 0.5, (400, 2))  # fast, smooth (20 units / frame)
+    assert not deepof.utils.spike_mask(traj).any()
+    spiked = traj.copy()
+    spiked[100] += 60
+    spiked[250:252] += [0, 80]
+    assert list(np.flatnonzero(deepof.utils.spike_mask(spiked))) == [100, 250, 251]
+    still = np.full((300, 2), 50.0) + rng.normal(0, 0.5, (300, 2))
+    still[150] += 30
+    assert 150 in np.flatnonzero(deepof.utils.spike_mask(still))
+    assert not deepof.utils.spike_mask(still)[[0, -1]].any()
+
+
+def test_mask_outliers_edges():
+    """The moving-average test does not flag the first and last frames of a still trajectory (zero padding did)."""
+    rng = np.random.default_rng(1)
+    track = pd.DataFrame({"x": 100 + rng.normal(0, 0.5, 300), "y": 50 + rng.normal(0, 0.5, 300)})
+    mask = deepof.utils.mask_outliers(track, pd.Series(np.ones(300)), 0.75, 5, 3, "or")
+    assert not mask.iloc[[0, 1, -2, -1]].any()
+    spike = deepof.utils.mask_outliers(track, pd.Series(np.ones(300)), 0.75, 5, 3, "or", test="spike")
+    assert spike.dtype == bool and len(spike) == 300
+
+
+def test_rolling_speed_centered():
+    """Centred speeds peak at a jump, the default (lagging) ones about two frames later."""
+    x = np.zeros(20)
+    x[10:] = 10.0  # one jump between frames 9 and 10
+    table = pd.DataFrame(np.c_[x, np.zeros(20)], columns=pd.MultiIndex.from_tuples([("Nose", "x"), ("Nose", "y")]))
+    centre = {}
+    for centered in (False, True):
+        speed = deepof.utils.rolling_speed(table, frame_rate=1, centered=centered)["Nose"].fillna(0).to_numpy()
+        centre[centered] = np.average(np.arange(20), weights=speed)
+    assert centre[True] == pytest.approx(9.5) and centre[False] == pytest.approx(11.5)
+
+
+def test_social_context_absent_partner():
+    """Frames without any tracked part of the partner give zeros (no invented partner), or the interpolation of the
+    behaviour up to 0.9.0 with absent_partner="interpolate"."""
+    names = ["Nose", "Center", "Tail_base"]
+    focal = np.zeros((300, 3, 2))
+    focal[:, 0, 1], focal[:, 2, 1] = 1.0, -1.0
+    partner = np.zeros((300, 3, 2))
+    partner[:, :, 0] = 1.0
+    partner[:, 0, 1], partner[:, 2, 1] = 0.5, -0.5
+    partner[100:200] = np.nan
+    values = {mode: deepof.utils.social_context_features(focal, partner, names, names, "Center", "Nose", 2.0, 30.0,
+                                                         absent_partner=mode)[0] for mode in ("zero", "interpolate")}
+    assert np.all(values["zero"][100:200] == 0) and np.any(values["zero"][50] != 0)
+    assert np.allclose(values["interpolate"][150], values["interpolate"][50])
+    assert np.allclose(values["zero"][:100], values["interpolate"][:100])
+    with pytest.raises(ValueError):
+        deepof.utils.social_context_features(focal, partner, names, names, "Center", "Nose", 2.0, 30.0,
+                                             absent_partner="other")
+
+
+def test_filter_columns_animal_prefix():
+    """An animal's columns are those named "<id>_...": "mouse1" does not take the columns of "mouse10"."""
+    columns = [("mouse1_Nose", "x"), ("mouse10_Nose", "x"), "mouse1_Nose", "mouse10_Nose",
+               ("mouse1_Nose", "mouse1_Tail_base"), ("mouse1_Nose", "mouse10_Tail_base")]
+    assert deepof.utils.filter_columns(columns, "mouse1") == [("mouse1_Nose", "x"), "mouse1_Nose",
+                                                              ("mouse1_Nose", "mouse1_Tail_base")]
+    # single animal without id (""): every name belongs to it
+    assert deepof.utils.filter_columns([("Nose", "x"), "Nose"], "") == [("Nose", "x"), "Nose"]

@@ -35,6 +35,46 @@ coordinates = NewType("deepof_coordinates", Any)
 table_dict = NewType("deepof_table_dict", Any)
 
 
+# Input layout of the per-node / per-edge temporal networks of the graph encoders (TCN, transformer, recurrent):
+#   "nodes"   stream i is the time series of node (edge) i, i.e. x.permute(0, 2, 1, 3) (models of deepof >= 0.9.1)
+#   "legacy"  deepof <= 0.9.0: a TensorFlow-style transpose -> reshape -> transpose that reinterprets the (node, frame)
+#             grid: stream i holds every N-th frame of several nodes with x / y / speed mixed (found 2026-11-18). Kept so
+#             that the models trained with it give the same embeddings.
+INPUT_LAYOUTS = ("nodes", "legacy")
+NODES_LAYOUT_SINCE = (0, 9, 1)
+
+
+def _version_tuple(version) -> Tuple[int, ...]:
+    """"0.9.1" -> (0, 9, 1)."""
+    return tuple(int(part) for part in str(version).split(".")[:3])
+
+
+def input_layout_for_version(version) -> str:
+    """Input layout of a model trained with deepof `version`; None (checkpoints before versions were stored, <= 0.9.0)
+    or an unreadable version: "legacy"."""
+    try:
+        return "nodes" if version is not None and _version_tuple(version) >= NODES_LAYOUT_SINCE else "legacy"
+    except ValueError:
+        return "legacy"
+
+
+def check_input_layout(layout: str) -> str:
+    if layout not in INPUT_LAYOUTS:
+        raise ValueError(f"input_layout needs to be one of {INPUT_LAYOUTS}, got {layout!r}.")
+    return layout
+
+
+def group_streams(x: torch.Tensor, layout: str) -> torch.Tensor:
+    """Node or edge features (B, T, G, F) -> (B, G, T, F): the stream of every group (node or edge) over time, in the
+    given input layout (see INPUT_LAYOUTS)."""
+    B, T, G, F = x.shape
+    if layout == "nodes":
+        return x.permute(0, 2, 1, 3)
+    if layout == "legacy":
+        return x.reshape(B, T, G * F).permute(2, 1, 0).reshape(F, T, G, B).permute(3, 2, 1, 0)
+    raise ValueError(f"input_layout needs to be one of {INPUT_LAYOUTS}, got {layout!r}.")
+
+
 def _encoder_head(in_features: int, latent_dim: int, dropout_rate: float = 0.0) -> nn.Sequential:
     """Projection head of the encoders: Dense(2*latent) -> LayerNorm -> Dense(latent) -> LayerNorm -> Dense(latent)."""
     head = nn.Sequential(
@@ -74,7 +114,7 @@ class RecurrentEncoderPT(nn.Module):
           a: (B, T, E_edges, F_per_edge)
 
           Internally:
-            - TF-style grouping reshape -> (B, N_nodes, T, F_per_node) / (B, E_edges, T, F_per_edge)
+            - streams per node / edge (group_streams, input_layout) -> (B, N_nodes, T, F_per_node) / (B, E_edges, T, F_per_edge)
             - Recurrent blocks -> (B, N_nodes/E_edges, 2*latent_dim)
             - CensNetConvPT -> (B, N_nodes/E_edges, latent_dim)
             - ReLU (to match TF activation='relu')
@@ -93,10 +133,12 @@ class RecurrentEncoderPT(nn.Module):
         latent_dim: int,
         use_gnn: bool = True,
         interaction_regularization: float = 0.0,  # not used in PT, kept for API parity
+        input_layout: str = "nodes",  # see INPUT_LAYOUTS
     ):
         super().__init__()
         self.use_gnn = use_gnn
         self.latent_dim = latent_dim
+        self.input_layout = check_input_layout(input_layout)
 
         self.num_nodes = int(adjacency_matrix.shape[0])
         self.num_edges = int(edge_feature_shape[1]) if use_gnn else 0
@@ -148,26 +190,6 @@ class RecurrentEncoderPT(nn.Module):
         # Head MLP after concatenating node+edge embeddings, as in the TCN encoder
         self.head = _encoder_head(final_in, latent_dim)
 
-    @staticmethod
-    def tf_style_group_reshape(x: torch.Tensor, groups: int, feat_per_group: int) -> torch.Tensor:
-        """
-        Exact TF mapping used in the encoder for the GNN path:
-          x: (B, T, groups, feat_per_group)
-          -> (B, groups, T, feat_per_group)
-        Derived from the TF sequence: transpose -> reshape -> transpose.
-        """
-        B, T, G, F = x.shape
-        assert G == groups and F == feat_per_group
-        # (B, T, G*F)
-        flat = x.reshape(B, T, G * F)
-        # (G*F, T, B)
-        tmp = flat.permute(2, 1, 0)
-        # (F, T, G, B)
-        tmp = tmp.reshape(F, T, G, B)
-        # (B, G, T, F)
-        out = tmp.permute(3, 2, 1, 0).contiguous()
-        return out
-
     def forward(self, x: torch.Tensor, a: torch.Tensor, cluster_mode=False, return_backbone=False) -> torch.Tensor:
         """
         x: (B, T, N_nodes, F_per_node)
@@ -178,9 +200,10 @@ class RecurrentEncoderPT(nn.Module):
         _, _, E_edges, F_per_edge = a.shape
 
         if self.use_gnn:
-            # TF-style reshape into (B, groups, T, features)
-            x_reshaped = self.tf_style_group_reshape(x, self.num_nodes, F_per_node)  # (B, N, T, F)
-            a_reshaped = self.tf_style_group_reshape(a, self.num_edges, F_per_edge)  # (B, E, T, F)
+            # Streams per node / edge: (B, groups, T, features) in the model's input layout
+            assert N_nodes == self.num_nodes and E_edges == self.num_edges
+            x_reshaped = group_streams(x, self.input_layout).contiguous()  # (B, N, T, F)
+            a_reshaped = group_streams(a, self.input_layout).contiguous()  # (B, E, T, F)
 
             # Recurrent blocks -> (B, N/E, 2*latent)
             node_output = self.node_recurrent_block(x_reshaped)
@@ -585,11 +608,13 @@ class TCNEncoderPT(nn.Module):
         interaction_regularization: float = 0.0,  # not used explicitly in PT
         use_batch_norm: bool = False,
         legacy_tcn: bool = False,
+        input_layout: str = "nodes",  # see INPUT_LAYOUTS
     ):
         super().__init__()
         self.use_gnn = use_gnn
         self.latent_dim = int(latent_dim)
         self.conv_filters = int(conv_filters)
+        self.input_layout = check_input_layout(input_layout)
 
         W, N, F_node = input_shape
         _, E, F_edge = edge_feature_shape
@@ -653,22 +678,11 @@ class TCNEncoderPT(nn.Module):
         _, _, E, F_edge = a.shape
 
         if self.use_gnn:
-            # Nodes: TF-style reshape pipeline to match memory layout exactly
-            x_3d = x.reshape(B, W, N * F_node)          # (B, W, N*F)
-            x_t = x_3d.permute(2, 1, 0)              # (N*F, W, B)
-            x_reshaped_t = x_t.reshape(F_node, W, N, B)
-            x_nodes = x_reshaped_t.permute(3, 2, 1, 0)  # (B, N, W, F)
-
-            node_in = x_nodes.reshape(B * N, W, F_node)
+            # One temporal stream per node and per edge, in the model's input layout (see INPUT_LAYOUTS)
+            node_in = group_streams(x, self.input_layout).reshape(B * N, W, F_node)
             node_out = self.node_tcn(node_in).view(B, N, self.conv_filters)  # (B, N, C)
 
-            # Edges: TF-style reshape pipeline to match memory layout exactly
-            a_3d = a.view(B, W, E * F_edge)          # (B, W, E*F_edge)
-            a_t = a_3d.permute(2, 1, 0)              # (E*F_edge, W, B)
-            a_reshaped_t = a_t.reshape(F_edge, W, E, B)
-            a_edges = a_reshaped_t.permute(3, 2, 1, 0)  # (B, E, W, F_edge)
-
-            edge_in = a_edges.reshape(B * E, W, F_edge)
+            edge_in = group_streams(a, self.input_layout).reshape(B * E, W, F_edge)
             edge_out = self.edge_tcn(edge_in).view(B, E, self.conv_filters)  # (B, E, C)
 
             # Graph block
@@ -1038,10 +1052,12 @@ class TFMEncoderPT(nn.Module):
         dff: int = 128,
         dropout_rate: float = 0.0,  # as the TCN (the augmentations regularize; dropout would differ between views)
         key_dim: int = 32,        # the width of the TCN; None: min(64, nodes * features)
+        input_layout: str = "nodes",  # see INPUT_LAYOUTS
     ):
         super().__init__()
         self.use_gnn = use_gnn
         self.latent_dim = int(latent_dim)
+        self.input_layout = check_input_layout(input_layout)
         self.W, self.N, self.NF = input_shape
         _, self.E, self.EF = edge_feature_shape
         
@@ -1127,27 +1143,13 @@ class TFMEncoderPT(nn.Module):
             f"Input shape mismatch: got ({W}, {N}, {NF}), expected ({self.W}, {self.N}, {self.NF})"
 
         if self.use_gnn:
-            # === Process Nodes ===
-            # Reshape to process each node's time series independently
-            # Following the same memory layout as TCN encoder
-            x_flat = x.reshape(B, W, N * NF)
-            x_transposed = x_flat.permute(2, 1, 0)           # (N*NF, W, B)
-            x_reshaped = x_transposed.reshape(NF, W, N, B)   # (NF, W, N, B)
-            x_nodes = x_reshaped.permute(3, 2, 1, 0)         # (B, N, W, NF)
-            
-            node_in = x_nodes.reshape(B * N, W, NF)          # (B*N, W, NF)
+            # === Process Nodes: one time series per node, in the model's input layout (see INPUT_LAYOUTS) ===
+            node_in = group_streams(x, self.input_layout).reshape(B * N, W, NF)  # (B*N, W, NF)
             node_out = self.node_tf(node_in)                 # (B*N, key_dim)
             nodes_encoded = node_out.view(B, N, self.key_dim)  # (B, N, key_dim)
 
-            # === Process Edges ===
-            # Reshape to process each edge's time series independently
-            # Same pattern as TCN encoder
-            a_flat = a.reshape(B, W, E * EF)
-            a_transposed = a_flat.permute(2, 1, 0)           # (E*EF, W, B)
-            a_reshaped = a_transposed.reshape(EF, W, E, B)   # (EF, W, E, B)
-            a_edges = a_reshaped.permute(3, 2, 1, 0)         # (B, E, W, EF)
-            
-            edge_in = a_edges.reshape(B * E, W, EF)          # (B*E, W, EF)
+            # === Process Edges: one time series per edge ===
+            edge_in = group_streams(a, self.input_layout).reshape(B * E, W, EF)  # (B*E, W, EF)
             edge_out = self.edge_tf(edge_in)                 # (B*E, key_dim)
             edges_encoded = edge_out.view(B, E, self.key_dim)  # (B, E, key_dim)
 
@@ -1502,9 +1504,10 @@ def init_encoder_decoder(
     tcn_conv_stacks: int = 2,
     tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
     legacy_tcn: bool = False,
+    input_layout: str = "nodes",
 ):
     """
-    Initialize encoder/decoder modules based on encoder type.
+    Initialize encoder/decoder modules based on encoder type (input_layout: see INPUT_LAYOUTS).
 
     Args:
         encoder_type: can be either "recurrent", "TCN", or "transformer".
@@ -1525,6 +1528,7 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
             use_gnn=use_gnn,
             interaction_regularization=interaction_regularization,
+            input_layout=input_layout,
         )
         decoder = RecurrentDecoderPT(
             output_shape=(time_steps, decoder_output_features),
@@ -1544,6 +1548,7 @@ def init_encoder_decoder(
             conv_stacks=tcn_conv_stacks,
             conv_dilations=tcn_conv_dilations,
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
         )
         decoder = TCNDecoderPT(
             output_shape=(time_steps, decoder_output_features),
@@ -1559,6 +1564,7 @@ def init_encoder_decoder(
             latent_dim=latent_dim,
             use_gnn=use_gnn,
             # interaction_regularization=interaction_regularization,
+            input_layout=input_layout,
         )
         decoder = TFMDecoderPT(
             output_shape=(time_steps, decoder_output_features),
@@ -1604,6 +1610,7 @@ class VQVAEPT(nn.Module):
         tcn_conv_stacks: int = 2,
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8),
         legacy_tcn: bool = False,
+        input_layout: str = "nodes",
     ):
         """Initialize a VQ-VAE model.
 
@@ -1632,6 +1639,7 @@ class VQVAEPT(nn.Module):
         self.encoder_type = encoder_type
         
         # Initialize encoder based on type
+        self.input_layout = check_input_layout(input_layout)  # see INPUT_LAYOUTS
         self.encoder, self.decoder = init_encoder_decoder(
             encoder_type=encoder_type,
             input_shape=input_shape,
@@ -1648,6 +1656,7 @@ class VQVAEPT(nn.Module):
             tcn_conv_stacks=tcn_conv_stacks,
             tcn_conv_dilations=tcn_conv_dilations,
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
         )
         
         # Initialize Vector Quantizer
@@ -1893,6 +1902,7 @@ class VaDEPT(nn.Module):
         tcn_conv_stacks: int = 2,
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
         legacy_tcn: bool = False,
+        input_layout: str = "nodes",
     ):
         super().__init__()
         
@@ -1902,6 +1912,7 @@ class VaDEPT(nn.Module):
         self.window_size = time_steps #important for modal usage later
         self.lens_enabled=lens_enabled
 
+        self.input_layout = check_input_layout(input_layout)  # see INPUT_LAYOUTS
         self.encoder, self.decoder = init_encoder_decoder(
             encoder_type=encoder_type,
             input_shape=input_shape,
@@ -1918,6 +1929,7 @@ class VaDEPT(nn.Module):
             tcn_conv_stacks=tcn_conv_stacks,
             tcn_conv_dilations=tcn_conv_dilations,
             legacy_tcn=legacy_tcn,
+            input_layout=input_layout,
         )        
 
         self.latent_space = GaussianMixtureLatentPT(
@@ -2104,6 +2116,7 @@ class ContrastivePT(nn.Module):
         tcn_conv_stacks: int = 2,
         tcn_conv_dilations: Iterable[int] = (1, 2, 4, 8), 
         legacy_tcn: bool = False,
+        input_layout: str = "nodes",  # see INPUT_LAYOUTS
         cluster_mode: bool = False,
         social_nodes: int = 0,
         social_partners: int = 1,
@@ -2123,6 +2136,7 @@ class ContrastivePT(nn.Module):
             raise ValueError(f"Node and edge time dims must match: T={T}, Te={Te}")
         
         self.cluster_mode=cluster_mode
+        self.input_layout = check_input_layout(input_layout)
 
         self.full_time_steps = T
         if window_len is None:
@@ -2151,6 +2165,7 @@ class ContrastivePT(nn.Module):
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
                 interaction_regularization=interaction_regularization,
+                input_layout=input_layout,
             )
         elif encoder_type.lower() == "tcn":
             self.encoder = TCNEncoderPT(
@@ -2165,6 +2180,7 @@ class ContrastivePT(nn.Module):
                 conv_stacks=tcn_conv_stacks,
                 conv_dilations=tcn_conv_dilations,
                 legacy_tcn=legacy_tcn,
+                input_layout=input_layout,
             )
         elif encoder_type.lower() == "transformer":
             self.encoder = TFMEncoderPT(
@@ -2173,6 +2189,7 @@ class ContrastivePT(nn.Module):
                 adjacency_matrix=adjacency_matrix,
                 latent_dim=latent_dim,
                 use_gnn=use_gnn,
+                input_layout=input_layout,
             )
         else: # pragma: no cover
             raise ValueError(f"Unknown encoder_type: {encoder_type}")
@@ -2223,4 +2240,3 @@ class ContrastivePT(nn.Module):
         if return_backbone:
             return projection, backbone
         return backbone if self.cluster_mode else projection
- 

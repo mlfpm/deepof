@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_info
 import torch.distributed as dist
-from typing import Dict, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from deepof.data_loading import get_dt
 from tqdm import tqdm
 
@@ -74,6 +74,9 @@ class BatchDictDataset:
         self.global_shuffle = bool(global_shuffle)
         self.shuffle_seed = None if shuffle_seed is None else int(shuffle_seed)
 
+        if not len(preprocessed_dict.keys()):  # (failed below with an IndexError)
+            raise ValueError(f"BatchDictDataset \"{dataset_name}\": no windows, e.g. the validation split of "
+                             f"get_graph_dataset(test_videos=0); training needs training and validation windows.")
         # Determine if the dataset has angles
         self.has_angles = False
         if get_dt(preprocessed_dict, list(preprocessed_dict.keys())[0])[2].size > 0:
@@ -677,6 +680,32 @@ class BatchDictDataset:
         ret.append(vid)
         return tuple(ret)
 
+    def memory_bytes(self) -> int:
+        """Bytes of the arrays a training loader reads (nodes, edges, angles if returned, labels if supervised), as
+        stored (the decision of make_loader(in_memory=...))."""
+        total = 0
+        for path, name in self._loader_arrays():
+            with h5py.File(path, 'r') as f:
+                total += int(np.prod(f[name].shape)) * f[name].dtype.itemsize
+        return total + int(np.load(self.idx_path, mmap_mode='r').nbytes)
+
+    def _loader_arrays(self) -> List[tuple]:
+        arrays = [(self.X_path, 'X'), (self.a_path, 'a')]
+        if self.return_angles:
+            arrays.append((self.ang_path, 'ang'))
+        if self.supervised_dict is not None and os.path.exists(self.y_path):
+            arrays.append((self.y_path, 'y'))
+        return arrays
+
+    def load_arrays(self) -> Dict[str, np.ndarray]:
+        """The arrays of the training loader in memory ({"X", "a", ("ang"), ("y"), "video_idx"})."""
+        out = {}
+        for path, name in self._loader_arrays():
+            with h5py.File(path, 'r') as f:
+                out[name] = f[name][:]
+        out["video_idx"] = np.load(self.idx_path)
+        return out
+
     def make_loader(
         self,
         batch_size: int,
@@ -695,7 +724,12 @@ class BatchDictDataset:
         ddp_shard: bool = True,
         bootstrap_training: bool = False,
         bootstrap_block_len: int = 250,
+        in_memory: bool = False,
     ) -> DataLoader:
+        """Loader of the windows. Shuffled HDF5 loaders read blocks of batch_size consecutive windows (the HDF5 is
+        shuffled once when it is built) in a new order every epoch, i.e. the same windows meet in every epoch and run.
+        in_memory=True (shuffle, not bootstrap_training): the arrays are loaded into memory once and every epoch draws
+        its batches from a new permutation of all windows (seeded by seed and the epoch)."""
 
         # get DDP identity (if needed)
         ddp_rank = 0
@@ -712,6 +746,9 @@ class BatchDictDataset:
             gen = torch.Generator()
             gen.manual_seed(int(seed))
 
+        memory = None
+        if in_memory and shuffle and iterable_for_h5 and not bootstrap_training:
+            memory = self.load_arrays()
         if iterable_for_h5:
             iterable = _H5BatchIterableDataset(
                 self,
@@ -735,6 +772,7 @@ class BatchDictDataset:
                 bootstrap_training=bootstrap_training,
                 bootstrap_block_len=bootstrap_block_len,
                 global_shuffle=self.global_shuffle,
+                memory=memory,
             )
             return DataLoader(
                 iterable,
@@ -784,9 +822,11 @@ class _H5BatchIterableDataset(IterableDataset):
         bootstrap_training: bool = False,
         bootstrap_block_len: int = 250,
         global_shuffle: bool = False,
+        memory: Optional[Dict[str, np.ndarray]] = None,
     ):
         super().__init__()
         self.base_dataset = base_dataset
+        self.memory = memory  # arrays in memory: random batches every epoch (make_loader(in_memory=True))
         self.x_path = x_path
         self.a_path = a_path
         self.ang_path = ang_path
@@ -902,7 +942,36 @@ class _H5BatchIterableDataset(IterableDataset):
 
         return out
 
+    def _iter_memory(self):
+        """Batches drawn from the arrays in memory: a new permutation of all windows every epoch (seeded by the loader
+        seed and the epoch, the same on every DDP rank), sharded by DDP rank and loader worker as the HDF5 batches."""
+        mem = self.memory
+        n, bs = len(mem["video_idx"]), self.batch_size
+        self._epoch = getattr(self, "_epoch", 0) + 1
+        rng = np.random.default_rng(((self.seed if self.seed is not None else 0) + self._epoch) % (2**32))
+        order = rng.permutation(n)
+        n_batches = n // bs if self.drop_last else (n + bs - 1) // bs
+        batches = [order[i * bs:(i + 1) * bs] for i in range(n_batches)]
+        if self.ddp_world_size > 1:  # pragma: no cover (DDP, not run in CI)
+            batches = batches[:(len(batches) // self.ddp_world_size) * self.ddp_world_size]
+            batches = batches[self.ddp_rank::self.ddp_world_size]
+        w = get_worker_info()
+        if w is not None:
+            batches = batches[w.id::w.num_workers]
+        for idx in batches:
+            batch = [torch.from_numpy(mem["X"][idx]).float(), torch.from_numpy(mem["a"][idx]).float()]
+            if "ang" in mem:
+                batch.append(torch.from_numpy(mem["ang"][idx]).float())
+            if "y" in mem:
+                batch.append(torch.from_numpy(mem["y"][idx]).float())
+            batch.append(torch.from_numpy(idx.astype(np.int64)))
+            batch.append(torch.from_numpy(mem["video_idx"][idx].astype(np.int32)))
+            yield tuple(batch)
+
     def __iter__(self):
+        if self.memory is not None:
+            yield from self._iter_memory()
+            return
         X_h5 = h5py.File(self.x_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
         A_h5 = h5py.File(self.a_path, 'r', rdcc_nbytes=self.rdcc_nbytes, rdcc_nslots=self.rdcc_nslots)
 

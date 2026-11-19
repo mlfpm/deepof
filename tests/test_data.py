@@ -1116,3 +1116,16 @@ def test_load_arena_data_formats_and_rescaling(tmp_path):
     assert all(s[-1] == 760.0 for s in new_scales.values())
     for k in keys:  # twice the arena size in mm, the same pixels (up to rounding to whole pixels)
         assert np.allclose(new_arenas[k], 2 * arenas[k], atol=2) and np.allclose(new_rois[k][1], 2 * rois[k][1], atol=2)
+
+
+def test_resolve_preprocessing_choices():
+    """Choices as given, else as stored with the training scaler; a scaler of data prepared before they existed keeps
+    the earlier behaviour, new data get the current defaults."""
+    resolve = deepof.data.resolve_preprocessing_choices
+    assert resolve({}, None) == {"social_absent_partner": "zero", "centered_speed": False}
+    assert resolve({}, {"body_length": {}}) == {"social_absent_partner": "interpolate", "centered_speed": False}
+    assert resolve({}, {"social_absent_partner": "zero", "centered_speed": True}) == {
+        "social_absent_partner": "zero", "centered_speed": True}
+    assert resolve({"centered_speed": True}, {"body_length": {}})["centered_speed"] is True
+    with pytest.raises(ValueError):
+        resolve({"social_absent_partner": "other"}, None)

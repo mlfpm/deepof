@@ -25,6 +25,7 @@ import optuna
 
 
 import deepof.clustering.dataset
+from deepof.config import DEEPOF_VERSION
 import deepof.clustering.model_utils_new
 from copy import deepcopy
 from torch.utils.data import DataLoader
@@ -685,23 +686,6 @@ def step_contrastive_distill(
         var_loss=l_term2
         cov_loss=l_term3
 
-    if False: #ctx.epoch > 1:
-        # Cut middle section from tensor
-        half_len = x_full.shape[1] // 2
-        starts=(torch.ones([x_full.shape[0]],device=x_full.device)*half_len // 2).int()
-
-        x = slice_time_per_sample(x_full, starts, half_len)
-        plot_mined_pairs(
-            x1=x, x2=x_aug1,                 # the two views that correspond to z and z_aug
-            z1=z_view1, z2=z_view2,                 # embeddings (preferably already normalized if your loss normalizes)
-            edge_index=edge_index,    # or global, whichever matches node indexing
-            top_m_pos=1,
-            mutual=True,
-            sim_threshold=0.9,
-            show_top_neg=3,
-            title_prefix="NCE mining debug:",
-        )
-
     distill_loss = torch.tensor(0.0, device=device, dtype=loss.dtype)
 
     # Distillation on the main window embedding
@@ -814,6 +798,26 @@ def step_contrastive_distill(
         **view_losses,
     }
     return StepResult(loss=total, logs=logs)
+
+
+IN_MEMORY_MAX_GB = 24.0  # training windows up to this size go into memory by default (CommonFitCfg.in_memory)
+
+
+def _training_in_memory(setting: Optional[bool], dataset, num_workers: int = 0) -> bool:
+    """Whether the training windows are held in memory (random batches every epoch): as set, else when they take at
+    most IN_MEMORY_MAX_GB and at most half of the available memory (one copy per loader worker). One info line."""
+    size = dataset.memory_bytes()
+    if setting is None:
+        need, limit = size * max(1, num_workers), IN_MEMORY_MAX_GB * 1e9
+        try:
+            import psutil
+            limit = min(limit, 0.5 * psutil.virtual_memory().available)
+        except ImportError:  # pragma: no cover
+            pass
+        setting = need <= limit
+    print(f"Training windows ({size / 1e9:.2f} GB): " + ("in memory, a new random batch composition every epoch" if setting
+          else "read from the HDF5 file in blocks of consecutive windows (the same windows meet in every epoch)"))
+    return bool(setting)
 
 
 def _make_cfg(cfg_cls, **kwargs):
@@ -1006,6 +1010,8 @@ def train_deepof_model(
     tcn_kernel_size: Optional[int] = None,
     tcn_conv_stacks: Optional[int] = None,
     tcn_conv_dilations: Optional[tuple] = None,
+    input_layout: Optional[str] = None,  # graph encoders' input: "nodes" (default) or "legacy" (<= 0.9.0)
+    in_memory: Optional[bool] = None,  # training windows in memory, random batches every epoch (None: by size)
     # LEarning rate adjust5ments:
     lr_warmup_start_factor: Optional[float] = None,
     lr_warmup_end_factor: Optional[float] = None,
@@ -1100,6 +1106,7 @@ def train_deepof_model(
     include_social_view: Optional[bool] = None,  # regression target from the social context nodes (per-animal data)
     social_target_shift: Optional[int] = None,  # frames the social target lies ahead of the window, see TurtleTeacherCfg
     social_near_weight: Optional[float] = None,  # weight of windows with a partner near in the social view
+    sort_social_partners: Optional[bool] = None,  # social view: partners by proximity (default), False: by animal id
     regression_bottleneck_dim: Optional[int] = None,  # views predicted through a code of this width, see TurtleTeacherCfg
     regression_future_shifts: Optional[Tuple[int, ...]] = None,  # views of later windows as extra targets (frames)
     shifted_target_missing: Optional[str] = None,  # "own" / "skip": shifted targets without a later window, see TurtleTeacherCfg
@@ -1242,6 +1249,8 @@ def train_deepof_model(
         tcn_kernel_size = tcn_kernel_size,
         tcn_conv_stacks = tcn_conv_stacks,
         tcn_conv_dilations = tcn_conv_dilations, 
+        input_layout=input_layout,
+        in_memory=in_memory,
     )
 
     teacher_cfg = _make_cfg(
@@ -1291,6 +1300,7 @@ def train_deepof_model(
         include_social_view=include_social_view,
         social_target_shift=social_target_shift,
         social_near_weight=social_near_weight,
+        sort_social_partners=sort_social_partners,
         regression_bottleneck_dim=regression_bottleneck_dim,
         regression_future_shifts=None if regression_future_shifts is None else tuple(int(s) for s in regression_future_shifts),
         shifted_target_missing=_lower(shifted_target_missing),
@@ -1556,11 +1566,13 @@ def train_deepof_model_base(
         global_shuffle=True,  # batches mix windows of all videos (batch-level losses, BatchNorm statistics)
     )
 
+    in_memory = _training_in_memory(common_cfg.in_memory, train_dataset, common_cfg.num_workers)
     train_loader = train_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=shuffle, num_workers=common_cfg.num_workers, drop_last=False,
         iterable_for_h5=True, pin_memory=(device.type == 'cuda'), prefetch_factor=common_cfg.prefetch_factor,
         persistent_workers=(common_cfg.num_workers > 0), block_shuffle=shuffle, permute_within_block=False, seed=common_cfg.seed,  
         ddp_shard=True, bootstrap_training=bootstrap_training, bootstrap_block_len=bootstrap_block_len,
+        in_memory=in_memory,
     )
     val_loader = val_dataset.make_loader(
         batch_size=common_cfg.batch_size, shuffle=False, num_workers=common_cfg.num_workers, drop_last=False,
@@ -1701,7 +1713,8 @@ def fit_VQVAE(
     n_batches_per_epoch = len(train_loader)
 
     model_name = "vqvae"
-    rebuild_spec={                    
+    rebuild_spec={
+        "deepof_version": DEEPOF_VERSION,
         "model_name": model_name,
         "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "x_shape": train_loader.dataset.x_shape,
@@ -1737,6 +1750,7 @@ def fit_VQVAE(
             tcn_kernel_size=common_cfg.tcn_kernel_size,
             tcn_conv_stacks=common_cfg.tcn_conv_stacks,
             tcn_conv_dilations=common_cfg.tcn_conv_dilations,
+            input_layout=common_cfg.input_layout,
         ).to(device, non_blocking=True)
     else:  # continue_training: the loaded model takes the loss weights of the current config
         model.to(device)
@@ -1745,6 +1759,7 @@ def fit_VQVAE(
         model.vq_layer.ema_decay = common_cfg.vq_ema_decay
         model.vq_layer.sync_ema()  # EMA sums of the loaded codebook (checkpoints without them load the defaults)
     _build_lazy_parameters(model, train_loader.dataset.x_shape, train_loader.dataset.a_shape, device)  # before DDP
+    rebuild_spec["input_layout"] = unwrap_dp(model).input_layout  # a continued model keeps its own
     # DDP wrap (preferred)
     is_ddp = dist.is_available() and dist.is_initialized()
     rank = dist.get_rank() if is_ddp else 0
@@ -2152,7 +2167,8 @@ def fit_contrastive(
             f"Hard-negative shifts start at {min(neg_min_shift, max_room)}, within the positive shift range "
             f"(up to aug_max_shift={contrastive_cfg.aug_max_shift}); the same offset can then be a positive and a negative."
         )
-    rebuild_spec={                    
+    rebuild_spec={
+        "deepof_version": DEEPOF_VERSION,
         "model_name": model_name,
         "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "window_len": window_len,
@@ -2195,6 +2211,7 @@ def fit_contrastive(
             tcn_kernel_size=common_cfg.tcn_kernel_size,
             tcn_conv_stacks=common_cfg.tcn_conv_stacks,
             tcn_conv_dilations=common_cfg.tcn_conv_dilations,
+            input_layout=common_cfg.input_layout,
         ).to(device)
     else:  # continue_training: the loaded model takes the loss settings of the current config
         model.to(device)
@@ -2232,11 +2249,11 @@ def fit_contrastive(
     )
     rot_precomp = build_rotation_precomp(edge_index=edge_index_local, n_nodes=n_nodes, device=device)
 
-    # Nodes per animal (name prefix before the first "_"), for the negative augmentations
+    # Nodes per animal (_node_animals), for the negative augmentations
     _, _, node_names = _build_edge_from_metainfo(
         meta_info=meta_info, device=device, n_nodes=n_nodes, return_local=False, return_node_names=True,
     )
-    prefixes = [name.split("_", 1)[0] if "_" in name else "" for name in node_names]
+    prefixes = _node_animals(node_names, meta_info)
     animal_nodes = [torch.tensor([i for i, p in enumerate(prefixes) if p == key], device=device)
                     for key in dict.fromkeys(prefixes)]
     if neg_aug:
@@ -2322,6 +2339,7 @@ def fit_contrastive(
             regression_head = DDP(regression_head, device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
     _build_lazy_parameters(model, (window_len, *train_loader.dataset.x_shape[1:]),
                            (window_len, *train_loader.dataset.a_shape[1:]), device)
+    rebuild_spec["input_layout"] = unwrap_dp(model).input_layout  # a continued model keeps its own
     predictive_head = None
     if contrastive_cfg.predictive_weight > 0:
         with torch.no_grad():
@@ -2607,6 +2625,7 @@ def fit_VADE(
         tcn_kernel_size=common_cfg.tcn_kernel_size,
         tcn_conv_stacks=common_cfg.tcn_conv_stacks,
         tcn_conv_dilations=common_cfg.tcn_conv_dilations,
+        input_layout=common_cfg.input_layout,
     ).to(device, non_blocking=True)
     step_fn = step_vade
     # Parameters created on the first forward (CensNet) have to exist before DDP and the pretraining optimizer
@@ -2635,7 +2654,9 @@ def fit_VADE(
     n_batches_per_epoch = len(train_loader)
 
     model_name = "vade"
-    rebuild_spec={                    
+    rebuild_spec={
+        "deepof_version": DEEPOF_VERSION,
+        "input_layout": unwrap_dp(model).input_layout,
         "model_name": model_name,
         "batch_size": common_cfg.batch_size,  # reused as inference batch size
         "x_shape": train_loader.dataset.x_shape,
@@ -3005,6 +3026,19 @@ def fit_VADE(
 #
 
 
+def _node_animals(node_names: List[str], meta_info: dict) -> List[str]:
+    """Animal of every node (body part): one animal for per-animal datasets (body parts without id prefix) and
+    single-animal data; otherwise the id of meta_info["animal_ids"] whose "<id>_" starts the name. Data prepared before
+    the ids were stored (deepof <= 0.9.0) keep the earlier rule, the name up to the first "_" (which split the body parts
+    of one animal into "Left", "Right", "Tail", ... and left per-animal models without within-animal edges)."""
+    if meta_info.get("per_animal"):
+        return [""] * len(node_names)
+    if "animal_ids" not in meta_info:
+        return [name.split("_", 1)[0] if "_" in name else "" for name in node_names]
+    ids = sorted((str(a) for a in meta_info["animal_ids"] if a), key=len, reverse=True)
+    return [next((a for a in ids if name.startswith(a + "_")), "") for name in node_names]
+
+
 def _build_edge_from_metainfo(
     meta_info: dict,
     device: torch.device,
@@ -3055,15 +3089,8 @@ def _build_edge_from_metainfo(
     if not return_local:
         return edge_index_global, None, (node_names if return_node_names else None)
 
-    # 3) Build local/within-mouse edge index by filtering on name prefix ('B_' vs 'W_')
-    def animal_key(name: str) -> str:
-        # 'B_Right_bhip' -> 'B', 'W_Nose' -> 'W'
-        # (split on first underscore)
-        if "_" not in name:
-            return("")
-        return name.split("_", 1)[0]
-
-    keys = [animal_key(nm) for nm in node_names]  # len N
+    # 3) Build local/within-mouse edge index from the animal of every node
+    keys = _node_animals(node_names, meta_info)  # len N
     # map each node index -> animal id (e.g., B->0, W->1)
     uniq = {k: i for i, k in enumerate(sorted(set(keys)))}
     animal_id = torch.tensor([uniq[k] for k in keys], dtype=torch.long, device=device)  # (N,)

@@ -90,6 +90,7 @@ from tqdm import tqdm
 
 import deepof.annotation_utils
 from deepof.config import PROGRESS_BAR_FIXED_WIDTH, ROI_COLORS, suppress_warnings_context, DistanceUnit, BitPrecision
+from deepof.config import DEEPOF_VERSION
 #import deepof.clustering.models_new
 import deepof.clustering.training
 import deepof.utils
@@ -105,7 +106,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # SET DEEPOF VERSION
-current_deepof_version="0.9.0"
+current_deepof_version = DEEPOF_VERSION
 
 # DEFINE CUSTOM ANNOTATED TYPES #
 project = NewType("deepof_project", Any)
@@ -169,6 +170,7 @@ def load_project(
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
+        outlier_test: str = "moving_average",
         likelihood_tol: float = 0.75,
         animal_presence_threshold: float = 0.5,
         model: str = "mouse_topview",
@@ -199,6 +201,10 @@ def load_project(
         remove_outliers (bool): whether outliers should be removed during project creation.
         interpolation_limit (int): linear interpolation fills up to this many missing frames from each end of a gap (gaps of up to twice this length are closed).
         interpolation_std (int): maximum number of standard deviations to interpolate.
+        outlier_test (str): outlier test of remove_outliers (deepof.utils.mask_outliers): "moving_average" (default) or
+            "spike" (positions that jump away and come back within two frames; does not flag fast genuine
+            movement). TODO: the default stays "moving_average" only until "spike" is validated (2026-11), then the
+            switch is removed.
         likelihood_tol (float): likelihood threshold for outlier detection.
         animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
         model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
@@ -289,6 +295,7 @@ def load_project(
             remove_outliers = remove_outliers,
             interpolation_limit = interpolation_limit,
             interpolation_std = interpolation_std,
+            outlier_test = outlier_test,
             likelihood_tol = likelihood_tol,
             animal_presence_threshold = coordinates._animal_presence_threshold,
             model = model,
@@ -324,6 +331,32 @@ def _strip_animal_prefix(name, animal: str):
         parts = [part.strip(" '\"") for part in name[1:-1].split(",") if part.strip()]
         return str(tuple(strip(part) for part in parts))
     return tuple(strip(s) for s in name) if isinstance(name, tuple) else strip(name)
+
+
+# Preprocessing choices of get_graph_dataset that changed in deepof 0.9.1: (default for new data, behaviour of data
+# prepared before). A preprocessing with the scaler of earlier data (pretrained_scaler without the key) keeps the
+# earlier behaviour, so that models trained on it get the inputs they were trained on.
+PREPROCESSING_CHOICES = {"social_absent_partner": ("zero", "interpolate"), "centered_speed": (False, False)}
+
+
+def resolve_preprocessing_choices(explicit: dict, pretrained_scaler: Optional[dict] = None) -> dict:
+    """The preprocessing choices of get_graph_dataset (PREPROCESSING_CHOICES): as given, else as stored in
+    pretrained_scaler, else the earlier behaviour for a scaler of data prepared before they existed, else (new data)
+    the current default."""
+    out = {}
+    for name, (default, before) in PREPROCESSING_CHOICES.items():
+        value = explicit.get(name)
+        if value is None:
+            if isinstance(pretrained_scaler, dict) and name in pretrained_scaler:
+                value = pretrained_scaler[name]
+            else:
+                value = before if pretrained_scaler is not None else default
+        out[name] = value
+    if out["social_absent_partner"] not in ("zero", "interpolate"):
+        raise ValueError(f"social_absent_partner needs to be \"zero\" or \"interpolate\", got "
+                         f"{out['social_absent_partner']!r}")
+    out["centered_speed"] = bool(out["centered_speed"])
+    return out
 
 
 def animal_scaler(global_scaler: Optional[dict], animal: str) -> Optional[dict]:
@@ -389,6 +422,7 @@ class Project:
         remove_outliers: bool = True,
         interpolation_limit: int = 5,
         interpolation_std: int = 3,
+        outlier_test: str = "moving_average",
         likelihood_tol: float = 0.75,
         animal_presence_threshold: float = 0.5,
         model: str = "mouse_topview",
@@ -420,6 +454,10 @@ class Project:
             remove_outliers (bool): whether outliers should be removed during project creation.
             interpolation_limit (int): linear interpolation fills up to this many missing frames from each end of a gap (gaps of up to twice this length are closed).
             interpolation_std (int): maximum number of standard deviations to interpolate.
+            outlier_test (str): outlier test of remove_outliers (deepof.utils.mask_outliers): "moving_average" (default) or
+                "spike" (positions that jump away and come back within two frames; does not flag fast genuine
+                movement). TODO: the default stays "moving_average" only until "spike" is validated (2026-11), then
+                the switch is removed.
             likelihood_tol (float): likelihood threshold for outlier detection.
             animal_presence_threshold (float): Threshold for the quality of the tracking. If the quality is below this threshold, the animal is considered to be absent.
             model (str): model to use for pose estimation. Defaults to 'mouse_topview' (as described in the documentation).
@@ -633,6 +671,9 @@ class Project:
         self.remove_outliers = remove_outliers
         self.interpolation_limit = interpolation_limit
         self.interpolation_std = interpolation_std
+        if outlier_test not in ("moving_average", "spike"):
+            raise ValueError(f"outlier_test needs to be \"moving_average\" or \"spike\", got {outlier_test!r}")
+        self.outlier_test = outlier_test
         self.likelihood_tolerance = likelihood_tol
         self.animal_presence_threshold = animal_presence_threshold
         self.model = model
@@ -1169,6 +1210,7 @@ class Project:
                 table, lik_dict[key],
                 likelihood_tolerance=self.likelihood_tolerance,
                 mode="or", n_std=self.interpolation_std,
+                test=getattr(self, "outlier_test", "moving_average"),  # (projects of earlier versions: none stored)
             )
             warn_nans_count += warn_nans
         
@@ -2013,6 +2055,7 @@ class Coordinates:
         invert_roi: bool = False,
         file_name: str = 'coords',
         return_path: bool = False,
+        centered_speed: bool = False,
     ) -> table_dict:
         """Return a table_dict object with the coordinates of each animal as values.
 
@@ -2021,6 +2064,7 @@ class Coordinates:
             center_group (bool): Only for a body part as center. If True, all animals are centered on this body part of the first animal (the distances between the animals are kept); if False (default), every animal on its own.
             polar (bool) States whether the coordinates should be converted to polar values.
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
+            centered_speed (bool): Only with speed: the derivatives centred on the frame instead of lagging it by about two frames (see deepof.utils.rolling_speed; TODO: the lagging default is kept only until the centred variant is validated, then this switch is removed).
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
@@ -2053,6 +2097,7 @@ class Coordinates:
                 center_group = center_group,
                 polar = polar,
                 speed = speed,
+                centered_speed = centered_speed,
                 align = align,
                 align_group = align_group,
                 align_inplace = align_inplace,
@@ -2174,8 +2219,9 @@ class Coordinates:
         coord_1, coord_2 = coords
 
         if center == "arena":
-            tab.loc[:, (slice("x"), [coord_1])] -= scale[0]
-            tab.loc[:, (slice("x"), [coord_2])] -= scale[1]
+            # every body part (slice("x") was a label slice up to "x": body parts sorting after "x" stayed uncentred)
+            tab.loc[:, (slice(None), [coord_1])] -= scale[0]
+            tab.loc[:, (slice(None), [coord_2])] -= scale[1]
         elif isinstance(center, str) and center_group:
             # One shift per frame for all animals: the distances within and between the animals stay unchanged. Plain
             # subtraction, so that a missing reference body part gives NaN (not uncentred values)
@@ -2259,8 +2305,10 @@ class Coordinates:
         
         return aligned_df
 
-    def _calculate_derivatives(self, tab: pd.DataFrame, speed: int, frame_rate: float = None, typ: str = "coords") -> pd.DataFrame:
-        """Calculates speed, acceleration, jerk, etc., based on the 'speed' parameter."""
+    def _calculate_derivatives(self, tab: pd.DataFrame, speed: int, frame_rate: float = None, typ: str = "coords",
+                               centered: bool = False) -> pd.DataFrame:
+        """Calculates speed, acceleration, jerk, etc., based on the 'speed' parameter (centered: see
+        deepof.utils.rolling_speed)."""
         if not speed:
             return tab
         if frame_rate is None:
@@ -2271,6 +2319,7 @@ class Coordinates:
             frame_rate=frame_rate,
             deriv=speed,
             typ=typ,
+            centered=centered,
         )
 
 
@@ -2292,6 +2341,7 @@ class Coordinates:
     animals_in_roi: str = None,
     in_roi_criterion: str = "Center",
     invert_roi: bool = False,
+    centered_speed: bool = False,
 ) -> pd.DataFrame:
         """Return a pandas dataFrame with the coordinates for the selected key as values.
 
@@ -2303,6 +2353,7 @@ class Coordinates:
             center_group (bool): Only for a body part as center. If True, all animals are centered on this body part of the first animal; if False (default), every animal on its own.
             polar (bool) States whether the coordinates should be converted to polar values.
             speed (int): States the derivative of the positions to report. Speed is returned if 1, acceleration if 2, jerk if 3, etc.
+            centered_speed (bool): Only with speed: the derivatives centred on the frame instead of lagging it by about two frames (see deepof.utils.rolling_speed; TODO: the lagging default is kept only until the centred variant is validated, then this switch is removed).
             align (str): Selects the body part to which later processes will align the frames with (see preprocess in table_dict documentation).
             align_inplace (bool): Only valid if align is set. Aligns the vector that goes from the origin to the selected body part with the y-axis, for all timepoints (default).
             to_video (bool): Undoes the scaling to mm back to the pixel scaling from the original video 
@@ -2350,7 +2401,7 @@ class Coordinates:
 
         # 9. Calculate speed/derivatives
         if speed:
-            tab = self._calculate_derivatives(tab, speed)
+            tab = self._calculate_derivatives(tab, speed, centered=centered_speed)
 
         # 10. Handle missing animals based on quality data
         table_dict = deepof.utils.set_missing_animals(self, {key: tab}, quality, animal_presence_threshold=self._animal_presence_threshold)
@@ -3305,6 +3356,8 @@ class Coordinates:
         per_animal: bool = False,
         social_context: bool = True,
         social_range: float = 0.75,
+        social_absent_partner: Optional[str] = None,
+        centered_speed: Optional[bool] = None,
         _focal: bool = False,
         _fit_only: bool = False,
         **kwargs,
@@ -3335,6 +3388,9 @@ class Coordinates:
             per_animal (bool): Only for projects with several animals (ignored otherwise, single-animal datasets do not change). If True, every animal gets its own windows: its own body parts (without the id prefix, so one model with shared weights sees all animals) centered and aligned on itself and divided by its own body length, with one standardization fitted on all animals. The windows have the keys "<video>::<animal>"; meta_info["per_animal"] is True, the fourth return value is a dictionary {animal: table_dict} and global_scaler["body_length"] is {animal: {video: ...}} (embedding_per_video handles both). Needs body parts as center and align and is not available for very large projects. Defaults to False.
             social_context (bool): Only with per_animal. If True (default), the windows of an animal additionally contain what each other animal does relative to it (deepof.utils.social_context_features: position of its nose, center and tail base, body direction, movement and nose contacts, in the animal's own frame and faded with the distance, so that an animal far away gives zeros whatever it does). They are stored as additional nodes after the body parts (meta_info["social_nodes"], ["social_partners"], ["social_columns"]), which only the contrastive model can use (own stream, see ContrastivePT).
             social_range (float): Distance in body lengths at which the social context has faded to 1 / e. Defaults to 0.75.
+            social_absent_partner (str): Social context in frames in which a partner is absent (no tracked body part): "zero" (zeros, no invented partner) or "interpolate" (linear interpolation over the absence, the behaviour up to 0.9.0). None (default): taken from pretrained_scaler, i.e. as when the training data were prepared ("interpolate" for scalers of data prepared before 0.9.1), "zero" for new data.
+            centered_speed (bool): Speeds of the nodes centred on the frame instead of lagging it by about two frames (deepof.utils.rolling_speed). None (default): taken from pretrained_scaler as social_absent_partner, False for new data. TODO: the lagging default is kept only until the centred variant is validated (2026-11), then this switch is removed.
+            Both choices are stored in meta_info and in the returned scaler, so that a later preprocessing with that scaler (embedding_per_video, readouts) repeats them.
             _focal, _fit_only: internal (one animal of a per_animal dataset: body part names without id prefix; only the samples for the shared scaler).
 
         Returns:
@@ -3359,6 +3415,10 @@ class Coordinates:
                                  f"{missing}, wrong length: {wrong}.")
         if return_as_paths is None:
             return_as_paths = self._very_large_project
+        choices = resolve_preprocessing_choices(
+            dict(social_absent_partner=social_absent_partner, centered_speed=centered_speed),
+            kwargs.get("pretrained_scaler"))
+        social_absent_partner, centered_speed = choices["social_absent_partner"], choices["centered_speed"]
         several_animals = bool(self._animal_ids) and len(self._animal_ids) > 1 and bool(self._animal_ids[0])
         if (per_animal and several_animals) or _focal:
             if ((animal_id is not None and not _focal) or not preprocess or center == "arena" or return_as_paths
@@ -3375,7 +3435,7 @@ class Coordinates:
                      mouse_size_normalization=mouse_size_normalization,
                      include_imputation_mask=include_imputation_mask, include_kinematics=include_kinematics,
                      align_per_window=align_per_window, frame_mask=frame_mask, social_context=social_context,
-                     social_range=social_range),
+                     social_range=social_range, **choices),
                 kwargs, precomputed_tab_dict,
             )
         # The reference body parts (first selected animal) of the centering, the outlier test and the window alignment
@@ -3426,7 +3486,8 @@ class Coordinates:
 
                 # Speeds from the unrotated positions: the alignment rotates every frame by its own angle, so the
                 # changes of the aligned positions would depend on where the animal is and in which direction it moves
-                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths)
+                speeds = self.get_coords(selected_id=animal_id, speed=1, file_name='speed', return_path=return_as_paths,
+                                         centered_speed=centered_speed)
 
                 pbar.update()
                 pbar.set_postfix(step="Loading distances")
@@ -3473,7 +3534,8 @@ class Coordinates:
                             rows = None if frame_mask is None else frame_mask[key]
                             length = deepof.utils.table_body_lengths(tab, [animal_id], rows=rows)[animal_id]
                             tab = pd.concat([tab, self._social_context_table(
-                                get_dt(arena_coords, key), animal_id, center, align, length, social_range)], axis=1)
+                                get_dt(arena_coords, key), animal_id, center, align, length, social_range,
+                                absent_partner=social_absent_partner)], axis=1)
                         tab = tab.loc[:, [not (isinstance(c, tuple) and str(c[0]).endswith("kinematics") and c[0] != own)
                                           for c in tab.columns]]
                         tab.columns = pd.Index([_strip_animal_prefix(c, animal_id) for c in tab.columns],
@@ -3617,6 +3679,12 @@ class Coordinates:
                 return tab_dict, (to_preprocess, metainfo, global_scaler)
             # Centering and alignment, also for a later preprocessing of the same data (embedding_per_video)
             metainfo['center'], metainfo['align'], metainfo['align_per_window'] = center, align, bool(align_per_window)
+            # Preprocessing choices: in meta_info and in the scaler (a preprocessing with it repeats them)
+            metainfo.update(choices)
+            # Animal of the nodes (training._node_animals; a per-animal dataset overwrites it with all its ids)
+            metainfo['animal_ids'] = [a for a in self._animal_ids if a]
+            if isinstance(global_scaler, dict):
+                global_scaler = dict(global_scaler, **choices)
             metainfo['node_columns']=feature_names[node_sorting_indices]
             metainfo['edge_columns']=feature_names[edge_sorting_indices]
             metainfo['angle_columns']=feature_names[angle_sorting_indices]
@@ -3663,13 +3731,13 @@ class Coordinates:
 
                         # save paths for modified tables (replaces the window table by the reshaped one)
                         to_preprocess[k][key] = _save_replacing_table(dataset, table_path, return_as_paths)
-                    #collect shapes
-                    if len(to_preprocess[k].keys())>0 and k==0:
-                        metainfo['shape_train']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]
-                    elif len(to_preprocess[k].keys())>0 and k==1:    
-                        metainfo['shape_test']=[(num_rows, dataset[0].shape[1],dataset[0].shape[2]),(num_rows, dataset[1].shape[1],dataset[1].shape[2]),(num_rows, dataset[2].shape[1],dataset[2].shape[2])]   
+                    # collect shapes (an empty split, e.g. test_videos=0, gets (0,) entries under its own name; before
+                    # 2026-11-18 an empty test split overwrote shape_train)
+                    name = 'shape_train' if k == 0 else 'shape_test'
+                    if len(to_preprocess[k].keys()) > 0:
+                        metainfo[name] = [(num_rows, d.shape[1], d.shape[2]) for d in dataset]
                     else:
-                        metainfo['shape_train']=[(0,),(0,),(0,)]
+                        metainfo[name] = [(0,), (0,), (0,)]
                     pbar.update()
 
             return (
@@ -3726,7 +3794,7 @@ class Coordinates:
             return to_preprocess, metainfo, adj_matrix, tab_dict, None
                 
     def _social_context_table(self, coords: pd.DataFrame, animal: str, center: str, align: str, body_length: float,
-                              social_range: float) -> pd.DataFrame:
+                              social_range: float, absent_partner: str = "zero") -> pd.DataFrame:
         """Social context of one animal in one video (deepof.utils.social_context_features for every other animal, in
         the order of the animal ids) with the columns ("social<i>_<node>", "sx" / "sy" / "ss")."""
         def positions(aid):
@@ -3743,7 +3811,8 @@ class Coordinates:
         for i, other in enumerate([a for a in self._animal_ids if a != animal], start=1):
             partner, partner_names = positions(other)
             nodes, node_names = deepof.utils.social_context_features(
-                focal, partner, names, partner_names, center, align, body_length, self._frame_rate, social_range)
+                focal, partner, names, partner_names, center, align, body_length, self._frame_rate, social_range,
+                absent_partner=absent_partner)
             for j, node in enumerate(node_names):
                 values.append(nodes[:, j])
                 columns += [(f"social{i}_{node}", channel) for channel in ("sx", "sy", "ss")]
@@ -3778,6 +3847,8 @@ class Coordinates:
             )
             if scaler is not None:
                 scaler["per_animal"] = True
+        if isinstance(scaler, dict):  # the preprocessing choices go with the scaler (see PREPROCESSING_CHOICES)
+            scaler = dict(scaler, **{name: args[name] for name in PREPROCESSING_CHOICES})
 
         train, test, meta_info, adjacency = {}, {}, None, None
         for a in ids:
@@ -4578,9 +4649,9 @@ class TableDict(dict):
         keys=np.array(list(current_table_dict.keys()))
 
         if isinstance(test_videos,int):
-            rng = np.random.seed(42)
-            test_indices = np.random.choice(
-                range(len(current_table_dict)), test_videos, replace=False, 
+            # own generator (the same draw as the former np.random.seed(42), without reseeding the global one)
+            test_indices = np.random.RandomState(42).choice(
+                range(len(current_table_dict)), test_videos, replace=False,
             )
             test_keys = keys[test_indices]
         elif isinstance(test_videos,list) and all([key in list(current_table_dict.keys()) for key in test_videos]):

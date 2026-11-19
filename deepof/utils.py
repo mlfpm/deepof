@@ -623,12 +623,15 @@ def iterative_imputation(
         tab_dict (dict): Dictionary with the coordinates of the body parts after imputation.
 
     """
-    presence_masks = compute_animal_presence_mask(lik_dict)
+    # the project's presence threshold, as in set_missing_animals (before 2026-11-18 always the default 0.5)
+    presence_masks = compute_animal_presence_mask(
+        lik_dict, animal_presence_threshold=getattr(project, "animal_presence_threshold", 0.5))
     table_path=os.path.join(project.project_path, project.project_name, "Tables")
     tab_dict = deepof.data.TableDict(
         tab_dict, typ="coords", table_path=table_path, animal_ids=project.animal_ids
     )
     imputed_tabs = copy.deepcopy(tab_dict)
+    zero_parts, too_little = [], []  # warned once after the loops
 
     for animal_id in project.animal_ids:
 
@@ -667,16 +670,22 @@ def iterative_imputation(
                 imputed_tabs[k].update(imputed)
 
                 if tab.shape[1] != imputed.shape[1]: # pragma: no cover
-                    warnings.warn(
-                        "Some of the body parts have zero measurements. Iterative imputation skips these,"
-                        " which could bring problems downstream. A possible solution could be to refine "
-                        "DLC tracklets."
-                    )
+                    zero_parts.append(f"{animal_id} in {k}")
 
             except ValueError: # pragma: no cover
-                warnings.warn(
-                    f"Animal {animal_id} in experiment {k} has not enough data. Skipping imputation."
-                )
+                too_little.append(f"{animal_id} in {k}")
+
+    if zero_parts: # pragma: no cover
+        warnings.warn(
+            f"Some of the body parts have zero measurements ({len(zero_parts)} animal / experiment pairs, e.g. "
+            f"{', '.join(zero_parts[:3])}). Iterative imputation skips these, which could bring problems downstream. "
+            "A possible solution could be to refine DLC tracklets."
+        )
+    if too_little: # pragma: no cover
+        warnings.warn(
+            f"Not enough data for the imputation of {len(too_little)} animal / experiment pairs (e.g. "
+            f"{', '.join(too_little[:3])}): skipped."
+        )
 
     return imputed_tabs
 
@@ -2709,6 +2718,14 @@ def _pp_make_scaler(scale_kind: str):
     return SCALERS[scale_kind]()
 
 
+def _to_numeric_or_keep(column: pd.Series) -> pd.Series:
+    """pd.to_numeric, the column unchanged if it does not convert (what the deprecated errors="ignore" did)."""
+    try:
+        return pd.to_numeric(column)
+    except (ValueError, TypeError):
+        return column
+
+
 def _pp_sanitize_numeric(df: pd.DataFrame) -> pd.DataFrame:
     """Interpolate NaNs and fill remaining gaps with zeros."""
     out = df.copy()
@@ -3177,7 +3194,7 @@ def _pp_pass2_scale_and_save(
 
             # Reattach interpolated angles
             if angles_df is not None:
-                angles_df = angles_df.apply(pd.to_numeric, errors="ignore").interpolate(
+                angles_df = angles_df.apply(_to_numeric_or_keep).interpolate(
                     limit_direction="both"
                 )
                 tab = pd.concat([tab, angles_df], axis=1)
@@ -3720,6 +3737,40 @@ def binary_moving_median_numba(time_series, lag): # pragma: no cover
     return padded
 
 
+def spike_mask(xy: np.ndarray, n_std: float = 3.0, max_len: int = 2) -> np.ndarray:
+    """True at the positions of a trajectory (frames, 2) that jump away and come back within max_len frames: every frame
+    of the excursion deviates from the straight line between the positions before and after it by more than these two
+    are apart, and by more than thr = median + n_std robust standard deviations (1.4826 MAD) of the deviations of all
+    frames from the line through their neighbours. Fast smooth movement (running, chasing) stays close to that line
+    and is not flagged; the first and last frames can not be."""
+    xy = np.asarray(xy, dtype=float)
+    T = len(xy)
+    mask = np.zeros(T, bool)
+    if T < 3:
+        return mask
+    deviation = np.linalg.norm(xy[1:-1] - (xy[:-2] + xy[2:]) / 2, axis=1)
+    deviation = deviation[np.isfinite(deviation)]
+    if not len(deviation):
+        return mask
+    median = np.median(deviation)
+    thr = median + n_std * 1.4826 * np.median(np.abs(deviation - median))
+    if not thr > 0:
+        return mask
+    with np.errstate(invalid="ignore"):
+        for length in range(1, max_len + 1):
+            if T < length + 2:
+                break
+            before, after = xy[:T - length - 1], xy[length + 1:]  # the positions around an excursion of `length` frames
+            limit = np.maximum(thr, np.linalg.norm(after - before, axis=1))
+            spike = np.ones(T - length - 1, bool)
+            for k in range(1, length + 1):
+                line = before + (after - before) * (k / (length + 1))
+                spike &= np.linalg.norm(xy[k:T - length - 1 + k] - line, axis=1) > limit
+            for k in range(1, length + 1):
+                mask[k:T - length - 1 + k] |= spike
+    return mask
+
+
 def mask_outliers(
     time_series: pd.DataFrame,
     likelihood: pd.DataFrame,
@@ -3727,6 +3778,7 @@ def mask_outliers(
     lag: int,
     n_std: int,
     mode: str,
+    test: str = "moving_average",
 ) -> pd.DataFrame:
     """Return a mask over the bivariate trajectory of a body part, identifying as True all detected outliers.
 
@@ -3740,13 +3792,30 @@ def mask_outliers(
         lag (int): Size of the convolution window used to compute the moving average
         n_std (int): Number of standard deviations over the moving average to be considered an outlier
         mode (str): If "and" (default) both x and y have to be marked in order to call an outlier. If "or", one is enough.
+        test (str): "moving_average" (default): deviation from the moving average larger than n_std standard deviations
+            of the deviations; also flags fast genuine movement (16-22 % of the positions in the fastest 5 % of the
+            frames on DooM data). "spike": positions that jump away and come back within 2 frames (spike_mask, n_std
+            robust standard deviations of the frame-to-frame steps; mode is not used). TODO: "moving_average" stays the
+            default only until "spike" is validated (2026-11), then the switch is removed.
 
     Returns
         mask (pd.DataFrame): Bi-variate mask over time_series. True indicates an outlier.
 
     """
-    moving_avg_x = moving_average(time_series["x"], lag)
-    moving_avg_y = moving_average(time_series["y"], lag)
+    if test == "spike":
+        spikes = spike_mask(time_series[["x", "y"]].to_numpy(float), n_std=n_std)
+        return pd.Series(spikes, index=time_series.index) | (likelihood < likelihood_tolerance)
+    if test != "moving_average":
+        raise ValueError(f"test needs to be \"moving_average\" or \"spike\", got {test!r}")
+    # Moving average over the frames that exist: at the ends of the video moving_average pads with zeros, which flagged
+    # the first and last lag // 2 frames of every body part as outliers (until 2026-11-18)
+    def edge_average(values):
+        kernel = np.ones(lag)
+        return (np.convolve(np.asarray(values, dtype=float), kernel, mode="same")
+                / np.convolve(np.ones(len(values)), kernel, mode="same"))
+
+    moving_avg_x = edge_average(time_series["x"])
+    moving_avg_y = edge_average(time_series["y"])
 
     residuals_x = time_series["x"] - moving_avg_x
     residuals_y = time_series["y"] - moving_avg_y
@@ -3776,8 +3845,9 @@ def full_outlier_mask(
     lag: int,
     n_std: int,
     mode: str,
+    test: str = "moving_average",
 ) -> pd.DataFrame:
-    """Iterate over all body parts of experiment, and outputs a dataframe where all x, y positions are replaced by a boolean mask, where True indicates an outlier.
+    """Iterate over all body parts of experiment, and outputs a dataframe where all x, y positions are replaced by a boolean mask, where True indicates an outlier (test: see mask_outliers).
 
     Args:
         experiment (pd.DataFrame): Data frame with time series representing the x, y positions of every body part
@@ -3807,6 +3877,7 @@ def full_outlier_mask(
                 lag,
                 n_std,
                 mode,
+                test=test,
             )
 
             full_mask.loc[:, (bpart, "x")] = mask
@@ -3824,8 +3895,10 @@ def remove_outliers(
     lag: int = 5,
     n_std: int = 3,
     mode: str = "or",
+    test: str = "moving_average",
 ) -> pd.DataFrame:
-    """Mark all outliers in experiment and replaces them using a uni-variate linear interpolation approach.
+    """Mark all outliers in experiment and replaces them using a uni-variate linear interpolation approach (test: see
+    mask_outliers).
 
     Note that this approach only works for equally spaced data (constant camera acquisition rates).
 
@@ -3846,7 +3919,7 @@ def remove_outliers(
 
     # Creates a mask marking all outliers
     mask = full_outlier_mask(
-        experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode
+        experiment, likelihood, likelihood_tolerance, exclude, lag, n_std, mode, test=test
     )
     warn_nans=False
     if np.sum(np.sum(mask))/np.prod(mask.shape) > 0.3:
@@ -3896,6 +3969,14 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
     if selected_id is None:
         return columns
 
+    # A name belongs to the animal if it is its id or starts with "<id>_" (a bare prefix test also matched other animals
+    # whose id starts with this one, e.g. "mouse1" -> "mouse10_Nose", until 2026-11-18)
+    if selected_id == "":  # single animal without id: every name belongs to it (as with the prefix test before)
+        owned = lambda name: isinstance(name, str)
+    else:
+        prefix = selected_id if selected_id.endswith("_") else selected_id + "_"
+        owned = lambda name: isinstance(name, str) and (name == selected_id or name.startswith(prefix))
+
     columns_to_keep = []
     for column in columns:
         # Speed transformed columns
@@ -3907,19 +3988,19 @@ def filter_columns(columns: list, selected_id: str, table_type:str = None) -> li
             columns_to_keep.append(column)
         if type(column) == str and table_type=="supervised" and selected_id in column:
             columns_to_keep.append(column)
-        elif type(column) == str and column.startswith(selected_id):
+        elif type(column) == str and owned(column):
             columns_to_keep.append(column)
         elif type(column) == str and column.startswith("('") and column.endswith(")"):
             # tuple names stored as text (tables of very large projects), e.g. "('B_Nose', 'B_Spine_1', 'B_Center')"
             parts = [part.strip(" '\"") for part in column[1:-1].split(",") if part.strip()]
-            if parts and all(part.startswith(selected_id) for part in parts):
+            if parts and all(owned(part) for part in parts):
                 columns_to_keep.append(column)
             continue
         # Raw coordinate columns
-        if column[0].startswith(selected_id) and column[1] in ["x", "y", "rho", "phi"]:
+        if owned(column[0]) and column[1] in ["x", "y", "rho", "phi"]:
             columns_to_keep.append(column)
         # Raw distance and angle columns
-        elif len(column) in [2, 3] and all([i.startswith(selected_id) for i in column]):
+        elif len(column) in [2, 3] and all(owned(i) for i in column):
             columns_to_keep.append(column)
         elif column[0].lower().startswith("pheno"):
             columns_to_keep.append(column)
@@ -3986,6 +4067,7 @@ def rolling_speed(
     deriv: int = 1,
     shift: int = 2,
     typ: str = "coords",
+    centered: bool = False,
 ) -> pd.DataFrame:
     """Return the average speed over n frames in millimeters per second.
 
@@ -3997,6 +4079,11 @@ def rolling_speed(
         deriv (int): Position derivative order; 1 for speed, 2 for acceleration, 3 for jerk, etc.
         shift (int): Window shift for rolling speed calculation.
         typ (str): Type of dataset. Intended for internal usage only.
+        centered (bool): If False (default), the speed at frame t is the distance between t - shift and t, averaged
+            over the frames t - window + 1 ... t, i.e. it lags the positions by about shift frames. If True, the
+            centred difference (t - shift / 2 to t + shift / 2) averaged over a window centred on t: no lag.
+            TODO: the lagging variant is kept as the default only until the centred one is validated (2026-11), then
+            "centered" becomes the only behaviour and this switch is removed.
 
     Returns:
         speeds (pd.DataFrame): Data frame containing 2D speeds for each body part in the original data or their consequent derivatives.
@@ -4015,11 +4102,15 @@ def rolling_speed(
     for der in range(deriv):
         features = 2 if der == 0 and typ == "coords" else 1
 
+        if centered:  # positions half the shift before and after the frame (shift 2: t - 1 and t + 1)
+            before, after = dframe.shift(shift - shift // 2), dframe.shift(-(shift // 2))
+        else:
+            before, after = dframe.shift(shift), dframe
         distances = (
             np.concatenate(
                 [
-                    np.array(dframe).reshape([-1, features], order="C"),
-                    np.array(dframe.shift(shift)).reshape([-1, features], order="C"),
+                    np.array(after).reshape([-1, features], order="C"),
+                    np.array(before).reshape([-1, features], order="C"),
                 ],
                 axis=1,
             )
@@ -4035,7 +4126,7 @@ def rolling_speed(
             order="C",
         )
         distances = pd.DataFrame(distances, index=dframe.index)
-        speeds = np.round(distances.rolling(window).mean(), rounds)
+        speeds = np.round(distances.rolling(window, center=centered).mean(), rounds)
         del dframe
         dframe = speeds
 
@@ -4678,7 +4769,7 @@ SOCIAL_CONTACT_SCALE = 1 / 3  # contact proximities fade with social_range * thi
 
 def social_context_features(
     focal: np.ndarray, partner: np.ndarray, part_names: List[str], partner_names: List[str], center: str, align: str,
-    body_length: float, frame_rate: float, social_range: float = 0.75,
+    body_length: float, frame_rate: float, social_range: float = 0.75, absent_partner: str = "zero",
 ) -> Tuple[np.ndarray, List[str]]:
     """
     Context "nodes" of one partner for a focal animal: per frame three values (x, y, s) per node, all in [-1, 1] or
@@ -4693,6 +4784,9 @@ def social_context_features(
           partner nose - focal tail base (who sniffs whom)
 
     Speeds are in body lengths per second, as sign(v) * log1p(|v|). Missing positions are interpolated linearly.
+    Frames in which the partner is absent (no tracked body part) give zeros with absent_partner="zero" (default since
+    0.9.1: no invented partner), or the linear interpolation over the absence with "interpolate" (the behaviour up to
+    0.9.0: a partner absent for a while was moved along a straight line, or frozen at its first / last position).
 
     Args:
         focal, partner (np.ndarray): positions (frames, parts, 2) in a common frame (e.g. the arena).
@@ -4701,10 +4795,13 @@ def social_context_features(
         body_length (float): body length of the focal animal (same unit as the positions).
         frame_rate (float): frames per second.
         social_range (float): distance (focal body lengths) at which the context has faded to 1 / e.
+        absent_partner (str): "zero" or "interpolate", see above.
 
     Returns:
         (values (frames, nodes, 3), node names).
     """
+    if absent_partner not in ("zero", "interpolate"):
+        raise ValueError(f"absent_partner needs to be \"zero\" or \"interpolate\", got {absent_partner!r}")
     def clean(P):
         flat = pd.DataFrame(P.reshape(len(P), -1)).interpolate(limit_direction="both").fillna(0.0).to_numpy(float)
         return flat.reshape(P.shape)
@@ -4713,6 +4810,7 @@ def social_context_features(
         return {n.lower(): j for j, n in enumerate(names)}
 
     present = np.isfinite(partner).any(axis=(0, 1)).all() and np.isfinite(focal).any(axis=(0, 1)).all()
+    absent = ~np.isfinite(partner).any(axis=(1, 2))  # frames without any tracked body part of the partner
     F, P = clean(focal) / body_length, clean(partner) / body_length
     fi, pi = index(part_names), index(partner_names)
     c_f, c_p = F[:, fi[center.lower()]], P[:, pi[center.lower()]]
@@ -4755,4 +4853,6 @@ def social_context_features(
     values = np.stack(nodes, axis=1)
     if not present:  # an animal without any position in this video
         values[:] = 0.0
+    elif absent_partner == "zero":
+        values[absent] = 0.0
     return values, names

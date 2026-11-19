@@ -231,6 +231,9 @@ def test_embedding_model_fittingPT(model_name):
         def make_loader(self, **kwargs):
             return self._loader
 
+        def memory_bytes(self):
+            return 0
+
     FakeBatchDictDataset._instance_count = 0
 
     # Call the outer function, with the fit functions and the dataset faked
@@ -2576,3 +2579,130 @@ def test_norm_and_activation_choices():
     for name, cls in [(None, torch.nn.ReLU), ("GELU", torch.nn.GELU), ("tanh", torch.nn.Tanh), ("leaky_relu", torch.nn.LeakyReLU),
                       ("linear", torch.nn.Identity)]:
         assert isinstance(models._act(name), cls)
+
+
+def test_encoder_input_layout():
+    """The graph encoders give their per-node / per-edge temporal networks one stream per node / edge over time (input
+    layout "nodes", deepof >= 0.9.1); "legacy" reproduces the layout of the models up to 0.9.0 (a TensorFlow-style
+    reshape that mixed frames, body parts and channels), which checkpoints without a stored version keep."""
+    from deepof.clustering.models_new import TCNEncoderPT, group_streams, input_layout_for_version
+
+    B, W, N, F_node = 2, 6, 3, 2
+    x = torch.arange(B * W * N * F_node, dtype=torch.float32).reshape(B, W, N, F_node)
+    streams = group_streams(x, "nodes")
+    for n in range(N):
+        assert torch.equal(streams[:, n], x[:, :, n, :])
+    legacy = group_streams(x, "legacy")
+    assert torch.equal(legacy, x.reshape(B, W, N * F_node).permute(2, 1, 0).reshape(F_node, W, N, B).permute(3, 2, 1, 0))
+    assert not torch.equal(legacy, streams)
+    assert [input_layout_for_version(v) for v in (None, "0.9.0", "0.9.1", "1.0", "unknown")] == [
+        "legacy", "legacy", "nodes", "nodes", "legacy"]
+
+    # The node and edge TCNs of a real encoder get exactly these streams
+    adjacency = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]], dtype=np.float32)  # a chain: 2 edges
+    a = torch.randn(B, W, 2, 1)
+    for layout in ("nodes", "legacy"):
+        encoder = TCNEncoderPT((W, N, F_node), (W, 2, 1), adjacency, latent_dim=4, conv_filters=4, conv_stacks=1,
+                               conv_dilations=(1,), input_layout=layout).eval()
+        seen = {}
+        encoder.node_tcn.register_forward_hook(lambda module, inputs, output: seen.__setitem__("node", inputs[0]))
+        encoder.edge_tcn.register_forward_hook(lambda module, inputs, output: seen.__setitem__("edge", inputs[0]))
+        with torch.no_grad():
+            encoder(x, a)
+        assert torch.equal(seen["node"], group_streams(x, layout).reshape(B * N, W, F_node))
+        assert torch.equal(seen["edge"], group_streams(a, layout).reshape(B * 2, W, 1))
+    with pytest.raises(ValueError):
+        TCNEncoderPT((W, N, F_node), (W, 2, 1), adjacency, latent_dim=4, input_layout="other")
+
+
+def test_checkpoint_input_layout(tmp_path):
+    """Saved models store the deepof version and their input layout; checkpoints without them (deepof <= 0.9.0) load
+    with the legacy layout, so that they give the embeddings they were trained with."""
+    from deepof.config import DEEPOF_VERSION
+
+    T, N, F_node, E = 16, 3, 3, 2
+    adjacency = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]], dtype=np.float32)
+    model = deepof.clustering.models_new.ContrastivePT(
+        input_shape=(T, N, F_node), edge_feature_shape=(T, E, 1), adjacency_matrix=adjacency, window_len=8,
+        latent_dim=4, encoder_type="TCN", tcn_conv_filters=4, tcn_conv_stacks=1, tcn_conv_dilations=(1,)).eval()
+    with torch.no_grad():
+        model(torch.randn(1, 8, N, F_node), torch.randn(1, 8, E, 1))  # builds the lazy layers
+    spec = dict(model_name="contrastive", x_shape=(T, N, F_node), a_shape=(T, E, 1), adjacency_matrix=adjacency,
+                window_len=8, latent_dim=4, n_components=2, encoder_type="TCN", tcn_conv_filters=4, tcn_kernel_size=4,
+                tcn_conv_stacks=1, tcn_conv_dilations=(1,))  # (no version / layout: save_model_info adds them)
+    path = str(tmp_path / "model.pth")
+    deepof.clustering.model_utils_new.save_model_info(
+        path, stage="best_val", epoch=0, common_cfg=deepof.clustering.model_utils_new.CommonFitCfg(),
+        teacher_cfg=deepof.clustering.model_utils_new.TurtleTeacherCfg(), model=model, log_summary={},
+        rebuild_spec=spec, save_weights=True)
+    loaded, _, loaded_spec, _ = deepof.clustering.model_utils_new.load_model_from_ckpt(
+        path, device=torch.device("cpu"), print_info=False)
+    assert loaded_spec["input_layout"] == "nodes" and loaded_spec["deepof_version"] == DEEPOF_VERSION
+    assert loaded.encoder.input_layout == "nodes" and loaded.input_layout == "nodes"
+
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)  # as saved by deepof <= 0.9.0
+    for key in ("input_layout", "deepof_version"):
+        del checkpoint["rebuild_spec"][key]
+    torch.save(checkpoint, path)
+    old, _, _, _ = deepof.clustering.model_utils_new.load_model_from_ckpt(
+        path, device=torch.device("cpu"), print_info=False)
+    assert old.encoder.input_layout == "legacy"
+
+
+def test_sort_social_partners():
+    """Social view targets: partners ordered by proximity per sample (nearest first, ties by id), so the targets do
+    not depend on the partners' ids, which the summing social encoder can not see."""
+    from deepof.clustering.teacher_model import sort_partners_by_proximity
+
+    B, T, P, per, C = 2, 4, 3, 6, 3
+    x = torch.zeros(B, T, P * per, C)
+    for p in range(P):
+        x[:, :, p * per:(p + 1) * per, 0] = p + 1  # the partner's id in channel 0
+    fade = [p * per + 1 for p in range(P)]
+    x[0, :, fade, 2] = torch.tensor([0.1, 0.9, 0.5])
+    s = sort_partners_by_proximity(x, fade)
+    assert [int(s[0, 0, p * per, 0]) for p in range(P)] == [2, 3, 1]
+    assert [int(s[1, 0, p * per, 0]) for p in range(P)] == [1, 2, 3]  # all equally far: id order
+    permuted = x.reshape(B, T, P, per, C)[:, :, [2, 0, 1]].reshape(B, T, P * per, C)
+    assert torch.equal(sort_partners_by_proximity(permuted, fade)[0], s[0])
+
+
+def test_node_animals():
+    """Animal of every node: one for per-animal and single-animal data, the "<id>_" prefix otherwise; data prepared
+    before the ids were stored keep the earlier rule (name up to the first "_")."""
+    from deepof.clustering.training import _node_animals
+
+    names = ["Center", "Left_ear", "Tail_base"]
+    assert _node_animals(names, {"per_animal": True, "animal_ids": ["B", "W"]}) == ["", "", ""]
+    assert _node_animals(names, {"animal_ids": []}) == ["", "", ""]
+    assert _node_animals(["B_Nose", "B_Left_ear", "W_Nose"], {"animal_ids": ["B", "W"]}) == ["B", "B", "W"]
+    assert _node_animals(names, {}) == ["", "Left", "Tail"]
+
+
+def test_in_memory_loader(tmp_path):
+    """make_loader(in_memory=True): every window once per epoch, its data at its index, and a new random batch
+    composition every epoch and seed (HDF5 loaders read fixed blocks of consecutive windows)."""
+    rng = np.random.default_rng(0)
+    T = 6
+    pre = {f"v{i}": (rng.normal(size=(n, T, 6)).astype(np.float32), rng.normal(size=(n, T, 4)).astype(np.float32),
+                     rng.uniform(0, np.pi, size=(n, T, 3)).astype(np.float32)) for i, n in enumerate([40, 25])}
+    ds = deepof.clustering.dataset.BatchDictDataset(pre, str(tmp_path), "train_", h5_chunk_len=8, node_channels=3)
+    assert ds.memory_bytes() > 0
+    stored = ds.load_arrays()
+
+    def epochs(loader, n=2):
+        out = []
+        for _ in range(n):
+            batches = [(x, idx) for x, a, idx, vid in loader]
+            out.append([set(idx.tolist()) for _, idx in batches])
+            for x, idx in batches:  # the windows are the ones at their indices
+                assert torch.allclose(x, torch.from_numpy(stored["X"][idx.numpy()]).float())
+        return out
+
+    first, second = epochs(ds.make_loader(batch_size=8, shuffle=True, in_memory=True, seed=0, pin_memory=False))
+    assert sorted(i for b in first for i in b) == list(range(65)) and sorted(i for b in second for i in b) == list(range(65))
+    assert first != second  # a new composition every epoch
+    other_seed = epochs(ds.make_loader(batch_size=8, shuffle=True, in_memory=True, seed=1, pin_memory=False), n=1)[0]
+    assert other_seed != first
+    blocks = epochs(ds.make_loader(batch_size=8, shuffle=True, in_memory=False, seed=0, pin_memory=False))
+    assert sorted(map(sorted, blocks[0])) == sorted(map(sorted, blocks[1]))  # HDF5: the same blocks every epoch

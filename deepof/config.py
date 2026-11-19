@@ -8,6 +8,11 @@ from enum import Enum
 
 suppress_warnings_context = ContextVar('suppress_warnings', default=True)
 
+# Version of the package (setup.py has the same number). Projects and model checkpoints store it; behaviour that
+# changed between versions follows the stored version, e.g. the input layout of the graph encoders (0.9.0: legacy,
+# 0.9.1: per-node time series; models_new.input_layout_for_version)
+DEEPOF_VERSION = "0.9.1"
+
 
 PROGRESS_BAR_FIXED_WIDTH = 30
 ONE_ANIMAL_COLOR_MAP = { 

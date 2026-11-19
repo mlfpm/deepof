@@ -1146,14 +1146,17 @@ def extract_kinematics_segments_view(
 @torch.no_grad()
 def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_social: int, n_segments: int = 1,
                                  batch_size: int = 8192, fade_nodes: Optional[List[int]] = None,
-                                 clean: Optional[Callable] = None):
+                                 clean: Optional[Callable] = None, sort_partners: bool = False):
     """Social view of the centre window (the unaugmented contrastive view) for all samples in dataset order: the three
     values of each of the last n_social nodes (social context of per-animal datasets, see
     deepof.utils.social_context_features), mean per segment. Shape [N_samples, n_segments * n_social * 3].
     clean: target_cleaner applied to the social context first.
 
-    fade_nodes: indices (within the social nodes) of the partners' centre nodes. If given, also returns the proximity
-    of the nearest partner per sample [N_samples]: its distance fade (third value of the node), mean over the window."""
+    fade_nodes: indices (within the social nodes) of the partners' centre nodes (one per partner, in partner order). If
+    given, also returns the proximity of the nearest partner per sample [N_samples]: its distance fade (third value of
+    the node), mean over the window.
+    sort_partners: with several partners (and fade_nodes), the partners of every sample ordered by that proximity
+    (nearest first; ties keep the id order) instead of by animal id."""
     loader = getattr(dataset, "base_dataset", dataset).make_loader(
         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0, iterable_for_h5=True,
         pin_memory=False, block_shuffle=False, permute_within_block=False, prefetch_factor=0, ddp_shard=False,
@@ -1162,6 +1165,8 @@ def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_s
     for batch in loader:
         social = batch[0][:, :, -n_social:, :3].float()
         social = _centre_frames(social if clean is None else clean(social), window_len)
+        if sort_partners and fade_nodes and len(fade_nodes) > 1:
+            social = sort_partners_by_proximity(social, fade_nodes)
         if fade_nodes:
             proximity.append(social[:, :, fade_nodes, 2].mean(dim=1).amax(dim=1))
         segments = torch.tensor_split(social.reshape(social.shape[0], social.shape[1], -1), n_segments, dim=1)
@@ -1169,6 +1174,21 @@ def extract_social_segments_view(dataset: BatchDictDataset, window_len: int, n_s
     if fade_nodes:
         return torch.cat(feats, dim=0), torch.cat(proximity, dim=0)
     return torch.cat(feats, dim=0)
+
+
+def sort_partners_by_proximity(social: torch.Tensor, fade_nodes: List[int]) -> torch.Tensor:
+    """Social context nodes [B, T, P * nodes per partner, C] with the P partners of every sample reordered by their
+    proximity (distance fade of their centre node fade_nodes[p], channel 2, mean over T), nearest first; ties keep
+    the id order. The partners' nodes are consecutive (social1_*, social2_*, ...)."""
+    B, T, n_social, C = social.shape
+    P = len(fade_nodes)
+    if n_social % P:
+        raise ValueError(f"{n_social} social nodes can not be split into {P} partners")
+    proximity = social[:, :, fade_nodes, 2].mean(dim=1)  # [B, P]
+    order = torch.sort(proximity, dim=1, descending=True, stable=True).indices
+    parts = social.reshape(B, T, P, n_social // P, C)
+    index = order[:, None, :, None, None].expand(B, T, P, n_social // P, C)
+    return torch.gather(parts, 2, index).reshape(B, T, n_social, C)
 
 
 SOCIAL_NEAR_FADE = 0.25  # windows count as "partner near" above this distance fade of the nearest partner's centre
@@ -1314,7 +1334,7 @@ def build_regression_targets(
         for k, ds in enumerate([train_dataset] + others):
             view = extract_social_segments_view(ds, window_len, n_social, n_segments=n_segments,
                                                 batch_size=teacher_cfg.batch_size_angles, fade_nodes=fade_nodes,
-                                                clean=clean)
+                                                clean=clean, sort_partners=teacher_cfg.sort_social_partners)
             if fade_nodes:
                 view, near_fade = view
                 proximity = near_fade if k == 0 else proximity
