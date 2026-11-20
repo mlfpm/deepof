@@ -2649,6 +2649,55 @@ def test_checkpoint_input_layout(tmp_path):
     assert old.encoder.input_layout == "legacy"
 
 
+def test_slow_pathway(tmp_path):
+    """Slow whole-body pathway: off by default (no extra modules); with slow_dim it adds slow_dim backbone columns
+    between the own and the social part, gets gradients, changes less than the own part when the window moves by a
+    frame, and survives a checkpoint round trip."""
+    T, N, F_node, E, S = 30, 6, 3, 5, 6
+    adjacency = np.zeros((N, N), dtype=np.float32)
+    for i in range(N - 1):
+        adjacency[i, i + 1] = adjacency[i + 1, i] = 1
+
+    def build(**extra):
+        torch.manual_seed(0)
+        return deepof.clustering.models_new.ContrastivePT(
+            input_shape=(44, N + S, F_node), edge_feature_shape=(44, E, 1), adjacency_matrix=adjacency, window_len=T,
+            latent_dim=8, encoder_type="TCN", tcn_conv_filters=8, tcn_conv_stacks=1, tcn_conv_dilations=(1, 2),
+            social_nodes=S, social_partners=2, social_dim=8, **extra)
+
+    assert not any(k.startswith("slow") for k in build().state_dict())
+    torch.manual_seed(1)
+    x, a = torch.randn(4, T + 1, N + S, F_node), torch.randn(4, T + 1, E, 1)
+    plain = build()(x[:, :T], a[:, :T], return_backbone=True)[1]
+    model = build(slow_dim=4, slow_stride=8)
+    projection, backbone = model(x[:, :T], a[:, :T], return_backbone=True)
+    assert backbone.shape[1] == plain.shape[1] + 4 and projection.shape == (4, 8)
+    projection.sum().backward()
+    assert all(p.grad is not None and p.grad.abs().sum() > 0 for p in model.slow_tcn.parameters())
+    own = plain.shape[1] - 8
+    with torch.no_grad():
+        b0 = model(x[:, :T], a[:, :T], return_backbone=True)[1]
+        b1 = model(x[:, 1:], a[:, 1:], return_backbone=True)[1]
+    change = lambda cols: float((b1[:, cols] - b0[:, cols]).norm() / b0[:, cols].norm())
+    assert change(slice(own, own + 4)) < change(slice(0, own))
+
+    model.eval()
+    spec = dict(model_name="contrastive", x_shape=(44, N + S, F_node), a_shape=(44, E, 1), adjacency_matrix=adjacency,
+                window_len=T, latent_dim=8, n_components=2, encoder_type="TCN", tcn_conv_filters=8, tcn_kernel_size=4,
+                tcn_conv_stacks=1, tcn_conv_dilations=(1, 2), social_nodes=S, social_partners=2, social_dim=8,
+                slow_dim=4, slow_stride=8)
+    path = str(tmp_path / "model.pth")
+    deepof.clustering.model_utils_new.save_model_info(
+        path, stage="best_val", epoch=0, common_cfg=deepof.clustering.model_utils_new.CommonFitCfg(),
+        teacher_cfg=deepof.clustering.model_utils_new.TurtleTeacherCfg(), model=model, log_summary={},
+        rebuild_spec=spec, save_weights=True)
+    loaded = deepof.clustering.model_utils_new.load_model_from_ckpt(path, device=torch.device("cpu"),
+                                                                    print_info=False)[0].eval()
+    assert loaded.slow_dim == 4 and loaded.slow_stride == 8
+    with torch.no_grad():
+        assert torch.allclose(model(x[:, :T], a[:, :T]), loaded(x[:, :T], a[:, :T]))
+
+
 def test_sort_social_partners():
     """Social view targets: partners ordered by proximity per sample (nearest first, ties by id), so the targets do
     not depend on the partners' ids, which the summing social encoder can not see."""

@@ -325,6 +325,11 @@ class ContrastiveCfg:
     # Per-animal datasets with social context: size of the social part of the backbone output (the embedding used for
     # clustering is [own behavior | social context], see ContrastivePT)
     social_dim: int = 32
+    # Slow whole-body pathway (0: off, as before): slow_dim values from all body parts of the animal together, averaged
+    # in bins of slow_stride frames (see ContrastivePT.slow_features), placed between the own and the social part of
+    # the backbone output
+    slow_dim: int = 0
+    slow_stride: int = 8
     # Weight of the contrastive loss itself (0: off, e.g. to train with the predictive loss and / or the regression
     # teacher only; the time-shifted view is still computed unless shift_view_mode="off")
     contrastive_weight: float = 1.0
@@ -1613,6 +1618,8 @@ def load_model_from_ckpt(path: str, device=None, strict: bool = False, print_inf
             social_nodes=int(spec.get("social_nodes", 0)),
             social_partners=int(spec.get("social_partners", 1)),
             social_dim=int(spec.get("social_dim", 32)),
+            slow_dim=int(spec.get("slow_dim", 0)),  # checkpoints before the slow pathway: none
+            slow_stride=int(spec.get("slow_stride", 8)),
         )
 
     elif model_name == "vade":

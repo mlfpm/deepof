@@ -2094,6 +2094,10 @@ class ContrastivePT(nn.Module):
         are summed over the partners (any number and order) and mapped to social_dim values, which are appended to the
         backbone output: [own behavior | social context]. The social part is not normalized per sample, so that a
         partner far away (inputs near 0) gives a nearly constant vector. The projection head works on both parts.
+      - slow_dim > 0: a slow whole-body pathway next to the per-body-part encoder (slow_features): all body parts of
+        the animal together, averaged in bins of slow_stride frames, a small TCN over the bins, averaged over them ->
+        slow_dim values, inserted before the social part: [own behavior | slow whole-body | social context]. 0 (the
+        default): no pathway, the model is the same as before (state dict, initialization and outputs).
     """
 
     def __init__(
@@ -2121,12 +2125,18 @@ class ContrastivePT(nn.Module):
         social_nodes: int = 0,
         social_partners: int = 1,
         social_dim: int = 32,
+        slow_dim: int = 0,
+        slow_stride: int = 8,
     ):
         super().__init__()
 
         T, N, F_in = input_shape
         Te, E, Fe = edge_feature_shape
         self.social_nodes, self.social_partners, self.social_dim = int(social_nodes), int(social_partners), int(social_dim)
+        self.slow_dim, self.slow_stride = int(slow_dim), int(slow_stride)
+        if self.slow_dim < 0 or self.slow_stride < 1:
+            raise ValueError(f"slow_dim needs to be >= 0 (0: no slow pathway) and slow_stride >= 1, got {slow_dim} and "
+                             f"{slow_stride}")
         if self.social_nodes and (self.social_nodes % self.social_partners or not 0 < self.social_nodes < N):
             raise ValueError(f"social_nodes={social_nodes} must be a multiple of social_partners={social_partners} "
                              f"and smaller than the number of nodes ({N})")
@@ -2207,8 +2217,20 @@ class ContrastivePT(nn.Module):
                 if isinstance(module, nn.Conv1d):
                     nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
             self.social_out = nn.Linear(tcn_conv_filters, self.social_dim)
-            # One projection head on [own | social] instead of the encoder's own one
-            self.head = _encoder_head(self.encoder.head[0].in_features + self.social_dim, latent_dim)
+        if self.slow_dim:
+            # Slow whole-body pathway: every body part of the animal together (x, y, speed, ... of all of them per
+            # frame), averaged over bins of slow_stride frames, a small TCN over the bins and the mean over them, so
+            # it describes the whole body at a coarse time scale and hardly changes when the window moves by a frame
+            self.slow_tcn = TCN1DPT(
+                in_channels=N * F_in, conv_filters=tcn_conv_filters, kernel_size=2, conv_stacks=1,
+                conv_dilations=(1, 2), return_sequences=True, use_batch_norm=False, legacy_tcn=legacy_tcn,
+            )
+            self.slow_out = nn.Linear(tcn_conv_filters, self.slow_dim)
+        if self.social_nodes or self.slow_dim:
+            # One projection head on [own | slow | social] instead of the encoder's own one (the social part stays
+            # last: readouts take the last social_dim columns as the social context)
+            extra = self.slow_dim + (self.social_dim if self.social_nodes else 0)
+            self.head = _encoder_head(self.encoder.head[0].in_features + extra, latent_dim)
             self.encoder.head = nn.Identity()
 
         # Debug cache
@@ -2227,16 +2249,30 @@ class ContrastivePT(nn.Module):
           x: (B, T_half, N, F), a: (B, T_half, E, Fe) -> (B, D)
         With return_backbone, returns (projection, backbone output) (used by the regression teacher).
         """
-        if not self.social_nodes:
+        if not self.social_nodes and not self.slow_dim:
             return self.encoder(x, a, self.cluster_mode, return_backbone=return_backbone)
         x_self, x_social = self.split_nodes(x)
         _, own = self.encoder(x_self, a, False, return_backbone=True)
-        B, T, _, F_in = x_social.shape
-        partners = x_social.reshape(B, T, self.social_partners, -1).permute(0, 2, 1, 3).reshape(
-            B * self.social_partners, T, -1)
-        social = self.social_out(self.social_tcn(partners.float()).view(B, self.social_partners, -1).sum(dim=1))
-        backbone = torch.cat([own, social.to(own.dtype)], dim=1)
+        parts = [own]
+        if self.slow_dim:
+            parts.append(self.slow_features(x_self).to(own.dtype))
+        if self.social_nodes:
+            B, T, _, F_in = x_social.shape
+            partners = x_social.reshape(B, T, self.social_partners, -1).permute(0, 2, 1, 3).reshape(
+                B * self.social_partners, T, -1)
+            social = self.social_out(self.social_tcn(partners.float()).view(B, self.social_partners, -1).sum(dim=1))
+            parts.append(social.to(own.dtype))
+        backbone = torch.cat(parts, dim=1)
         projection = self.head(backbone)
         if return_backbone:
             return projection, backbone
         return backbone if self.cluster_mode else projection
+
+    def slow_features(self, x_self: torch.Tensor) -> torch.Tensor:
+        """Slow whole-body pathway (slow_dim > 0): body parts of the animal (B, T, N, F) -> (B, slow_dim). The frames
+        are averaged in ceil(T / slow_stride) bins, the TCN runs over the bins, its output is averaged over them
+        (and normalized as the own part of the backbone output)."""
+        B, T, N, F_in = x_self.shape
+        body = x_self.reshape(B, T, N * F_in).transpose(1, 2).float()  # (B, N * F, T)
+        bins = F.adaptive_avg_pool1d(body, -(-T // self.slow_stride)).transpose(1, 2)  # (B, bins, N * F)
+        return _normalize_backbone(self.slow_out(self.slow_tcn(bins).mean(dim=1)))

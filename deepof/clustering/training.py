@@ -1114,6 +1114,8 @@ def train_deepof_model(
     regression_clean_smooth: Optional[int] = None,  # cleaner targets: Savitzky-Golay (frames), see TurtleTeacherCfg
     regression_clean_clip: Optional[float] = None,  # cleaner targets: quantile clipping, see TurtleTeacherCfg
     social_dim: Optional[int] = None,  # size of the social part of the embedding (per-animal data), see ContrastiveCfg
+    slow_dim: Optional[int] = None,  # slow whole-body pathway (0: off), see ContrastiveCfg / ContrastivePT
+    slow_stride: Optional[int] = None,  # frames per bin of the slow pathway, see ContrastiveCfg
     nodes_view_parts: Optional[Tuple[str, ...]] = None,  # regression nodes view: ("positions", "speeds") or a subset
     regression_view_weights: Optional[Dict[str, float]] = None,  # e.g. {"kinematics": 0.5}, missing views weigh 1
     # Diagnostics
@@ -1391,6 +1393,8 @@ def train_deepof_model(
         proto_space=_lower(proto_space),
         predictive_weight=predictive_weight,
         social_dim=social_dim,
+        slow_dim=slow_dim,
+        slow_stride=slow_stride,
         contrastive_weight=contrastive_weight,
         proto_clusters=proto_clusters,
         proto_warmup_epochs=proto_warmup_epochs,
@@ -2187,6 +2191,8 @@ def fit_contrastive(
         "social_nodes": int(meta_info.get("social_nodes", 0)),
         "social_partners": int(meta_info.get("social_partners", 1)),
         "social_dim": int(contrastive_cfg.social_dim),
+        "slow_dim": int(contrastive_cfg.slow_dim),
+        "slow_stride": int(contrastive_cfg.slow_stride),
     }
 
     # Create model
@@ -2195,6 +2201,8 @@ def fit_contrastive(
             social_nodes=rebuild_spec["social_nodes"],
             social_partners=rebuild_spec["social_partners"],
             social_dim=rebuild_spec["social_dim"],
+            slow_dim=rebuild_spec["slow_dim"],
+            slow_stride=rebuild_spec["slow_stride"],
             input_shape=train_loader.dataset.x_shape,
             edge_feature_shape=train_loader.dataset.a_shape,
             adjacency_matrix=adjacency_matrix,
